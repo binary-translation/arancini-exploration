@@ -7,7 +7,9 @@ target-makefile := $(target-dir)/Makefile
 real-target := $(out-dir)/$(target)
 real-cxxflags := $(cxxflags) $(target-cxxflags)
 real-needs := $(patsubst %,-l%,$(needs))
-real-ldflags := $(ldflags) $(target-ldflags) -L $(out-dir) $(real-needs)
+real-ldflags := $(ldflags) $(target-ldflags)
+
+ldflags-libs := -L $(out-dir) $(real-needs) $(target-ldflags-libs)
 
 srcs := $(shell find $(target-dir) | grep -E "\.cpp$$")
 objs := $(srcs:.cpp=.o)
@@ -21,7 +23,7 @@ build: $(real-target) $(target-makefile)
 
 $(real-target): $(objs) $(deps)
 	@echo "  LD    $(PRETTY-OUT-TARGET)"
-	$(q)$(cxx) -o $@ $(real-ldflags) $(objs) $(extra-objs)
+	$(q)$(cxx) -o $@ $(real-ldflags) $(objs) $(extra-objs) $(ldflags-libs)
 
 %.o: %.cpp %.d
 	@echo "  CXX   $(PRETTY-SRC-TARGET)"

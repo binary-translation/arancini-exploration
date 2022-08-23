@@ -4,3 +4,4 @@
 **.d
 out/
 .vscode/
+generated.S
