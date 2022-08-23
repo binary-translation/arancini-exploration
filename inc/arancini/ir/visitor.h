@@ -23,7 +23,8 @@ public:
 	virtual bool visit_chunk_start(chunk &c) = 0;
 	virtual bool visit_chunk_end(chunk &c) = 0;
 
-	virtual bool visit_packet(packet &p) = 0;
+	virtual bool visit_packet_start(packet &p) = 0;
+	virtual bool visit_packet_end(packet &p) = 0;
 
 	// Nodes
 	virtual bool visit_node(node &n) = 0;

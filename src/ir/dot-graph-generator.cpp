@@ -18,8 +18,10 @@ bool dot_graph_generator::visit_chunk_end(chunk &c)
 	return true;
 }
 
-bool dot_graph_generator::visit_packet(packet &p)
+bool dot_graph_generator::visit_packet_start(packet &p)
 {
+	os_ << "subgraph cluster_" << std::hex << &p << "{" << std::endl;
+
 	if (last_packet_ && !last_packet_->actions().empty() && !p.actions().empty()) {
 		os_ << "N" << last_packet_->actions().back() << " -> N" << p.actions().front() << " [color=blue];" << std::endl;
 	}
@@ -29,6 +31,8 @@ bool dot_graph_generator::visit_packet(packet &p)
 
 	return true;
 }
+
+bool dot_graph_generator::visit_packet_end(packet &p) { os_ << "}" << std::endl; return true; }
 
 bool dot_graph_generator::visit_node(node &n)
 {

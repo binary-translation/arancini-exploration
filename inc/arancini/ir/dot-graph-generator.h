@@ -16,7 +16,8 @@ public:
 
 	virtual bool visit_chunk_start(chunk &c) override;
 	virtual bool visit_chunk_end(chunk &c) override;
-	virtual bool visit_packet(packet &p) override;
+	virtual bool visit_packet_start(packet &p) override;
+	virtual bool visit_packet_end(packet &p) override;
 	virtual bool visit_node(node &n) override;
 	virtual bool visit_action_node(action_node &n) override;
 	virtual bool visit_value_node(value_node &n) override;

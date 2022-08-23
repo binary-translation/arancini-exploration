@@ -35,7 +35,7 @@ public:
 
 	bool accept(visitor &v)
 	{
-		if (!v.visit_packet(*this)) {
+		if (!v.visit_packet_start(*this)) {
 			return false;
 		}
 
@@ -43,7 +43,7 @@ public:
 			n->accept(v);
 		}
 
-		return true;
+		return v.visit_packet_end(*this);
 	}
 
 private:
