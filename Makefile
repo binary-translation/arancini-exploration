@@ -17,9 +17,12 @@ BUILD-TARGET = $(patsubst __BUILD__%,%,$@)
 CLEAN-TARGET = $(patsubst __CLEAN__%,%,$@)
 #NICE-BUILD-TARGET :=
 
-all: $(out-dir) $(build-rules)
+all: $(out-dir) extlibs $(build-rules)
 
 clean: $(clean-rules)
+
+extlibs: .FORCE
+	make -C $(lib-dir)
 
 $(build-rules): .FORCE
 	@echo "Building $(BUILD-TARGET)"
