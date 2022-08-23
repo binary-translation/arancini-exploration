@@ -1,0 +1,3 @@
+target := libarancini-output-llvm.so
+target-ldflags := -shared
+target-cxxflags := -fPIC

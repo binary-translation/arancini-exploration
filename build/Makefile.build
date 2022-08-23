@@ -1,0 +1,35 @@
+target-dir := $(src-dir)/$(ctarget)
+target-makefile := $(target-dir)/Makefile
+
+-include $(bld-dir)/Makefile.inc
+-include $(target-makefile)
+
+real-target := $(out-dir)/$(target)
+real-cxxflags := $(cxxflags) $(target-cxxflags)
+real-needs := $(patsubst %,-l%,$(needs))
+real-ldflags := $(ldflags) $(target-ldflags) -L $(out-dir) $(real-needs)
+
+srcs := $(shell find $(target-dir) | grep -E "\.cpp$$")
+objs := $(srcs:.cpp=.o)
+deps := $(srcs:.cpp=.d)
+
+PRETTY-SRC-TARGET = $(patsubst $(src-dir)/%,%,$@)
+PRETTY-OUT-TARGET = $(patsubst $(out-dir)/%,%,$@)
+
+build: $(real-target) $(target-makefile)
+	@echo -n
+
+$(real-target): $(objs) $(deps)
+	@echo "  LD    $(PRETTY-OUT-TARGET)"
+	$(q)$(cxx) -o $@ $(real-ldflags) $(objs) $(extra-objs)
+
+%.o: %.cpp %.d
+	@echo "  CXX   $(PRETTY-SRC-TARGET)"
+	$(q)$(cxx) -c -o $@ $(real-cxxflags) $<
+
+%.d: %.cpp
+	$(q)$(cxx) -M -MT $(@:.d=.o) -o $@ $(real-cxxflags) $<
+
+-include $(deps)
+
+.PHONY: build .FORCE
