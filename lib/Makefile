@@ -4,4 +4,4 @@ xed-lib := $(xed-dir)/obj/libxed.a
 all: $(xed-lib)
 
 $(xed-lib):
-	cd $(xed-dir); ./mfile.py
+	cd $(xed-dir); ./mfile.py --extra-flags=-fPIC
