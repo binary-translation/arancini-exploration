@@ -14,9 +14,8 @@ public:
 	{
 	}
 
-	virtual bool visit_builder_start(builder &b) override;
-	virtual bool visit_builder_end(builder &b) override;
-	virtual bool visit_block(block &b) override;
+	virtual bool visit_chunk_start(chunk &c) override;
+	virtual bool visit_chunk_end(chunk &c) override;
 	virtual bool visit_packet(packet &p) override;
 	virtual bool visit_node(node &n) override;
 	virtual bool visit_action_node(action_node &n) override;

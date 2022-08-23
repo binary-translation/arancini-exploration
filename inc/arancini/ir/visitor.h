@@ -1,7 +1,7 @@
 #pragma once
 
 namespace arancini::ir {
-class block;
+class chunk;
 class packet;
 class node;
 class action_node;
@@ -17,14 +17,15 @@ class write_reg_node;
 class write_mem_node;
 class binary_arith_node;
 class port;
-class builder;
 
 class visitor {
 public:
-	virtual bool visit_builder_start(builder &b) = 0;
-	virtual bool visit_builder_end(builder &b) = 0;
-	virtual bool visit_block(block &b) = 0;
+	virtual bool visit_chunk_start(chunk &c) = 0;
+	virtual bool visit_chunk_end(chunk &c) = 0;
+
 	virtual bool visit_packet(packet &p) = 0;
+
+	// Nodes
 	virtual bool visit_node(node &n) = 0;
 	virtual bool visit_action_node(action_node &n) = 0;
 	virtual bool visit_value_node(value_node &n) = 0;
@@ -38,6 +39,7 @@ public:
 	virtual bool visit_write_reg_node(write_reg_node &n) = 0;
 	virtual bool visit_write_mem_node(write_mem_node &n) = 0;
 	virtual bool visit_binary_arith_node(binary_arith_node &n) = 0;
+
 	virtual bool visit_port(port &p) = 0;
 };
 } // namespace arancini::ir

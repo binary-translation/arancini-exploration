@@ -1,5 +1,5 @@
 #include <arancini/input/x86/x86-input-arch.h>
-#include <arancini/ir/builder.h>
+#include <arancini/ir/chunk.h>
 #include <arancini/ir/node.h>
 #include <arancini/ir/packet.h>
 #include <arancini/ir/port.h>
@@ -26,7 +26,7 @@ static void initialise_xed()
 
 static int reg_to_offset(xed_reg_enum_t reg) { return (xed_get_largest_enclosing_register(reg) - XED_REG_RAX); }
 
-static value_node *read_operand(packet *pkt, xed_decoded_inst_t *xed_inst, int opnum)
+static value_node *read_operand(std::shared_ptr<packet> pkt, xed_decoded_inst_t *xed_inst, int opnum)
 {
 	const xed_inst_t *insn = xed_decoded_inst_inst(xed_inst);
 	auto operand = xed_inst_operand(insn, opnum);
@@ -71,7 +71,7 @@ static value_node *read_operand(packet *pkt, xed_decoded_inst_t *xed_inst, int o
 	}
 }
 
-static action_node *write_operand(packet *pkt, xed_decoded_inst_t *xed_inst, int opnum, const port &value)
+static action_node *write_operand(std::shared_ptr<packet> pkt, xed_decoded_inst_t *xed_inst, int opnum, const port &value)
 {
 	const xed_inst_t *insn = xed_decoded_inst_inst(xed_inst);
 	auto operand = xed_inst_operand(insn, opnum);
@@ -99,7 +99,8 @@ static action_node *write_operand(packet *pkt, xed_decoded_inst_t *xed_inst, int
 
 enum flag_op { ignore, set0, set1, update };
 
-static void write_flags(packet *pkt, xed_decoded_inst_t *xed_inst, binary_arith_node *op, flag_op zf, flag_op cf, flag_op of, flag_op sf, flag_op pf)
+static void write_flags(
+	std::shared_ptr<packet> pkt, xed_decoded_inst_t *xed_inst, binary_arith_node *op, flag_op zf, flag_op cf, flag_op of, flag_op sf, flag_op pf)
 {
 	switch (zf) {
 	case flag_op::set0:
@@ -158,9 +159,9 @@ static void write_flags(packet *pkt, xed_decoded_inst_t *xed_inst, binary_arith_
 	}
 }
 
-static void translate_instruction(builder &b, off_t address, xed_decoded_inst_t *xed_inst)
+static std::shared_ptr<packet> translate_instruction(off_t address, xed_decoded_inst_t *xed_inst)
 {
-	auto pkt = b.insert_packet();
+	auto pkt = std::make_shared<packet>();
 	pkt->insert_start(address);
 
 	char buffer[64];
@@ -237,7 +238,6 @@ static void translate_instruction(builder &b, off_t address, xed_decoded_inst_t 
 
 		pkt->insert_write_pc(target_node->val());
 
-		// TERMINATE
 		break;
 	}
 
@@ -263,10 +263,14 @@ static void translate_instruction(builder &b, off_t address, xed_decoded_inst_t 
 	}
 
 	pkt->insert_end();
+
+	return pkt;
 }
 
-void x86_input_arch::translate_code(builder &builder, off_t base_address, const void *code, size_t code_size)
+std::shared_ptr<chunk> x86_input_arch::translate_chunk(off_t base_address, const void *code, size_t code_size)
 {
+	auto c = std::make_shared<chunk>();
+
 	initialise_xed();
 
 	const uint8_t *mc = (const uint8_t *)code;
@@ -285,9 +289,12 @@ void x86_input_arch::translate_code(builder &builder, off_t base_address, const 
 
 		xed_uint_t length = xed_decoded_inst_get_length(&xedd);
 
-		translate_instruction(builder, base_address, &xedd);
+		auto i = translate_instruction(base_address, &xedd);
+		c->add_packet(i);
 
 		offset += length;
 		base_address += length;
 	} while (offset < code_size);
+
+	return c;
 }

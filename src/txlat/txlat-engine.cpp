@@ -1,7 +1,7 @@
 #include <arancini/elf/elf-reader.h>
 #include <arancini/input/x86/x86-input-arch.h>
-#include <arancini/ir/builder.h>
 #include <arancini/ir/dot-graph-generator.h>
+#include <arancini/ir/chunk.h>
 #include <arancini/txlat/txlat-engine.h>
 #include <iostream>
 
@@ -32,7 +32,6 @@ void txlat_engine::translate_symbol(elf_reader &reader, const symbol &sym)
 	//std::cerr << "translating symbol " << sym.name() << ", value=" << std::hex << sym.value() << ", size=" << sym.size() << ", section=" << sym.section_index()
 	//		  << std::endl;
 
-	builder builder;
 	x86_input_arch input_arch;
 
 	auto section = reader.get_section(sym.section_index());
@@ -44,8 +43,8 @@ void txlat_engine::translate_symbol(elf_reader &reader, const symbol &sym)
 
 	const void *symbol_data = (const void *)((uintptr_t)section->data() + symbol_offset_in_section);
 
-	input_arch.translate_code(builder, sym.value(), symbol_data, sym.size());
+	auto c = input_arch.translate_chunk(sym.value(), symbol_data, sym.size());
 
 	dot_graph_generator g(std::cout);
-	builder.accept(g);
+	c->accept(g);
 }

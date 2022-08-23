@@ -1,5 +1,4 @@
-#include <arancini/ir/block.h>
-#include <arancini/ir/builder.h>
+#include <arancini/ir/chunk.h>
 #include <arancini/ir/dot-graph-generator.h>
 #include <arancini/ir/node.h>
 #include <arancini/ir/packet.h>
@@ -7,17 +6,17 @@
 
 using namespace arancini::ir;
 
-bool dot_graph_generator::visit_builder_start(builder &b)
+bool dot_graph_generator::visit_chunk_start(chunk &c)
 {
-	os_ << "digraph a {" << std::endl;
+	os_ << "digraph chunk {" << std::endl;
 	return true;
 }
-bool dot_graph_generator::visit_builder_end(builder &b)
+
+bool dot_graph_generator::visit_chunk_end(chunk &c)
 {
 	os_ << "}" << std::endl;
 	return true;
 }
-bool dot_graph_generator::visit_block(block &b) { return true; }
 
 bool dot_graph_generator::visit_packet(packet &p)
 {

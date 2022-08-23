@@ -8,11 +8,6 @@
 namespace arancini::ir {
 class packet {
 public:
-	packet(block &owner)
-		: owner_(owner)
-	{
-	}
-
 	constant_node *insert_constant(const value_type &vt, unsigned long cv) { return insert(new constant_node(*this, vt, cv)); }
 	constant_node *insert_constant_u32(unsigned int cv) { return insert(new constant_node(*this, value_type::u32(), cv)); }
 	constant_node *insert_constant_u64(unsigned long cv) { return insert(new constant_node(*this, value_type::u64(), cv)); }
@@ -52,7 +47,6 @@ public:
 	}
 
 private:
-	block &owner_;
 	std::vector<action_node *> actions_;
 
 	template <class T> T *insert(T *n)
