@@ -71,7 +71,7 @@ static value_node *read_operand(std::shared_ptr<packet> pkt, xed_decoded_inst_t 
 	}
 }
 
-static action_node *write_operand(std::shared_ptr<packet> pkt, xed_decoded_inst_t *xed_inst, int opnum, const port &value)
+static action_node *write_operand(std::shared_ptr<packet> pkt, xed_decoded_inst_t *xed_inst, int opnum, port &value)
 {
 	const xed_inst_t *insn = xed_decoded_inst_inst(xed_inst);
 	auto operand = xed_inst_operand(insn, opnum);

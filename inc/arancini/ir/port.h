@@ -1,5 +1,6 @@
 #pragma once
 
+#include <set>
 #include <vector>
 
 #include <arancini/ir/value-type.h>
@@ -25,11 +26,16 @@ public:
 
 	node *owner() const { return owner_; }
 
-	bool accept(visitor &v) { return v.visit_port(*this); }
+	void add_target(node *target) { targets_.insert(target); }
+
+	const std::set<node *> targets() const { return targets_; }
+
+	bool accept(visitor &v);
 
 private:
 	port_kinds kind_;
 	value_type vt_;
 	node *owner_;
+	std::set<node *> targets_;
 };
 } // namespace arancini::ir

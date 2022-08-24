@@ -1,5 +1,6 @@
 #include <arancini/ir/chunk.h>
 #include <arancini/ir/dot-graph-generator.h>
+#include <arancini/ir/debug-visitor.h>
 #include <arancini/output/debug/dot-graph-output.h>
 #include <iostream>
 

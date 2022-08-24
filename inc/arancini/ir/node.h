@@ -96,7 +96,7 @@ public:
 	{
 	}
 
-	const port &val() const { return value_; }
+	port &val() { return value_; }
 
 	virtual bool accept(visitor &v) override
 	{
@@ -134,13 +134,14 @@ public:
 
 class write_pc_node : public action_node {
 public:
-	write_pc_node(packet &owner, const port &value)
+	write_pc_node(packet &owner, port &value)
 		: action_node(owner, node_kinds::write_pc)
 		, value_(value)
 	{
+		value.add_target(this);
 	}
 
-	const port &value() const { return value_; }
+	port &value() const { return value_; }
 
 	virtual bool accept(visitor &v) override
 	{
@@ -156,7 +157,7 @@ public:
 	}
 
 private:
-	const port &value_;
+	port &value_;
 };
 
 class constant_node : public value_node {
@@ -207,13 +208,14 @@ private:
 
 class read_mem_node : public value_node {
 public:
-	read_mem_node(packet &owner, const value_type &vt, const port &addr)
+	read_mem_node(packet &owner, const value_type &vt, port &addr)
 		: value_node(owner, node_kinds::read_mem, vt)
 		, addr_(addr)
 	{
+		addr.add_target(this);
 	}
 
-	const port &address() const { return addr_; }
+	port &address() const { return addr_; }
 
 	virtual bool accept(visitor &v) override
 	{
@@ -221,24 +223,29 @@ public:
 			return false;
 		}
 
-		return v.visit_read_mem_node(*this);
+		if (!v.visit_read_mem_node(*this)) {
+			return false;
+		}
+
+		return addr_.owner()->accept(v);
 	}
 
 private:
-	const port &addr_;
+	port &addr_;
 };
 
 class write_reg_node : public action_node {
 public:
-	write_reg_node(packet &owner, unsigned long regoff, const port &val)
+	write_reg_node(packet &owner, unsigned long regoff, port &val)
 		: action_node(owner, node_kinds::write_reg)
 		, regoff_(regoff)
 		, val_(val)
 	{
+		val.add_target(this);
 	}
 
 	unsigned long regoff() const { return regoff_; }
-	const port &value() const { return val_; }
+	port &value() const { return val_; }
 
 	virtual bool accept(visitor &v) override
 	{
@@ -255,20 +262,22 @@ public:
 
 private:
 	unsigned long regoff_;
-	const port &val_;
+	port &val_;
 };
 
 class write_mem_node : public action_node {
 public:
-	write_mem_node(packet &owner, const port &addr, const port &val)
+	write_mem_node(packet &owner, port &addr, port &val)
 		: action_node(owner, node_kinds::write_mem)
 		, addr_(addr)
 		, val_(val)
 	{
+		addr.add_target(this);
+		val.add_target(this);
 	}
 
-	const port &address() const { return addr_; }
-	const port &value() const { return val_; }
+	port &address() const { return addr_; }
+	port &value() const { return val_; }
 
 	virtual bool accept(visitor &v) override
 	{
@@ -288,15 +297,15 @@ public:
 	}
 
 private:
-	const port &addr_;
-	const port &val_;
+	port &addr_;
+	port &val_;
 };
 
 enum class binary_arith_op { add, sub, mul, div, band, bor, bxor };
 
 class binary_arith_node : public value_node {
 public:
-	binary_arith_node(packet &owner, binary_arith_op op, const port &lhs, const port &rhs)
+	binary_arith_node(packet &owner, binary_arith_op op, port &lhs, port &rhs)
 		: value_node(owner, node_kinds::binary_arith, lhs.type())
 		, op_(op)
 		, lhs_(lhs)
@@ -306,17 +315,19 @@ public:
 		, overflow_(port_kinds::overflow, value_type::u1(), this)
 		, carry_(port_kinds::carry, value_type::u1(), this)
 	{
+		lhs.add_target(this);
+		rhs.add_target(this);
 	}
 
 	binary_arith_op op() const { return op_; }
 
-	const port &lhs() const { return lhs_; }
-	const port &rhs() const { return rhs_; }
+	port &lhs() const { return lhs_; }
+	port &rhs() const { return rhs_; }
 
-	const port &zero() const { return zero_; }
-	const port &negative() const { return negative_; }
-	const port &overflow() const { return overflow_; }
-	const port &carry() const { return carry_; }
+	port &zero() { return zero_; }
+	port &negative() { return negative_; }
+	port &overflow() { return overflow_; }
+	port &carry() { return carry_; }
 
 	virtual bool accept(visitor &v) override
 	{
@@ -339,12 +350,15 @@ public:
 		if (!zero_.accept(v)) {
 			return false;
 		}
+
 		if (!negative_.accept(v)) {
 			return false;
 		}
+
 		if (!overflow_.accept(v)) {
 			return false;
 		}
+
 		if (!carry_.accept(v)) {
 			return false;
 		}
@@ -354,8 +368,8 @@ public:
 
 private:
 	binary_arith_op op_;
-	const port &lhs_;
-	const port &rhs_;
+	port &lhs_;
+	port &rhs_;
 	port zero_, negative_, overflow_, carry_;
 };
 } // namespace arancini::ir

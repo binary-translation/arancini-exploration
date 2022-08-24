@@ -32,14 +32,21 @@ bool dot_graph_generator::visit_packet_start(packet &p)
 	return true;
 }
 
-bool dot_graph_generator::visit_packet_end(packet &p) { os_ << "}" << std::endl; return true; }
+bool dot_graph_generator::visit_packet_end(packet &p)
+{
+	os_ << "}" << std::endl;
+	return true;
+}
 
 bool dot_graph_generator::visit_node(node &n)
 {
+	cur_node_ = &n;
+
 	if (seen_.count(&n)) {
 		return false;
 	}
 	seen_.insert(&n);
+
 	return true;
 }
 
@@ -76,7 +83,6 @@ bool dot_graph_generator::visit_read_pc_node(read_pc_node &n)
 bool dot_graph_generator::visit_write_pc_node(write_pc_node &n)
 {
 	os_ << "N" << &n << " [label=\"write-pc\"];" << std::endl;
-	os_ << "N" << n.value().owner() << " -> N" << &n << ";" << std::endl;
 	return true;
 }
 
@@ -101,37 +107,12 @@ bool dot_graph_generator::visit_read_mem_node(read_mem_node &n)
 bool dot_graph_generator::visit_write_reg_node(write_reg_node &n)
 {
 	os_ << "N" << &n << " [label=\"write-reg #" << n.regoff() << "\"];" << std::endl;
-
-	std::string port_name = "?";
-	switch (n.value().kind()) {
-	case port_kinds::value:
-		port_name = "value";
-		break;
-	case port_kinds::zero:
-		port_name = "Z";
-		break;
-	case port_kinds::negative:
-		port_name = "N";
-		break;
-	case port_kinds::overflow:
-		port_name = "V";
-		break;
-	case port_kinds::carry:
-		port_name = "C";
-		break;
-	}
-
-	os_ << "N" << n.value().owner() << " -> N" << &n << " [label=\"" << port_name << "\"];" << std::endl;
-
 	return true;
 }
 
 bool dot_graph_generator::visit_write_mem_node(write_mem_node &n)
 {
 	os_ << "N" << &n << " [label=\"write-mem\"];" << std::endl;
-	os_ << "N" << n.address().owner() << " -> N" << &n << ";" << std::endl;
-	os_ << "N" << n.value().owner() << " -> N" << &n << ";" << std::endl;
-
 	return true;
 }
 
@@ -161,14 +142,43 @@ bool dot_graph_generator::visit_binary_arith_node(binary_arith_node &n)
 	case binary_arith_op::bxor:
 		os_ << "xor";
 		break;
+	default:
+		os_ << "???";
+		break;
 	}
 
 	os_ << "\"];" << std::endl;
 
-	os_ << "N" << n.lhs().owner() << " -> N" << &n << ";" << std::endl;
-	os_ << "N" << n.rhs().owner() << " -> N" << &n << ";" << std::endl;
-
 	return true;
 }
 
-bool dot_graph_generator::visit_port(port &p) { return true; }
+bool dot_graph_generator::visit_port(port &p)
+{
+	std::string port_name = "?";
+	switch (p.kind()) {
+	case port_kinds::value:
+		port_name = "value";
+		break;
+	case port_kinds::zero:
+		port_name = "Z";
+		break;
+	case port_kinds::negative:
+		port_name = "N";
+		break;
+	case port_kinds::overflow:
+		port_name = "V";
+		break;
+	case port_kinds::carry:
+		port_name = "C";
+		break;
+	case port_kinds::constant:
+		port_name = "#";
+		break;
+	}
+
+	for (auto target : p.targets()) {
+		os_ << "N" << p.owner() << " -> N" << target << " [label=\"" << port_name << ":" << p.type().width() << "\"];" << std::endl;
+	}
+
+	return true;
+}

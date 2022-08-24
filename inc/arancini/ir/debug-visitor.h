@@ -1,17 +1,14 @@
 #pragma once
 
 #include <arancini/ir/visitor.h>
-#include <iostream>
-#include <set>
+#include <ostream>
 
 namespace arancini::ir {
-class dot_graph_generator : public visitor {
+class debug_visitor : public visitor {
 public:
-	dot_graph_generator(std::ostream &os)
+	debug_visitor(std::ostream &os)
 		: os_(os)
-		, last_packet_(nullptr)
-		, last_action_(nullptr)
-		, cur_node_(nullptr)
+		, level_(0)
 	{
 	}
 
@@ -36,9 +33,16 @@ public:
 
 private:
 	std::ostream &os_;
-	packet *last_packet_;
-	action_node *last_action_;
-	node *cur_node_;
-	std::set<node *> seen_;
+	int level_;
+
+	void indent() { level_++; }
+	void outdent() { level_--; }
+
+	void apply_indent()
+	{
+		for (int i = 0; i < level_; i++) {
+			os_ << "  ";
+		}
+	}
 };
 } // namespace arancini::ir
