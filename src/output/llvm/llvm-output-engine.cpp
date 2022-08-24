@@ -96,6 +96,7 @@ void llvm_output_engine::build(LLVMContext &ctx, Module &mod)
 	auto main_fn_type = FunctionType::get(Type::getInt32Ty(ctx), { Type::getInt32Ty(ctx), PointerType::get(Type::getInt8PtrTy(ctx), 0) }, false);
 	auto main_fn = Function::Create(main_fn_type, GlobalValue::LinkageTypes::ExternalLinkage, "main", mod);
 
+	// TODO: Input Arch Specific (maybe need some kind of descriptor?)
 	auto state_elements = std::vector<Type *>({ Type::getInt64Ty(ctx) });
 	auto cpu_state_type = StructType::get(ctx, state_elements, false);
 	cpu_state_type->setName("cpu_state_struct");
@@ -117,6 +118,7 @@ void llvm_output_engine::build(LLVMContext &ctx, Module &mod)
 	builder.SetInsertPoint(main_entry_block);
 	builder.CreateCall(mod.getOrInsertFunction("initialise_dynamic_runtime", init_dbt_type));
 
+	// TODO: Initialise this - PC needs to be ELF Entry Point
 	auto global_cpu_state = mod.getOrInsertGlobal("GlobalCPUState", cpu_state_type);
 
 	builder.CreateCall(mod.getOrInsertFunction("MainLoop", loop_fn_type), { global_cpu_state });
@@ -124,6 +126,8 @@ void llvm_output_engine::build(LLVMContext &ctx, Module &mod)
 	builder.CreateRet(ConstantInt::get(Type::getInt32Ty(ctx), 0));
 
 	builder.SetInsertPoint(entry_block);
+
+	// TODO: Input Arch Specific
 	auto program_counter
 		= builder.CreateGEP(cpu_state_type, state_arg, { ConstantInt::get(Type::getInt64Ty(ctx), 0), ConstantInt::get(Type::getInt32Ty(ctx), 0) }, "pcptr");
 	builder.CreateBr(loop_block);
@@ -141,10 +145,4 @@ void llvm_output_engine::build(LLVMContext &ctx, Module &mod)
 	if (verifyFunction(*loop_fn, &errs())) {
 		throw std::runtime_error("function verification failed");
 	}
-
-	/*dot_graph_generator g(std::cout);
-
-	for (auto c : chunks()) {
-		c->accept(g);
-	}*/
 }

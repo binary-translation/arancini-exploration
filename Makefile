@@ -8,7 +8,7 @@ export lib-dir := $(top-dir)/lib
 export bld-dir := $(top-dir)/build
 export out-dir := $(top-dir)/out
 
-targets := core input/x86 ir output/llvm output/arm64 runtime txlat
+targets := core input/x86 ir output/debug output/llvm output/arm64 runtime txlat
 
 build-rules := $(patsubst %,__BUILD__%,$(targets))
 clean-rules := $(patsubst %,__CLEAN__%,$(targets))
