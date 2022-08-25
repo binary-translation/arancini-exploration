@@ -7,6 +7,7 @@ namespace llvm {
 class LLVMContext;
 class Argument;
 class Module;
+class MDNode;
 class FunctionType;
 class Type;
 class IntegerType;
@@ -53,6 +54,8 @@ private:
 		::llvm::FunctionType *dbt_invoke;
 	} types;
 
+	::llvm::MDNode *guest_mem_alias_scope_;
+
 	void build();
 	void initialise_types();
 	void create_main_function(::llvm::Function *loop_fn);
@@ -63,6 +66,8 @@ private:
 	::llvm::Value *lower_node(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
 		std::shared_ptr<ir::packet> pkt, ir::node *a);
 	::llvm::Value *lower_port(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
+		std::shared_ptr<ir::packet> pkt, ir::port &p);
+	::llvm::Value *materialise_port(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
 		std::shared_ptr<ir::packet> pkt, ir::port &p);
 };
 

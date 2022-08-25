@@ -11,6 +11,7 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/MDBuilder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Type.h>
 #include <llvm/IR/Verifier.h>
@@ -110,7 +111,19 @@ void generation_context::build()
 {
 	initialise_types();
 
+	//! 0 = !{!1}
+	//! 1 = distinct !{!1, !2, !"MainLoop: argument 0"}
+	//! 2 = distinct !{!2, !"MainLoop"}
+
+	MDBuilder mdb(*llvm_context_);
+	auto dom = mdb.createAnonymousAliasScopeDomain("guest-mem");
+	guest_mem_alias_scope_ = mdb.createAnonymousAliasScope(dom, "guest-mem-scope");
+
 	auto loop_fn = Function::Create(types.loop_fn, GlobalValue::LinkageTypes::ExternalLinkage, "MainLoop", *module_);
+	loop_fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
+	loop_fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
+	loop_fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
+
 	create_main_function(loop_fn);
 
 	// TODO: Input Arch Specific (maybe need some kind of descriptor?)
@@ -145,7 +158,7 @@ void generation_context::build()
 	builder.SetInsertPoint(exit_block);
 	builder.CreateRetVoid();
 
-	// module_->print(outs(), nullptr);
+	module_->print(outs(), nullptr);
 
 	if (verifyFunction(*loop_fn, &errs())) {
 		throw std::runtime_error("function verification failed");
@@ -161,14 +174,8 @@ void generation_context::lower_chunks(SwitchInst *pcswitch, BasicBlock *contbloc
 
 static std::map<port *, Value *> node_ports_to_llvm_values;
 
-Value *generation_context::lower_port(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, port &p)
+Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, port &p)
 {
-	auto existing = node_ports_to_llvm_values.find(&p);
-
-	if (existing != node_ports_to_llvm_values.end()) {
-		return existing->second;
-	}
-
 	auto n = p.owner();
 
 	switch (p.owner()->kind()) {
@@ -193,18 +200,30 @@ Value *generation_context::lower_port(IRBuilder<> &builder, Argument *state_arg,
 		auto rmn = (read_mem_node *)n;
 		auto address = lower_port(builder, state_arg, pkt, rmn->address());
 
+		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(types.i64, 256));
+
+		if (auto address_ptr_i = ::llvm::dyn_cast<Instruction>(address_ptr)) {
+			address_ptr_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, guest_mem_alias_scope_));
+		}
+
+		LoadInst *li;
 		switch (rmn->val().type().width()) {
 		case 8:
-			return builder.CreateLoad(types.i8, builder.CreateIntToPtr(address, PointerType::get(types.i64, 256)));
+			li = builder.CreateLoad(types.i8, address_ptr);
+			break;
 		case 32:
-			return builder.CreateLoad(types.i32, builder.CreateIntToPtr(address, PointerType::get(types.i64, 256)));
+			li = builder.CreateLoad(types.i32, address_ptr);
+			break;
 		case 64:
-			return builder.CreateLoad(types.i64, builder.CreateIntToPtr(address, PointerType::get(types.i64, 256)));
+			li = builder.CreateLoad(types.i64, address_ptr);
+			break;
 
 		default:
 			throw std::runtime_error("unsupported memory load width");
 		}
-		break;
+
+		li->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(li->getContext(), guest_mem_alias_scope_));
+		return li;
 	}
 
 	case node_kinds::read_reg: {
@@ -284,6 +303,20 @@ Value *generation_context::lower_port(IRBuilder<> &builder, Argument *state_arg,
 	}
 }
 
+Value *generation_context::lower_port(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, port &p)
+{
+	auto existing = node_ports_to_llvm_values.find(&p);
+
+	if (existing != node_ports_to_llvm_values.end()) {
+		return existing->second;
+	}
+
+	Value *v = materialise_port(builder, state_arg, pkt, p);
+	node_ports_to_llvm_values[&p] = v;
+
+	return v;
+}
+
 Value *generation_context::lower_node(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, node *a)
 {
 	switch (a->kind()) {
@@ -308,7 +341,15 @@ Value *generation_context::lower_node(IRBuilder<> &builder, Argument *state_arg,
 		auto address = lower_port(builder, state_arg, pkt, wmn->address());
 		auto value = lower_port(builder, state_arg, pkt, wmn->value());
 
-		return builder.CreateStore(value, builder.CreateIntToPtr(address, PointerType::get(types.i64, 256)));
+		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(types.i64, 256));
+
+		if (auto address_ptr_i = ::llvm::dyn_cast<Instruction>(address_ptr)) {
+			address_ptr_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, guest_mem_alias_scope_));
+		}
+
+		auto store = builder.CreateStore(value, address_ptr);
+		store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), guest_mem_alias_scope_));
+		return store;
 	}
 
 	case node_kinds::write_pc: {
