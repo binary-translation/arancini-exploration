@@ -16,6 +16,7 @@ class read_mem_node;
 class write_reg_node;
 class write_mem_node;
 class binary_arith_node;
+class cast_node;
 class port;
 
 class visitor {
@@ -40,6 +41,7 @@ public:
 	virtual bool visit_write_reg_node(write_reg_node &n) = 0;
 	virtual bool visit_write_mem_node(write_mem_node &n) = 0;
 	virtual bool visit_binary_arith_node(binary_arith_node &n) = 0;
+	virtual bool visit_cast_node(cast_node &n) = 0;
 
 	virtual bool visit_port(port &p) = 0;
 };

@@ -31,6 +31,15 @@ public:
 	binary_arith_node *insert_or(port &lhs, port &rhs) { return insert(new binary_arith_node(*this, binary_arith_op::bor, lhs, rhs)); }
 	binary_arith_node *insert_xor(port &lhs, port &rhs) { return insert(new binary_arith_node(*this, binary_arith_op::bxor, lhs, rhs)); }
 
+	cast_node *insert_zx(const value_type &target_type, port &value)
+	{
+		/*if (target_type.width() == value.type().width()) {
+			return val
+		}*/
+
+		return insert(new cast_node(*this, cast_op::zx, target_type, value));
+	}
+
 	const std::vector<action_node *> &actions() const { return actions_; }
 
 	bool accept(visitor &v)
@@ -45,6 +54,8 @@ public:
 
 		return v.visit_packet_end(*this);
 	}
+
+	start_node *get_start_node() const { return (start_node *)actions_.front(); }
 
 private:
 	std::vector<action_node *> actions_;

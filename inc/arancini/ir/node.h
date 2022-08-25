@@ -6,7 +6,7 @@
 #include <arancini/ir/visitor.h>
 
 namespace arancini::ir {
-enum class node_kinds { start, end, read_pc, write_pc, constant, binary_arith, read_reg, read_mem, write_reg, write_mem };
+enum class node_kinds { start, end, read_pc, write_pc, constant, binary_arith, read_reg, read_mem, write_reg, write_mem, cast };
 
 class packet;
 
@@ -299,6 +299,42 @@ public:
 private:
 	port &addr_;
 	port &val_;
+};
+
+enum class cast_op { zx, sx, trunc };
+
+class cast_node : public value_node {
+public:
+	cast_node(packet &owner, cast_op op, const value_type &target_type, port &source_value)
+		: value_node(owner, node_kinds::cast, target_type)
+		, op_(op)
+		, target_type_(target_type)
+		, source_value_(source_value)
+	{
+		source_value.add_target(this);
+	}
+
+	cast_op op() const { return op_; }
+
+	port &source_value() const { return source_value_; }
+
+	virtual bool accept(visitor &v) override
+	{
+		if (!value_node::accept(v)) {
+			return false;
+		}
+
+		if (!v.visit_cast_node(*this)) {
+			return false;
+		}
+
+		return source_value_.owner()->accept(v);
+	}
+
+private:
+	cast_op op_;
+	value_type target_type_;
+	port &source_value_;
 };
 
 enum class binary_arith_op { add, sub, mul, div, band, bor, bxor };

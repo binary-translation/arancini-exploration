@@ -14,12 +14,14 @@ class packet;
  */
 class chunk {
 public:
-    /**
-     * @brief Adds an instruction packet to the end of this chunk.
-     *
-     * @param p The instruction packet to append to this chunk.
-     */
+	/**
+	 * @brief Adds an instruction packet to the end of this chunk.
+	 *
+	 * @param p The instruction packet to append to this chunk.
+	 */
 	void add_packet(std::shared_ptr<packet> p) { packets_.push_back(p); }
+
+	const std::vector<std::shared_ptr<packet>> packets() const { return packets_; }
 
 	void accept(visitor &v)
 	{

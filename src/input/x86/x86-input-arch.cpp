@@ -24,7 +24,7 @@ static void initialise_xed()
 	}
 }
 
-static int reg_to_offset(xed_reg_enum_t reg) { return (xed_get_largest_enclosing_register(reg) - XED_REG_RAX); }
+static int reg_to_offset(xed_reg_enum_t reg) { return (xed_get_largest_enclosing_register(reg) - XED_REG_RAX) + 1; }
 
 static value_node *read_operand(std::shared_ptr<packet> pkt, xed_decoded_inst_t *xed_inst, int opnum)
 {
@@ -40,7 +40,18 @@ static value_node *read_operand(std::shared_ptr<packet> pkt, xed_decoded_inst_t 
 
 		switch (regclass) {
 		case XED_REG_CLASS_GPR:
-			return pkt->insert_read_reg(value_type::u32(), reg_to_offset(reg));
+			switch (xed_get_register_width_bits(reg)) {
+			case 8:
+				return pkt->insert_zx(value_type::u64(), pkt->insert_read_reg(value_type::u8(), reg_to_offset(reg))->val());
+			case 16:
+				return pkt->insert_zx(value_type::u64(), pkt->insert_read_reg(value_type::u16(), reg_to_offset(reg))->val());
+			case 32:
+				return pkt->insert_zx(value_type::u64(), pkt->insert_read_reg(value_type::u32(), reg_to_offset(reg))->val());
+			case 64:
+				return pkt->insert_read_reg(value_type::u64(), reg_to_offset(reg));
+			default:
+				throw std::runtime_error("unsupported register size");
+			}
 
 		default:
 			throw std::runtime_error("unsupported register");
@@ -50,16 +61,16 @@ static value_node *read_operand(std::shared_ptr<packet> pkt, xed_decoded_inst_t 
 	case XED_OPERAND_IMM0: {
 		switch (xed_decoded_inst_get_immediate_width_bits(xed_inst)) {
 		case 8:
-			return pkt->insert_constant_u64(xed_decoded_inst_get_unsigned_immediate(xed_inst));
+			return pkt->insert_constant_u64(xed_decoded_inst_get_signed_immediate(xed_inst));
 
 		case 16:
-			return pkt->insert_constant_u64(xed_decoded_inst_get_unsigned_immediate(xed_inst));
+			return pkt->insert_constant_u64(xed_decoded_inst_get_signed_immediate(xed_inst));
 
 		case 32:
-			return pkt->insert_constant_u64(xed_decoded_inst_get_unsigned_immediate(xed_inst));
+			return pkt->insert_constant_u64(xed_decoded_inst_get_signed_immediate(xed_inst));
 
 		case 64:
-			return pkt->insert_constant_u64(xed_decoded_inst_get_unsigned_immediate(xed_inst));
+			return pkt->insert_constant_u64(xed_decoded_inst_get_signed_immediate(xed_inst));
 
 		default:
 			throw std::runtime_error("unsupported immediate width");
@@ -85,7 +96,7 @@ static action_node *write_operand(std::shared_ptr<packet> pkt, xed_decoded_inst_
 
 		switch (regclass) {
 		case XED_REG_CLASS_GPR:
-			return pkt->insert_write_reg(reg_to_offset(reg), value);
+			return pkt->insert_write_reg(reg_to_offset(reg), pkt->insert_zx(value_type::u64(), value)->val());
 
 		default:
 			throw std::runtime_error("unsupported register");
@@ -104,13 +115,13 @@ static void write_flags(
 {
 	switch (zf) {
 	case flag_op::set0:
-		pkt->insert_write_reg(100, pkt->insert_constant(value_type::u1(), 0)->val());
+		pkt->insert_write_reg(17, pkt->insert_constant(value_type::u1(), 0)->val());
 		break;
 	case flag_op::set1:
-		pkt->insert_write_reg(100, pkt->insert_constant(value_type::u1(), 1)->val());
+		pkt->insert_write_reg(17, pkt->insert_constant(value_type::u1(), 1)->val());
 		break;
 	case flag_op::update:
-		pkt->insert_write_reg(100, op->zero());
+		pkt->insert_write_reg(17, op->zero());
 		break;
 	default:
 		break;
@@ -118,13 +129,13 @@ static void write_flags(
 
 	switch (cf) {
 	case flag_op::set0:
-		pkt->insert_write_reg(101, pkt->insert_constant(value_type::u1(), 0)->val());
+		pkt->insert_write_reg(18, pkt->insert_constant(value_type::u1(), 0)->val());
 		break;
 	case flag_op::set1:
-		pkt->insert_write_reg(101, pkt->insert_constant(value_type::u1(), 1)->val());
+		pkt->insert_write_reg(18, pkt->insert_constant(value_type::u1(), 1)->val());
 		break;
 	case flag_op::update:
-		pkt->insert_write_reg(101, op->carry());
+		pkt->insert_write_reg(18, op->carry());
 		break;
 	default:
 		break;
@@ -132,13 +143,13 @@ static void write_flags(
 
 	switch (of) {
 	case flag_op::set0:
-		pkt->insert_write_reg(102, pkt->insert_constant(value_type::u1(), 0)->val());
+		pkt->insert_write_reg(19, pkt->insert_constant(value_type::u1(), 0)->val());
 		break;
 	case flag_op::set1:
-		pkt->insert_write_reg(102, pkt->insert_constant(value_type::u1(), 1)->val());
+		pkt->insert_write_reg(19, pkt->insert_constant(value_type::u1(), 1)->val());
 		break;
 	case flag_op::update:
-		pkt->insert_write_reg(102, op->overflow());
+		pkt->insert_write_reg(19, op->overflow());
 		break;
 	default:
 		break;
@@ -146,13 +157,13 @@ static void write_flags(
 
 	switch (sf) {
 	case flag_op::set0:
-		pkt->insert_write_reg(103, pkt->insert_constant(value_type::u1(), 0)->val());
+		pkt->insert_write_reg(20, pkt->insert_constant(value_type::u1(), 0)->val());
 		break;
 	case flag_op::set1:
-		pkt->insert_write_reg(103, pkt->insert_constant(value_type::u1(), 1)->val());
+		pkt->insert_write_reg(20, pkt->insert_constant(value_type::u1(), 1)->val());
 		break;
 	case flag_op::update:
-		pkt->insert_write_reg(103, op->negative());
+		pkt->insert_write_reg(20, op->negative());
 		break;
 	default:
 		break;

@@ -116,6 +116,12 @@ bool dot_graph_generator::visit_write_mem_node(write_mem_node &n)
 	return true;
 }
 
+bool dot_graph_generator::visit_cast_node(cast_node &n)
+{
+	os_ << "N" << &n << " [label=\"cast\"];" << std::endl;
+	return true;
+}
+
 bool dot_graph_generator::visit_binary_arith_node(binary_arith_node &n)
 {
 	os_ << "N" << &n << " [label=\"";
