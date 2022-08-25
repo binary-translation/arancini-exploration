@@ -44,6 +44,7 @@ private:
 	struct {
 		::llvm::Type *vd;
 		::llvm::IntegerType *i8;
+		::llvm::IntegerType *i16;
 		::llvm::IntegerType *i32;
 		::llvm::IntegerType *i64;
 		::llvm::StructType *cpu_state;

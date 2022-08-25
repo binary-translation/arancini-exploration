@@ -62,6 +62,7 @@ void generation_context::initialise_types()
 	// Primitives
 	types.vd = Type::getVoidTy(*llvm_context_);
 	types.i8 = Type::getInt8Ty(*llvm_context_);
+	types.i16 = Type::getInt16Ty(*llvm_context_);
 	types.i32 = Type::getInt32Ty(*llvm_context_);
 	types.i64 = Type::getInt64Ty(*llvm_context_);
 
@@ -186,6 +187,8 @@ Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *stat
 		case 1:
 		case 8:
 			return ConstantInt::get(types.i8, cn->const_val());
+		case 16:
+			return ConstantInt::get(types.i16, cn->const_val());
 		case 32:
 			return ConstantInt::get(types.i32, cn->const_val());
 		case 64:
@@ -211,6 +214,9 @@ Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *stat
 		case 8:
 			li = builder.CreateLoad(types.i8, address_ptr);
 			break;
+		case 16:
+			li = builder.CreateLoad(types.i16, address_ptr);
+			break;
 		case 32:
 			li = builder.CreateLoad(types.i32, address_ptr);
 			break;
@@ -233,6 +239,8 @@ Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *stat
 		switch (rrn->val().type().width()) {
 		case 8:
 			return builder.CreateLoad(types.i8, src_reg);
+		case 16:
+			return builder.CreateLoad(types.i16, src_reg);
 		case 32:
 			return builder.CreateLoad(types.i32, src_reg);
 		case 64:
@@ -284,6 +292,8 @@ Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *stat
 		switch (cn->op()) {
 		case cast_op::zx:
 			switch (cn->val().type().width()) {
+			case 16:
+				return builder.CreateZExt(val, types.i16);
 			case 32:
 				return builder.CreateZExt(val, types.i32);
 			case 64:
