@@ -31,17 +31,106 @@ using namespace ::llvm;
 
 void llvm_output_engine::generate()
 {
+	generation_context gc(chunks());
+	gc.generate();
+}
+
+generation_context::generation_context(const std::vector<std::shared_ptr<ir::chunk>> &chunks)
+	: chunks_(chunks)
+	, llvm_context_(std::make_unique<LLVMContext>())
+	, module_(std::make_unique<Module>("test", *llvm_context_))
+{
+}
+
+void generation_context::generate()
+{
 	InitializeAllTargetInfos();
 	InitializeAllTargets();
 	InitializeAllTargetMCs();
 	InitializeAllAsmParsers();
 	InitializeAllAsmPrinters();
 
-	LLVMContext ctx;
-	Module mod("test", ctx);
+	build();
+	optimise();
+	compile();
+}
 
-	build(ctx, mod);
+void generation_context::initialise_types()
+{
+	// Primitives
+	types.vd = Type::getVoidTy(*llvm_context_);
+	types.i32 = Type::getInt32Ty(*llvm_context_);
+	types.i64 = Type::getInt64Ty(*llvm_context_);
 
+	// CPU State
+	auto state_elements = std::vector<Type *>({ types.i64 });
+	types.cpu_state = StructType::get(*llvm_context_, state_elements, false);
+	types.cpu_state->setName("cpu_state_struct");
+	types.cpu_state_ptr = PointerType::get(types.cpu_state, 0);
+
+	// Functions
+	types.main_fn = FunctionType::get(types.i32, { types.i32, PointerType::get(Type::getInt8PtrTy(*llvm_context_), 0) }, false);
+	types.loop_fn = FunctionType::get(types.vd, { types.cpu_state_ptr }, false);
+	types.init_dbt = FunctionType::get(types.vd, false);
+	types.dbt_invoke = FunctionType::get(types.vd, { types.cpu_state_ptr }, false);
+}
+
+void generation_context::create_main_function()
+{
+	auto main_fn = Function::Create(types.main_fn, GlobalValue::LinkageTypes::ExternalLinkage, "main", *module_);
+	auto main_entry_block = BasicBlock::Create(*llvm_context_, "main_entry", main_fn);
+
+	IRBuilder<> builder(*llvm_context_);
+	builder.SetInsertPoint(main_entry_block);
+	builder.CreateCall(module_->getOrInsertFunction("initialise_dynamic_runtime", types.init_dbt));
+
+	// TODO: Initialise this - PC needs to be ELF Entry Point
+	auto global_cpu_state = module_->getOrInsertGlobal("GlobalCPUState", types.cpu_state);
+
+	builder.CreateCall(module_->getOrInsertFunction("MainLoop", types.loop_fn), { global_cpu_state });
+
+	builder.CreateRet(ConstantInt::get(types.i32, 0));
+}
+
+void generation_context::build()
+{
+	initialise_types();
+	create_main_function();
+
+	// TODO: Input Arch Specific (maybe need some kind of descriptor?)
+
+	auto loop_fn = Function::Create(types.loop_fn, GlobalValue::LinkageTypes::ExternalLinkage, "MainLoop", *module_);
+	auto state_arg = loop_fn->getArg(0);
+
+	auto entry_block = BasicBlock::Create(*llvm_context_, "entry", loop_fn);
+	auto loop_block = BasicBlock::Create(*llvm_context_, "loop", loop_fn);
+	auto switch_to_dbt = BasicBlock::Create(*llvm_context_, "switch_to_dbt", loop_fn);
+
+	IRBuilder<> builder(*llvm_context_);
+
+	builder.SetInsertPoint(entry_block);
+
+	// TODO: Input Arch Specific
+	auto program_counter = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 0) }, "pcptr");
+	builder.CreateBr(loop_block);
+
+	builder.SetInsertPoint(loop_block);
+	auto program_counter_val = builder.CreateLoad(types.i64, program_counter, "pc");
+	builder.CreateSwitch(program_counter_val, switch_to_dbt);
+
+	builder.SetInsertPoint(switch_to_dbt);
+
+	auto switch_callee = module_->getOrInsertFunction("invoke_code", types.dbt_invoke);
+	builder.CreateCall(switch_callee, { state_arg });
+	builder.CreateBr(loop_block);
+
+	if (verifyFunction(*loop_fn, &errs())) {
+		throw std::runtime_error("function verification failed");
+	}
+}
+
+void generation_context::optimise()
+{
 	LoopAnalysisManager LAM;
 	FunctionAnalysisManager FAM;
 	CGSCCAnalysisManager CGAM;
@@ -56,13 +145,16 @@ void llvm_output_engine::generate()
 
 	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
 
-	MPM.run(mod, MAM);
-
-	auto TT = sys::getDefaultTargetTriple();
-	mod.setTargetTriple(TT);
+	MPM.run(*module_, MAM);
 
 	// Compiled modules now exists
-	mod.print(outs(), nullptr);
+	module_->print(outs(), nullptr);
+}
+
+void generation_context::compile()
+{
+	auto TT = sys::getDefaultTargetTriple();
+	module_->setTargetTriple(TT);
 
 	std::string error_message;
 	auto T = TargetRegistry::lookupTarget(TT, error_message);
@@ -74,7 +166,7 @@ void llvm_output_engine::generate()
 	auto RM = Optional<Reloc::Model>();
 	auto TM = T->createTargetMachine(TT, "generic", "", TO, RM);
 
-	mod.setDataLayout(TM->createDataLayout());
+	module_->setDataLayout(TM->createDataLayout());
 
 	std::error_code EC;
 	raw_fd_ostream output_file("generated.o", EC, sys::fs::OF_None);
@@ -88,61 +180,5 @@ void llvm_output_engine::generate()
 		throw std::runtime_error("unable to emit file");
 	}
 
-	OPM.run(mod);
-}
-
-void llvm_output_engine::build(LLVMContext &ctx, Module &mod)
-{
-	auto main_fn_type = FunctionType::get(Type::getInt32Ty(ctx), { Type::getInt32Ty(ctx), PointerType::get(Type::getInt8PtrTy(ctx), 0) }, false);
-	auto main_fn = Function::Create(main_fn_type, GlobalValue::LinkageTypes::ExternalLinkage, "main", mod);
-
-	// TODO: Input Arch Specific (maybe need some kind of descriptor?)
-	auto state_elements = std::vector<Type *>({ Type::getInt64Ty(ctx) });
-	auto cpu_state_type = StructType::get(ctx, state_elements, false);
-	cpu_state_type->setName("cpu_state_struct");
-	auto cpu_state_ptr_type = PointerType::get(cpu_state_type, 0);
-
-	auto loop_fn_type = FunctionType::get(Type::getVoidTy(ctx), { cpu_state_ptr_type }, false);
-
-	auto loop_fn = Function::Create(loop_fn_type, GlobalValue::LinkageTypes::ExternalLinkage, "MainLoop", mod);
-	auto state_arg = loop_fn->getArg(0);
-
-	auto main_entry_block = BasicBlock::Create(ctx, "main_entry", main_fn);
-	auto entry_block = BasicBlock::Create(ctx, "entry", loop_fn);
-	auto loop_block = BasicBlock::Create(ctx, "loop", loop_fn);
-	auto switch_to_dbt = BasicBlock::Create(ctx, "switch_to_dbt", loop_fn);
-
-	auto init_dbt_type = FunctionType::get(Type::getVoidTy(ctx), false);
-
-	IRBuilder<> builder(ctx);
-	builder.SetInsertPoint(main_entry_block);
-	builder.CreateCall(mod.getOrInsertFunction("initialise_dynamic_runtime", init_dbt_type));
-
-	// TODO: Initialise this - PC needs to be ELF Entry Point
-	auto global_cpu_state = mod.getOrInsertGlobal("GlobalCPUState", cpu_state_type);
-
-	builder.CreateCall(mod.getOrInsertFunction("MainLoop", loop_fn_type), { global_cpu_state });
-
-	builder.CreateRet(ConstantInt::get(Type::getInt32Ty(ctx), 0));
-
-	builder.SetInsertPoint(entry_block);
-
-	// TODO: Input Arch Specific
-	auto program_counter
-		= builder.CreateGEP(cpu_state_type, state_arg, { ConstantInt::get(Type::getInt64Ty(ctx), 0), ConstantInt::get(Type::getInt32Ty(ctx), 0) }, "pcptr");
-	builder.CreateBr(loop_block);
-
-	builder.SetInsertPoint(loop_block);
-	auto program_counter_val = builder.CreateLoad(Type::getInt64Ty(ctx), program_counter, "pc");
-	builder.CreateSwitch(program_counter_val, switch_to_dbt);
-
-	builder.SetInsertPoint(switch_to_dbt);
-
-	auto switch_callee = mod.getOrInsertFunction("invoke_code", loop_fn_type);
-	builder.CreateCall(switch_callee, { state_arg });
-	builder.CreateBr(loop_block);
-
-	if (verifyFunction(*loop_fn, &errs())) {
-		throw std::runtime_error("function verification failed");
-	}
+	OPM.run(*module_);
 }
