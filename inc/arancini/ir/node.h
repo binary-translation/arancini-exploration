@@ -6,7 +6,23 @@
 #include <arancini/ir/visitor.h>
 
 namespace arancini::ir {
-enum class node_kinds { start, end, read_pc, write_pc, constant, binary_arith, read_reg, read_mem, write_reg, write_mem, cast };
+enum class node_kinds {
+	start,
+	end,
+	read_pc,
+	write_pc,
+	constant,
+	unary_arith,
+	binary_arith,
+	ternary_arith,
+	read_reg,
+	read_mem,
+	write_reg,
+	write_mem,
+	cast,
+	csel,
+	bit_shift
+};
 
 class packet;
 
@@ -301,6 +317,96 @@ private:
 	port &val_;
 };
 
+class csel_node : public value_node {
+public:
+	csel_node(packet &owner, port &condition, port &trueval, port &falseval)
+		: value_node(owner, node_kinds::csel, trueval.type())
+		, condition_(condition)
+		, trueval_(trueval)
+		, falseval_(falseval)
+	{
+		condition.add_target(this);
+		trueval.add_target(this);
+		falseval.add_target(this);
+	}
+
+	port &condition() const { return condition_; }
+	port &trueval() const { return trueval_; }
+	port &falseval() const { return falseval_; }
+
+	virtual bool accept(visitor &v) override
+	{
+		if (!value_node::accept(v)) {
+			return false;
+		}
+
+		if (!v.visit_csel_node(*this)) {
+			return false;
+		}
+
+		if (!condition_.owner()->accept(v)) {
+			return false;
+		}
+
+		if (!trueval_.owner()->accept(v)) {
+			return false;
+		}
+
+		if (!falseval_.owner()->accept(v)) {
+			return false;
+		}
+
+		return true;
+	}
+
+private:
+	port &condition_;
+	port &trueval_;
+	port &falseval_;
+};
+
+enum class shift_op { lsl, lsr, asr };
+
+class bit_shift_node : public value_node {
+public:
+	bit_shift_node(packet &owner, shift_op op, port &input, port &amount)
+		: value_node(owner, node_kinds::bit_shift, input.type())
+		, op_(op)
+		, input_(input)
+		, amount_(amount)
+	{
+		input.add_target(this);
+		amount.add_target(this);
+	}
+
+	shift_op op() const { return op_; }
+
+	port &input() const { return input_; }
+	port &amount() const { return amount_; }
+
+	virtual bool accept(visitor &v) override
+	{
+		if (!value_node::accept(v)) {
+			return false;
+		}
+
+		if (!v.visit_bit_shift_node(*this)) {
+			return false;
+		}
+
+		if (!input_.owner()->accept(v)) {
+			return false;
+		}
+
+		return amount_.owner()->accept(v);
+	}
+
+private:
+	shift_op op_;
+	port &input_;
+	port &amount_;
+};
+
 enum class cast_op { zx, sx, trunc };
 
 class cast_node : public value_node {
@@ -337,28 +443,16 @@ private:
 	port &source_value_;
 };
 
-enum class binary_arith_op { add, sub, mul, div, band, bor, bxor };
-
-class binary_arith_node : public value_node {
+class arith_node : public value_node {
 public:
-	binary_arith_node(packet &owner, binary_arith_op op, port &lhs, port &rhs)
-		: value_node(owner, node_kinds::binary_arith, lhs.type())
-		, op_(op)
-		, lhs_(lhs)
-		, rhs_(rhs)
+	arith_node(packet &owner, node_kinds kind, const value_type &type)
+		: value_node(owner, kind, type)
 		, zero_(port_kinds::zero, value_type::u1(), this)
 		, negative_(port_kinds::negative, value_type::u1(), this)
 		, overflow_(port_kinds::overflow, value_type::u1(), this)
 		, carry_(port_kinds::carry, value_type::u1(), this)
 	{
-		lhs.add_target(this);
-		rhs.add_target(this);
 	}
-
-	binary_arith_op op() const { return op_; }
-
-	port &lhs() const { return lhs_; }
-	port &rhs() const { return rhs_; }
 
 	port &zero() { return zero_; }
 	port &negative() { return negative_; }
@@ -371,15 +465,7 @@ public:
 			return false;
 		}
 
-		if (!v.visit_binary_arith_node(*this)) {
-			return false;
-		}
-
-		if (!lhs_.owner()->accept(v)) {
-			return false;
-		}
-
-		if (!rhs_.owner()->accept(v)) {
+		if (!v.visit_arith_node(*this)) {
 			return false;
 		}
 
@@ -403,9 +489,145 @@ public:
 	}
 
 private:
+	port zero_, negative_, overflow_, carry_;
+};
+
+enum class unary_arith_op { bnot, neg, complement };
+
+class unary_arith_node : public arith_node {
+public:
+	unary_arith_node(packet &owner, unary_arith_op op, port &lhs)
+		: arith_node(owner, node_kinds::unary_arith, lhs.type())
+		, op_(op)
+		, lhs_(lhs)
+	{
+		lhs.add_target(this);
+	}
+
+	unary_arith_op op() const { return op_; }
+
+	port &lhs() const { return lhs_; }
+
+	virtual bool accept(visitor &v) override
+	{
+		if (!arith_node::accept(v)) {
+			return false;
+		}
+
+		if (!v.visit_unary_arith_node(*this)) {
+			return false;
+		}
+
+		if (!lhs_.owner()->accept(v)) {
+			return false;
+		}
+
+		return true;
+	}
+
+private:
+	unary_arith_op op_;
+	port &lhs_;
+};
+
+enum class binary_arith_op { add, sub, mul, div, band, bor, bxor, cmpeq, cmpne };
+
+class binary_arith_node : public arith_node {
+public:
+	binary_arith_node(packet &owner, binary_arith_op op, port &lhs, port &rhs)
+		: arith_node(owner, node_kinds::binary_arith, lhs.type())
+		, op_(op)
+		, lhs_(lhs)
+		, rhs_(rhs)
+
+	{
+		lhs.add_target(this);
+		rhs.add_target(this);
+	}
+
+	binary_arith_op op() const { return op_; }
+
+	port &lhs() const { return lhs_; }
+	port &rhs() const { return rhs_; }
+
+	virtual bool accept(visitor &v) override
+	{
+		if (!arith_node::accept(v)) {
+			return false;
+		}
+
+		if (!v.visit_binary_arith_node(*this)) {
+			return false;
+		}
+
+		if (!lhs_.owner()->accept(v)) {
+			return false;
+		}
+
+		if (!rhs_.owner()->accept(v)) {
+			return false;
+		}
+
+		return true;
+	}
+
+private:
 	binary_arith_op op_;
 	port &lhs_;
 	port &rhs_;
-	port zero_, negative_, overflow_, carry_;
+};
+
+enum class ternary_arith_op { adc, sbb };
+
+class ternary_arith_node : public arith_node {
+public:
+	ternary_arith_node(packet &owner, ternary_arith_op op, port &lhs, port &rhs, port &top)
+		: arith_node(owner, node_kinds::ternary_arith, lhs.type())
+		, op_(op)
+		, lhs_(lhs)
+		, rhs_(rhs)
+		, top_(top)
+	{
+		lhs.add_target(this);
+		rhs.add_target(this);
+		top.add_target(this);
+	}
+
+	ternary_arith_op op() const { return op_; }
+
+	port &lhs() const { return lhs_; }
+	port &rhs() const { return rhs_; }
+	port &top() const { return top_; }
+
+	virtual bool accept(visitor &v) override
+	{
+		if (!arith_node::accept(v)) {
+			return false;
+		}
+
+		if (!v.visit_ternary_arith_node(*this)) {
+			return false;
+		}
+
+		if (!lhs_.owner()->accept(v)) {
+			return false;
+		}
+
+		if (!rhs_.owner()->accept(v)) {
+			return false;
+		}
+
+		if (!top_.owner()->accept(v)) {
+			return false;
+		}
+
+		return true;
+	}
+
+private:
+	ternary_arith_op op_;
+	port &lhs_;
+	port &rhs_;
+	port &top_;
 };
 } // namespace arancini::ir

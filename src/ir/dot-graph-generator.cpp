@@ -118,7 +118,71 @@ bool dot_graph_generator::visit_write_mem_node(write_mem_node &n)
 
 bool dot_graph_generator::visit_cast_node(cast_node &n)
 {
-	os_ << "N" << &n << " [label=\"cast\"];" << std::endl;
+	os_ << "N" << &n << " [label=\"";
+	switch (n.op()) {
+	case cast_op::sx:
+		os_ << "sx";
+		break;
+	case cast_op::zx:
+		os_ << "zx";
+		break;
+	case cast_op::trunc:
+		os_ << "trunc";
+		break;
+	}
+	os_ << "\"];" << std::endl;
+	return true;
+}
+
+bool dot_graph_generator::visit_csel_node(csel_node &n)
+{
+	os_ << "N" << &n << " [label=\"csel\"];" << std::endl;
+	return true;
+}
+
+bool dot_graph_generator::visit_bit_shift_node(bit_shift_node &n)
+{
+	os_ << "N" << &n << " [label=\"";
+
+	switch (n.op()) {
+	case shift_op::asr:
+		os_ << "asr";
+		break;
+	case shift_op::lsr:
+		os_ << "lsr";
+		break;
+	case shift_op::lsl:
+		os_ << "lsl";
+		break;
+	}
+
+	os_ << "\"];" << std::endl;
+	return true;
+}
+
+bool dot_graph_generator::visit_arith_node(arith_node &n) { return true; }
+
+bool dot_graph_generator::visit_unary_arith_node(unary_arith_node &n)
+{
+	os_ << "N" << &n << " [label=\"";
+
+	switch (n.op()) {
+	case unary_arith_op::bnot:
+		os_ << "not";
+		break;
+	case unary_arith_op::neg:
+		os_ << "neg";
+		break;
+	case unary_arith_op::complement:
+		os_ << "cmpl";
+		break;
+	default:
+		os_ << "???";
+		break;
+	}
+
+	os_ << "\"];" << std::endl;
+
 	return true;
 }
 
@@ -147,6 +211,27 @@ bool dot_graph_generator::visit_binary_arith_node(binary_arith_node &n)
 		break;
 	case binary_arith_op::bxor:
 		os_ << "xor";
+		break;
+	default:
+		os_ << "???";
+		break;
+	}
+
+	os_ << "\"];" << std::endl;
+
+	return true;
+}
+
+bool dot_graph_generator::visit_ternary_arith_node(ternary_arith_node &n)
+{
+	os_ << "N" << &n << " [label=\"";
+
+	switch (n.op()) {
+	case ternary_arith_op::adc:
+		os_ << "adc";
+		break;
+	case ternary_arith_op::sbb:
+		os_ << "sbb";
 		break;
 	default:
 		os_ << "???";

@@ -43,10 +43,12 @@ private:
 
 	struct {
 		::llvm::Type *vd;
+		::llvm::IntegerType *i1;
 		::llvm::IntegerType *i8;
 		::llvm::IntegerType *i16;
 		::llvm::IntegerType *i32;
 		::llvm::IntegerType *i64;
+		::llvm::IntegerType *i128;
 		::llvm::StructType *cpu_state;
 		::llvm::PointerType *cpu_state_ptr;
 		::llvm::FunctionType *main_fn;

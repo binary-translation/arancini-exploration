@@ -15,8 +15,13 @@ class read_reg_node;
 class read_mem_node;
 class write_reg_node;
 class write_mem_node;
+class arith_node;
+class unary_arith_node;
 class binary_arith_node;
+class ternary_arith_node;
 class cast_node;
+class csel_node;
+class bit_shift_node;
 class port;
 
 class visitor {
@@ -40,8 +45,13 @@ public:
 	virtual bool visit_read_mem_node(read_mem_node &n) = 0;
 	virtual bool visit_write_reg_node(write_reg_node &n) = 0;
 	virtual bool visit_write_mem_node(write_mem_node &n) = 0;
+	virtual bool visit_arith_node(arith_node &n) = 0;
+	virtual bool visit_unary_arith_node(unary_arith_node &n) = 0;
 	virtual bool visit_binary_arith_node(binary_arith_node &n) = 0;
+	virtual bool visit_ternary_arith_node(ternary_arith_node &n) = 0;
 	virtual bool visit_cast_node(cast_node &n) = 0;
+	virtual bool visit_csel_node(csel_node &n) = 0;
+	virtual bool visit_bit_shift_node(bit_shift_node &n) = 0;
 
 	virtual bool visit_port(port &p) = 0;
 };

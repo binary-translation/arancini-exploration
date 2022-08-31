@@ -22,7 +22,7 @@ void txlat_engine::translate(const std::string &input)
 		if (s->type() == section_type::symbol_table) {
 			auto st = std::static_pointer_cast<symbol_table>(s);
 			for (const auto &sym : st->symbols()) {
-				if (sym.name() == "_start") {
+				if (sym.name() == "_start") { // || sym.name() == "__libc_start_main") {
 					oe_->add_chunk(translate_symbol(elf, sym));
 				}
 			}

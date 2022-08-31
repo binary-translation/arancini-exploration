@@ -61,17 +61,21 @@ void generation_context::initialise_types()
 {
 	// Primitives
 	types.vd = Type::getVoidTy(*llvm_context_);
+	types.i1 = Type::getInt1Ty(*llvm_context_);
 	types.i8 = Type::getInt8Ty(*llvm_context_);
 	types.i16 = Type::getInt16Ty(*llvm_context_);
 	types.i32 = Type::getInt32Ty(*llvm_context_);
 	types.i64 = Type::getInt64Ty(*llvm_context_);
+	types.i128 = Type::getInt128Ty(*llvm_context_);
 
 	// CPU State
 
 	// 0 PC, RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI, R8, R9, R10, R11, R12, R13, R14, R15,
-	// 17 ZF, 18 CF, 19 OF, 20 SF
+	// 17 ZF, 18 CF, 19 OF, 20 SF, 21 PF
+	// 22 XMM0...
+	// 38 FS, 38 GS
 	auto state_elements = std::vector<Type *>({ types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64,
-		types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i8, types.i8, types.i8, types.i8 });
+		types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i8, types.i8, types.i8, types.i8, types.i8 });
 
 	types.cpu_state = StructType::get(*llvm_context_, state_elements, false);
 	types.cpu_state->setName("cpu_state_struct");
@@ -237,6 +241,8 @@ Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *stat
 		auto src_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, rrn->regoff()) }, "regptr");
 
 		switch (rrn->val().type().width()) {
+		case 1:
+			return builder.CreateLoad(types.i1, src_reg);
 		case 8:
 			return builder.CreateLoad(types.i8, src_reg);
 		case 16:
@@ -245,6 +251,8 @@ Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *stat
 			return builder.CreateLoad(types.i32, src_reg);
 		case 64:
 			return builder.CreateLoad(types.i64, src_reg);
+		case 128:
+			return builder.CreateLoad(types.i128, src_reg);
 
 		default:
 			throw std::runtime_error("unsupported register width " + std::to_string(rrn->val().type().width()) + " in load");
@@ -263,10 +271,20 @@ Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *stat
 				return builder.CreateXor(lhs, rhs);
 			case binary_arith_op::band:
 				return builder.CreateAnd(lhs, rhs);
+			case binary_arith_op::bor:
+				return builder.CreateOr(lhs, rhs);
 			case binary_arith_op::add:
 				return builder.CreateAdd(lhs, rhs);
 			case binary_arith_op::sub:
 				return builder.CreateSub(lhs, rhs);
+			case binary_arith_op::mul:
+				return builder.CreateMul(lhs, rhs);
+			case binary_arith_op::div:
+				return builder.CreateUDiv(lhs, rhs);
+			case binary_arith_op::cmpeq:
+				return builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, lhs, rhs);
+			case binary_arith_op::cmpne:
+				return builder.CreateCmp(CmpInst::Predicate::ICMP_NE, lhs, rhs);
 
 			default:
 				throw std::runtime_error("unsupported binary operator " + std::to_string((int)ban->op()));
@@ -292,19 +310,111 @@ Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *stat
 		switch (cn->op()) {
 		case cast_op::zx:
 			switch (cn->val().type().width()) {
+			case 8:
+				return builder.CreateZExt(val, types.i8);
 			case 16:
 				return builder.CreateZExt(val, types.i16);
 			case 32:
 				return builder.CreateZExt(val, types.i32);
 			case 64:
 				return builder.CreateZExt(val, types.i64);
+			case 128:
+				return builder.CreateZExt(val, types.i128);
 
 			default:
-				throw std::runtime_error("unsupported zx width");
+				throw std::runtime_error("unsupported zx width " + std::to_string(cn->val().type().width()));
+			}
+
+		case cast_op::sx:
+			switch (cn->val().type().width()) {
+			case 16:
+				return builder.CreateSExt(val, types.i16);
+			case 32:
+				return builder.CreateSExt(val, types.i32);
+			case 64:
+				return builder.CreateSExt(val, types.i64);
+
+			default:
+				throw std::runtime_error("unsupported sx width");
+			}
+
+		case cast_op::trunc:
+			switch (cn->val().type().width()) {
+			case 8:
+				return builder.CreateTrunc(val, types.i8);
+			case 16:
+				return builder.CreateTrunc(val, types.i16);
+			case 32:
+				return builder.CreateTrunc(val, types.i32);
+
+			default:
+				throw std::runtime_error("unsupported trunc width");
 			}
 
 		default:
 			throw std::runtime_error("unsupported cast op");
+		}
+	}
+
+	case node_kinds::csel: {
+		auto cn = (csel_node *)n;
+
+		auto cond = lower_port(builder, state_arg, pkt, cn->condition());
+		auto tv = lower_port(builder, state_arg, pkt, cn->trueval());
+		auto fv = lower_port(builder, state_arg, pkt, cn->falseval());
+
+		return builder.CreateSelect(cond, tv, fv);
+	}
+
+	case node_kinds::unary_arith: {
+		auto un = (unary_arith_node *)n;
+
+		auto v = lower_port(builder, state_arg, pkt, un->lhs());
+
+		switch (un->op()) {
+		case unary_arith_op::bnot:
+			return builder.CreateNot(v);
+
+		default:
+			throw std::runtime_error("unsupported unary operator");
+		}
+	}
+
+	case node_kinds::bit_shift: {
+		auto bsn = (bit_shift_node *)n;
+
+		auto input = lower_port(builder, state_arg, pkt, bsn->input());
+		auto amount = lower_port(builder, state_arg, pkt, bsn->amount());
+
+		switch (bsn->op()) {
+		case shift_op::asr:
+			return builder.CreateAShr(input, amount);
+		case shift_op::lsr:
+			return builder.CreateLShr(input, amount);
+		case shift_op::lsl:
+			return builder.CreateShl(input, amount);
+
+		default:
+			throw std::runtime_error("unsupported shift op");
+		}
+	}
+
+	case node_kinds::ternary_arith: {
+		auto tan = (ternary_arith_node *)n;
+
+		auto lhs = lower_port(builder, state_arg, pkt, tan->lhs());
+		auto rhs = lower_port(builder, state_arg, pkt, tan->rhs());
+		auto top = lower_port(builder, state_arg, pkt, tan->top());
+
+		switch (tan->op()) {
+		case ternary_arith_op::adc:
+			return builder.CreateAdd(lhs, builder.CreateAdd(rhs, top));
+
+		case ternary_arith_op::sbb:
+			return builder.CreateSub(lhs, builder.CreateAdd(rhs, top));
+
+		default:
+			throw std::runtime_error("unsupported ternary op");
 		}
 	}
 
