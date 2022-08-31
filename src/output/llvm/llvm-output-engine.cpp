@@ -190,7 +190,8 @@ void generation_context::lower_chunks(SwitchInst *pcswitch, BasicBlock *contbloc
 
 static std::map<port *, Value *> node_ports_to_llvm_values;
 
-static const char *regnames[] = { "rip", "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15" };
+static const char *regnames[]
+	= { "rip", "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "zf", "cf", "of", "sf", "pf" };
 
 static std::string reg_name(int regoff)
 {
@@ -319,6 +320,9 @@ Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *stat
 		} else if (p.kind() == port_kinds::zero) {
 			auto value_port = lower_port(builder, state_arg, pkt, n->val());
 			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
+		} else if (p.kind() == port_kinds::negative) {
+			auto value_port = lower_port(builder, state_arg, pkt, n->val());
+			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_SLT, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
 		} else {
 			return ConstantInt::get(types.i8, 0);
 			// throw std::runtime_error("unsupported port kind");

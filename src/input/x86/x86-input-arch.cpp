@@ -189,7 +189,17 @@ static action_node *write_operand(std::shared_ptr<packet> pkt, xed_decoded_inst_
 					return pkt->insert_write_reg(reg_to_offset(reg), value);
 				}
 			} else {
-				return pkt->insert_write_reg(reg_to_offset(reg), pkt->insert_zx(value_type::u64(), value)->val());
+				// TODO: AH behaviour
+				if (value.type().width() == 32) {
+					// EAX behaviour
+					return pkt->insert_write_reg(reg_to_offset(reg), pkt->insert_zx(value_type::u64(), value)->val());
+				} else {
+					// AX/AL behaviour
+					auto orig = pkt->insert_read_reg(value_type::u32(), reg_to_offset(reg));
+					auto repl = pkt->insert_or(orig->val(), pkt->insert_zx(value_type::u32(), value)->val());
+
+					return pkt->insert_write_reg(reg_to_offset(reg), pkt->insert_zx(value_type::u64(), repl->val())->val());
+				}
 			}
 
 		case XED_REG_CLASS_XMM:
