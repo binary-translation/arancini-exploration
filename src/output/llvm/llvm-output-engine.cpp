@@ -3,6 +3,7 @@
 #include <arancini/output/llvm/llvm-output-engine.h>
 #include <iostream>
 #include <map>
+#include <sstream>
 #include <string>
 
 #include <llvm/IR/Constants.h>
@@ -74,8 +75,15 @@ void generation_context::initialise_types()
 	// 17 ZF, 18 CF, 19 OF, 20 SF, 21 PF
 	// 22 XMM0...
 	// 38 FS, 38 GS
-	auto state_elements = std::vector<Type *>({ types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64,
-		types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i8, types.i8, types.i8, types.i8, types.i8 });
+	auto state_elements = std::vector<Type *>({
+		types.i64, // 0: RIP
+		types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, // 1: AX, CX, DX, BX, SP, BP, SI, DI
+		types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, // 9: R8, R9, R10, R11, R12, R13, R14, R15
+		types.i8, types.i8, types.i8, types.i8, types.i8, // 17: ZF, CF, OF, SF, PF
+		types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, // 22: XMM0--7
+		types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, // 30: XMM8--15
+		types.i64, types.i64 // 38: FS, GS
+	});
 
 	types.cpu_state = StructType::get(*llvm_context_, state_elements, false);
 	types.cpu_state->setName("cpu_state_struct");
@@ -340,16 +348,23 @@ Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *stat
 
 		case cast_op::trunc:
 			switch (cn->val().type().width()) {
+			case 1:
+				return builder.CreateTrunc(val, types.i1);
 			case 8:
 				return builder.CreateTrunc(val, types.i8);
 			case 16:
 				return builder.CreateTrunc(val, types.i16);
 			case 32:
 				return builder.CreateTrunc(val, types.i32);
+			case 64:
+				return builder.CreateTrunc(val, types.i64);
 
 			default:
 				throw std::runtime_error("unsupported trunc width");
 			}
+
+		case cast_op::bitcast:
+			return val;
 
 		default:
 			throw std::runtime_error("unsupported cast op");
@@ -386,6 +401,8 @@ Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *stat
 		auto input = lower_port(builder, state_arg, pkt, bsn->input());
 		auto amount = lower_port(builder, state_arg, pkt, bsn->amount());
 
+		amount = builder.CreateZExt(amount, input->getType());
+
 		switch (bsn->op()) {
 		case shift_op::asr:
 			return builder.CreateAShr(input, amount);
@@ -402,19 +419,24 @@ Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *stat
 	case node_kinds::ternary_arith: {
 		auto tan = (ternary_arith_node *)n;
 
-		auto lhs = lower_port(builder, state_arg, pkt, tan->lhs());
-		auto rhs = lower_port(builder, state_arg, pkt, tan->rhs());
-		auto top = lower_port(builder, state_arg, pkt, tan->top());
+		if (p.kind() == port_kinds::value) {
+			auto lhs = lower_port(builder, state_arg, pkt, tan->lhs());
+			auto rhs = lower_port(builder, state_arg, pkt, tan->rhs());
+			auto top = lower_port(builder, state_arg, pkt, tan->top());
 
-		switch (tan->op()) {
-		case ternary_arith_op::adc:
-			return builder.CreateAdd(lhs, builder.CreateAdd(rhs, top));
+			switch (tan->op()) {
+			case ternary_arith_op::adc:
+				return builder.CreateAdd(lhs, builder.CreateAdd(rhs, top));
 
-		case ternary_arith_op::sbb:
-			return builder.CreateSub(lhs, builder.CreateAdd(rhs, top));
+			case ternary_arith_op::sbb:
+				return builder.CreateSub(lhs, builder.CreateAdd(rhs, top));
 
-		default:
-			throw std::runtime_error("unsupported ternary op");
+			default:
+				throw std::runtime_error("unsupported ternary op");
+			}
+		} else {
+			return ConstantInt::get(types.i8, 0);
+			// throw std::runtime_error("unsupported port kind");
 		}
 	}
 
@@ -448,6 +470,9 @@ Value *generation_context::lower_node(IRBuilder<> &builder, Argument *state_arg,
 		auto wrn = (write_reg_node *)a;
 		// gep register
 		// store value
+
+		std::cerr << "wreg off=" << wrn->regoff() << std::endl;
+
 		auto dest_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, wrn->regoff()) }, "regptr");
 
 		auto val = lower_port(builder, state_arg, pkt, wrn->value());
@@ -461,7 +486,7 @@ Value *generation_context::lower_node(IRBuilder<> &builder, Argument *state_arg,
 		auto address = lower_port(builder, state_arg, pkt, wmn->address());
 		auto value = lower_port(builder, state_arg, pkt, wmn->value());
 
-		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(types.i64, 256));
+		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(value->getType(), 256));
 
 		if (auto address_ptr_i = ::llvm::dyn_cast<Instruction>(address_ptr)) {
 			address_ptr_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, guest_mem_alias_scope_));
@@ -496,30 +521,49 @@ void generation_context::lower_chunk(SwitchInst *pcswitch, BasicBlock *contblock
 		return;
 	}
 
-	auto first_packet = c->packets().front();
-	if (first_packet->actions().empty()) {
-		return;
-	}
-
-	auto first_action = (start_node *)first_packet->actions().front();
-	if (first_action->kind() != node_kinds::start) {
-		throw std::logic_error("first action in first packet is not a start node");
-	}
-
-	BasicBlock *packet_block = BasicBlock::Create(*llvm_context_, "BB" + std::to_string(first_action->offset()), contblock->getParent());
-	blocks[first_action->offset()] = packet_block;
-
-	builder.SetInsertPoint(packet_block);
-
 	auto state_arg = contblock->getParent()->getArg(0);
 
+	BasicBlock *packet_block = nullptr;
 	for (auto p : c->packets()) {
+		if (p->actions().empty()) {
+			continue;
+		}
+
+		auto first_action = p->actions().front();
+		if (first_action->kind() != node_kinds::start) {
+			throw std::logic_error("first action in packet isn't a start node");
+		}
+
+		if (!packet_block) {
+			auto packet_start_node = (start_node *)first_action;
+
+			std::stringstream block_name;
+			block_name << "BB_" << std::hex << packet_start_node->offset();
+
+			packet_block = BasicBlock::Create(*llvm_context_, block_name.str(), contblock->getParent());
+			blocks[packet_start_node->offset()] = packet_block;
+			builder.SetInsertPoint(packet_block);
+		}
+
+		bool updates_pc = false;
+
 		for (auto a : p->actions()) {
 			lower_node(builder, state_arg, p, a);
+
+			if (a->updates_pc()) {
+				updates_pc = true;
+			}
+		}
+
+		if (updates_pc) {
+			builder.CreateBr(contblock);
+			packet_block = nullptr;
 		}
 	}
 
-	builder.CreateBr(contblock);
+	if (packet_block) {
+		builder.CreateBr(contblock);
+	}
 
 	for (auto b : blocks) {
 		pcswitch->addCase(ConstantInt::get(types.i64, b.first), b.second);

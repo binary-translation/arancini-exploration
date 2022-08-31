@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdexcept>
 #include <vector>
 
 #include <arancini/ir/port.h>
@@ -53,6 +54,8 @@ public:
 	}
 
 	virtual bool is_action() const override { return true; }
+
+	virtual bool updates_pc() const { return false; }
 
 	virtual bool accept(visitor &v) override
 	{
@@ -158,6 +161,8 @@ public:
 	}
 
 	port &value() const { return value_; }
+
+	virtual bool updates_pc() const override { return true; }
 
 	virtual bool accept(visitor &v) override
 	{
@@ -407,7 +412,7 @@ private:
 	port &amount_;
 };
 
-enum class cast_op { zx, sx, trunc };
+enum class cast_op { bitcast, zx, sx, trunc };
 
 class cast_node : public value_node {
 public:
@@ -417,6 +422,17 @@ public:
 		, target_type_(target_type)
 		, source_value_(source_value)
 	{
+		if (op == cast_op::bitcast) {
+			if (target_type.width() != source_value.type().width()) {
+				throw std::logic_error(
+					"cannot bitcast between types with different sizes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
+			}
+		} else {
+			if (target_type.type_class() != source_value.type().type_class()) {
+				throw std::logic_error("cannot cast between type classes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
+			}
+		}
+
 		source_value.add_target(this);
 	}
 
@@ -541,6 +557,10 @@ public:
 		, rhs_(rhs)
 
 	{
+		if (!lhs.type().equivalent_to(rhs.type())) {
+			throw std::logic_error("incompatible types in binary arith node: lhs=" + lhs.type().to_string() + ", rhs=" + rhs.type().to_string());
+		}
+
 		lhs.add_target(this);
 		rhs.add_target(this);
 	}

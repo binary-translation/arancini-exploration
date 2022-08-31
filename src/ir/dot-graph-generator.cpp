@@ -129,6 +129,9 @@ bool dot_graph_generator::visit_cast_node(cast_node &n)
 	case cast_op::trunc:
 		os_ << "trunc";
 		break;
+	case cast_op::bitcast:
+		os_ << "bitcast";
+		break;
 	}
 	os_ << "\"];" << std::endl;
 	return true;

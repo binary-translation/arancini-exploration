@@ -24,21 +24,7 @@ static void initialise_xed()
 	}
 }
 
-static int reg_to_offset(xed_reg_enum_t reg)
-{
-	switch (xed_reg_class(reg)) {
-	case XED_REG_CLASS_GPR:
-		return (xed_get_largest_enclosing_register(reg) - XED_REG_RAX) + 1;
-
-	case XED_REG_CLASS_XMM:
-		return (reg - XED_REG_XMM0) + 21;
-
-	default:
-		throw std::runtime_error("unsupported register class when computing offset");
-	}
-}
-
-#define REGOFF_RAX 11
+#define REGOFF_RAX 1
 #define REGOFF_ZF 17
 #define REGOFF_CF 18
 #define REGOFF_OF 19
@@ -47,6 +33,20 @@ static int reg_to_offset(xed_reg_enum_t reg)
 #define REGOFF_XMM0 22
 #define REGOFF_FS 38
 #define REGOFF_GS 39
+
+static int reg_to_offset(xed_reg_enum_t reg)
+{
+	switch (xed_reg_class(reg)) {
+	case XED_REG_CLASS_GPR:
+		return (xed_get_largest_enclosing_register(reg) - XED_REG_RAX) + REGOFF_RAX;
+
+	case XED_REG_CLASS_XMM:
+		return (reg - XED_REG_XMM0) + REGOFF_XMM0;
+
+	default:
+		throw std::runtime_error("unsupported register class when computing offset");
+	}
+}
 
 static value_node *compute_address(std::shared_ptr<packet> pkt, xed_decoded_inst_t *xed_inst, int mem_idx)
 {
@@ -129,16 +129,16 @@ static value_node *read_operand(std::shared_ptr<packet> pkt, xed_decoded_inst_t 
 	case XED_OPERAND_IMM0: {
 		switch (xed_decoded_inst_get_immediate_width_bits(xed_inst)) {
 		case 8:
-			return pkt->insert_constant_u64(xed_decoded_inst_get_signed_immediate(xed_inst));
+			return pkt->insert_constant_s32(xed_decoded_inst_get_signed_immediate(xed_inst));
 
 		case 16:
-			return pkt->insert_constant_u64(xed_decoded_inst_get_signed_immediate(xed_inst));
+			return pkt->insert_constant_s32(xed_decoded_inst_get_signed_immediate(xed_inst));
 
 		case 32:
-			return pkt->insert_constant_u64(xed_decoded_inst_get_signed_immediate(xed_inst));
+			return pkt->insert_constant_s32(xed_decoded_inst_get_signed_immediate(xed_inst));
 
 		case 64:
-			return pkt->insert_constant_u64(xed_decoded_inst_get_signed_immediate(xed_inst));
+			return pkt->insert_constant_s32(xed_decoded_inst_get_signed_immediate(xed_inst));
 
 		default:
 			throw std::runtime_error("unsupported immediate width");
@@ -529,6 +529,86 @@ static void handle_setcc(std::shared_ptr<packet> pkt, xed_decoded_inst_t *xed_in
 	write_operand(pkt, xed_inst, 0, cond->val());
 }
 
+/*
+ * Automatically casts the value to the target type, taking into account sign/zero extension/truncation rules.
+ */
+static value_node *auto_cast(std::shared_ptr<packet> pkt, const value_type &target_type, value_node *v)
+{
+	const auto &vtype = v->val().type();
+
+	// If the widths of the type are the same, then we might only have to do a bitcast.
+	if (target_type.width() == vtype.width()) {
+		if (target_type.type_class() != vtype.type_class()) {
+			// If the type classes are different, then just do a bitcast.
+			return pkt->insert_bitcast(target_type, v->val());
+		} else {
+			// Otherwise, there's actually nothing to do.
+			return v;
+		}
+	}
+
+	// If we get here, we know we need to do a truncation, or an extension.
+	value_node *r;
+
+	if (target_type.width() < vtype.width()) {
+		// This is a truncation
+		r = pkt->insert_trunc(value_type(vtype.type_class(), target_type.width()), v->val());
+	} else {
+		// This is an extension
+		if (vtype.type_class() == value_type_class::signed_integer) {
+			// The value is a signed integer, so do a sign extension.
+			r = pkt->insert_sx(value_type(value_type_class::signed_integer, target_type.width()), v->val());
+		} else if (vtype.type_class() == value_type_class::unsigned_integer) {
+			// The value is an unsigned integer, so do a zero extension.
+			r = pkt->insert_zx(value_type(value_type_class::unsigned_integer, target_type.width()), v->val());
+		} else {
+			// Other type classes (void, floating point, etc) are not supported.
+			throw std::runtime_error("auto cast not supported");
+		}
+	}
+
+	// We've done an extension or a truncation, but we might also have to do a bitcast,
+	// e.g. if we're sign extensing a s32 to u64, we have to sign extend, but then bitcast.
+	if (target_type.type_class() != vtype.type_class()) {
+		r = pkt->insert_bitcast(target_type, r->val());
+	}
+
+	return r;
+}
+
+static value_type type_of_operand(xed_decoded_inst_t *xed_inst, int opnum)
+{
+	const xed_inst_t *insn = xed_decoded_inst_inst(xed_inst);
+	auto operand = xed_inst_operand(insn, opnum);
+	auto opname = xed_operand_name(operand);
+
+	switch (opname) {
+	case XED_OPERAND_REG0:
+	case XED_OPERAND_REG1: {
+		auto reg = xed_decoded_inst_get_reg(xed_inst, opname);
+		auto regclass = xed_reg_class(reg);
+
+		switch (regclass) {
+		case XED_REG_CLASS_GPR:
+			return value_type(value_type_class::unsigned_integer, xed_get_register_width_bits(reg));
+
+		case XED_REG_CLASS_XMM:
+			return value_type(value_type_class::unsigned_integer, 128);
+
+		default:
+			throw std::runtime_error("unsupported register class");
+		}
+	}
+
+	case XED_OPERAND_IMM0: {
+		return value_type(value_type_class::signed_integer, xed_decoded_inst_get_immediate_width_bits(xed_inst));
+	}
+
+	default:
+		throw std::logic_error("unsupported operand type: " + std::to_string((int)opname));
+	}
+}
+
 static std::shared_ptr<packet> translate_instruction(off_t address, xed_decoded_inst_t *xed_inst)
 {
 	auto pkt = std::make_shared<packet>();
@@ -543,7 +623,7 @@ static std::shared_ptr<packet> translate_instruction(off_t address, xed_decoded_
 	switch (xed_decoded_inst_get_iclass(xed_inst)) {
 	case XED_ICLASS_XOR: {
 		auto op0 = read_operand(pkt, xed_inst, 0);
-		auto op1 = read_operand(pkt, xed_inst, 1);
+		auto op1 = auto_cast(pkt, op0->val().type(), read_operand(pkt, xed_inst, 1));
 		auto rslt = pkt->insert_xor(op0->val(), op1->val());
 
 		write_operand(pkt, xed_inst, 0, rslt->val());
@@ -553,7 +633,7 @@ static std::shared_ptr<packet> translate_instruction(off_t address, xed_decoded_
 
 	case XED_ICLASS_AND: {
 		auto op0 = read_operand(pkt, xed_inst, 0);
-		auto op1 = read_operand(pkt, xed_inst, 1);
+		auto op1 = auto_cast(pkt, op0->val().type(), read_operand(pkt, xed_inst, 1));
 		auto rslt = pkt->insert_and(op0->val(), op1->val());
 
 		write_operand(pkt, xed_inst, 0, rslt->val());
@@ -563,7 +643,7 @@ static std::shared_ptr<packet> translate_instruction(off_t address, xed_decoded_
 
 	case XED_ICLASS_OR: {
 		auto op0 = read_operand(pkt, xed_inst, 0);
-		auto op1 = read_operand(pkt, xed_inst, 1);
+		auto op1 = auto_cast(pkt, op0->val().type(), read_operand(pkt, xed_inst, 1));
 		auto rslt = pkt->insert_or(op0->val(), op1->val());
 
 		write_operand(pkt, xed_inst, 0, rslt->val());
@@ -581,7 +661,7 @@ static std::shared_ptr<packet> translate_instruction(off_t address, xed_decoded_
 
 	case XED_ICLASS_SUB: {
 		auto op0 = read_operand(pkt, xed_inst, 0);
-		auto op1 = read_operand(pkt, xed_inst, 1);
+		auto op1 = auto_cast(pkt, op0->val().type(), read_operand(pkt, xed_inst, 1));
 		auto rslt = pkt->insert_sub(op0->val(), op1->val());
 
 		write_operand(pkt, xed_inst, 0, rslt->val());
@@ -591,8 +671,9 @@ static std::shared_ptr<packet> translate_instruction(off_t address, xed_decoded_
 
 	case XED_ICLASS_SBB: {
 		auto op0 = read_operand(pkt, xed_inst, 0);
-		auto op1 = read_operand(pkt, xed_inst, 1);
-		auto rslt = pkt->insert_sbb(op0->val(), op1->val(), pkt->insert_read_reg(value_type::u1(), 18)->val());
+		auto op1 = auto_cast(pkt, op0->val().type(), read_operand(pkt, xed_inst, 1));
+		auto cf = auto_cast(pkt, op0->val().type(), pkt->insert_read_reg(value_type::u1(), REGOFF_CF));
+		auto rslt = pkt->insert_sbb(op0->val(), op1->val(), cf->val());
 
 		write_operand(pkt, xed_inst, 0, rslt->val());
 		write_flags(pkt, xed_inst, rslt, flag_op::update, flag_op::set0, flag_op::set0, flag_op::update, flag_op::update, flag_op::update);
@@ -601,7 +682,7 @@ static std::shared_ptr<packet> translate_instruction(off_t address, xed_decoded_
 
 	case XED_ICLASS_CMP: {
 		auto op0 = read_operand(pkt, xed_inst, 0);
-		auto op1 = read_operand(pkt, xed_inst, 1);
+		auto op1 = auto_cast(pkt, op0->val().type(), read_operand(pkt, xed_inst, 1));
 		auto rslt = pkt->insert_sub(op0->val(), op1->val());
 
 		write_flags(pkt, xed_inst, rslt, flag_op::update, flag_op::set0, flag_op::set0, flag_op::update, flag_op::update, flag_op::update);
@@ -610,7 +691,7 @@ static std::shared_ptr<packet> translate_instruction(off_t address, xed_decoded_
 
 	case XED_ICLASS_ADD: {
 		auto op0 = read_operand(pkt, xed_inst, 0);
-		auto op1 = read_operand(pkt, xed_inst, 1);
+		auto op1 = auto_cast(pkt, op0->val().type(), read_operand(pkt, xed_inst, 1));
 		auto rslt = pkt->insert_add(op0->val(), op1->val());
 
 		write_operand(pkt, xed_inst, 0, rslt->val());
@@ -639,7 +720,12 @@ static std::shared_ptr<packet> translate_instruction(off_t address, xed_decoded_
 	}
 
 	case XED_ICLASS_MOV: {
-		auto op1 = read_operand(pkt, xed_inst, 1);
+		const xed_inst_t *insn = xed_decoded_inst_inst(xed_inst);
+		auto operand = xed_inst_operand(insn, 0);
+		auto opname = xed_operand_name(operand);
+
+		auto tt = opname == XED_OPERAND_MEM0 ? type_of_operand(xed_inst, 1) : type_of_operand(xed_inst, 0);
+		auto op1 = auto_cast(pkt, tt, read_operand(pkt, xed_inst, 1));
 		write_operand(pkt, xed_inst, 0, op1->val());
 		break;
 	}
@@ -695,7 +781,7 @@ static std::shared_ptr<packet> translate_instruction(off_t address, xed_decoded_
 
 	case XED_ICLASS_TEST: {
 		auto op0 = read_operand(pkt, xed_inst, 0);
-		auto op1 = read_operand(pkt, xed_inst, 1);
+		auto op1 = auto_cast(pkt, op0->val().type(), read_operand(pkt, xed_inst, 1));
 		auto rslt = pkt->insert_and(op0->val(), op1->val());
 
 		write_flags(pkt, xed_inst, rslt, flag_op::update, flag_op::set0, flag_op::set0, flag_op::update, flag_op::update, flag_op::ignore);

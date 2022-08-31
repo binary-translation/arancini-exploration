@@ -25,7 +25,7 @@ extern "C" cpu_state *initialise_dynamic_runtime(unsigned long entry_point)
 {
 	std::cerr << "arancini: dbt: initialise" << std::endl;
 	auto s = new cpu_state();
-	bzero(s, sizeof(s));
+	bzero(s, sizeof(*s));
 
 	mem = mmap(nullptr, 0x100000000, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
 	if (mem == MAP_FAILED) {

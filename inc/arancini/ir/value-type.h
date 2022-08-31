@@ -1,5 +1,9 @@
 #pragma once
 
+#include <iomanip>
+#include <sstream>
+#include <string>
+
 namespace arancini::ir {
 enum class value_type_class { none, signed_integer, unsigned_integer, floating_point };
 
@@ -25,6 +29,36 @@ public:
 
 	int width() const { return width_; }
 	value_type_class type_class() const { return tc_; }
+
+	bool equivalent_to(const value_type &o) const { return width_ == o.width_ && tc_ == o.tc_; }
+
+	std::string to_string() const
+	{
+		std::stringstream s;
+
+		switch (tc_) {
+		case value_type_class::none:
+			return "v";
+
+		case value_type_class::signed_integer:
+			s << "s";
+			break;
+
+		case value_type_class::unsigned_integer:
+			s << "u";
+			break;
+		case value_type_class::floating_point:
+			s << "f";
+			break;
+		default:
+			s << "?";
+			break;
+		}
+
+		s << std::dec << std::to_string(width_);
+
+		return s.str();
+	}
 
 private:
 	value_type_class tc_;
