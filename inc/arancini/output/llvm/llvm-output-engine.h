@@ -58,6 +58,7 @@ private:
 	} types;
 
 	::llvm::MDNode *guest_mem_alias_scope_;
+	::llvm::MDNode *reg_file_alias_scope_;
 
 	void build();
 	void initialise_types();

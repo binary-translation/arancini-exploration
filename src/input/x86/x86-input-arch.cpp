@@ -91,7 +91,7 @@ static value_node *compute_address(std::shared_ptr<packet> pkt, xed_decoded_inst
 	return address_base;
 }
 
-static value_node *read_operand(std::shared_ptr<packet> pkt, xed_decoded_inst_t *xed_inst, int opnum, int memwidth = 0)
+static value_node *read_operand(std::shared_ptr<packet> pkt, xed_decoded_inst_t *xed_inst, int opnum)
 {
 	const xed_inst_t *insn = xed_decoded_inst_inst(xed_inst);
 	auto operand = xed_inst_operand(insn, opnum);
@@ -107,11 +107,11 @@ static value_node *read_operand(std::shared_ptr<packet> pkt, xed_decoded_inst_t 
 		case XED_REG_CLASS_GPR:
 			switch (xed_get_register_width_bits(reg)) {
 			case 8:
-				return pkt->insert_zx(value_type::u64(), pkt->insert_read_reg(value_type::u8(), reg_to_offset(reg))->val());
+				return pkt->insert_read_reg(value_type::u8(), reg_to_offset(reg));
 			case 16:
-				return pkt->insert_zx(value_type::u64(), pkt->insert_read_reg(value_type::u16(), reg_to_offset(reg))->val());
+				return pkt->insert_read_reg(value_type::u16(), reg_to_offset(reg));
 			case 32:
-				return pkt->insert_zx(value_type::u64(), pkt->insert_read_reg(value_type::u32(), reg_to_offset(reg))->val());
+				return pkt->insert_read_reg(value_type::u32(), reg_to_offset(reg));
 			case 64:
 				return pkt->insert_read_reg(value_type::u64(), reg_to_offset(reg));
 			default:
@@ -182,7 +182,15 @@ static action_node *write_operand(std::shared_ptr<packet> pkt, xed_decoded_inst_
 
 		switch (regclass) {
 		case XED_REG_CLASS_GPR:
-			return pkt->insert_write_reg(reg_to_offset(reg), pkt->insert_zx(value_type::u64(), value)->val());
+			if (value.type().width() == 64) {
+				if (value.type().type_class() == value_type_class::signed_integer) {
+					return pkt->insert_write_reg(reg_to_offset(reg), pkt->insert_bitcast(value_type::u64(), value)->val());
+				} else {
+					return pkt->insert_write_reg(reg_to_offset(reg), value);
+				}
+			} else {
+				return pkt->insert_write_reg(reg_to_offset(reg), pkt->insert_zx(value_type::u64(), value)->val());
+			}
 
 		case XED_REG_CLASS_XMM:
 			return pkt->insert_write_reg(reg_to_offset(reg), pkt->insert_zx(value_type::u128(), value)->val());
@@ -791,7 +799,9 @@ static std::shared_ptr<packet> translate_instruction(off_t address, xed_decoded_
 	case XED_ICLASS_MOVSXD: {
 		// TODO: INCORRECT FOR SOME SIZES
 		auto input = read_operand(pkt, xed_inst, 1);
-		auto cast = pkt->insert_sx(value_type::u64(), input->val());
+		input = pkt->insert_bitcast(value_type(value_type_class::signed_integer, input->val().type().width()), input->val());
+
+		auto cast = pkt->insert_sx(value_type::s64(), input->val());
 
 		write_operand(pkt, xed_inst, 0, cast->val());
 		break;

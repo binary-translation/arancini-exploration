@@ -129,8 +129,11 @@ void generation_context::build()
 	//! 2 = distinct !{!2, !"MainLoop"}
 
 	MDBuilder mdb(*llvm_context_);
-	auto dom = mdb.createAnonymousAliasScopeDomain("guest-mem");
-	guest_mem_alias_scope_ = mdb.createAnonymousAliasScope(dom, "guest-mem-scope");
+	auto fmdom = mdb.createAnonymousAliasScopeDomain("guest-mem");
+	guest_mem_alias_scope_ = mdb.createAnonymousAliasScope(fmdom, "guest-mem-scope");
+
+	auto rfdom = mdb.createAnonymousAliasScopeDomain("reg-file");
+	reg_file_alias_scope_ = mdb.createAnonymousAliasScope(rfdom, "reg-file-scope");
 
 	auto loop_fn = Function::Create(types.loop_fn, GlobalValue::LinkageTypes::ExternalLinkage, "MainLoop", *module_);
 	loop_fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
@@ -186,6 +189,17 @@ void generation_context::lower_chunks(SwitchInst *pcswitch, BasicBlock *contbloc
 }
 
 static std::map<port *, Value *> node_ports_to_llvm_values;
+
+static const char *regnames[] = { "rip", "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15" };
+
+static std::string reg_name(int regoff)
+{
+	if (regoff < (sizeof(regnames) / sizeof(regnames[0]))) {
+		return regnames[regoff];
+	}
+
+	return "guestreg";
+}
 
 Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, port &p)
 {
@@ -246,7 +260,12 @@ Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *stat
 
 	case node_kinds::read_reg: {
 		auto rrn = (read_reg_node *)n;
-		auto src_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, rrn->regoff()) }, "regptr");
+		auto src_reg = builder.CreateGEP(
+			types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, rrn->regoff()) }, reg_name(rrn->regoff()));
+
+		if (auto src_reg_i = ::llvm::dyn_cast<Instruction>(src_reg)) {
+			src_reg_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, reg_file_alias_scope_));
+		}
 
 		switch (rrn->val().type().width()) {
 		case 1:
@@ -297,6 +316,9 @@ Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *stat
 			default:
 				throw std::runtime_error("unsupported binary operator " + std::to_string((int)ban->op()));
 			}
+		} else if (p.kind() == port_kinds::zero) {
+			auto value_port = lower_port(builder, state_arg, pkt, n->val());
+			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
 		} else {
 			return ConstantInt::get(types.i8, 0);
 			// throw std::runtime_error("unsupported port kind");
@@ -473,7 +495,12 @@ Value *generation_context::lower_node(IRBuilder<> &builder, Argument *state_arg,
 
 		std::cerr << "wreg off=" << wrn->regoff() << std::endl;
 
-		auto dest_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, wrn->regoff()) }, "regptr");
+		auto dest_reg = builder.CreateGEP(
+			types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, wrn->regoff()) }, reg_name(wrn->regoff()));
+
+		if (auto dest_reg_i = ::llvm::dyn_cast<Instruction>(dest_reg)) {
+			dest_reg_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, reg_file_alias_scope_));
+		}
 
 		auto val = lower_port(builder, state_arg, pkt, wrn->value());
 
