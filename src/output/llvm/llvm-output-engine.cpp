@@ -1,51 +1,33 @@
 #include <arancini/ir/chunk.h>
 #include <arancini/ir/dot-graph-generator.h>
+#include <arancini/output/llvm/llvm-output-engine-impl.h>
 #include <arancini/output/llvm/llvm-output-engine.h>
 #include <iostream>
 #include <map>
 #include <sstream>
 #include <string>
 
-#include <llvm/IR/Constants.h>
-#include <llvm/IR/DerivedTypes.h>
-#include <llvm/IR/Function.h>
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/LLVMContext.h>
-#include <llvm/IR/LegacyPassManager.h>
-#include <llvm/IR/MDBuilder.h>
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Type.h>
-#include <llvm/IR/Verifier.h>
-
-#include <llvm/MC/TargetRegistry.h>
-
-#include <llvm/Passes/PassBuilder.h>
-
-#include <llvm/Support/FileSystem.h>
-#include <llvm/Support/Host.h>
-#include <llvm/Support/TargetSelect.h>
-
-#include <llvm/Target/TargetMachine.h>
-#include <llvm/Target/TargetOptions.h>
-
 using namespace arancini::output::llvm;
 using namespace arancini::ir;
 using namespace ::llvm;
 
-void llvm_output_engine::generate()
+llvm_output_engine::llvm_output_engine()
+	: oei_(std::make_unique<llvm_output_engine_impl>(chunks()))
 {
-	generation_context gc(chunks());
-	gc.generate();
 }
 
-generation_context::generation_context(const std::vector<std::shared_ptr<ir::chunk>> &chunks)
+llvm_output_engine::~llvm_output_engine() = default;
+
+void llvm_output_engine::generate() { oei_->generate(); }
+
+llvm_output_engine_impl::llvm_output_engine_impl(const std::vector<std::shared_ptr<ir::chunk>> &chunks)
 	: chunks_(chunks)
 	, llvm_context_(std::make_unique<LLVMContext>())
-	, module_(std::make_unique<Module>("test", *llvm_context_))
+	, module_(std::make_unique<Module>("generated", *llvm_context_))
 {
 }
 
-void generation_context::generate()
+void llvm_output_engine_impl::generate()
 {
 	InitializeAllTargetInfos();
 	InitializeAllTargets();
@@ -58,7 +40,7 @@ void generation_context::generate()
 	compile();
 }
 
-void generation_context::initialise_types()
+void llvm_output_engine_impl::initialise_types()
 {
 	// Primitives
 	types.vd = Type::getVoidTy(*llvm_context_);
@@ -96,7 +78,7 @@ void generation_context::initialise_types()
 	types.dbt_invoke = FunctionType::get(types.i32, { types.cpu_state_ptr }, false);
 }
 
-void generation_context::create_main_function(Function *loop_fn)
+void llvm_output_engine_impl::create_main_function(Function *loop_fn)
 {
 	auto main_fn = Function::Create(types.main_fn, GlobalValue::LinkageTypes::ExternalLinkage, "main", *module_);
 	auto main_entry_block = BasicBlock::Create(*llvm_context_, "main_entry", main_fn);
@@ -120,7 +102,7 @@ void generation_context::create_main_function(Function *loop_fn)
 	builder.CreateRet(ConstantInt::get(types.i32, 1));
 }
 
-void generation_context::build()
+void llvm_output_engine_impl::build()
 {
 	initialise_types();
 
@@ -181,14 +163,12 @@ void generation_context::build()
 	}
 }
 
-void generation_context::lower_chunks(SwitchInst *pcswitch, BasicBlock *contblock)
+void llvm_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlock *contblock)
 {
 	for (auto c : chunks_) {
 		lower_chunk(pcswitch, contblock, c);
 	}
 }
-
-static std::map<port *, Value *> node_ports_to_llvm_values;
 
 static const char *regnames[]
 	= { "rip", "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "zf", "cf", "of", "sf", "pf" };
@@ -202,7 +182,7 @@ static std::string reg_name(int regoff)
 	return "guestreg";
 }
 
-Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, port &p)
+Value *llvm_output_engine_impl::materialise_port(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, port &p)
 {
 	auto n = p.owner();
 
@@ -471,25 +451,30 @@ Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *stat
 	}
 }
 
-Value *generation_context::lower_port(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, port &p)
+Value *llvm_output_engine_impl::lower_port(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, port &p)
 {
-	auto existing = node_ports_to_llvm_values.find(&p);
+	auto existing = node_ports_to_llvm_values_.find(&p);
 
-	if (existing != node_ports_to_llvm_values.end()) {
+	if (existing != node_ports_to_llvm_values_.end()) {
 		return existing->second;
 	}
 
 	Value *v = materialise_port(builder, state_arg, pkt, p);
-	node_ports_to_llvm_values[&p] = v;
+	node_ports_to_llvm_values_[&p] = v;
 
 	return v;
 }
 
-Value *generation_context::lower_node(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, node *a)
+Value *llvm_output_engine_impl::lower_node(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, node *a)
 {
 	switch (a->kind()) {
-	case node_kinds::label:
+	case node_kinds::label: {
+		auto current_block = builder.GetInsertBlock();
+		auto intermediate_block = BasicBlock::Create(*llvm_context_, "IB", current_block->getParent());
+		builder.CreateBr(intermediate_block);
+		builder.SetInsertPoint(intermediate_block);
 		return nullptr;
+	}
 
 	case node_kinds::write_reg: {
 		auto wrn = (write_reg_node *)a;
@@ -538,7 +523,7 @@ Value *generation_context::lower_node(IRBuilder<> &builder, Argument *state_arg,
 	}
 
 	case node_kinds::cond_br: {
-		throw std::runtime_error("unsupported cond-br");
+		return nullptr; // throw std::runtime_error("unsupported cond-br");
 	}
 
 	default:
@@ -546,7 +531,7 @@ Value *generation_context::lower_node(IRBuilder<> &builder, Argument *state_arg,
 	}
 }
 
-void generation_context::lower_chunk(SwitchInst *pcswitch, BasicBlock *contblock, std::shared_ptr<chunk> c)
+void llvm_output_engine_impl::lower_chunk(SwitchInst *pcswitch, BasicBlock *contblock, std::shared_ptr<chunk> c)
 {
 	IRBuilder<> builder(*llvm_context_);
 	std::map<unsigned long, BasicBlock *> blocks;
@@ -598,7 +583,7 @@ void generation_context::lower_chunk(SwitchInst *pcswitch, BasicBlock *contblock
 	}
 }
 
-void generation_context::optimise()
+void llvm_output_engine_impl::optimise()
 {
 	LoopAnalysisManager LAM;
 	FunctionAnalysisManager FAM;
@@ -620,7 +605,7 @@ void generation_context::optimise()
 	module_->print(outs(), nullptr);
 }
 
-void generation_context::compile()
+void llvm_output_engine_impl::compile()
 {
 	auto TT = sys::getDefaultTargetTriple();
 	module_->setTargetTriple(TT);
