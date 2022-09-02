@@ -631,12 +631,6 @@ static std::shared_ptr<packet> translate_instruction(off_t address, xed_decoded_
 {
 	auto pkt = std::make_shared<packet>(address);
 
-	/*char buffer[64];
-	// xed_decoded_inst_dump(xed_inst, buffer, sizeof(buffer));
-	xed_format_context(XED_SYNTAX_INTEL, xed_inst, buffer, sizeof(buffer), address, nullptr, 0);*/
-
-	// std::cerr << "insn @ " << std::hex << address << ": " << buffer << std::endl;
-
 	switch (xed_decoded_inst_get_iclass(xed_inst)) {
 	case XED_ICLASS_XOR: {
 		auto op0 = read_operand(pkt, xed_inst, 0);
@@ -982,6 +976,21 @@ static std::shared_ptr<packet> translate_instruction(off_t address, xed_decoded_
 		break;
 	}
 
+	case XED_ICLASS_RET_FAR:
+	case XED_ICLASS_RET_NEAR: {
+		// pop stack, write to pc
+
+		auto rsp = pkt->insert_read_reg(value_type::u64(), reg_to_offset(XED_REG_RSP));
+		auto retaddr = pkt->insert_read_mem(value_type::u64(), rsp->val());
+
+		auto new_rsp = pkt->insert_add(rsp->val(), pkt->insert_constant_u64(8)->val());
+		pkt->insert_write_reg(reg_to_offset(XED_REG_RSP), new_rsp->val());
+
+		pkt->insert_write_pc(retaddr->val());
+
+		break;
+	}
+
 	case XED_ICLASS_NOP:
 	case XED_ICLASS_HLT:
 	case XED_ICLASS_CPUID:
@@ -989,8 +998,17 @@ static std::shared_ptr<packet> translate_instruction(off_t address, xed_decoded_
 	case XED_ICLASS_PAND:
 		break;
 
-	default:
-		return nullptr; // throw std::runtime_error("unsupported instruction");
+	case XED_ICLASS_REPE_CMPSB: {
+		throw std::runtime_error("unsupported rep cmpsb");
+	}
+
+	default: {
+		char buffer[64];
+		xed_format_context(XED_SYNTAX_INTEL, xed_inst, buffer, sizeof(buffer), address, nullptr, 0);
+		std::cerr << "UNSUPPORTED INSTRUCTION @ " << std::hex << address << ": " << buffer << std::endl;
+
+		throw std::runtime_error("unsupported instruction");
+	}
 	}
 
 	return pkt;
