@@ -488,8 +488,7 @@ Value *generation_context::lower_port(IRBuilder<> &builder, Argument *state_arg,
 Value *generation_context::lower_node(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, node *a)
 {
 	switch (a->kind()) {
-	case node_kinds::start:
-	case node_kinds::end:
+	case node_kinds::label:
 		return nullptr;
 
 	case node_kinds::write_reg: {
@@ -536,6 +535,10 @@ Value *generation_context::lower_node(IRBuilder<> &builder, Argument *state_arg,
 		auto val = lower_port(builder, state_arg, pkt, wpn->value());
 
 		return builder.CreateStore(val, dest_reg);
+	}
+
+	case node_kinds::cond_br: {
+		throw std::runtime_error("unsupported cond-br");
 	}
 
 	default:

@@ -8,8 +8,7 @@
 
 namespace arancini::ir {
 enum class node_kinds {
-	start,
-	end,
+	label,
 	read_pc,
 	write_pc,
 	constant,
@@ -22,7 +21,8 @@ enum class node_kinds {
 	write_mem,
 	cast,
 	csel,
-	bit_shift
+	bit_shift,
+	cond_br
 };
 
 class packet;
@@ -67,43 +67,11 @@ public:
 	}
 };
 
-class start_node : public action_node {
+class label_node : public action_node {
 public:
-	start_node(packet &owner, unsigned long offset)
-		: action_node(owner, node_kinds::start)
-		, offset_(offset)
+	label_node(packet &owner)
+		: action_node(owner, node_kinds::label)
 	{
-	}
-
-	unsigned long offset() const { return offset_; }
-
-	virtual bool accept(visitor &v) override
-	{
-		if (!action_node::accept(v)) {
-			return false;
-		}
-
-		return v.visit_start_node(*this);
-	}
-
-private:
-	unsigned long offset_;
-};
-
-class end_node : public action_node {
-public:
-	end_node(packet &owner)
-		: action_node(owner, node_kinds::end)
-	{
-	}
-
-	virtual bool accept(visitor &v) override
-	{
-		if (!action_node::accept(v)) {
-			return false;
-		}
-
-		return v.visit_end_node(*this);
 	}
 };
 
@@ -132,6 +100,32 @@ public:
 
 private:
 	port value_;
+};
+
+class cond_br_node : public action_node {
+public:
+	cond_br_node(packet &owner, port &cond, label_node *target)
+		: action_node(owner, node_kinds::cond_br)
+		, cond_(cond)
+		, target_(target)
+	{
+	}
+
+	port &cond() const { return cond_; }
+	label_node *target() const { return target_; }
+
+	virtual bool accept(visitor &v) override
+	{
+		if (!action_node::accept(v)) {
+			return false;
+		}
+
+		return v.visit_cond_br_node(*this);
+	}
+
+private:
+	port &cond_;
+	label_node *target_;
 };
 
 class read_pc_node : public value_node {

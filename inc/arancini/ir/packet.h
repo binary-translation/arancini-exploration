@@ -20,8 +20,8 @@ public:
 	value_node *insert_constant_s32(signed int cv) { return insert(new constant_node(*this, value_type::s32(), cv)); }
 	value_node *insert_constant_u64(unsigned long cv) { return insert(new constant_node(*this, value_type::u64(), cv)); }
 
-	action_node *insert_start(unsigned long offset) { return insert(new start_node(*this, offset)); }
-	action_node *insert_end() { return insert(new end_node(*this)); }
+	label_node *insert_label() { return insert(new label_node(*this)); }
+	action_node *insert_cond_br(port &cond, label_node *target) { return insert(new cond_br_node(*this, cond, target)); }
 
 	value_node *insert_read_pc() { return insert(new read_pc_node(*this)); }
 	action_node *insert_write_pc(port &value) { return insert(new write_pc_node(*this, value)); }

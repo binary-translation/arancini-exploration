@@ -19,8 +19,7 @@ public:
 	virtual bool visit_node(node &n) override;
 	virtual bool visit_action_node(action_node &n) override;
 	virtual bool visit_value_node(value_node &n) override;
-	virtual bool visit_start_node(start_node &n) override;
-	virtual bool visit_end_node(end_node &n) override;
+	virtual bool visit_cond_br_node(cond_br_node &n) override;
 	virtual bool visit_read_pc_node(read_pc_node &n) override;
 	virtual bool visit_write_pc_node(write_pc_node &n) override;
 	virtual bool visit_constant_node(constant_node &n) override;

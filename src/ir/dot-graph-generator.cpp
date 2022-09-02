@@ -63,14 +63,9 @@ bool dot_graph_generator::visit_action_node(action_node &n)
 
 bool dot_graph_generator::visit_value_node(value_node &n) { return true; }
 
-bool dot_graph_generator::visit_start_node(start_node &n)
+bool dot_graph_generator::visit_cond_br_node(cond_br_node &n)
 {
-	os_ << "N" << &n << " [label=\"start #" << std::hex << n.offset() << "\"];" << std::endl;
-	return true;
-}
-bool dot_graph_generator::visit_end_node(end_node &n)
-{
-	os_ << "N" << &n << " [label=\"end\"];" << std::endl;
+	os_ << "N" << &n << " [label=\"cond-br\"];" << std::endl;
 	return true;
 }
 

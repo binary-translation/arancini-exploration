@@ -55,9 +55,7 @@ bool debug_visitor::visit_action_node(action_node &n) { return true; }
 
 bool debug_visitor::visit_value_node(value_node &n) { return true; }
 
-bool debug_visitor::visit_start_node(start_node &n) { return true; }
-
-bool debug_visitor::visit_end_node(end_node &n) { return true; }
+bool debug_visitor::visit_cond_br_node(cond_br_node &n) { return true; }
 
 bool debug_visitor::visit_read_pc_node(read_pc_node &n) { return true; }
 
