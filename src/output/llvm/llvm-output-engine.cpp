@@ -333,7 +333,7 @@ Value *generation_context::materialise_port(IRBuilder<> &builder, Argument *stat
 		// auto src_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 0) }, "pcptr");
 		// return builder.CreateLoad(types.i64, src_reg);
 
-		return ConstantInt::get(types.i64, pkt->get_start_node()->offset());
+		return ConstantInt::get(types.i64, pkt->address());
 	}
 
 	case node_kinds::cast: {
@@ -497,7 +497,7 @@ Value *generation_context::lower_node(IRBuilder<> &builder, Argument *state_arg,
 		// gep register
 		// store value
 
-		std::cerr << "wreg off=" << wrn->regoff() << std::endl;
+		// std::cerr << "wreg off=" << wrn->regoff() << std::endl;
 
 		auto dest_reg = builder.CreateGEP(
 			types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, wrn->regoff()) }, reg_name(wrn->regoff()));
@@ -554,45 +554,39 @@ void generation_context::lower_chunk(SwitchInst *pcswitch, BasicBlock *contblock
 
 	auto state_arg = contblock->getParent()->getArg(0);
 
+	for (auto p : c->packets()) {
+		std::stringstream block_name;
+		block_name << "INSN_" << std::hex << p->address();
+
+		BasicBlock *block = BasicBlock::Create(*llvm_context_, block_name.str(), contblock->getParent());
+		blocks[p->address()] = block;
+	}
+
 	BasicBlock *packet_block = nullptr;
 	for (auto p : c->packets()) {
-		if (p->actions().empty()) {
-			continue;
+		auto next_block = blocks[p->address()];
+
+		if (packet_block != nullptr) {
+			builder.CreateBr(next_block);
 		}
 
-		auto first_action = p->actions().front();
-		if (first_action->kind() != node_kinds::start) {
-			throw std::logic_error("first action in packet isn't a start node");
-		}
+		packet_block = next_block;
 
-		if (!packet_block) {
-			auto packet_start_node = (start_node *)first_action;
+		builder.SetInsertPoint(packet_block);
 
-			std::stringstream block_name;
-			block_name << "BB_" << std::hex << packet_start_node->offset();
-
-			packet_block = BasicBlock::Create(*llvm_context_, block_name.str(), contblock->getParent());
-			blocks[packet_start_node->offset()] = packet_block;
-			builder.SetInsertPoint(packet_block);
-		}
-
-		bool updates_pc = false;
-
-		for (auto a : p->actions()) {
-			lower_node(builder, state_arg, p, a);
-
-			if (a->updates_pc()) {
-				updates_pc = true;
+		if (!p->actions().empty()) {
+			for (auto a : p->actions()) {
+				lower_node(builder, state_arg, p, a);
 			}
 		}
 
-		if (updates_pc) {
+		if (p->updates_pc()) {
 			builder.CreateBr(contblock);
 			packet_block = nullptr;
 		}
 	}
 
-	if (packet_block) {
+	if (packet_block != nullptr) {
 		builder.CreateBr(contblock);
 	}
 

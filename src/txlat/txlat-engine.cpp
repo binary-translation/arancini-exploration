@@ -3,6 +3,7 @@
 #include <arancini/ir/chunk.h>
 #include <arancini/output/llvm/llvm-output-engine.h>
 #include <arancini/txlat/txlat-engine.h>
+#include <chrono>
 #include <iostream>
 
 using namespace arancini::txlat;
@@ -13,6 +14,8 @@ using namespace arancini::input::x86;
 using namespace arancini::output;
 using namespace arancini::output::llvm;
 
+static std::set<std::string> allowed_symbols = { "_start", "__libc_start_main", "_dl_aux_init" };
+
 void txlat_engine::translate(const std::string &input)
 {
 	elf_reader elf(input);
@@ -22,7 +25,7 @@ void txlat_engine::translate(const std::string &input)
 		if (s->type() == section_type::symbol_table) {
 			auto st = std::static_pointer_cast<symbol_table>(s);
 			for (const auto &sym : st->symbols()) {
-				if (sym.name() == "_start" || sym.name() == "__libc_start_main") {
+				if (allowed_symbols.count(sym.name())) {
 					oe_->add_chunk(translate_symbol(elf, sym));
 				}
 			}
@@ -46,5 +49,11 @@ std::shared_ptr<chunk> txlat_engine::translate_symbol(elf_reader &reader, const 
 	off_t symbol_offset_in_section = sym.value() - section->address();
 
 	const void *symbol_data = (const void *)((uintptr_t)section->data() + symbol_offset_in_section);
-	return ia_->translate_chunk(sym.value(), symbol_data, sym.size());
+
+	auto start = std::chrono::high_resolution_clock::now();
+	auto cv = ia_->translate_chunk(sym.value(), symbol_data, sym.size());
+	auto dur = std::chrono::high_resolution_clock::now() - start;
+
+	std::cerr << "symbol translation time: " << std::dec << std::chrono::duration_cast<std::chrono::microseconds>(dur).count() << " us" << std::endl;
+	return cv;
 }

@@ -629,14 +629,13 @@ static value_type type_of_operand(xed_decoded_inst_t *xed_inst, int opnum)
 
 static std::shared_ptr<packet> translate_instruction(off_t address, xed_decoded_inst_t *xed_inst)
 {
-	auto pkt = std::make_shared<packet>();
-	pkt->insert_start(address);
+	auto pkt = std::make_shared<packet>(address);
 
-	char buffer[64];
+	/*char buffer[64];
 	// xed_decoded_inst_dump(xed_inst, buffer, sizeof(buffer));
-	xed_format_context(XED_SYNTAX_INTEL, xed_inst, buffer, sizeof(buffer), address, nullptr, 0);
+	xed_format_context(XED_SYNTAX_INTEL, xed_inst, buffer, sizeof(buffer), address, nullptr, 0);*/
 
-	std::cerr << "insn @ " << std::hex << address << ": " << buffer << std::endl;
+	// std::cerr << "insn @ " << std::hex << address << ": " << buffer << std::endl;
 
 	switch (xed_decoded_inst_get_iclass(xed_inst)) {
 	case XED_ICLASS_XOR: {
@@ -994,8 +993,6 @@ static std::shared_ptr<packet> translate_instruction(off_t address, xed_decoded_
 		return nullptr; // throw std::runtime_error("unsupported instruction");
 	}
 
-	pkt->insert_end();
-
 	return pkt;
 }
 
@@ -1007,7 +1004,7 @@ std::shared_ptr<chunk> x86_input_arch::translate_chunk(off_t base_address, const
 
 	const uint8_t *mc = (const uint8_t *)code;
 
-	std::cerr << "chunk @ " << base_address << std::endl;
+	// std::cerr << "chunk @ " << base_address << std::endl;
 
 	size_t offset = 0;
 	do {

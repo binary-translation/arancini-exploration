@@ -8,6 +8,11 @@
 namespace arancini::ir {
 class packet {
 public:
+	packet(off_t address)
+		: address_(address)
+	{
+	}
+
 	value_node *insert_constant(const value_type &vt, unsigned long cv) { return insert(new constant_node(*this, vt, cv)); }
 	value_node *insert_constant_u8(unsigned char cv) { return insert(new constant_node(*this, value_type::u8(), cv)); }
 	value_node *insert_constant_u16(unsigned short cv) { return insert(new constant_node(*this, value_type::u16(), cv)); }
@@ -81,9 +86,21 @@ public:
 		return v.visit_packet_end(*this);
 	}
 
-	start_node *get_start_node() const { return (start_node *)actions_.front(); }
+	off_t address() const { return address_; }
+
+	bool updates_pc() const
+	{
+		for (action_node *a : actions_) {
+			if (a->kind() == node_kinds::write_pc) {
+				return true;
+			}
+		}
+
+		return false;
+	}
 
 private:
+	off_t address_;
 	std::vector<action_node *> actions_;
 
 	template <class T> T *insert(T *n)
