@@ -473,6 +473,8 @@ Value *llvm_output_engine_impl::lower_node(IRBuilder<> &builder, Argument *state
 		auto intermediate_block = BasicBlock::Create(*llvm_context_, "IB", current_block->getParent());
 		builder.CreateBr(intermediate_block);
 		builder.SetInsertPoint(intermediate_block);
+
+		label_nodes_to_llvm_blocks_[(label_node *)a] = intermediate_block;
 		return nullptr;
 	}
 
@@ -523,7 +525,18 @@ Value *llvm_output_engine_impl::lower_node(IRBuilder<> &builder, Argument *state
 	}
 
 	case node_kinds::cond_br: {
-		return nullptr; // throw std::runtime_error("unsupported cond-br");
+		auto cbn = (cond_br_node *)a;
+
+		auto current_block = builder.GetInsertBlock();
+		auto intermediate_block = BasicBlock::Create(*llvm_context_, "IB", current_block->getParent());
+
+		auto cond = lower_port(builder, state_arg, pkt, cbn->cond());
+
+		auto br = builder.CreateCondBr(cond, label_nodes_to_llvm_blocks_[cbn->target()], intermediate_block);
+
+		builder.SetInsertPoint(intermediate_block);
+
+		return br;
 	}
 
 	default:

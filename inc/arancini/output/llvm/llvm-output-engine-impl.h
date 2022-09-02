@@ -31,6 +31,7 @@ class chunk;
 class node;
 class port;
 class packet;
+class label_node;
 } // namespace arancini::ir
 
 namespace arancini::output::llvm {
@@ -65,6 +66,7 @@ private:
 	::llvm::MDNode *reg_file_alias_scope_;
 
     std::map<ir::port *, ::llvm::Value *> node_ports_to_llvm_values_;
+    std::map<ir::label_node *, ::llvm::BasicBlock *> label_nodes_to_llvm_blocks_;
 
 	void build();
 	void initialise_types();
