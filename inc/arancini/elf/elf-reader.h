@@ -122,7 +122,11 @@ private:
 		section_type type, section_flags flags, const std::string &name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size);
 	void parse_symbol_table(section_flags flags, const std::string &name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size);
 
+#if __cplusplus > 202002L
 	constexpr const void *get_data_ptr(off_t offset) const { return (const void *)((uintptr_t)elf_data_ + offset); }
+#else
+	const void *get_data_ptr(off_t offset) const { return (const void *)((uintptr_t)elf_data_ + offset); }
+#endif
 
 	template <typename T> constexpr T read(off_t offset) const { return *(const T *)get_data_ptr(offset); }
 
