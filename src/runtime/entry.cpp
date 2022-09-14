@@ -10,6 +10,7 @@ struct xmmreg {
 	unsigned long l, h;
 };
 
+// TODO: This shouldn't be hard coded.
 struct cpu_state {
 	/* 0 */ unsigned long pc;
 	/* 1 */ unsigned long rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi;
@@ -21,31 +22,41 @@ struct cpu_state {
 
 void *mem;
 
+/*
+ * Initialises the dynamic runtime for the guest program that is about to be executed.
+ */
 extern "C" cpu_state *initialise_dynamic_runtime(unsigned long entry_point)
 {
 	std::cerr << "arancini: dbt: initialise" << std::endl;
+
+	// Allocate storage for the emulated CPU state structure (TODO think about multithreading)
 	auto s = new cpu_state();
 	bzero(s, sizeof(*s));
 
+	// Allocate emulated guest memory - hardcode this to 4Gb for now
 	mem = mmap(nullptr, 0x100000000, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
 	if (mem == MAP_FAILED) {
 		throw std::runtime_error("unable to map guest memory");
 	}
 
-	// asm volatile("int3");
+	// The GS register is used as the base address for the emulated guest memory.  Static and dynamic
+	// code generate memory instructions based on this.
 	syscall(SYS_arch_prctl, ARCH_SET_GS, (unsigned long long)mem);
 
-	//_writegsbase_u64((unsigned long long)mem);
-
+	// Initialise the CPU state structure with the PC set to the entry point of
+	// the guest program, and a stack pointer at the top of the emulated address space.
 	s->pc = entry_point;
 	s->rsp = 0x100000000 - 8;
 
 	std::cerr << "state @ " << (void *)s << ", mem @ " << mem << ", stack @ " << std::hex << s->rsp << std::endl;
 
-	// asm volatile("int3");
 	return s;
 }
 
+/*
+ * Entry point from /static/ code when the CPU jumps to an address that hasn't been
+ * translated.
+ */
 extern "C" int invoke_code(cpu_state *cpu_state)
 {
 	std::cerr << "arancini: dbt: invoke " << std::hex << cpu_state << std::endl;
