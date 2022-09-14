@@ -304,6 +304,7 @@ Value *llvm_output_engine_impl::materialise_port(IRBuilder<> &builder, Argument 
 			auto value_port = lower_port(builder, state_arg, pkt, n->val());
 			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_SLT, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
 		} else {
+			// TODO: Need to support CARRY + OVERFLOW
 			return ConstantInt::get(types.i8, 0);
 			// throw std::runtime_error("unsupported port kind");
 		}
