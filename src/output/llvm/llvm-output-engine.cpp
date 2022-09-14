@@ -175,7 +175,7 @@ static const char *regnames[]
 
 static std::string reg_name(int regoff)
 {
-	if (regoff < (sizeof(regnames) / sizeof(regnames[0]))) {
+	if ((size_t)regoff < (sizeof(regnames) / sizeof(regnames[0]))) {
 		return regnames[regoff];
 	}
 
