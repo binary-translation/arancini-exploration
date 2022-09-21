@@ -68,7 +68,8 @@ void llvm_output_engine_impl::initialise_types()
 	});
 
 	types.cpu_state = StructType::get(*llvm_context_, state_elements, false);
-	types.cpu_state->setName("cpu_state_struct");
+	if (!types.cpu_state->isLiteral())
+	  types.cpu_state->setName("cpu_state_struct");
 	types.cpu_state_ptr = PointerType::get(types.cpu_state, 0);
 
 	// Functions
