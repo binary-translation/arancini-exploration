@@ -22,6 +22,10 @@ static void initialise_xed()
 	}
 }
 
+/*
+This function implements the factory pattern, returning a translator specialized in the
+translation for each category of instructions.
+*/
 static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_inst_t *xed_inst)
 {
 	switch (xed_decoded_inst_get_iclass(xed_inst)) {
@@ -143,6 +147,18 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 	}
 }
 
+/*
+This is the starting point for the translation of the input architecture.
+For each instruction in the input machine code, it uses a factory pattern
+to get a translator specific for that category of instruction, which
+is then used to translate the instruction to the Arancini IR.
+Each instruction is translated into a packet, which is then added to
+the output chunk.
+
+The translator factory is implemented by the get_translator function.
+All the x86 translators implementations can be found in the
+src/input/x86/translators/ folder.
+*/
 std::shared_ptr<chunk> x86_input_arch::translate_chunk(off_t base_address, const void *code, size_t code_size)
 {
 	auto c = std::make_shared<chunk>();
