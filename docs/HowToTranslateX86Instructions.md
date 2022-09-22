@@ -1,5 +1,5 @@
 
-#How to Implement a Translator for an x86 Instruction
+# How to Implement a Translator for an x86 Instruction
 
 For each instruction in the input machine code, it uses a factory pattern
 to get a translator specific for that category of instruction, which
@@ -27,11 +27,40 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 	case XED_ICLASS_CMP:
 	case XED_ICLASS_TEST:
 		return std::make_unique<binop_translator>();
-
         ...
 }
 ```
 
-All the x86 translators implementations can be found in the
+All the x86 translators are defined in the `inc/arancini/input/x86/translators/translators.h`
+header file, and their implementations can be found in the
 `src/input/x86/translators/` folder.
+For example, the translator for all binary-operation instructions is implemented in
+the `src/input/x86/translators/binop.cpp` file.
+This file contains the implementation of the virtual function 
+`binop_translator::do_translate()`.
+The class `binop_translator` extends the abstract `translator` class, which defines the
+virtual `do_translate()` function.
+The `do_translate()` function is called by the `translator::translate()` function.
+Combined, they form the primary interface used for translating individual x86 instructions
+into packets in the Arancini IR.
+The snippet of code bellow shows how the `binop_translator` translates an addition instruction.
+```cpp
+void binop_translator::do_translate()
+{
+	auto op0 = read_operand(0);
+	auto op1 = auto_cast(op0->val().type(), read_operand(1));
+
+	value_node *rslt;
+
+	switch (xed_decoded_inst_get_iclass(xed_inst())) {
+        ...
+	case XED_ICLASS_ADD:
+		rslt = pkt()->insert_add(op0->val(), op1->val());
+		break;
+        ...
+        }
+        ...
+}
+
+```
 
