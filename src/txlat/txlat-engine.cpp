@@ -16,6 +16,15 @@ using namespace arancini::output::llvm;
 
 static std::set<std::string> allowed_symbols = { "_start", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
 
+
+
+/*
+This function acts as the main driver for the binary translation.
+First it parses the ELF binary, lifting each section to the Arancini IR.
+Finally, the lifted IR is processed by the output engine.
+For example, the output engine can generate the target binary or a
+visualisation of the Arancini IR.
+*/
 void txlat_engine::translate(const std::string &input)
 {
 	elf_reader elf(input);
@@ -35,6 +44,10 @@ void txlat_engine::translate(const std::string &input)
 	oe_->generate();
 }
 
+/*
+This function uses an x86 implementation of the input_architecture class to lift
+x86 symbol sections to the Arancini IR.
+*/
 std::shared_ptr<chunk> txlat_engine::translate_symbol(elf_reader &reader, const symbol &sym)
 {
 	// std::cerr << "translating symbol " << sym.name() << ", value=" << std::hex << sym.value() << ", size=" << sym.size() << ", section=" <<
