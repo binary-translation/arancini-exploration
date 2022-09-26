@@ -1,5 +1,5 @@
 export MAKEFLAGS += -rR --no-print-directory
-export q ?= @
+export q ?= 
 
 export top-dir := $(CURDIR)
 export inc-dir := $(top-dir)/inc
@@ -8,7 +8,7 @@ export lib-dir := $(top-dir)/lib
 export bld-dir := $(top-dir)/build
 export out-dir := $(top-dir)/out
 
-targets := core input/x86 ir output/debug output/llvm output/arm64 runtime txlat
+targets := core input/x86 ir output/debug output/llvm output/arm64 txlat
 
 build-rules := $(patsubst %,__BUILD__%,$(targets))
 clean-rules := $(patsubst %,__CLEAN__%,$(targets))
@@ -21,7 +21,7 @@ all: $(out-dir) extlibs $(build-rules)
 
 clean: $(clean-rules)
 
-extlibs: .FORCE
+extlibs:
 	make -C $(lib-dir)
 
 $(build-rules): .FORCE
@@ -34,4 +34,4 @@ $(clean-rules): .FORCE
 $(out-dir):
 	@mkdir $@
 
-.PHONY: .FORCE
+.PHONY: .FORCE all clean
