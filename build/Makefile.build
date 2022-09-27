@@ -13,7 +13,7 @@ real-ldflags := $(ldflags) $(target-ldflags)
 ldflags-libs := -L $(out-dir) $(real-needs) $(target-ldflags-libs)
 
 cpp-srcs := $(shell find $(target-dir) | grep -E "\.cpp$$")
-as-srcs := $(shell find $(target-dir) | grep -E "\.S$$")
+as-srcs := $(shell find $(target-dir) | grep -E "\.$(target-arch)\.S$$")
 cpp-objs := $(cpp-srcs:.cpp=.o)
 as-objs := $(as-srcs:.S=.o)
 objs := $(cpp-objs) $(as-objs)

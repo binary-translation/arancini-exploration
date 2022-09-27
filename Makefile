@@ -8,6 +8,9 @@ export lib-dir := $(top-dir)/lib
 export bld-dir := $(top-dir)/build
 export out-dir := $(top-dir)/out
 
+export cross-compile ?=
+export target-arch := $(shell $(cross-compile)g++ -dumpmachine | cut -d '-' -f 1)
+
 targets := core input/x86 ir output/debug output/llvm output/arm64 runtime txlat
 
 build-rules := $(patsubst %,__BUILD__%,$(targets))
