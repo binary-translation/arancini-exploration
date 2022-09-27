@@ -51,7 +51,7 @@ std::shared_ptr<chunk> txlat_engine::translate_symbol(elf_reader &reader, const 
 	const void *symbol_data = (const void *)((uintptr_t)section->data() + symbol_offset_in_section);
 
 	auto start = std::chrono::high_resolution_clock::now();
-	auto cv = ia_->translate_chunk(sym.value(), symbol_data, sym.size());
+	auto cv = ia_->translate_chunk(sym.value(), symbol_data, sym.size(), false);
 	auto dur = std::chrono::high_resolution_clock::now() - start;
 
 	std::cerr << "symbol translation time: " << std::dec << std::chrono::duration_cast<std::chrono::microseconds>(dur).count() << " us" << std::endl;

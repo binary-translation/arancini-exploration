@@ -145,7 +145,7 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 	}
 }
 
-std::shared_ptr<chunk> x86_input_arch::translate_chunk(off_t base_address, const void *code, size_t code_size)
+std::shared_ptr<chunk> x86_input_arch::translate_chunk(off_t base_address, const void *code, size_t code_size, bool basic_block)
 {
 	auto c = std::make_shared<chunk>();
 
@@ -170,7 +170,12 @@ std::shared_ptr<chunk> x86_input_arch::translate_chunk(off_t base_address, const
 		xed_uint_t length = xed_decoded_inst_get_length(&xedd);
 
 		auto t = get_translator(base_address, &xedd);
-		c->add_packet(t->translate(base_address, &xedd));
+		auto p = t->translate(base_address, &xedd);
+		c->add_packet(p);
+
+		if (p->updates_pc() && basic_block) {
+			break;
+		}
 
 		offset += length;
 		base_address += length;
