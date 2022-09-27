@@ -17,7 +17,7 @@ as-srcs := $(shell find $(target-dir) | grep -E "\.S$$")
 cpp-objs := $(cpp-srcs:.cpp=.o)
 as-objs := $(as-srcs:.S=.o)
 objs := $(cpp-objs) $(as-objs)
-deps := $(srcs:.cpp=.d)
+deps := $(cpp-srcs:.cpp=.d)
 
 PRETTY-SRC-TARGET = $(patsubst $(src-dir)/%,%,$@)
 PRETTY-OUT-TARGET = $(patsubst $(out-dir)/%,%,$@)
