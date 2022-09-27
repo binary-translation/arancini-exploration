@@ -21,7 +21,7 @@ all: $(out-dir) extlibs $(build-rules)
 
 clean: $(clean-rules)
 
-extlibs: .FORCE
+extlibs:
 	make -C $(lib-dir)
 
 $(build-rules): .FORCE
@@ -34,4 +34,4 @@ $(clean-rules): .FORCE
 $(out-dir):
 	@mkdir $@
 
-.PHONY: .FORCE
+.PHONY: .FORCE all clean
