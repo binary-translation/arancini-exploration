@@ -11,7 +11,7 @@ public:
 	llvm_output_engine();
 	~llvm_output_engine();
 
-	void generate() override;
+	void generate(const output_personality &personality) override;
 
 private:
 	std::unique_ptr<llvm_output_engine_impl> oei_;

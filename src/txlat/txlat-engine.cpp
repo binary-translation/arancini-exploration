@@ -2,6 +2,7 @@
 #include <arancini/input/x86/x86-input-arch.h>
 #include <arancini/ir/chunk.h>
 #include <arancini/output/llvm/llvm-output-engine.h>
+#include <arancini/output/output-personality.h>
 #include <arancini/txlat/txlat-engine.h>
 #include <chrono>
 #include <iostream>
@@ -32,7 +33,8 @@ void txlat_engine::translate(const std::string &input)
 		}
 	}
 
-	oe_->generate();
+	static_output_personality sop;
+	oe_->generate(sop);
 }
 
 std::shared_ptr<chunk> txlat_engine::translate_symbol(elf_reader &reader, const symbol &sym)

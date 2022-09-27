@@ -18,7 +18,7 @@ llvm_output_engine::llvm_output_engine()
 
 llvm_output_engine::~llvm_output_engine() = default;
 
-void llvm_output_engine::generate() { oei_->generate(); }
+void llvm_output_engine::generate(const output_personality &personality) { oei_->generate(); }
 
 llvm_output_engine_impl::llvm_output_engine_impl(const std::vector<std::shared_ptr<ir::chunk>> &chunks)
 	: chunks_(chunks)

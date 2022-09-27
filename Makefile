@@ -11,7 +11,7 @@ export out-dir := $(top-dir)/out
 export cross-compile ?=
 export target-arch := $(shell $(cross-compile)g++ -dumpmachine | cut -d '-' -f 1)
 
-targets := core input/x86 ir output/debug output/llvm output/arm64 runtime txlat
+targets := core input/x86 ir output/debug output/llvm output/arm64 output/x86 runtime txlat
 
 build-rules := $(patsubst %,__BUILD__%,$(targets))
 clean-rules := $(patsubst %,__CLEAN__%,$(targets))
