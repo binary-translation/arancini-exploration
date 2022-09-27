@@ -14,7 +14,7 @@ using namespace arancini::input::x86;
 using namespace arancini::output;
 using namespace arancini::output::llvm;
 
-static std::set<std::string> allowed_symbols = { "_start", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
+static std::set<std::string> allowed_symbols = { "test", "_start", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
 
 
 
