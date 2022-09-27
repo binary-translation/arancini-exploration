@@ -22,6 +22,8 @@ static void initialise_xed()
 	}
 }
 
+// TODO: This is quite heavy-weight - need to hold instances of translators ready to go, rather than
+// instantiating each time.
 static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_inst_t *xed_inst)
 {
 	switch (xed_decoded_inst_get_iclass(xed_inst)) {
