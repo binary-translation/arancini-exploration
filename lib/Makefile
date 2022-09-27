@@ -1,7 +1,7 @@
 xed-dir := $(lib-dir)/intel-xed/xed
 xed-lib := $(xed-dir)/obj/libxed.a
 
-all: submodules $(xed-lib)
+all: $(xed-lib)
 
 submodules:
 	git submodule init

@@ -1,5 +1,5 @@
 export MAKEFLAGS += -rR --no-print-directory
-export q ?= 
+export q ?= @
 
 export top-dir := $(CURDIR)
 export inc-dir := $(top-dir)/inc
