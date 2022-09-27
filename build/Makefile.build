@@ -6,13 +6,17 @@ target-makefile := $(target-dir)/Makefile
 
 real-target := $(out-dir)/$(target)
 real-cxxflags := $(cxxflags) $(target-cxxflags)
+real-asflags := $(cxxflags) $(target-cxxflags)
 real-needs := $(patsubst %,-l%,$(needs))
 real-ldflags := $(ldflags) $(target-ldflags)
 
 ldflags-libs := -L $(out-dir) $(real-needs) $(target-ldflags-libs)
 
-srcs := $(shell find $(target-dir) | grep -E "\.cpp$$")
-objs := $(srcs:.cpp=.o)
+cpp-srcs := $(shell find $(target-dir) | grep -E "\.cpp$$")
+as-srcs := $(shell find $(target-dir) | grep -E "\.S$$")
+cpp-objs := $(cpp-srcs:.cpp=.o)
+as-objs := $(as-srcs:.S=.o)
+objs := $(cpp-objs) $(as-objs)
 deps := $(srcs:.cpp=.d)
 
 PRETTY-SRC-TARGET = $(patsubst $(src-dir)/%,%,$@)
@@ -28,6 +32,10 @@ $(real-target): $(objs) $(deps)
 %.o: %.cpp %.d
 	@echo "  CXX   $(PRETTY-SRC-TARGET)"
 	$(q)$(cxx) -c -o $@ $(real-cxxflags) $<
+
+%.o: %.S
+	@echo "  CXX   $(PRETTY-SRC-TARGET)"
+	$(q)$(cxx) -c -o $@ $(real-asflags) $<
 
 %.d: %.cpp
 	$(q)$(cxx) -M -MT $(@:.d=.o) -o $@ $(real-cxxflags) $<
