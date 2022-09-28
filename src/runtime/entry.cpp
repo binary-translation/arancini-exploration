@@ -34,16 +34,25 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point)
 {
 	std::cerr << "arancini: dbt: initialise" << std::endl;
 
-	ctx = new execution_context(ia, oe, 0x100000000);
+	// Create an execution context for the given input (guest) and output (host) architecture.
+	ctx = new execution_context(ia, oe);
+
+	// Create a memory area for the stack.
+	unsigned long stack_size = 0x10000;
+	ctx->add_memory_region(0x100000000 - stack_size, stack_size);
+
+	// TODO: Load guest .text, .data, .bss sections via program headers
+
 	auto main_thread = ctx->create_execution_thread();
 
 	// Initialise the CPU state structure with the PC set to the entry point of
-	// the guest program, and a stack pointer at the top of the emulated address space.
+	// the guest program, and an emulated stack pointer at the top of the
+	// emulated address space.
 	x86_cpu_state *x86_state = (x86_cpu_state *)main_thread->get_cpu_state();
 	x86_state->pc = entry_point;
 	x86_state->rsp = 0x100000000 - 8;
 
-	std::cerr << "state @ " << (void *)x86_state << ", mem @ " << ctx->get_memory() << ", stack @ " << std::hex << x86_state->rsp << std::endl;
+	std::cerr << "state @ " << (void *)x86_state << ", pc @ " << std::hex << x86_state->pc << ", stack @ " << std::hex << x86_state->rsp << std::endl;
 
 	return main_thread->get_cpu_state();
 }

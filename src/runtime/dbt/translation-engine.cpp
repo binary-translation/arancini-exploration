@@ -47,7 +47,7 @@ translation *translation_engine::get_translation(unsigned long pc)
 
 translation *translation_engine::translate(unsigned long pc)
 {
-	void *code = (void *)((uintptr_t)ec_.get_memory() + pc);
+	void *code = ec_.get_memory_ptr(pc);
 
 	auto chunk = ia_.translate_chunk(pc, code, 0x1000, true);
 	oe_.add_chunk(chunk);
