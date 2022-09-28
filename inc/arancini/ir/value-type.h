@@ -21,20 +21,32 @@ public:
 	static value_type s32() { return value_type(value_type_class::signed_integer, 32); }
 	static value_type s64() { return value_type(value_type_class::signed_integer, 64); }
 
-	value_type(value_type_class tc, int width)
+	static value_type vector(const value_type& underlying_type, int nr_elements)
+	{
+		return value_type(underlying_type.tc_, underlying_type.element_width_, nr_elements);
+	}
+
+	value_type(value_type_class tc, int element_width, int nr_elements = 1)
 		: tc_(tc)
-		, width_(width)
+		, element_width_(element_width)
+		, nr_elements_(nr_elements)
 	{
 	}
 
-	int width() const { return width_; }
+	int element_width() const { return element_width_; }
 	value_type_class type_class() const { return tc_; }
+	bool is_vector() const { return nr_elements_ > 1; }
+	int width() const { return element_width_ * nr_elements_; }
 
-	bool equivalent_to(const value_type &o) const { return width_ == o.width_ && tc_ == o.tc_; }
+	bool equivalent_to(const value_type &o) const { return element_width_ == o.element_width_ && tc_ == o.tc_ && nr_elements_ == o.nr_elements_; }
 
 	std::string to_string() const
 	{
 		std::stringstream s;
+
+		if (nr_elements_ > 1) {
+			s << "v" << std::dec << nr_elements_;
+		}
 
 		switch (tc_) {
 		case value_type_class::none:
@@ -55,13 +67,14 @@ public:
 			break;
 		}
 
-		s << std::dec << std::to_string(width_);
+		s << std::dec << std::to_string(element_width_);
 
 		return s.str();
 	}
 
 private:
 	value_type_class tc_;
-	int width_;
+	int element_width_;
+	int nr_elements_;
 };
 } // namespace arancini::ir
