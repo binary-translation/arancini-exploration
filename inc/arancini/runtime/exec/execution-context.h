@@ -5,12 +5,20 @@
 #include <map>
 #include <memory>
 
+namespace arancini::input {
+class input_arch;
+}
+
+namespace arancini::output {
+class output_engine;
+}
+
 namespace arancini::runtime::exec {
 class execution_thread;
 
 class execution_context {
 public:
-	execution_context(size_t memory_size);
+	execution_context(input::input_arch &ia, output::output_engine &oe, size_t memory_size);
 	~execution_context();
 
 	std::shared_ptr<execution_thread> create_execution_thread();

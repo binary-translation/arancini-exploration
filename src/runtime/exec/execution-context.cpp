@@ -3,7 +3,7 @@
 #include <arancini/runtime/exec/execution-thread.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
 
-#ifdef __x86_64__
+#if defined(ARCH_X86_64)
 #include <asm/prctl.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -15,10 +15,10 @@
 
 using namespace arancini::runtime::exec;
 
-execution_context::execution_context(size_t memory_size)
+execution_context::execution_context(input::input_arch &ia, output::output_engine &oe, size_t memory_size)
 	: memory_(nullptr)
 	, memory_size_(memory_size)
-	, te_(*this)
+	, te_(*this, ia, oe)
 {
 	allocate_guest_memory();
 }
@@ -32,7 +32,7 @@ void execution_context::allocate_guest_memory()
 		throw std::runtime_error("Unable to allocate guest memory");
 	}
 
-#ifdef __x86_64__
+#if defined(ARCH_X86_64)
 	// The GS register is used as the base address for the emulated guest memory.  Static and dynamic
 	// code generate memory instructions based on this.
 	syscall(SYS_arch_prctl, ARCH_SET_GS, (unsigned long long)memory_);
