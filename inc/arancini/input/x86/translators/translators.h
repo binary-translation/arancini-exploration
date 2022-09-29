@@ -40,6 +40,14 @@ protected:
 	reg_offsets reg_to_offset(xed_reg_enum_t reg);
 
 	enum flag_op { ignore, set0, set1, update };
+	/// @brief Write flag register with a flag_op (ignore, set0, set1, update)
+	/// @param op node affecting the flags
+	/// @param zf zero flag (ZF)
+	/// @param cf carry flag (CF)
+	/// @param of overflow floag (OF)
+	/// @param sf sign flag (SF)
+	/// @param pf parity flag (PF)
+	/// @param af adjust flag (AF)
 	void write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of, flag_op sf, flag_op pf, flag_op af);
 
 	enum class cond_type { nbe, nb, b, be, z, nle, nl, l, le, nz, no, np, ns, o, p, s };
