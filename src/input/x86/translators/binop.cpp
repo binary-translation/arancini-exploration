@@ -14,13 +14,16 @@ void binop_translator::do_translate()
 
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
 	case XED_ICLASS_XOR:
+	case XED_ICLASS_PXOR:
 		rslt = pkt()->insert_xor(op0->val(), op1->val());
 		break;
 	case XED_ICLASS_AND:
+	case XED_ICLASS_PAND:
 	case XED_ICLASS_TEST:
 		rslt = pkt()->insert_and(op0->val(), op1->val());
 		break;
 	case XED_ICLASS_OR:
+	case XED_ICLASS_POR:
 		rslt = pkt()->insert_or(op0->val(), op1->val());
 		break;
 
