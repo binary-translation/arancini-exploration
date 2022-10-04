@@ -61,7 +61,9 @@ void mov_translator::do_translate()
 	}
 
 	case XED_ICLASS_MOVHPS:
-	case XED_ICLASS_MOVUPS: {
+	case XED_ICLASS_MOVUPS:
+	case XED_ICLASS_MOVAPS:
+	case XED_ICLASS_MOVDQA: {
 		// TODO: INCORRECT FOR SOME SIZES
 
 		auto src = read_operand(1);
