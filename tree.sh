@@ -8,4 +8,4 @@ else
     INPUT=$1
 fi
 
-make && out/txlat ${INPUT} | dot -Tx11
+make && objdump -d ${INPUT} && out/txlat ${INPUT} | dot -Tx11
