@@ -21,7 +21,7 @@ public:
 	static value_type s32() { return value_type(value_type_class::signed_integer, 32); }
 	static value_type s64() { return value_type(value_type_class::signed_integer, 64); }
 
-	static value_type vector(const value_type& underlying_type, int nr_elements)
+	static value_type vector(const value_type &underlying_type, int nr_elements)
 	{
 		return value_type(underlying_type.tc_, underlying_type.element_width_, nr_elements);
 	}
@@ -37,6 +37,8 @@ public:
 	value_type_class type_class() const { return tc_; }
 	bool is_vector() const { return nr_elements_ > 1; }
 	int width() const { return element_width_ * nr_elements_; }
+
+	value_type element_type() const { return value_type(tc_, element_width_, 1); }
 
 	bool equivalent_to(const value_type &o) const { return element_width_ == o.element_width_ && tc_ == o.tc_ && nr_elements_ == o.nr_elements_; }
 
