@@ -2,6 +2,7 @@
 #include <arancini/ir/dot-graph-generator.h>
 #include <arancini/output/llvm/llvm-output-engine-impl.h>
 #include <arancini/output/llvm/llvm-output-engine.h>
+#include <arancini/output/output-personality.h>
 #include <iostream>
 #include <map>
 #include <sstream>
@@ -12,22 +13,31 @@ using namespace arancini::ir;
 using namespace ::llvm;
 
 llvm_output_engine::llvm_output_engine()
-	: oei_(std::make_unique<llvm_output_engine_impl>(chunks()))
+	: oei_(std::make_unique<llvm_output_engine_impl>(*this, chunks()))
+	, dbg_(false)
 {
 }
 
 llvm_output_engine::~llvm_output_engine() = default;
 
-void llvm_output_engine::generate(const output_personality &personality) { oei_->generate(); }
+void llvm_output_engine::generate(const output_personality &personality)
+{
+	if (personality.kind() != output_personality_kind::personality_static) {
+		throw std::runtime_error("LLVM output engine requires static personality");
+	}
 
-llvm_output_engine_impl::llvm_output_engine_impl(const std::vector<std::shared_ptr<ir::chunk>> &chunks)
-	: chunks_(chunks)
+	oei_->generate((const static_output_personality &)personality);
+}
+
+llvm_output_engine_impl::llvm_output_engine_impl(const llvm_output_engine &e, const std::vector<std::shared_ptr<ir::chunk>> &chunks)
+	: e_(e)
+	, chunks_(chunks)
 	, llvm_context_(std::make_unique<LLVMContext>())
 	, module_(std::make_unique<Module>("generated", *llvm_context_))
 {
 }
 
-void llvm_output_engine_impl::generate()
+void llvm_output_engine_impl::generate(const static_output_personality &personality)
 {
 	InitializeAllTargetInfos();
 	InitializeAllTargets();
@@ -37,7 +47,7 @@ void llvm_output_engine_impl::generate()
 
 	build();
 	optimise();
-	compile();
+	compile(personality.output_file());
 }
 
 void llvm_output_engine_impl::initialise_types()
@@ -156,7 +166,9 @@ void llvm_output_engine_impl::build()
 	builder.SetInsertPoint(exit_block);
 	builder.CreateRetVoid();
 
-	module_->print(outs(), nullptr);
+	if (e_.dbg_) {
+		module_->print(outs(), nullptr);
+	}
 
 	if (verifyFunction(*loop_fn, &errs())) {
 		throw std::runtime_error("function verification failed");
@@ -616,10 +628,12 @@ void llvm_output_engine_impl::optimise()
 	MPM.run(*module_, MAM);
 
 	// Compiled modules now exists
-	module_->print(outs(), nullptr);
+	if (e_.dbg_) {
+		module_->print(outs(), nullptr);
+	}
 }
 
-void llvm_output_engine_impl::compile()
+void llvm_output_engine_impl::compile(const std::string &output_file_name)
 {
 	auto TT = sys::getDefaultTargetTriple();
 	module_->setTargetTriple(TT);
@@ -637,7 +651,7 @@ void llvm_output_engine_impl::compile()
 	module_->setDataLayout(TM->createDataLayout());
 
 	std::error_code EC;
-	raw_fd_ostream output_file("generated.o", EC, sys::fs::OF_None);
+	raw_fd_ostream output_file(output_file_name, EC, sys::fs::OF_None);
 
 	if (EC) {
 		throw std::runtime_error("could not create output file: " + EC.message());

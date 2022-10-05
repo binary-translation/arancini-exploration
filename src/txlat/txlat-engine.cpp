@@ -1,8 +1,10 @@
 #include <arancini/elf/elf-reader.h>
 #include <arancini/input/x86/x86-input-arch.h>
 #include <arancini/ir/chunk.h>
+#include <arancini/output/debug/dot-graph-output.h>
 #include <arancini/output/llvm/llvm-output-engine.h>
 #include <arancini/output/output-personality.h>
+
 #include <arancini/txlat/txlat-engine.h>
 #include <chrono>
 #include <iostream>
@@ -17,27 +19,62 @@ using namespace arancini::output::llvm;
 
 static std::set<std::string> allowed_symbols = { "_start" }; //, "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
 
-void txlat_engine::translate(const std::string &input, const std::string &output)
+static std::map<std::string, std::function<std::unique_ptr<arancini::output::output_engine>()>> translation_engines = {
+	{ "llvm", [] { return std::make_unique<arancini::output::llvm::llvm_output_engine>(); } },
+	{ "dot", [] { return std::make_unique<arancini::output::debug::dot_graph_output>(); } },
+};
+
+void txlat_engine::process_options(arancini::output::output_engine &oe, const boost::program_options::variables_map &cmdline)
 {
-	elf_reader elf(input);
+	if (auto llvmoe = dynamic_cast<arancini::output::llvm::llvm_output_engine *>(&oe)) {
+		llvmoe->set_debug(cmdline.count("debug"));
+	}
+}
+
+void txlat_engine::translate(const boost::program_options::variables_map &cmdline)
+{
+	// Parse the input ELF file
+	elf_reader elf(cmdline.at("input").as<std::string>());
 	elf.parse();
 
+	// TODO: Figure the input engine out from ELF architecture header
+	auto ia = std::make_unique<arancini::input::x86::x86_input_arch>();
+
+	// Figure out the output engine
+	auto requested_engine = cmdline.at("engine").as<std::string>();
+	auto engine_factory = translation_engines.find(requested_engine);
+	if (engine_factory == translation_engines.end()) {
+		std::cerr << "Error: unknown translation engine '" << requested_engine << "'" << std::endl;
+		std::cerr << "Available engines:" << std::endl;
+		for (const auto &e : translation_engines) {
+			std::cerr << "  " << e.first << std::endl;
+		}
+
+		throw std::runtime_error("Unknown translation engine");
+	}
+
+	// Invoke the factory to construct the output engine
+	auto oe = engine_factory->second();
+	process_options(*oe, cmdline);
+
+	// Loop over each symbol table, and translate the symbol.
 	for (auto s : elf.sections()) {
 		if (s->type() == section_type::symbol_table) {
 			auto st = std::static_pointer_cast<symbol_table>(s);
 			for (const auto &sym : st->symbols()) {
 				if (allowed_symbols.count(sym.name())) {
-					oe_->add_chunk(translate_symbol(elf, sym));
+					oe->add_chunk(translate_symbol(*ia, elf, sym));
 				}
 			}
 		}
 	}
 
-	static_output_personality sop(output);
-	oe_->generate(sop);
+	// Invoke the output engine.
+	static_output_personality sop(cmdline.at("output").as<std::string>());
+	oe->generate(sop);
 }
 
-std::shared_ptr<chunk> txlat_engine::translate_symbol(elf_reader &reader, const symbol &sym)
+std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arch &ia, elf_reader &reader, const symbol &sym)
 {
 	// std::cerr << "translating symbol " << sym.name() << ", value=" << std::hex << sym.value() << ", size=" << sym.size() << ", section=" <<
 	// sym.section_index()
@@ -53,7 +90,7 @@ std::shared_ptr<chunk> txlat_engine::translate_symbol(elf_reader &reader, const 
 	const void *symbol_data = (const void *)((uintptr_t)section->data() + symbol_offset_in_section);
 
 	auto start = std::chrono::high_resolution_clock::now();
-	auto cv = ia_->translate_chunk(sym.value(), symbol_data, sym.size(), false);
+	auto cv = ia.translate_chunk(sym.value(), symbol_data, sym.size(), false);
 	auto dur = std::chrono::high_resolution_clock::now() - start;
 
 	std::cerr << "symbol translation time: " << std::dec << std::chrono::duration_cast<std::chrono::microseconds>(dur).count() << " us" << std::endl;
