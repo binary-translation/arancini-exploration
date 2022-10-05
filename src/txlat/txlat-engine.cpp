@@ -18,7 +18,7 @@ using namespace arancini::input::x86;
 using namespace arancini::output;
 using namespace arancini::output::llvm;
 
-static std::set<std::string> allowed_symbols = { "_start" }; //, "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
+static std::set<std::string> allowed_symbols = { "_start", "test" }; //, "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
 
 static std::map<std::string, std::function<std::unique_ptr<arancini::output::output_engine>()>> translation_engines = {
 	{ "llvm", [] { return std::make_unique<arancini::output::llvm::llvm_output_engine>(); } },
@@ -63,6 +63,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		if (s->type() == section_type::symbol_table) {
 			auto st = std::static_pointer_cast<symbol_table>(s);
 			for (const auto &sym : st->symbols()) {
+				std::cerr << "Symbol: " << sym.name() << "\n";
 				if (allowed_symbols.count(sym.name())) {
 					oe->add_chunk(translate_symbol(*ia, elf, sym));
 				}
