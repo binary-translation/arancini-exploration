@@ -18,7 +18,7 @@ using namespace arancini::input::x86;
 using namespace arancini::output;
 using namespace arancini::output::llvm;
 
-static std::set<std::string> allowed_symbols = { "_start", "test" }; //, "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
+static std::set<std::string> allowed_symbols = { "_start", "test", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
 
 static std::map<std::string, std::function<std::unique_ptr<arancini::output::output_engine>()>> translation_engines
 	= { { "llvm", [] { return std::make_unique<arancini::output::llvm::llvm_output_engine>(); } } };
