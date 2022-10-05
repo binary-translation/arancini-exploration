@@ -8,8 +8,8 @@ using namespace arancini::input::x86::translators;
 
 std::shared_ptr<packet> translator::translate(off_t address, xed_decoded_inst_t *xed_inst)
 {
-	packet_ = std::make_shared<packet>(address);
 	xed_inst_ = xed_inst;
+	packet_ = std::make_shared<packet>(address, xed_inst_);
 
 	do_translate();
 	return packet_;

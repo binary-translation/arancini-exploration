@@ -5,11 +5,15 @@
 #include <arancini/ir/node.h>
 #include <arancini/ir/visitor.h>
 
+extern "C" {
+#include <xed/xed-interface.h>
+}
+
 namespace arancini::ir {
 class packet {
 public:
-	packet(off_t address)
-		: address_(address)
+	packet(off_t address, xed_decoded_inst_t *src_inst)
+		: address_(address), src_inst_(src_inst)
 	{
 	}
 
@@ -88,6 +92,8 @@ public:
 
 	off_t address() const { return address_; }
 
+	xed_decoded_inst_t *src_inst() const { return src_inst_; }
+
 	bool updates_pc() const
 	{
 		for (action_node *a : actions_) {
@@ -101,6 +107,7 @@ public:
 
 private:
 	off_t address_;
+	xed_decoded_inst_t *src_inst_;
 	std::vector<action_node *> actions_;
 
 	template <class T> T *insert(T *n)
