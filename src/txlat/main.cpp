@@ -15,6 +15,7 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 		("input,I", po::value<std::string>()->required(), "The ELF file that is being translated") //
 		("output,O", po::value<std::string>()->required(), "The output file that is generated") //
 		("engine,E", po::value<std::string>()->default_value("llvm"), "The engine to use for translation") //
+		("graph", po::value<std::string>(), "Creates a DOT graph file representing the input ELF translation") //
 		("debug", "Enable debugging output");
 
 	po::variables_map vm;

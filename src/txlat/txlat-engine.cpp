@@ -1,7 +1,7 @@
 #include <arancini/elf/elf-reader.h>
 #include <arancini/input/x86/x86-input-arch.h>
 #include <arancini/ir/chunk.h>
-#include <arancini/output/debug/dot-graph-output.h>
+#include <arancini/ir/dot-graph-generator.h>
 #include <arancini/output/llvm/llvm-output-engine.h>
 #include <arancini/output/output-personality.h>
 
@@ -20,10 +20,8 @@ using namespace arancini::output::llvm;
 
 static std::set<std::string> allowed_symbols = { "_start", "test" }; //, "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
 
-static std::map<std::string, std::function<std::unique_ptr<arancini::output::output_engine>()>> translation_engines = {
-	{ "llvm", [] { return std::make_unique<arancini::output::llvm::llvm_output_engine>(); } },
-	{ "dot", [] { return std::make_unique<arancini::output::debug::dot_graph_output>(); } },
-};
+static std::map<std::string, std::function<std::unique_ptr<arancini::output::output_engine>()>> translation_engines
+	= { { "llvm", [] { return std::make_unique<arancini::output::llvm::llvm_output_engine>(); } } };
 
 void txlat_engine::process_options(arancini::output::output_engine &oe, const boost::program_options::variables_map &cmdline)
 {
@@ -63,11 +61,35 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		if (s->type() == section_type::symbol_table) {
 			auto st = std::static_pointer_cast<symbol_table>(s);
 			for (const auto &sym : st->symbols()) {
-				std::cerr << "Symbol: " << sym.name() << "\n";
+				// std::cerr << "Symbol: " << sym.name() << "\n";
 				if (allowed_symbols.count(sym.name())) {
 					oe->add_chunk(translate_symbol(*ia, elf, sym));
 				}
 			}
+		}
+	}
+
+	if (cmdline.count("graph")) {
+		std::string graph_output_file = cmdline.at("graph").as<std::string>();
+		std::ostream *o;
+
+		if (graph_output_file == "-") {
+			o = &std::cout;
+		} else {
+			o = new std::ofstream(graph_output_file);
+			if (!((std::ofstream *)o)->is_open()) {
+				throw std::runtime_error("unable to open file for graph output");
+			}
+		}
+
+		dot_graph_generator dgg(*o);
+
+		for (auto c : oe->chunks()) {
+			c->accept(dgg);
+		}
+
+		if (o != &std::cout) {
+			delete o;
 		}
 	}
 
