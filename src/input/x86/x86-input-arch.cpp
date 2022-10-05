@@ -34,6 +34,8 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 	case XED_ICLASS_MOVZX:
 	case XED_ICLASS_MOVHPS:
 	case XED_ICLASS_MOVUPS:
+	case XED_ICLASS_MOVAPS:
+	case XED_ICLASS_MOVDQA:
 	case XED_ICLASS_CQO:
 		return std::make_unique<mov_translator>();
 
@@ -95,12 +97,14 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 	case XED_ICLASS_HLT:
 	case XED_ICLASS_CPUID:
 	case XED_ICLASS_SYSCALL:
-	case XED_ICLASS_PAND:
 		return std::make_unique<nop_translator>();
 
 	case XED_ICLASS_XOR:
+	case XED_ICLASS_PXOR:
 	case XED_ICLASS_AND:
+	case XED_ICLASS_PAND:
 	case XED_ICLASS_OR:
+	case XED_ICLASS_POR:
 	case XED_ICLASS_ADD:
 	case XED_ICLASS_ADC:
 	case XED_ICLASS_SUB:
