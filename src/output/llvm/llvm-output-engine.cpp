@@ -205,13 +205,13 @@ Value *llvm_output_engine_impl::materialise_port(IRBuilder<> &builder, Argument 
 		switch (cn->val().type().width()) {
 		case 1:
 		case 8:
-			return ConstantInt::get(types.i8, cn->const_val());
+			return ConstantInt::get(types.i8, cn->const_val_i());
 		case 16:
-			return ConstantInt::get(types.i16, cn->const_val());
+			return ConstantInt::get(types.i16, cn->const_val_i());
 		case 32:
-			return ConstantInt::get(types.i32, cn->const_val());
+			return ConstantInt::get(types.i32, cn->const_val_i());
 		case 64:
-			return ConstantInt::get(types.i64, cn->const_val());
+			return ConstantInt::get(types.i64, cn->const_val_i());
 
 		default:
 			throw std::runtime_error("unsupported constant width");

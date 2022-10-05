@@ -86,6 +86,7 @@ public:
 	}
 
 	port &val() { return value_; }
+	const port &val() const { return value_; }
 
 	virtual bool accept(visitor &v) override
 	{
@@ -181,11 +182,26 @@ class constant_node : public value_node {
 public:
 	constant_node(packet &owner, const value_type &vt, unsigned long cv)
 		: value_node(owner, node_kinds::constant, vt)
-		, cv_(cv)
+		, cvi_(cv)
 	{
+		if (vt.type_class() != value_type_class::signed_integer && vt.type_class() != value_type_class::unsigned_integer) {
+			throw std::runtime_error("constructing a constant node with an integer for a non-integer value type");
+		}
 	}
 
-	unsigned long const_val() const { return cv_; }
+	constant_node(packet &owner, const value_type &vt, double cv)
+		: value_node(owner, node_kinds::constant, vt)
+		, cvf_(cv)
+	{
+		if (vt.type_class() != value_type_class::floating_point) {
+			throw std::runtime_error("constructing a constant node with a float for a non-float value type");
+		}
+	}
+
+	unsigned long const_val_i() const { return cvi_; }
+	double const_val_f() const { return cvf_; }
+
+	bool is_zero() const { return val().type().is_floating_point() ? cvf_ == 0 : cvi_ == 0; }
 
 	virtual bool accept(visitor &v) override
 	{
@@ -197,7 +213,10 @@ public:
 	}
 
 private:
-	unsigned long cv_;
+	union {
+		unsigned long cvi_;
+		double cvf_;
+	};
 };
 
 class read_reg_node : public value_node {

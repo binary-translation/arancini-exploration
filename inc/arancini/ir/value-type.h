@@ -20,6 +20,8 @@ public:
 	static value_type s16() { return value_type(value_type_class::signed_integer, 16); }
 	static value_type s32() { return value_type(value_type_class::signed_integer, 32); }
 	static value_type s64() { return value_type(value_type_class::signed_integer, 64); }
+	static value_type f32() { return value_type(value_type_class::floating_point, 32); }
+	static value_type f64() { return value_type(value_type_class::floating_point, 64); }
 
 	static value_type vector(const value_type &underlying_type, int nr_elements)
 	{
@@ -37,6 +39,8 @@ public:
 	value_type_class type_class() const { return tc_; }
 	bool is_vector() const { return nr_elements_ > 1; }
 	int width() const { return element_width_ * nr_elements_; }
+	bool is_floating_point() const { return tc_ == value_type_class::floating_point; }
+	bool is_integer() const { return tc_ == value_type_class::signed_integer || tc_ == value_type_class::unsigned_integer; }
 
 	value_type element_type() const { return value_type(tc_, element_width_, 1); }
 
