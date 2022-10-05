@@ -7,6 +7,7 @@
 
 #include <arancini/txlat/txlat-engine.h>
 #include <chrono>
+#include <cstdlib>
 #include <iostream>
 
 using namespace arancini::txlat;
@@ -70,8 +71,15 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	}
 
 	// Invoke the output engine.
-	static_output_personality sop(cmdline.at("output").as<std::string>());
+	static_output_personality sop("static-translation.o");
 	oe->generate(sop);
+
+	// TODO: Generate loadable sections
+
+	// Do the link - TODO: this is awful.
+
+	std::string cmd = "g++ -o " + cmdline.at("output").as<std::string>() + " -no-pie static-translation.o -L out -larancini-runtime";
+	std::system(cmd.c_str());
 }
 
 std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arch &ia, elf_reader &reader, const symbol &sym)
