@@ -157,7 +157,7 @@ std::shared_ptr<chunk> x86_input_arch::translate_chunk(off_t base_address, const
 
 	const uint8_t *mc = (const uint8_t *)code;
 
-	std::cerr << "chunk @ " << base_address << " code=" << code << ", size=" << code_size << std::endl;
+	std::cerr << "chunk @ " << std::hex << base_address << " code=" << code << ", size=" << code_size << std::endl;
 
 	size_t offset = 0;
 	do {

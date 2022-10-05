@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/program_options.hpp>
 #include <memory>
 #include <string>
 
@@ -23,18 +24,10 @@ class output_engine;
 namespace arancini::txlat {
 class txlat_engine {
 public:
-	txlat_engine(std::unique_ptr<input::input_arch> ia, std::unique_ptr<output::output_engine> oe)
-		: ia_(std::move(ia))
-		, oe_(std::move(oe))
-	{
-	}
-
-	void translate(const std::string &source);
+	void translate(const boost::program_options::variables_map &cmdline);
 
 private:
-	std::unique_ptr<input::input_arch> ia_;
-	std::unique_ptr<output::output_engine> oe_;
-
-	std::shared_ptr<ir::chunk> translate_symbol(elf::elf_reader &reader, const elf::symbol &sym);
+	void process_options(arancini::output::output_engine &oe, const boost::program_options::variables_map &cmdline);
+	std::shared_ptr<ir::chunk> translate_symbol(arancini::input::input_arch &ia, elf::elf_reader &reader, const elf::symbol &sym);
 };
 } // namespace arancini::txlat

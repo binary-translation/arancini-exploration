@@ -13,12 +13,15 @@ public:
 	{
 	}
 
-	value_node *insert_constant(const value_type &vt, unsigned long cv) { return insert(new constant_node(*this, vt, cv)); }
-	value_node *insert_constant_u8(unsigned char cv) { return insert(new constant_node(*this, value_type::u8(), cv)); }
-	value_node *insert_constant_u16(unsigned short cv) { return insert(new constant_node(*this, value_type::u16(), cv)); }
-	value_node *insert_constant_u32(unsigned int cv) { return insert(new constant_node(*this, value_type::u32(), cv)); }
-	value_node *insert_constant_s32(signed int cv) { return insert(new constant_node(*this, value_type::s32(), cv)); }
-	value_node *insert_constant_u64(unsigned long cv) { return insert(new constant_node(*this, value_type::u64(), cv)); }
+	value_node *insert_constant_i(const value_type &vt, unsigned long cv) { return insert(new constant_node(*this, vt, cv)); }
+	value_node *insert_constant_f(const value_type &vt, double cv) { return insert(new constant_node(*this, vt, cv)); }
+	value_node *insert_constant_u8(unsigned char cv) { return insert(new constant_node(*this, value_type::u8(), (unsigned long)cv)); }
+	value_node *insert_constant_u16(unsigned short cv) { return insert(new constant_node(*this, value_type::u16(), (unsigned long)cv)); }
+	value_node *insert_constant_u32(unsigned int cv) { return insert(new constant_node(*this, value_type::u32(), (unsigned long)cv)); }
+	value_node *insert_constant_s32(signed int cv) { return insert(new constant_node(*this, value_type::s32(), (unsigned long)cv)); }
+	value_node *insert_constant_u64(unsigned long cv) { return insert(new constant_node(*this, value_type::u64(), (unsigned long)cv)); }
+	value_node *insert_constant_f32(float cv) { return insert(new constant_node(*this, value_type::f32(), (double)cv)); }
+	value_node *insert_constant_f64(double cv) { return insert(new constant_node(*this, value_type::f64(), (double)cv)); }
 
 	label_node *insert_label() { return insert(new label_node(*this)); }
 	action_node *insert_cond_br(port &cond, label_node *target) { return insert(new cond_br_node(*this, cond, target)); }
