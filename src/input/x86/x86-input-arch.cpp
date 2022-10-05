@@ -30,6 +30,7 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 	case XED_ICLASS_MOV:
 	case XED_ICLASS_LEA:
 	case XED_ICLASS_MOVQ:
+	case XED_ICLASS_MOVD:
 	case XED_ICLASS_MOVSXD:
 	case XED_ICLASS_MOVZX:
 	case XED_ICLASS_MOVHPS:
