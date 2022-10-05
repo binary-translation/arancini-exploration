@@ -88,7 +88,7 @@ bool dot_graph_generator::visit_write_pc_node(write_pc_node &n)
 
 bool dot_graph_generator::visit_constant_node(constant_node &n)
 {
-	os_ << "N" << &n << " [label=\"constant #" << n.const_val() << "\"];" << std::endl;
+	os_ << "N" << &n << " [label=\"constant #" << n.const_val_i() << "\"];" << std::endl;
 	return true;
 }
 

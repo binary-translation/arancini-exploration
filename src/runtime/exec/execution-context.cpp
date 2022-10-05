@@ -3,7 +3,7 @@
 #include <arancini/runtime/exec/execution-thread.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
 
-#ifdef __x86_64__
+#if defined(ARCH_X86_64)
 #include <asm/prctl.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -15,24 +15,36 @@
 
 using namespace arancini::runtime::exec;
 
-execution_context::execution_context(size_t memory_size)
+execution_context::execution_context(input::input_arch &ia, output::output_engine &oe)
 	: memory_(nullptr)
-	, memory_size_(memory_size)
-	, te_(*this)
+	, memory_size_(0x100000000ull)
+	, te_(*this, ia, oe)
 {
 	allocate_guest_memory();
 }
 
 execution_context::~execution_context() { }
 
+void *execution_context::add_memory_region(off_t base_address, size_t size)
+{
+	if ((base_address + size) > memory_size_) {
+		throw std::runtime_error("memory region out of bounds");
+	}
+
+	void *base_ptr = (void *)((uintptr_t)memory_ + base_address);
+	mprotect(base_ptr, size, PROT_READ | PROT_WRITE);
+
+	return base_ptr;
+}
+
 void execution_context::allocate_guest_memory()
 {
-	memory_ = mmap(nullptr, memory_size_, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+	memory_ = mmap(nullptr, memory_size_, PROT_NONE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 	if (memory_ == MAP_FAILED) {
 		throw std::runtime_error("Unable to allocate guest memory");
 	}
 
-#ifdef __x86_64__
+#if defined(ARCH_X86_64)
 	// The GS register is used as the base address for the emulated guest memory.  Static and dynamic
 	// code generate memory instructions based on this.
 	syscall(SYS_arch_prctl, ARCH_SET_GS, (unsigned long long)memory_);

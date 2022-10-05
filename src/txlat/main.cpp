@@ -1,35 +1,53 @@
-#include <arancini/input/x86/x86-input-arch.h>
-#include <arancini/output/debug/dot-graph-output.h>
-#include <arancini/output/llvm/llvm-output-engine.h>
 #include <arancini/txlat/txlat-engine.h>
+#include <boost/program_options.hpp>
 #include <iostream>
+#include <optional>
 
 using namespace arancini::txlat;
+namespace po = boost::program_options;
+
+static std::optional<po::variables_map> init_options(int argc, const char *argv[])
+{
+	po::options_description desc("Command-line options");
+
+	desc.add_options() //
+		("help,h", "Displays usage information") //
+		("input,I", po::value<std::string>()->required(), "The ELF file that is being translated") //
+		("output,O", po::value<std::string>()->required(), "The output file that is generated") //
+		("engine,E", po::value<std::string>()->default_value("llvm"), "The engine to use for translation") //
+		("graph", po::value<std::string>(), "Creates a DOT graph file representing the input ELF translation") //
+		("debug", "Enable debugging output");
+
+	po::variables_map vm;
+	po::store(po::parse_command_line(argc, argv, desc), vm);
+
+	if (vm.count("help")) {
+		std::cout << desc << std::endl;
+		return std::nullopt;
+	}
+
+	try {
+		po::notify(vm);
+	} catch (std::exception &e) {
+		std::cerr << "Error: " << e.what() << std::endl << std::endl;
+		std::cout << desc << std::endl;
+		return std::nullopt;
+	}
+
+	return vm;
+}
 
 int main(int argc, const char *argv[])
 {
-	if (argc < 2) {
-		std::cerr << "error: usage: " << argv[0] << " <input elf file> [--llvm]" << std::endl;
+	auto cmdline = init_options(argc, argv);
+	if (!cmdline.has_value()) {
 		return 1;
 	}
 
-	auto ia = std::make_unique<arancini::input::x86::x86_input_arch>();
-	std::unique_ptr<arancini::output::output_engine> oe;
-
-	for (int i = 2; i < argc; i++) {
-		if (std::string(argv[i]) == "--llvm") {
-			oe = std::make_unique<arancini::output::llvm::llvm_output_engine>();
-		}
-	}
-
-	if (!oe) {
-		oe = std::make_unique<arancini::output::debug::dot_graph_output>();
-	}
-
-	txlat_engine e(std::move(ia), std::move(oe));
+	txlat_engine e;
 
 	try {
-		e.translate(argv[1]);
+		e.translate(cmdline.value());
 	} catch (const std::exception &e) {
 		std::cerr << "translation error: " << e.what() << std::endl;
 		return 1;
