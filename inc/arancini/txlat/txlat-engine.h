@@ -29,7 +29,7 @@ public:
 	{
 	}
 
-	void translate(const std::string &source);
+	void translate(const std::string &input, const std::string &output);
 
 private:
 	std::unique_ptr<input::input_arch> ia_;

@@ -15,9 +15,9 @@ using namespace arancini::input::x86;
 using namespace arancini::output;
 using namespace arancini::output::llvm;
 
-static std::set<std::string> allowed_symbols = {}; // "_start" }; //, "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
+static std::set<std::string> allowed_symbols = { "_start" }; //, "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
 
-void txlat_engine::translate(const std::string &input)
+void txlat_engine::translate(const std::string &input, const std::string &output)
 {
 	elf_reader elf(input);
 	elf.parse();
@@ -33,7 +33,7 @@ void txlat_engine::translate(const std::string &input)
 		}
 	}
 
-	static_output_personality sop;
+	static_output_personality sop(output);
 	oe_->generate(sop);
 }
 
