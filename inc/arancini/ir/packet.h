@@ -253,6 +253,19 @@ public:
 	/// @return A bit insert node.
 	value_node *insert_bit_insert(port &input, port &bits, int to, int length) { return insert(new bit_insert_node(*this, input, bits, to, length)); }
 
+	/// @brief Extract an element from a vector.
+	/// @param input The vector to be extracted from.
+	/// @param index The (zero based) index of the element to be extracted.
+	/// @return A vector extract node.
+	value_node *insert_vector_extract(port &input, int index) { return insert(new vector_extract_node(*this, input, index)); };
+
+	/// @brief Insert an element into a vector.
+	/// @param input The vector to be inserted into.
+	/// @param index The (zero based) index where the element will be inserted.
+	/// @param value The element to be inserted.
+	/// @return A vector insert node.
+	value_node *insert_vector_insert(port &input, int index, port& value) { return insert(new vector_insert_node(*this,input, index, value)); };
+
 	const std::vector<action_node *> &actions() const { return actions_; }
 
 	bool accept(visitor &v)
