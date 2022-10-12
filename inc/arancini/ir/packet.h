@@ -5,20 +5,27 @@
 #include <arancini/ir/node.h>
 #include <arancini/ir/visitor.h>
 
+extern "C" {
+#include <xed/xed-interface.h>
+}
+
 namespace arancini::ir {
 class packet {
 public:
-	packet(off_t address)
-		: address_(address)
+	packet(off_t address, xed_decoded_inst_t *src_inst)
+		: address_(address), src_inst_(src_inst)
 	{
 	}
 
-	value_node *insert_constant(const value_type &vt, unsigned long cv) { return insert(new constant_node(*this, vt, cv)); }
-	value_node *insert_constant_u8(unsigned char cv) { return insert(new constant_node(*this, value_type::u8(), cv)); }
-	value_node *insert_constant_u16(unsigned short cv) { return insert(new constant_node(*this, value_type::u16(), cv)); }
-	value_node *insert_constant_u32(unsigned int cv) { return insert(new constant_node(*this, value_type::u32(), cv)); }
-	value_node *insert_constant_s32(signed int cv) { return insert(new constant_node(*this, value_type::s32(), cv)); }
-	value_node *insert_constant_u64(unsigned long cv) { return insert(new constant_node(*this, value_type::u64(), cv)); }
+	value_node *insert_constant_i(const value_type &vt, unsigned long cv) { return insert(new constant_node(*this, vt, cv)); }
+	value_node *insert_constant_f(const value_type &vt, double cv) { return insert(new constant_node(*this, vt, cv)); }
+	value_node *insert_constant_u8(unsigned char cv) { return insert(new constant_node(*this, value_type::u8(), (unsigned long)cv)); }
+	value_node *insert_constant_u16(unsigned short cv) { return insert(new constant_node(*this, value_type::u16(), (unsigned long)cv)); }
+	value_node *insert_constant_u32(unsigned int cv) { return insert(new constant_node(*this, value_type::u32(), (unsigned long)cv)); }
+	value_node *insert_constant_s32(signed int cv) { return insert(new constant_node(*this, value_type::s32(), (unsigned long)cv)); }
+	value_node *insert_constant_u64(unsigned long cv) { return insert(new constant_node(*this, value_type::u64(), (unsigned long)cv)); }
+	value_node *insert_constant_f32(float cv) { return insert(new constant_node(*this, value_type::f32(), (double)cv)); }
+	value_node *insert_constant_f64(double cv) { return insert(new constant_node(*this, value_type::f64(), (double)cv)); }
 
 	label_node *insert_label() { return insert(new label_node(*this)); }
 	action_node *insert_cond_br(port &cond, label_node *target) { return insert(new cond_br_node(*this, cond, target)); }
@@ -88,6 +95,8 @@ public:
 
 	off_t address() const { return address_; }
 
+	xed_decoded_inst_t *src_inst() const { return src_inst_; }
+
 	bool updates_pc() const
 	{
 		for (action_node *a : actions_) {
@@ -101,6 +110,7 @@ public:
 
 private:
 	off_t address_;
+	xed_decoded_inst_t *src_inst_;
 	std::vector<action_node *> actions_;
 
 	template <class T> T *insert(T *n)

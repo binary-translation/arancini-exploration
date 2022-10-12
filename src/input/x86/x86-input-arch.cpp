@@ -25,6 +25,9 @@ static void initialise_xed()
 /*
 This function implements the factory pattern, returning a translator specialized in the
 translation for each category of instructions.
+
+TODO: This is quite heavy-weight - need to hold instances of translators ready to go, rather than
+instantiating each time.
 */
 static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_inst_t *xed_inst)
 {
@@ -32,10 +35,13 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 	case XED_ICLASS_MOV:
 	case XED_ICLASS_LEA:
 	case XED_ICLASS_MOVQ:
+	case XED_ICLASS_MOVD:
 	case XED_ICLASS_MOVSXD:
 	case XED_ICLASS_MOVZX:
 	case XED_ICLASS_MOVHPS:
 	case XED_ICLASS_MOVUPS:
+	case XED_ICLASS_MOVAPS:
+	case XED_ICLASS_MOVDQA:
 	case XED_ICLASS_CQO:
 		return std::make_unique<mov_translator>();
 
@@ -97,12 +103,14 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 	case XED_ICLASS_HLT:
 	case XED_ICLASS_CPUID:
 	case XED_ICLASS_SYSCALL:
-	case XED_ICLASS_PAND:
 		return std::make_unique<nop_translator>();
 
 	case XED_ICLASS_XOR:
+	case XED_ICLASS_PXOR:
 	case XED_ICLASS_AND:
+	case XED_ICLASS_PAND:
 	case XED_ICLASS_OR:
+	case XED_ICLASS_POR:
 	case XED_ICLASS_ADD:
 	case XED_ICLASS_ADC:
 	case XED_ICLASS_SUB:
@@ -159,7 +167,7 @@ The translator factory is implemented by the get_translator function.
 All the x86 translators implementations can be found in the
 src/input/x86/translators/ folder.
 */
-std::shared_ptr<chunk> x86_input_arch::translate_chunk(off_t base_address, const void *code, size_t code_size)
+std::shared_ptr<chunk> x86_input_arch::translate_chunk(off_t base_address, const void *code, size_t code_size, bool basic_block)
 {
 	auto c = std::make_shared<chunk>();
 
@@ -167,7 +175,7 @@ std::shared_ptr<chunk> x86_input_arch::translate_chunk(off_t base_address, const
 
 	const uint8_t *mc = (const uint8_t *)code;
 
-	std::cerr << "chunk @ " << base_address << " code=" << code << ", size=" << code_size << std::endl;
+	std::cerr << "chunk @ " << std::hex << base_address << " code=" << code << ", size=" << code_size << std::endl;
 
 	size_t offset = 0;
 	do {
@@ -184,7 +192,12 @@ std::shared_ptr<chunk> x86_input_arch::translate_chunk(off_t base_address, const
 		xed_uint_t length = xed_decoded_inst_get_length(&xedd);
 
 		auto t = get_translator(base_address, &xedd);
-		c->add_packet(t->translate(base_address, &xedd));
+		auto p = t->translate(base_address, &xedd);
+		c->add_packet(p);
+
+		if (p->updates_pc() && basic_block) {
+			break;
+		}
 
 		offset += length;
 		base_address += length;

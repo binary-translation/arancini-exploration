@@ -8,7 +8,10 @@ export lib-dir := $(top-dir)/lib
 export bld-dir := $(top-dir)/build
 export out-dir := $(top-dir)/out
 
-targets := core input/x86 ir output/debug output/llvm output/arm64 runtime txlat
+export cross-compile ?=
+export target-arch := $(shell $(cross-compile)g++ -dumpmachine | cut -d '-' -f 1)
+
+targets := core input/x86 ir output/debug output/llvm output/arm64 output/x86 runtime txlat
 
 build-rules := $(patsubst %,__BUILD__%,$(targets))
 clean-rules := $(patsubst %,__CLEAN__%,$(targets))
@@ -21,7 +24,7 @@ all: $(out-dir) extlibs $(build-rules)
 
 clean: $(clean-rules)
 
-extlibs: .FORCE
+extlibs:
 	make -C $(lib-dir)
 
 $(build-rules): .FORCE
@@ -34,4 +37,4 @@ $(clean-rules): .FORCE
 $(out-dir):
 	@mkdir $@
 
-.PHONY: .FORCE
+.PHONY: .FORCE all clean

@@ -8,8 +8,8 @@ using namespace arancini::input::x86::translators;
 
 std::shared_ptr<packet> translator::translate(off_t address, xed_decoded_inst_t *xed_inst)
 {
-	packet_ = std::make_shared<packet>(address);
 	xed_inst_ = xed_inst;
+	packet_ = std::make_shared<packet>(address, xed_inst_);
 
 	do_translate();
 	return packet_;
@@ -209,18 +209,18 @@ void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
 {
 	switch (zf) {
 	case flag_op::set0:
-		write_reg(reg_offsets::zf, pkt()->insert_constant(value_type::u1(), 0)->val());
+		write_reg(reg_offsets::zf, pkt()->insert_constant_i(value_type::u1(), 0)->val());
 		break;
 
 	case flag_op::set1:
-		write_reg(reg_offsets::zf, pkt()->insert_constant(value_type::u1(), 1)->val());
+		write_reg(reg_offsets::zf, pkt()->insert_constant_i(value_type::u1(), 1)->val());
 		break;
 
 	case flag_op::update:
 		if (op->kind() == node_kinds::binary_arith || op->kind() == node_kinds::ternary_arith) {
 			write_reg(reg_offsets::zf, ((arith_node *)op)->zero());
 		} else if (op->kind() == node_kinds::constant) {
-			write_reg(reg_offsets::zf, pkt()->insert_constant(value_type::u1(), ((constant_node *)op)->const_val() == 0)->val());
+			write_reg(reg_offsets::zf, pkt()->insert_constant_i(value_type::u1(), ((constant_node *)op)->is_zero())->val());
 		} else {
 			throw std::runtime_error("unsupported operation node type for ZF");
 		}
@@ -232,11 +232,11 @@ void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
 
 	switch (cf) {
 	case flag_op::set0:
-		write_reg(reg_offsets::cf, pkt()->insert_constant(value_type::u1(), 0)->val());
+		write_reg(reg_offsets::cf, pkt()->insert_constant_i(value_type::u1(), 0)->val());
 		break;
 
 	case flag_op::set1:
-		write_reg(reg_offsets::cf, pkt()->insert_constant(value_type::u1(), 1)->val());
+		write_reg(reg_offsets::cf, pkt()->insert_constant_i(value_type::u1(), 1)->val());
 		break;
 
 	case flag_op::update:
@@ -253,11 +253,11 @@ void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
 
 	switch (of) {
 	case flag_op::set0:
-		write_reg(reg_offsets::of, pkt()->insert_constant(value_type::u1(), 0)->val());
+		write_reg(reg_offsets::of, pkt()->insert_constant_i(value_type::u1(), 0)->val());
 		break;
 
 	case flag_op::set1:
-		write_reg(reg_offsets::of, pkt()->insert_constant(value_type::u1(), 1)->val());
+		write_reg(reg_offsets::of, pkt()->insert_constant_i(value_type::u1(), 1)->val());
 		break;
 
 	case flag_op::update:
@@ -274,11 +274,11 @@ void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
 
 	switch (sf) {
 	case flag_op::set0:
-		write_reg(reg_offsets::sf, pkt()->insert_constant(value_type::u1(), 0)->val());
+		write_reg(reg_offsets::sf, pkt()->insert_constant_i(value_type::u1(), 0)->val());
 		break;
 
 	case flag_op::set1:
-		write_reg(reg_offsets::sf, pkt()->insert_constant(value_type::u1(), 1)->val());
+		write_reg(reg_offsets::sf, pkt()->insert_constant_i(value_type::u1(), 1)->val());
 		break;
 
 	case flag_op::update:
@@ -286,7 +286,7 @@ void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
 			write_reg(reg_offsets::sf, ((arith_node *)op)->negative());
 		} else if (op->kind() == node_kinds::constant) {
 			// TODO: INCORRECT
-			write_reg(reg_offsets::sf, pkt()->insert_constant(value_type::u1(), ((constant_node *)op)->const_val() < 0)->val());
+			write_reg(reg_offsets::sf, pkt()->insert_constant_i(value_type::u1(), ((constant_node *)op)->const_val_i() < 0)->val());
 		} else {
 			throw std::runtime_error("unsupported operation node type for SF");
 		}

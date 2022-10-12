@@ -60,8 +60,18 @@ void mov_translator::do_translate()
 		break;
 	}
 
+	case XED_ICLASS_MOVD: {
+		auto input = read_operand(1);
+		auto cast = pkt()->insert_zx(value_type::u32(), input->val());
+
+		write_operand(0, cast->val());
+		break;
+	}
+
 	case XED_ICLASS_MOVHPS:
-	case XED_ICLASS_MOVUPS: {
+	case XED_ICLASS_MOVUPS:
+	case XED_ICLASS_MOVAPS:
+	case XED_ICLASS_MOVDQA: {
 		// TODO: INCORRECT FOR SOME SIZES
 
 		auto src = read_operand(1);

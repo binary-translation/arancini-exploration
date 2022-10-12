@@ -22,7 +22,9 @@ enum class node_kinds {
 	cast,
 	csel,
 	bit_shift,
-	cond_br
+	cond_br,
+	vector_extract,
+	vector_insert
 };
 
 class packet;
@@ -84,6 +86,7 @@ public:
 	}
 
 	port &val() { return value_; }
+	const port &val() const { return value_; }
 
 	virtual bool accept(visitor &v) override
 	{
@@ -179,11 +182,26 @@ class constant_node : public value_node {
 public:
 	constant_node(packet &owner, const value_type &vt, unsigned long cv)
 		: value_node(owner, node_kinds::constant, vt)
-		, cv_(cv)
+		, cvi_(cv)
 	{
+		if (vt.type_class() != value_type_class::signed_integer && vt.type_class() != value_type_class::unsigned_integer) {
+			throw std::runtime_error("constructing a constant node with an integer for a non-integer value type");
+		}
 	}
 
-	unsigned long const_val() const { return cv_; }
+	constant_node(packet &owner, const value_type &vt, double cv)
+		: value_node(owner, node_kinds::constant, vt)
+		, cvf_(cv)
+	{
+		if (vt.type_class() != value_type_class::floating_point) {
+			throw std::runtime_error("constructing a constant node with a float for a non-float value type");
+		}
+	}
+
+	unsigned long const_val_i() const { return cvi_; }
+	double const_val_f() const { return cvf_; }
+
+	bool is_zero() const { return val().type().is_floating_point() ? cvf_ == 0 : cvi_ == 0; }
 
 	virtual bool accept(visitor &v) override
 	{
@@ -195,7 +213,10 @@ public:
 	}
 
 private:
-	unsigned long cv_;
+	union {
+		unsigned long cvi_;
+		double cvf_;
+	};
 };
 
 class read_reg_node : public value_node {
@@ -643,5 +664,50 @@ private:
 	port &lhs_;
 	port &rhs_;
 	port &top_;
+};
+
+class vector_node : public value_node {
+public:
+	vector_node(packet &owner, node_kinds kind, const value_type &type, port &vct)
+		: value_node(owner, kind, type)
+		, vct_(vct)
+	{
+	}
+
+private:
+	port &vct_;
+	int index_;
+};
+
+class vector_element_node : public vector_node {
+public:
+	vector_element_node(packet &owner, node_kinds kind, const value_type &type, port &vct, int index)
+		: vector_node(owner, kind, type, vct)
+		, index_(index)
+	{
+	}
+
+private:
+	int index_;
+};
+
+class vector_extract_node : public vector_element_node {
+public:
+	vector_extract_node(packet &owner, port &vct, int index)
+		: vector_element_node(owner, node_kinds::vector_extract, vct.type().element_type(), vct, index)
+	{
+	}
+};
+
+class vector_insert_node : public vector_element_node {
+public:
+	vector_insert_node(packet &owner, port &vct, int index, port &val)
+		: vector_element_node(owner, node_kinds::vector_insert, vct.type(), vct, index)
+		, val_(val)
+	{
+	}
+
+private:
+	port &val_;
 };
 } // namespace arancini::ir

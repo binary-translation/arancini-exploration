@@ -20,7 +20,12 @@ bool dot_graph_generator::visit_chunk_end(chunk &c)
 
 bool dot_graph_generator::visit_packet_start(packet &p)
 {
-	os_ << "subgraph cluster_" << std::hex << &p << "{" << std::endl;
+	char buffer[64];
+
+	xed_format_context(XED_SYNTAX_INTEL, p.src_inst(), buffer, sizeof(buffer), p.address(), nullptr, 0);
+	std::cerr << "[DEBUG] xed_format_context: " << buffer << std::endl;
+	os_ << "subgraph cluster_" << std::hex << &p << " {" << std::endl;
+	os_ << "label = \"" << buffer << "\";" << std::endl;
 
 	if (last_packet_ && !last_packet_->actions().empty() && !p.actions().empty()) {
 		os_ << "N" << last_packet_->actions().back() << " -> N" << p.actions().front() << " [color=blue];" << std::endl;
@@ -83,7 +88,7 @@ bool dot_graph_generator::visit_write_pc_node(write_pc_node &n)
 
 bool dot_graph_generator::visit_constant_node(constant_node &n)
 {
-	os_ << "N" << &n << " [label=\"constant #" << n.const_val() << "\"];" << std::endl;
+	os_ << "N" << &n << " [label=\"constant #" << n.const_val_i() << "\"];" << std::endl;
 	return true;
 }
 
