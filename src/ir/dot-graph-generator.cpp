@@ -22,7 +22,8 @@ bool dot_graph_generator::visit_packet_start(packet &p)
 {
 	char buffer[64];
 
-	xed_format_context(XED_SYNTAX_INTEL, p.src_inst(), buffer, sizeof(buffer), p.address(), nullptr, 0);
+	std::cerr << "Here!!!! packet start\n";
+        xed_format_context(XED_SYNTAX_INTEL, p.src_inst(), buffer, sizeof(buffer), p.address(), nullptr, 0);
 	std::cerr << "[DEBUG] xed_format_context: " << buffer << std::endl;
 	os_ << "subgraph cluster_" << std::hex << &p << " {" << std::endl;
 	os_ << "label = \"" << buffer << "\";" << std::endl;

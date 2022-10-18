@@ -42,6 +42,9 @@ public:
 	bool is_floating_point() const { return tc_ == value_type_class::floating_point; }
 	bool is_integer() const { return tc_ == value_type_class::signed_integer || tc_ == value_type_class::unsigned_integer; }
 
+
+	int number_elements() const { return nr_elements_; }
+
 	value_type element_type() const { return value_type(tc_, element_width_, 1); }
 
 	bool equivalent_to(const value_type &o) const { return element_width_ == o.element_width_ && tc_ == o.tc_ && nr_elements_ == o.nr_elements_; }

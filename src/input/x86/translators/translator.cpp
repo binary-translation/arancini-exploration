@@ -1,3 +1,4 @@
+#include <iostream>
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/ir/node.h>
 #include <arancini/ir/packet.h>

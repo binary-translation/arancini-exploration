@@ -75,7 +75,47 @@ bool debug_visitor::visit_arith_node(arith_node &n) { return true; }
 
 bool debug_visitor::visit_unary_arith_node(unary_arith_node &n) { return true; }
 
-bool debug_visitor::visit_binary_arith_node(binary_arith_node &n) { return true; }
+bool debug_visitor::visit_binary_arith_node(binary_arith_node &n)
+{
+	indent();
+	apply_indent();
+	os_ << "visit binary airth: ";
+	switch(n.op()) {
+		case binary_arith_op::add:
+		os_ << "add";
+		break;
+		case binary_arith_op::sub:
+		os_ << "sub";
+		break;
+		case binary_arith_op::mul:
+		os_ << "mul";
+		break;
+		case binary_arith_op::div:
+		os_ << "div";
+		break;
+		case binary_arith_op::band:
+		os_ << "band";
+		break;
+		case binary_arith_op::bor:
+		os_ << "bor";
+		break;
+		case binary_arith_op::bxor:
+		os_ << "bxor";
+		break;
+		case binary_arith_op::cmpeq:
+		os_ << "cmpeq";
+		break;
+		case binary_arith_op::cmpne:
+		os_ << "cmpne";
+		break;
+		default:
+		os_ << "unknown op";
+	}
+	os_ << std::endl;
+
+	outdent();
+	return true;
+}
 
 bool debug_visitor::visit_ternary_arith_node(ternary_arith_node &n) { return true; }
 

@@ -1,6 +1,7 @@
 #include <arancini/elf/elf-reader.h>
 #include <arancini/input/x86/x86-input-arch.h>
 #include <arancini/ir/chunk.h>
+#include <arancini/ir/debug-visitor.h>
 #include <arancini/ir/dot-graph-generator.h>
 #include <arancini/output/llvm/llvm-output-engine.h>
 #include <arancini/output/output-personality.h>
@@ -76,6 +77,12 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		}
 	}
 
+	if (cmdline.count("debug")) {
+                debug_visitor dv(std::cout);
+		for (auto c : oe->chunks()) {
+			c->accept(dv);
+		}
+	}
 	if (cmdline.count("graph")) {
 		std::string graph_output_file = cmdline.at("graph").as<std::string>();
 		std::ostream *o;

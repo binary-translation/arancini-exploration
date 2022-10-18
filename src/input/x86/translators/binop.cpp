@@ -1,3 +1,4 @@
+#include <iostream>
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/ir/node.h>
 #include <arancini/ir/packet.h>
@@ -8,9 +9,38 @@ using namespace arancini::input::x86::translators;
 void binop_translator::do_translate()
 {
 	auto op0 = read_operand(0);
-	auto op1 = auto_cast(op0->val().type(), read_operand(1));
-
 	value_node *rslt;
+
+	value_type ty = op0->val().type();
+	std::cerr << "bits width: " << ty.width() << "\n";
+
+	switch (xed_decoded_inst_get_iclass(xed_inst())) {
+	case XED_ICLASS_PADDB:
+          ty = value_type::vector(value_type::u8(), ty.width()/8);
+	  op0 = auto_cast(ty, op0);
+	  break;
+	case XED_ICLASS_PADDW:
+          ty = value_type::vector(value_type::u16(), ty.width()/16);
+	  op0 = auto_cast(ty, op0);
+	  break;
+	case XED_ICLASS_PADDD:
+          ty = value_type::vector(value_type::u32(), ty.width()/32);
+	  op0 = auto_cast(ty, op0);
+	  break;
+	case XED_ICLASS_PADDQ:
+          ty = value_type::vector(value_type::u64(), ty.width()/64);
+	  op0 = auto_cast(ty, op0);
+	  break;
+	default:
+	  break;
+	}
+
+	std::cerr << "bits width: " << ty.width() << "\n";
+	std::cerr << "is vector: " << ty.is_vector() << "\n";
+	std::cerr << "elements width: " << ty.element_width() << "\n";
+	std::cerr << "number elements: " << ty.number_elements() << "\n";
+
+	auto op1 = auto_cast(ty, read_operand(1));
 
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
 	case XED_ICLASS_XOR:
@@ -28,6 +58,10 @@ void binop_translator::do_translate()
 		break;
 
 	case XED_ICLASS_ADD:
+	case XED_ICLASS_PADDB:
+	case XED_ICLASS_PADDW:
+	case XED_ICLASS_PADDD:
+	case XED_ICLASS_PADDQ:
 		rslt = pkt()->insert_add(op0->val(), op1->val());
 		break;
 	case XED_ICLASS_ADC:
