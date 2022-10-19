@@ -122,6 +122,10 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 	case XED_ICLASS_PADDW:
 	case XED_ICLASS_PADDD:
 	case XED_ICLASS_PADDQ:
+	case XED_ICLASS_PSUBB:
+	case XED_ICLASS_PSUBW:
+	case XED_ICLASS_PSUBD:
+	case XED_ICLASS_PSUBQ:
 		return std::make_unique<binop_translator>();
 
 	case XED_ICLASS_PUSH:

@@ -1,6 +1,6 @@
 
 FILES=addps.o addpd.o addepi8.o addepi16.o addepi32.o addepi64.o \
-      subps.o subpd.o \
+      subps.o subpd.o subepi8.o subepi16.o subepi32.o subepi64.o \
       mulps.o mulpd.o \
       divps.o divpd.o \
       sqrtps.o sqrtpd.o \
