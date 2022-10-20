@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <string>
 
 #include <arancini/ir/node.h>
 #include <arancini/ir/visitor.h>
@@ -13,8 +14,11 @@ namespace arancini::ir {
 class packet {
 public:
 	packet(off_t address, xed_decoded_inst_t *src_inst)
-		: address_(address), src_inst_(src_inst)
+		: address_(address)
 	{
+		char buffer[64];
+		xed_format_context(XED_SYNTAX_INTEL, src_inst, buffer, sizeof(buffer), address, nullptr, 0);
+		src_inst_str_ = std::string(buffer);
 	}
 
 	value_node *insert_constant_i(const value_type &vt, unsigned long cv) { return insert(new constant_node(*this, vt, cv)); }
@@ -95,7 +99,7 @@ public:
 
 	off_t address() const { return address_; }
 
-	xed_decoded_inst_t *src_inst() const { return src_inst_; }
+	std::string src_inst_str() const { return src_inst_str_; }
 
 	bool updates_pc() const
 	{
@@ -110,7 +114,7 @@ public:
 
 private:
 	off_t address_;
-	xed_decoded_inst_t *src_inst_;
+	std::string src_inst_str_;
 	std::vector<action_node *> actions_;
 
 	template <class T> T *insert(T *n)
