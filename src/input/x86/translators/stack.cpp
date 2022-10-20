@@ -26,6 +26,24 @@ void stack_translator::do_translate()
 		break;
 	}
 
+	case XED_ICLASS_LEAVE: {
+		/* Only supported for 64-bit mode */
+		/*
+		* LEAVE:
+		* 	RSP := RBP
+		* 	RBP := Pop()
+		*/
+		auto rbp = read_reg(value_type::u64(), reg_to_offset(XED_REG_RBP));
+		write_reg(reg_to_offset(XED_REG_RSP), rbp->val());
+
+		auto rsp = read_reg(value_type::u64(), reg_to_offset(XED_REG_RSP));
+		write_reg(reg_to_offset(XED_REG_RBP), pkt()->insert_read_mem(value_type::u64(), rsp->val())->val());
+
+		auto new_rsp = pkt()->insert_add(rsp->val(), pkt()->insert_constant_u64(8)->val());
+		write_reg(reg_to_offset(XED_REG_RSP), new_rsp->val());
+		break;
+	}
+
 	default:
 		throw std::runtime_error("unsupported stack operation");
 	}

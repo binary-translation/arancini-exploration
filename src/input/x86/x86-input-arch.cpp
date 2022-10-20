@@ -121,6 +121,7 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 
 	case XED_ICLASS_PUSH:
 	case XED_ICLASS_POP:
+	case XED_ICLASS_LEAVE:
 		return std::make_unique<stack_translator>();
 
 	case XED_ICLASS_CALL_FAR:
