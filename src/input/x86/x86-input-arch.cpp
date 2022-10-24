@@ -43,6 +43,7 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 	case XED_ICLASS_MOVAPS:
 	case XED_ICLASS_MOVDQA:
 	case XED_ICLASS_CQO:
+	case XED_ICLASS_CDQE:
 		return std::make_unique<mov_translator>();
 
 	case XED_ICLASS_SETNBE:
