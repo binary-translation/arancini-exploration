@@ -35,11 +35,9 @@ void mov_translator::do_translate()
 
 	case XED_ICLASS_CDQE: {
 		/* Only for 64-bit, other sizes are with CBW/CWDE instructions */
-		auto shift_size = pkt()->insert_constant_u32(32);
-		auto eax = read_reg(value_type::u32(), reg_to_offset(XED_REG_EAX));
-		auto lshift = pkt()->insert_lsl(eax->val(), shift_size->val());
-		auto rshift = pkt()->insert_asr(lshift->val(), shift_size->val());
-		write_reg(reg_to_offset(XED_REG_RAX), rshift->val());
+		auto eax = read_reg(value_type::s32(), reg_to_offset(XED_REG_EAX));
+		auto rax = pkt()->insert_sx(value_type::s64(), eax->val());
+		write_reg(reg_to_offset(XED_REG_RAX), rax->val());
 		break;
 	}
 
