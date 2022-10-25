@@ -267,7 +267,7 @@ bool dot_graph_generator::visit_port(port &p)
 	}
 
 	for (auto target : p.targets()) {
-		os_ << "N" << p.owner() << " -> N" << target << " [label=\"" << port_name << ":" << p.type().width() << "\"];" << std::endl;
+		os_ << "N" << p.owner() << " -> N" << target << " [label=\"" << port_name << ":" << p.type().to_string() << "\"];" << std::endl;
 	}
 
 	return true;
