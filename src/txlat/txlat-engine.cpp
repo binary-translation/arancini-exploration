@@ -4,8 +4,9 @@
 #include <arancini/ir/dot-graph-generator.h>
 #include <arancini/output/llvm/llvm-output-engine.h>
 #include <arancini/output/output-personality.h>
-
 #include <arancini/txlat/txlat-engine.h>
+#include <arancini/util/tempfile-manager.h>
+#include <arancini/util/tempfile.h>
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
@@ -17,6 +18,7 @@ using namespace arancini::input;
 using namespace arancini::input::x86;
 using namespace arancini::output;
 using namespace arancini::output::llvm;
+using namespace arancini::util;
 
 static std::set<std::string> allowed_symbols = { "_start", "test" }; //, "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
 
@@ -93,15 +95,22 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		}
 	}
 
+	tempfile_manager tf;
+
 	// Invoke the output engine.
-	static_output_personality sop("static-translation.o");
+	auto intermediate_file = tf.create_file(".o");
+	static_output_personality sop(intermediate_file->name());
 	oe->generate(sop);
 
-	// TODO: Generate loadable sections
+	// Generate loadable sections
+	for (auto p : elf.program_headers()) {
+		std::cerr << "PH: " << (int)p->type() << std::endl;
+	}
 
 	// Do the link - TODO: this is awful.
 
-	std::string cmd = "g++ -o " + cmdline.at("output").as<std::string>() + " -no-pie static-translation.o -L out -larancini-runtime";
+	std::string cmd = "g++ -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + " -L out -larancini-runtime";
+	std::cerr << "invoke: " << cmd << std::endl;
 	std::system(cmd.c_str());
 }
 
