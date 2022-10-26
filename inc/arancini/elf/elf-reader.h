@@ -100,6 +100,33 @@ private:
 	std::vector<std::string> strings_;
 };
 
+enum class program_header_type { null_program_header, loadable, dynamic, interp, note, shlib, program_headers, tls };
+
+class program_header {
+public:
+	program_header(program_header_type type, const void *data, off_t address, size_t data_size, size_t mem_size)
+		: type_(type)
+		, data_(data)
+		, address_(address)
+		, data_size_(data_size)
+		, mem_size_(mem_size)
+	{
+	}
+
+	program_header_type type() const { return type_; }
+	const void *data() const { return data_; }
+	off_t address() const { return address_; }
+	size_t data_size() const { return data_size_; }
+	size_t mem_size() const { return mem_size_; }
+
+private:
+	program_header_type type_;
+	const void *data_;
+	off_t address_;
+	size_t data_size_;
+	size_t mem_size_;
+};
+
 class elf_reader {
 public:
 	elf_reader(const std::string &filename);
@@ -108,14 +135,19 @@ public:
 	void parse();
 
 	const std::vector<std::shared_ptr<section>> &sections() const { return sections_; }
+	const std::vector<std::shared_ptr<program_header>> &program_headers() const { return program_headers_; }
 
 	std::shared_ptr<section> get_section(int index) const { return sections_[index]; }
+	std::shared_ptr<program_header> get_program_header(int index) const { return program_headers_[index]; }
 
 private:
 	void *elf_data_;
 	size_t elf_data_size_;
 
 	std::vector<std::shared_ptr<section>> sections_;
+	std::vector<std::shared_ptr<program_header>> program_headers_;
+
+	void parse_program_headers(off_t offset, int count, size_t size);
 
 	void parse_sections(off_t offset, int count, size_t size, int name_table_index);
 	void parse_section(
