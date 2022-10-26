@@ -8,7 +8,7 @@
 
 #if defined(ARCH_X86_64)
 #include <arancini/output/x86/x86-output-engine.h>
-#elif defined(ARCH_ARM64)
+#elif defined(ARCH_AARCH64)
 #include <arancini/output/arm64/arm64-output-engine.h>
 #endif
 
@@ -24,7 +24,7 @@ static arancini::input::x86::x86_input_arch ia;
 
 #if defined(ARCH_X86_64)
 static arancini::output::x86::x86_output_engine oe;
-#elif defined(ARCH_ARM64)
+#elif defined(ARCH_AARCH64)
 static arancini::output::arm64::arm64_output_engine oe;
 #else
 #error "Unsupported output architecture"

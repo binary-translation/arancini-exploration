@@ -33,6 +33,14 @@ void mov_translator::do_translate()
 		break;
 	}
 
+	case XED_ICLASS_CDQE: {
+		/* Only for 64-bit, other sizes are with CBW/CWDE instructions */
+		auto eax = read_reg(value_type::s32(), reg_to_offset(XED_REG_EAX));
+		auto rax = pkt()->insert_sx(value_type::s64(), eax->val());
+		write_reg(reg_to_offset(XED_REG_RAX), rax->val());
+		break;
+	}
+
 	case XED_ICLASS_MOVQ: {
 		// TODO: INCORRECT FOR SOME SIZES
 		auto op1 = read_operand(1);
@@ -55,6 +63,14 @@ void mov_translator::do_translate()
 		// TODO: Incorrect operand sizes
 		auto input = read_operand(1);
 		auto cast = pkt()->insert_zx(value_type::u64(), input->val());
+
+		write_operand(0, cast->val());
+		break;
+	}
+
+	case XED_ICLASS_MOVD: {
+		auto input = read_operand(1);
+		auto cast = pkt()->insert_zx(value_type::u32(), input->val());
 
 		write_operand(0, cast->val());
 		break;

@@ -20,7 +20,7 @@ using namespace arancini::output;
 using namespace arancini::output::llvm;
 using namespace arancini::util;
 
-static std::set<std::string> allowed_symbols = { "_start", "test" }; //, "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
+static std::set<std::string> allowed_symbols = { "_start", "test", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
 
 static std::map<std::string, std::function<std::unique_ptr<arancini::output::output_engine>()>> translation_engines
 	= { { "llvm", [] { return std::make_unique<arancini::output::llvm::llvm_output_engine>(); } } };
@@ -32,6 +32,13 @@ void txlat_engine::process_options(arancini::output::output_engine &oe, const bo
 	}
 }
 
+/*
+This function acts as the main driver for the binary translation.
+First it parses the ELF binary, lifting each section to the Arancini IR.
+Finally, the lifted IR is processed by the output engine.
+For example, the output engine can generate the target binary or a
+visualisation of the Arancini IR.
+*/
 void txlat_engine::translate(const boost::program_options::variables_map &cmdline)
 {
 	// Parse the input ELF file
@@ -114,6 +121,10 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	std::system(cmd.c_str());
 }
 
+/*
+This function uses an x86 implementation of the input_architecture class to lift
+x86 symbol sections to the Arancini IR.
+*/
 std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arch &ia, elf_reader &reader, const symbol &sym)
 {
 	// std::cerr << "translating symbol " << sym.name() << ", value=" << std::hex << sym.value() << ", size=" << sym.size() << ", section=" <<
