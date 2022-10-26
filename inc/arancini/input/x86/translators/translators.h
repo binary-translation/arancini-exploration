@@ -32,7 +32,7 @@ protected:
 	value_node *read_operand(int opnum);
 	value_node *compute_address(int mem_idx);
 
-	enum class reg_offsets { rip = 0, rax = 1, rcx = 2, rdx = 3, rbx = 4, zf = 17, cf = 18, of = 19, sf = 20, pf = 21, xmm0 = 22, fs = 38, gs = 39 };
+	enum class reg_offsets { rip = 0, rax = 1, rcx = 2, rdx = 3, rbx = 4, zf = 17, cf = 18, of = 19, sf = 20, pf = 21, xmm0 = 22, fs = 54, gs = 55 };
 
 	action_node *write_reg(reg_offsets reg, port &value);
 	value_node *read_reg(const value_type &vt, reg_offsets reg);

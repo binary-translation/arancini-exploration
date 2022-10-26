@@ -16,6 +16,8 @@ public:
 	static value_type u32() { return value_type(value_type_class::unsigned_integer, 32); }
 	static value_type u64() { return value_type(value_type_class::unsigned_integer, 64); }
 	static value_type u128() { return value_type(value_type_class::unsigned_integer, 128); }
+	static value_type u256() { return value_type(value_type_class::unsigned_integer, 256); }
+	static value_type u512() { return value_type(value_type_class::unsigned_integer, 512); }
 	static value_type s8() { return value_type(value_type_class::signed_integer, 8); }
 	static value_type s16() { return value_type(value_type_class::signed_integer, 16); }
 	static value_type s32() { return value_type(value_type_class::signed_integer, 32); }

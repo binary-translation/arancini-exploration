@@ -52,6 +52,10 @@ action_node *translator::write_operand(int opnum, port &value)
 
 		case XED_REG_CLASS_XMM:
 			return write_reg(reg_to_offset(reg), pkt()->insert_zx(value_type::u128(), value)->val());
+		case XED_REG_CLASS_YMM:
+			return write_reg(reg_to_offset(reg), pkt()->insert_zx(value_type::u256(), value)->val());
+		case XED_REG_CLASS_ZMM:
+			return write_reg(reg_to_offset(reg), pkt()->insert_zx(value_type::u512(), value)->val());
 
 		default:
 			throw std::runtime_error("unsupported register class");
@@ -97,6 +101,10 @@ value_node *translator::read_operand(int opnum)
 
 		case XED_REG_CLASS_XMM:
 			return read_reg(value_type::u128(), reg_to_offset(reg));
+		case XED_REG_CLASS_YMM:
+			return read_reg(value_type::u256(), reg_to_offset(reg));
+		case XED_REG_CLASS_ZMM:
+			return read_reg(value_type::u512(), reg_to_offset(reg));
 
 		default:
 			throw std::runtime_error("unsupported register class");
@@ -195,8 +203,9 @@ translator::reg_offsets translator::reg_to_offset(xed_reg_enum_t reg)
 		return (reg_offsets)((xed_get_largest_enclosing_register(reg) - XED_REG_RAX) + (int)reg_offsets::rax);
 
 	case XED_REG_CLASS_XMM:
+	case XED_REG_CLASS_YMM:
+	case XED_REG_CLASS_ZMM:
 		return (reg_offsets)((reg - XED_REG_XMM0) + (int)reg_offsets::xmm0);
-
 	default:
 		throw std::runtime_error("unsupported register class when computing offset");
 	}
@@ -460,6 +469,10 @@ value_type translator::type_of_operand(int opnum)
 
 		case XED_REG_CLASS_XMM:
 			return value_type(value_type_class::unsigned_integer, 128);
+		case XED_REG_CLASS_YMM:
+			return value_type(value_type_class::unsigned_integer, 256);
+		case XED_REG_CLASS_ZMM:
+			return value_type(value_type_class::unsigned_integer, 512);
 
 		default:
 			throw std::runtime_error("unsupported register class");

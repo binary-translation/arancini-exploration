@@ -17,21 +17,29 @@ void binop_translator::do_translate()
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
 	case XED_ICLASS_PADDB:
 	case XED_ICLASS_PSUBB:
+	case XED_ICLASS_VPADDB:
+	case XED_ICLASS_VPSUBB:
           ty = value_type::vector(value_type::u8(), ty.width()/8);
 	  op0 = auto_cast(ty, op0);
 	  break;
 	case XED_ICLASS_PADDW:
 	case XED_ICLASS_PSUBW:
+	case XED_ICLASS_VPADDW:
+	case XED_ICLASS_VPSUBW:
           ty = value_type::vector(value_type::u16(), ty.width()/16);
 	  op0 = auto_cast(ty, op0);
 	  break;
 	case XED_ICLASS_PADDD:
 	case XED_ICLASS_PSUBD:
+	case XED_ICLASS_VPADDD:
+	case XED_ICLASS_VPSUBD:
           ty = value_type::vector(value_type::u32(), ty.width()/32);
 	  op0 = auto_cast(ty, op0);
 	  break;
 	case XED_ICLASS_PADDQ:
 	case XED_ICLASS_PSUBQ:
+	case XED_ICLASS_VPADDQ:
+	case XED_ICLASS_VPSUBQ:
           ty = value_type::vector(value_type::u64(), ty.width()/64);
 	  op0 = auto_cast(ty, op0);
 	  break;
@@ -66,6 +74,10 @@ void binop_translator::do_translate()
 	case XED_ICLASS_PADDW:
 	case XED_ICLASS_PADDD:
 	case XED_ICLASS_PADDQ:
+	case XED_ICLASS_VPADDB:
+	case XED_ICLASS_VPADDW:
+	case XED_ICLASS_VPADDD:
+	case XED_ICLASS_VPADDQ:
 		rslt = pkt()->insert_add(op0->val(), op1->val());
 		break;
 	case XED_ICLASS_ADC:
@@ -76,6 +88,10 @@ void binop_translator::do_translate()
 	case XED_ICLASS_PSUBW:
 	case XED_ICLASS_PSUBD:
 	case XED_ICLASS_PSUBQ:
+	case XED_ICLASS_VPSUBB:
+	case XED_ICLASS_VPSUBW:
+	case XED_ICLASS_VPSUBD:
+	case XED_ICLASS_VPSUBQ:
 	case XED_ICLASS_CMP:
 		rslt = pkt()->insert_sub(op0->val(), op1->val());
 		break;
