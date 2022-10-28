@@ -103,7 +103,7 @@ public:
 		return value_.accept(v);
 	}
 
-private:
+protected:
 	port value_;
 };
 
@@ -572,11 +572,19 @@ public:
 		, op_(op)
 		, lhs_(lhs)
 		, rhs_(rhs)
-
 	{
 		if (!lhs.type().equivalent_to(rhs.type())) {
 			throw std::logic_error("incompatible types in binary arith node: lhs=" + lhs.type().to_string() + ", rhs=" + rhs.type().to_string());
 		}
+
+		if (op == binary_arith_op::mul) {
+			auto type = value_type(lhs.type().type_class(), lhs.type().element_width() * 2, lhs.type().nr_elements());
+			value_ = port(port_kinds::value, type, this);
+		}
+
+		op_ = op;
+		lhs_ = lhs;
+		rhs_ = rhs;
 
 		lhs.add_target(this);
 		rhs.add_target(this);

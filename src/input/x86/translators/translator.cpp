@@ -3,6 +3,8 @@
 #include <arancini/ir/packet.h>
 #include <arancini/ir/port.h>
 
+#include <csignal>
+
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
 
@@ -53,7 +55,7 @@ action_node *translator::write_operand(int opnum, port &value)
 			return write_reg(reg_to_offset(reg), pkt()->insert_zx(value_type::u128(), value)->val());
 
 		default:
-			throw std::runtime_error("unsupported register class");
+			throw std::runtime_error("" + std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": unsupported register class: " + std::to_string(regclass));
 		}
 	}
 
@@ -75,7 +77,8 @@ value_node *translator::read_operand(int opnum)
 
 	switch (opname) {
 	case XED_OPERAND_REG0:
-	case XED_OPERAND_REG1: {
+	case XED_OPERAND_REG1:
+	case XED_OPERAND_REG2: {
 		auto reg = xed_decoded_inst_get_reg(xed_inst(), opname);
 		auto regclass = xed_reg_class(reg);
 
@@ -97,8 +100,11 @@ value_node *translator::read_operand(int opnum)
 		case XED_REG_CLASS_XMM:
 			return read_reg(value_type::u128(), reg_to_offset(reg));
 
+		case XED_REG_CLASS_FLAGS:
+			return read_reg(value_type::u64(), reg_to_offset(reg));
+
 		default:
-			throw std::runtime_error("unsupported register class");
+			throw std::runtime_error(std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": unsupported register class: " + std::to_string(regclass));
 		}
 	}
 
