@@ -23,6 +23,8 @@ enum class node_kinds {
 	csel,
 	bit_shift,
 	cond_br,
+	bit_extract,
+	bit_insert,
 	vector_extract,
 	vector_insert
 };
@@ -664,6 +666,44 @@ private:
 	port &lhs_;
 	port &rhs_;
 	port &top_;
+};
+
+class bit_extract_node : public value_node {
+public:
+	bit_extract_node(packet &owner, port &value, int from, int length)
+		: value_node(owner, node_kinds::bit_extract, value.type())
+		, value_(value)
+		, from_(from)
+		, length_(length)
+	{
+		// TODO: check if from + length invalid
+	}
+
+private:
+	port &value_;
+	int from_, length_;
+};
+
+class bit_insert_node : public value_node {
+public:
+	bit_insert_node(packet &owner, port &value, port &bits, int to, int length)
+		: value_node(owner, node_kinds::bit_insert, value.type())
+		, value_(value)
+		, bits_(bits)
+		, to_(to)
+		, length_(length)
+	{
+		if (bits.type().width() > value.type().width()) {
+			throw std::runtime_error("width of type of incoming bits cannot be greater than type of value");
+		}
+
+		// TODO: check if to + length invalid
+	}
+
+private:
+	port &value_;
+	port &bits_;
+	int to_, length_;
 };
 
 class vector_node : public value_node {
