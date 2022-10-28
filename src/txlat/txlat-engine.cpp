@@ -32,6 +32,14 @@ void txlat_engine::process_options(arancini::output::output_engine &oe, const bo
 	}
 }
 
+static void run_or_fail(const std::string &cmd)
+{
+	std::cerr << "running: " << cmd << "..." << std::endl;
+	if (std::system(cmd.c_str()) != 0) {
+		throw std::runtime_error("error whilst running subcommand");
+	}
+}
+
 /*
 This function acts as the main driver for the binary translation.
 First it parses the ELF binary, lifting each section to the Arancini IR.
@@ -110,15 +118,51 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	oe->generate(sop);
 
 	// Generate loadable sections
+	std::vector<std::pair<std::shared_ptr<tempfile>, std::shared_ptr<program_header>>> phbins;
 	for (auto p : elf.program_headers()) {
-		std::cerr << "PH: " << (int)p->type() << std::endl;
+		// std::cerr << "PH: " << (int)p->type() << std::endl;
+		if (p->type() == program_header_type::loadable) {
+			auto phbin = tf.create_file(".bin");
+			phbins.push_back({ phbin, p });
+
+			auto s = phbin->open();
+			s.write((const char *)p->data(), p->data_size());
+		}
 	}
 
-	// Do the link - TODO: this is awful.
+	auto phobjsrc = tf.create_file(".S");
+	{
+		auto s = phobjsrc->open();
+		s << ".section .gphdata,\"a\"" << std::endl;
 
-	std::string cmd = "g++ -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + " -L out -larancini-runtime";
-	std::cerr << "invoke: " << cmd << std::endl;
-	std::system(cmd.c_str());
+		for (int i = 0; i < phbins.size(); i++) {
+			s << ".align 16" << std::endl;
+			s << "__PH_" << std::dec << i << "_LOAD: .quad 0x" << std::hex << phbins[i].second->address() << std::endl;
+			s << "__PH_" << std::dec << i << "_FSIZE: .quad 0x" << std::hex << phbins[i].second->data_size() << std::endl;
+			s << "__PH_" << std::dec << i << "_MSIZE: .quad 0x" << std::hex << phbins[i].second->mem_size() << std::endl;
+			s << "__PH_" << std::dec << i << "_DATA: .incbin \"" << phbins[i].first->name() << "\"" << std::endl;
+			s << ".size __PH_" << std::dec << i << "_DATA,.-__PH_" << std::dec << i << "_DATA" << std::endl;
+		}
+
+		s << ".section .gph,\"a\"" << std::endl;
+		s << ".globl __GPH" << std::endl;
+		s << ".type __GPH,%object" << std::endl;
+		s << "__GPH:" << std::endl;
+		for (int i = 0; i < phbins.size(); i++) {
+			s << ".quad __PH_" << std::dec << i << "_LOAD" << std::endl;
+		}
+		s << ".quad 0" << std::endl;
+		s << ".size __GPH,.-__GPH" << std::endl;
+	}
+
+	// Compile the program header objects
+
+	auto phobjout = tf.create_file(".o");
+	run_or_fail("g++ -c -o " + phobjout->name() + " " + phobjsrc->name());
+
+	// Generate the final output binary by linking everything together.
+	run_or_fail(
+		"g++ -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + " " + phobjout->name() + " -L out -larancini-runtime");
 }
 
 /*
