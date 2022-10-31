@@ -59,8 +59,9 @@ void llvm_output_engine_impl::initialise_types()
 	types.i16 = Type::getInt16Ty(*llvm_context_);
 	types.i32 = Type::getInt32Ty(*llvm_context_);
 	types.i64 = Type::getInt64Ty(*llvm_context_);
-	types.i128 = Type::getInt128Ty(*llvm_context_);
+        types.i128 = Type::getInt128Ty(*llvm_context_);
 
+	Type *zmmTy = VectorType::get(types.i128, 4, /*Scalable=*/false);
 	// CPU State
 
 	// 0 PC, RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI, R8, R9, R10, R11, R12, R13, R14, R15,
@@ -72,9 +73,13 @@ void llvm_output_engine_impl::initialise_types()
 		types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, // 1: AX, CX, DX, BX, SP, BP, SI, DI
 		types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, // 9: R8, R9, R10, R11, R12, R13, R14, R15
 		types.i8, types.i8, types.i8, types.i8, types.i8, // 17: ZF, CF, OF, SF, PF
-		types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, // 22: XMM0--7
-		types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, // 30: XMM8--15
-		types.i64, types.i64 // 38: FS, GS
+		//types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, // 22: XMM0--7
+		//types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, // 30: XMM8--15
+		zmmTy, zmmTy, zmmTy, zmmTy, zmmTy, zmmTy, zmmTy, zmmTy, // 22: ZMM0--7
+		zmmTy, zmmTy, zmmTy, zmmTy, zmmTy, zmmTy, zmmTy, zmmTy, // 30: ZMM8--15
+		zmmTy, zmmTy, zmmTy, zmmTy, zmmTy, zmmTy, zmmTy, zmmTy, // 38: ZMM16--23
+		zmmTy, zmmTy, zmmTy, zmmTy, zmmTy, zmmTy, zmmTy, zmmTy, // 46: ZMM24--31
+		types.i64, types.i64 // 54: FS, GS
 	});
 
 	types.cpu_state = StructType::get(*llvm_context_, state_elements, false);
