@@ -212,6 +212,12 @@ public:
 
 	value_node *insert_bitcast(const value_type &target_type, port &value) { return insert(new cast_node(*this, cast_op::bitcast, target_type, value)); }
 
+	/// @brief Converts a value between type classes, e.g. floating point to integer.  This is NOT a bit cast, it's a value cast.
+	/// @param target_type The type to convert to
+	/// @param value The value being converted
+	/// @return A cast node
+	value_node *insert_convert(const value_type &target_type, port &value) { return insert(new cast_node(*this, cast_op::convert, target_type, value)); }
+
 	value_node *insert_csel(port &condition, port &trueval, port &falseval) { return insert(new csel_node(*this, condition, trueval, falseval)); }
 
 	/// @brief logical shift left

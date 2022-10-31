@@ -429,7 +429,7 @@ private:
 	port &amount_;
 };
 
-enum class cast_op { bitcast, zx, sx, trunc };
+enum class cast_op { bitcast, zx, sx, trunc, convert };
 
 class cast_node : public value_node {
 public:
@@ -443,6 +443,10 @@ public:
 			if (target_type.width() != source_value.type().width()) {
 				throw std::logic_error(
 					"cannot bitcast between types with different sizes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
+			}
+		} else if (op == cast_op::convert) {
+			if (target_type.type_class() == source_value.type().type_class()) {
+				throw std::logic_error("cannot convert between the same type classes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
 			}
 		} else {
 			if (target_type.type_class() != source_value.type().type_class()) {
