@@ -684,6 +684,26 @@ public:
 		, length_(length)
 	{
 		// TODO: check if from + length invalid
+		value.add_target(this);
+	}
+
+	port &value() const { return value_; }
+
+	virtual bool accept(visitor &v) override
+	{
+		if (!value_node::accept(v)) {
+			return false;
+		}
+
+		if (!v.visit_bit_extract_node(*this)) {
+			return false;
+		}
+
+		if (!value_.owner()->accept(v)) {
+			return false;
+		}
+
+		return true;
 	}
 
 private:
@@ -705,6 +725,26 @@ public:
 		}
 
 		// TODO: check if to + length invalid
+		value.add_target(this);
+	}
+
+	port &value() const { return value_; }
+
+	virtual bool accept(visitor &v) override
+	{
+		if (!value_node::accept(v)) {
+			return false;
+		}
+
+		if (!v.visit_bit_insert_node(*this)) {
+			return false;
+		}
+
+		if (!value_.owner()->accept(v)) {
+			return false;
+		}
+
+		return true;
 	}
 
 private:
