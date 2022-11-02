@@ -85,6 +85,10 @@ bool debug_visitor::visit_csel_node(csel_node &n) { return true; }
 
 bool debug_visitor::visit_bit_shift_node(bit_shift_node &n) { return true; }
 
+bool debug_visitor::visit_bit_extract_node(bit_extract_node &n) { return true; }
+
+bool debug_visitor::visit_bit_insert_node(bit_insert_node &n) { return true; }
+
 bool debug_visitor::visit_port(port &p)
 {
 	indent();

@@ -245,6 +245,20 @@ bool dot_graph_generator::visit_ternary_arith_node(ternary_arith_node &n)
 	return true;
 }
 
+bool dot_graph_generator::visit_bit_extract_node(bit_extract_node &n)
+{
+	os_ << "N" << &n << " [label=\"bit_extract\"];" << std::endl;
+
+	return true;
+}
+
+bool dot_graph_generator::visit_bit_insert_node(bit_insert_node &n)
+{
+	os_ << "N" << &n << " [label=\"bit_insert\"];" << std::endl;
+
+	return true;
+}
+
 bool dot_graph_generator::visit_port(port &p)
 {
 	std::string port_name = "?";
