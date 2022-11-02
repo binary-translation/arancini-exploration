@@ -360,6 +360,8 @@ Value *llvm_output_engine_impl::materialise_port(IRBuilder<> &builder, Argument 
 				return builder.CreateSExt(val, types.i32);
 			case 64:
 				return builder.CreateSExt(val, types.i64);
+			case 128:
+				return builder.CreateSExt(val, types.i128);
 
 			default:
 				throw std::runtime_error("unsupported sx width");
