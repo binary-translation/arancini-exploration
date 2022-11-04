@@ -678,16 +678,20 @@ private:
 class bit_extract_node : public value_node {
 public:
 	bit_extract_node(packet &owner, port &value, int from, int length)
-		: value_node(owner, node_kinds::bit_extract, value.type())
-		, value_(value)
+		: value_node(owner, node_kinds::bit_extract, value_type(value_type_class::unsigned_integer, length))
+		, source_value_(value)
 		, from_(from)
 		, length_(length)
 	{
-		// TODO: check if from + length invalid
-		value.add_target(this);
+		if (from + length > source_value_.type().width() - 1) {
+			throw std::logic_error(
+				"bit extract range [" + std::to_string(from + length) + ":" + std::to_string(from) + "] is out of bounds from source value [" + std::to_string(source_value_.type().width()) + ":0]");
+		}
+
+		source_value_.add_target(this);
 	}
 
-	port &value() const { return value_; }
+	port &source_value() const { return source_value_; }
 
 	virtual bool accept(visitor &v) override
 	{
@@ -707,15 +711,15 @@ public:
 	}
 
 private:
-	port &value_;
+	port &source_value_;
 	int from_, length_;
 };
 
 class bit_insert_node : public value_node {
 public:
 	bit_insert_node(packet &owner, port &value, port &bits, int to, int length)
-		: value_node(owner, node_kinds::bit_insert, value.type())
-		, value_(value)
+		: value_node(owner, node_kinds::bit_insert, value_type(value_type_class::unsigned_integer, length))
+		, source_value_(value)
 		, bits_(bits)
 		, to_(to)
 		, length_(length)
@@ -724,11 +728,15 @@ public:
 			throw std::runtime_error("width of type of incoming bits cannot be greater than type of value");
 		}
 
-		// TODO: check if to + length invalid
+		if (to + length > source_value_.type().width() - 1) {
+			throw std::logic_error(
+				"bit insert range [" + std::to_string(to + length) + ":" + std::to_string(to) + "] is out of bounds in target value [" + std::to_string(source_value_.type().width()) + ":0]");
+		}
+
 		value.add_target(this);
 	}
 
-	port &value() const { return value_; }
+	port &source_value() const { return source_value_; }
 
 	virtual bool accept(visitor &v) override
 	{
@@ -748,7 +756,7 @@ public:
 	}
 
 private:
-	port &value_;
+	port &source_value_;
 	port &bits_;
 	int to_, length_;
 };
