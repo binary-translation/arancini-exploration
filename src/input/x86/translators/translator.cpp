@@ -25,7 +25,8 @@ action_node *translator::write_operand(int opnum, port &value)
 
 	switch (opname) {
 	case XED_OPERAND_REG0:
-	case XED_OPERAND_REG1: {
+	case XED_OPERAND_REG1:
+	case XED_OPERAND_REG2: {
 		auto reg = xed_decoded_inst_get_reg(xed_inst(), opname);
 		auto regclass = xed_reg_class(reg);
 

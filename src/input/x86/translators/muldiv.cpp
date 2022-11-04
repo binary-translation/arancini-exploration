@@ -15,8 +15,9 @@ void muldiv_translator::do_translate()
 	auto nops = xed_decoded_inst_noperands(insn);
 	arancini::ir::value_node *op[nops - 1];
 
-	for (auto i = 0; i < nops - 1; i++)
+	for (unsigned int i = 0; i < nops - 1; i++) {
 		op[i] = read_operand(i);
+	}
 
 	switch (xed_decoded_inst_get_iclass(insn)) {
 	// case XED_ICLASS_MUL:
@@ -43,63 +44,30 @@ void muldiv_translator::do_translate()
 		}
 		case 3: {
 			if (op[2]->kind() != node_kinds::constant) {
-				/* 1 operand: RDX:RAX := RAX * op0 */
-				arancini::ir::value_node *a_reg;
-
-				switch (op[0]->val().type().width()) {
-				case 8:
-					a_reg = read_reg(value_type::s8(), reg_to_offset(XED_REG_AL));
-					break;
-				case 16:
-					a_reg = read_reg(value_type::s16(), reg_to_offset(XED_REG_AX));
-					break;
-				case 32:
-					a_reg = read_reg(value_type::s32(), reg_to_offset(XED_REG_EAX));
-					break;
-				case 64:
-					a_reg = read_reg(value_type::s64(), reg_to_offset(XED_REG_RAX));
-					break;
-				default:
-					throw std::runtime_error("unknown operand type for IMUL");
+				/*
+				 * 1 operand: RDX:RAX := RAX * op0
+				 * xed decodes this with op[1] = ax and op[2] = dx (and their variants)
+				 */
+				std::cerr << "imul ";
+				for (auto o: op) {
+					std::cerr << o->val().type().to_string() << " ";
 				}
-				auto castop = pkt()->insert_bitcast(a_reg->val().type(), op[0]->val());
+				std::cerr << std::endl;
 
-				a_reg = pkt()->insert_sx(
-					value_type(value_type_class::signed_integer, a_reg->val().type().element_width() * 2,
-					a_reg->val().type().nr_elements()), a_reg->val());
-				castop = pkt()->insert_sx(a_reg->val().type(), castop->val());
-				rslt = pkt()->insert_mul(a_reg->val(), castop->val());
-				switch (op[0]->val().type().width()) {
-				case 8: {
+				auto ax = pkt()->insert_bitcast(op[1]->val().type().get_signed_type(), op[1]->val());
+				auto castop = pkt()->insert_bitcast(ax->val().type(), op[0]->val());
+				ax = pkt()->insert_sx(
+					value_type(value_type_class::signed_integer, ax->val().type().element_width() * 2, ax->val().type().nr_elements()), ax->val());
+				castop = pkt()->insert_sx(ax->val().type(), castop->val());
+				rslt = pkt()->insert_mul(ax->val(), castop->val());
+				if (op[0]->val().type().width() == 8) {
 					write_reg(reg_to_offset(XED_REG_AX), rslt->val());
-					break;
-				}
-				case 16: {
-					auto low = pkt()->insert_bit_extract(rslt->val(), 0, 16);
-					auto high = pkt()->insert_bit_extract(rslt->val(), 16, 16);
+				} else {
+					auto low = pkt()->insert_bit_extract(rslt->val(), 0, op[0]->val().type().width());
+					auto high = pkt()->insert_bit_extract(rslt->val(), op[0]->val().type().width() - 1, op[0]->val().type().width());
 
-					write_reg(reg_to_offset(XED_REG_AX), low->val());
-					write_reg(reg_to_offset(XED_REG_DX), high->val());
-					break;
-				}
-				case 32: {
-					auto low = pkt()->insert_bit_extract(rslt->val(), 0, 32);
-					auto high = pkt()->insert_bit_extract(rslt->val(), 32, 32);
-
-					write_reg(reg_to_offset(XED_REG_EAX), low->val());
-					write_reg(reg_to_offset(XED_REG_EDX), high->val());
-					break;
-				}
-				case 64: {
-					auto low = pkt()->insert_bit_extract(rslt->val(), 0, 64);
-					auto high = pkt()->insert_bit_extract(rslt->val(), 64, 64);
-
-					write_reg(reg_to_offset(XED_REG_RAX), low->val());
-					write_reg(reg_to_offset(XED_REG_RDX), high->val());
-					break;
-				}
-				default:
-					throw std::runtime_error("unknown operand type for IMUL");
+					write_operand(1, low->val());
+					write_operand(2, high->val());
 				}
 			} else {
 				/* 3 operands: op0 := op1 * op2 */
