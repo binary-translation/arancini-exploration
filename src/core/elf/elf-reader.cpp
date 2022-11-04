@@ -139,7 +139,7 @@ void elf_reader::parse_symbol_table(
 		auto sym = read<Elf64_Sym>(offset + i);
 
 		std::string name = readstr(link_offset + sym.st_name);
-		symbols.push_back(symbol(name, sym.st_value, sym.st_size, sym.st_shndx));
+		symbols.push_back(symbol(name, sym.st_value, sym.st_size, sym.st_shndx, sym.st_info));
 	}
 
 	sections_.push_back(std::make_shared<symbol_table>(get_data_ptr(offset), address, size, symbols, name, flags));

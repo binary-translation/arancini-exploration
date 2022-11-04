@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include <elf.h>
+
 namespace arancini::elf {
 enum class section_type { null_section = 0, progbits = 1, symbol_table = 2, string_table = 3 };
 enum class section_flags { shf_write = 1 };
@@ -52,11 +54,12 @@ public:
 
 class symbol {
 public:
-	symbol(const std::string &name, uint64_t value, size_t size, int shidx)
+	symbol(const std::string &name, uint64_t value, size_t size, int shidx, unsigned char info)
 		: name_(name)
 		, value_(value)
 		, size_(size)
 		, shidx_(shidx)
+		, info_(info)
 	{
 	}
 
@@ -67,11 +70,16 @@ public:
 
 	int section_index() const { return shidx_; }
 
+	unsigned char info() const { return info_; }
+
+	bool is_func() const { return ELF64_ST_TYPE(info_) == STT_FUNC; }
+
 private:
 	std::string name_;
 	uint64_t value_;
 	size_t size_;
 	int shidx_;
+	unsigned char info_;
 };
 
 class symbol_table : public section {
