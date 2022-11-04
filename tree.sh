@@ -8,4 +8,7 @@ else
     INPUT=$1
 fi
 
-make && objdump -d ${INPUT} && out/txlat -I ${INPUT} -O ${INPUT}-txl --graph - | dot -Tx11
+make && objdump -M intel -d ${INPUT} && out/txlat -I ${INPUT} -O ${INPUT}-txl --graph - > ${INPUT}.dot
+scripts/split_dot.py ${INPUT}.dot
+echo "Generated " $(ls ${INPUT}.dot.*)
+# cat ${INPUT}.dot | dot -Tx11
