@@ -224,7 +224,7 @@ void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
 		break;
 
 	case flag_op::update:
-		if (op->kind() == node_kinds::binary_arith || op->kind() == node_kinds::ternary_arith) {
+		if (op->kind() == node_kinds::unary_arith || op->kind() == node_kinds::binary_arith || op->kind() == node_kinds::ternary_arith) {
 			write_reg(reg_offsets::zf, ((arith_node *)op)->zero());
 		} else if (op->kind() == node_kinds::constant) {
 			write_reg(reg_offsets::zf, pkt()->insert_constant_i(value_type::u1(), ((constant_node *)op)->is_zero())->val());
@@ -289,7 +289,7 @@ void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
 		break;
 
 	case flag_op::update:
-		if (op->kind() == node_kinds::binary_arith || op->kind() == node_kinds::ternary_arith) {
+		if (op->kind() == node_kinds::unary_arith || op->kind() == node_kinds::binary_arith || op->kind() == node_kinds::ternary_arith) {
 			write_reg(reg_offsets::sf, ((arith_node *)op)->negative());
 		} else if (op->kind() == node_kinds::constant) {
 			// TODO: INCORRECT
