@@ -141,6 +141,7 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 		return std::make_unique<unop_translator>();
 
 	case XED_ICLASS_IMUL:
+	case XED_ICLASS_MUL:
 	case XED_ICLASS_IDIV:
 		return std::make_unique<muldiv_translator>();
 
