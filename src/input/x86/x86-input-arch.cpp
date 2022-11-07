@@ -151,6 +151,12 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 	case XED_ICLASS_PUNPCKLDQ:
 		return std::make_unique<punpck_translator>();
 
+	case XED_ICLASS_VADDSS:
+	case XED_ICLASS_VSUBSS:
+	case XED_ICLASS_VDIVSS:
+	case XED_ICLASS_VMULSS:
+		return std::make_unique<fpvec_translator>();
+
 	default: {
 		char buffer[64];
 		xed_format_context(XED_SYNTAX_INTEL, xed_inst, buffer, sizeof(buffer), address, nullptr, 0);
