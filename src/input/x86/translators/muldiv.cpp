@@ -65,12 +65,6 @@ void muldiv_translator::do_translate()
 				 * 1 operand: RDX:RAX := RAX * op0
 				 * xed decodes this with op[1] = ax and op[2] = dx (and their variants)
 				 */
-				std::cerr << "imul ";
-				for (auto o: op) {
-					std::cerr << o->val().type().to_string() << " ";
-				}
-				std::cerr << std::endl;
-
 				auto ax = pkt()->insert_bitcast(op[1]->val().type().get_signed_type(), op[1]->val());
 				auto castop = pkt()->insert_bitcast(ax->val().type(), op[0]->val());
 				ax = pkt()->insert_sx(
