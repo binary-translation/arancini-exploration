@@ -17,37 +17,56 @@ void fpvec_translator::do_translate()
 	auto src2 = read_operand(2);
 
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
-	case XED_ICLASS_VADDSS: {
-
-        src1 = pkt()->insert_bitcast(value_type::vector(value_type::f32(), 4), src1->val());
+	case XED_ICLASS_VADDSS:
+	case XED_ICLASS_VSUBSS:
+	case XED_ICLASS_VDIVSS:
+	case XED_ICLASS_VMULSS: {
+		dest = pkt()->insert_bitcast(value_type::vector(value_type::f32(), 4), dest->val());
+		src1 = pkt()->insert_bitcast(value_type::vector(value_type::f32(), 4), src1->val());
         src2 = pkt()->insert_bitcast(value_type::vector(value_type::f32(), 4), src2->val());
+		break;
+	}
+	case XED_ICLASS_VADDSD:
+	case XED_ICLASS_VSUBSD:
+	case XED_ICLASS_VDIVSD:
+	case XED_ICLASS_VMULSD: {
+		dest = pkt()->insert_bitcast(value_type::vector(value_type::f64(), 2), dest->val());
+		src1 = pkt()->insert_bitcast(value_type::vector(value_type::f64(), 2), src1->val());
+        src2 = pkt()->insert_bitcast(value_type::vector(value_type::f64(), 2), src2->val());
+		break;
+	}
+	default:
+		throw std::runtime_error("Unknown fpvec operand size");
+	}
+
+	switch (xed_decoded_inst_get_iclass(xed_inst())) {
+	case XED_ICLASS_VADDSS:
+	case XED_ICLASS_VADDSD: {
+
         auto res = pkt()->insert_add(pkt()->insert_vector_extract(src1->val(), 0)->val(), pkt()->insert_vector_extract(src2->val(), 0)->val());
 
         write_operand(0, pkt()->insert_vector_insert(dest->val(), 0, res->val())->val());
 		break;
 	}
-	case XED_ICLASS_VSUBSS: {
+	case XED_ICLASS_VSUBSS:
+	case XED_ICLASS_VSUBSD: {
 
-        src1 = pkt()->insert_bitcast(value_type::vector(value_type::f32(), 4), src1->val());
-        src2 = pkt()->insert_bitcast(value_type::vector(value_type::f32(), 4), src2->val());
         auto res = pkt()->insert_sub(pkt()->insert_vector_extract(src1->val(), 0)->val(), pkt()->insert_vector_extract(src2->val(), 0)->val());
 
         write_operand(0, pkt()->insert_vector_insert(dest->val(), 0, res->val())->val());
 		break;
 	}
-	case XED_ICLASS_VDIVSS: {
+	case XED_ICLASS_VDIVSS:
+	case XED_ICLASS_VDIVSD: {
 
-        src1 = pkt()->insert_bitcast(value_type::vector(value_type::f32(), 4), src1->val());
-        src2 = pkt()->insert_bitcast(value_type::vector(value_type::f32(), 4), src2->val());
         auto res = pkt()->insert_div(pkt()->insert_vector_extract(src1->val(), 0)->val(), pkt()->insert_vector_extract(src2->val(), 0)->val());
 
         write_operand(0, pkt()->insert_vector_insert(dest->val(), 0, res->val())->val());
 		break;
 	}
-	case XED_ICLASS_MULSS: {
+	case XED_ICLASS_MULSS:
+	case XED_ICLASS_MULSD: {
 
-        src1 = pkt()->insert_bitcast(value_type::vector(value_type::f32(), 4), src1->val());
-        src2 = pkt()->insert_bitcast(value_type::vector(value_type::f32(), 4), src2->val());
         auto res = pkt()->insert_mul(pkt()->insert_vector_extract(src1->val(), 0)->val(), pkt()->insert_vector_extract(src2->val(), 0)->val());
 
         write_operand(0, pkt()->insert_vector_insert(dest->val(), 0, res->val())->val());
