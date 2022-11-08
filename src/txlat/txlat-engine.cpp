@@ -20,7 +20,8 @@ using namespace arancini::output;
 using namespace arancini::output::llvm;
 using namespace arancini::util;
 
-static std::set<std::string> allowed_symbols = { "cmpstr", "cmpnum", "swap", "_qsort", "_start", "test", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
+static std::set<std::string> allowed_symbols
+	= { "cmpstr", "cmpnum", "swap", "_qsort", "_start", "test", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
 
 static std::map<std::string, std::function<std::unique_ptr<arancini::output::output_engine>()>> translation_engines
 	= { { "llvm", [] { return std::make_unique<arancini::output::llvm::llvm_output_engine>(); } } };
@@ -73,19 +74,22 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	auto oe = engine_factory->second();
 	process_options(*oe, cmdline);
 
-	// Loop over each symbol table, and translate the symbol.
-	for (auto s : elf.sections()) {
-		if (s->type() == section_type::symbol_table) {
-			auto st = std::static_pointer_cast<symbol_table>(s);
-			for (const auto &sym : st->symbols()) {
-				// if (allowed_symbols.count(sym.name())) {
-				if (sym.is_func()) {
-					oe->add_chunk(translate_symbol(*ia, elf, sym));
+	if (!cmdline.count("no-static")) {
+		// Loop over each symbol table, and translate the symbol.
+		for (auto s : elf.sections()) {
+			if (s->type() == section_type::symbol_table) {
+				auto st = std::static_pointer_cast<symbol_table>(s);
+				for (const auto &sym : st->symbols()) {
+					// if (allowed_symbols.count(sym.name())) {
+					if (sym.is_func()) {
+						oe->add_chunk(translate_symbol(*ia, elf, sym));
+					}
 				}
 			}
 		}
 	}
 
+	// Determine if we also need to produce a dot graph output.
 	if (cmdline.count("graph")) {
 		std::string graph_output_file = cmdline.at("graph").as<std::string>();
 		std::ostream *o;
@@ -110,59 +114,78 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		}
 	}
 
+	// Create a manager for temporary files, as we'll be creating a series of them.  When
+	// this object is destroyed, all temporary files are automatically unlinked.
 	tempfile_manager tf;
 
-	// Invoke the output engine.
+	// Invoke the output engine, and tell it to write to a temporary file.
 	auto intermediate_file = tf.create_file(".o");
 	static_output_personality sop(intermediate_file->name());
 	oe->generate(sop);
 
 	// Generate loadable sections
 	std::vector<std::pair<std::shared_ptr<tempfile>, std::shared_ptr<program_header>>> phbins;
+
+	// For each program header, determine whether or not it's loadable, and generate a
+	// corresponding temporary file containing the binary contents of the segment.
 	for (auto p : elf.program_headers()) {
 		// std::cerr << "PH: " << (int)p->type() << std::endl;
 		if (p->type() == program_header_type::loadable) {
+			// Create a temporary file, and record it in the phbins list.
 			auto phbin = tf.create_file(".bin");
 			phbins.push_back({ phbin, p });
 
+			// Open the file, and write the raw contents of the segment to it.
 			auto s = phbin->open();
 			s.write((const char *)p->data(), p->data_size());
 		}
 	}
 
+	// Now, we need to create an assembly file that includes the binary data for
+	// each program header, along with some associated metadata too.  TODO: Maybe we
+	// should just include the original ELF file - but then the runtime would need to
+	// parse and load it.
 	auto phobjsrc = tf.create_file(".S");
 	{
 		auto s = phobjsrc->open();
+
+		// Put all segment data into the .gphdata section (guest program header data)
 		s << ".section .gphdata,\"a\"" << std::endl;
 
-		for (int i = 0; i < phbins.size(); i++) {
+		// For each segment...
+		for (unsigned int i = 0; i < phbins.size(); i++) {
+			// Create the metadata for the segment, which includes the load (virtual) address,
+			// the actual byte size of the segment, the size in memory, then the actual data
+			// itself.
 			s << ".align 16" << std::endl;
 			s << "__PH_" << std::dec << i << "_LOAD: .quad 0x" << std::hex << phbins[i].second->address() << std::endl;
 			s << "__PH_" << std::dec << i << "_FSIZE: .quad 0x" << std::hex << phbins[i].second->data_size() << std::endl;
 			s << "__PH_" << std::dec << i << "_MSIZE: .quad 0x" << std::hex << phbins[i].second->mem_size() << std::endl;
 			s << "__PH_" << std::dec << i << "_DATA: .incbin \"" << phbins[i].first->name() << "\"" << std::endl;
+
+			// Make sure the symbol is appropriately sized.
 			s << ".size __PH_" << std::dec << i << "_DATA,.-__PH_" << std::dec << i << "_DATA" << std::endl;
 		}
 
+		// Finally, create pointers to each guest program header in an array.
 		s << ".section .gph,\"a\"" << std::endl;
 		s << ".globl __GPH" << std::endl;
 		s << ".type __GPH,%object" << std::endl;
 		s << "__GPH:" << std::endl;
-		for (int i = 0; i < phbins.size(); i++) {
+		for (unsigned int i = 0; i < phbins.size(); i++) {
 			s << ".quad __PH_" << std::dec << i << "_LOAD" << std::endl;
 		}
+
+		// Null terminate the array.
 		s << ".quad 0" << std::endl;
+
+		// Size the symbol appropriately.
 		s << ".size __GPH,.-__GPH" << std::endl;
 	}
 
-	// Compile the program header objects
-
-	auto phobjout = tf.create_file(".o");
-	run_or_fail("g++ -c -o " + phobjout->name() + " " + phobjsrc->name());
-
-	// Generate the final output binary by linking everything together.
+	// Generate the final output binary by compiling everything together.
 	run_or_fail(
-		"g++ -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + " " + phobjout->name() + " -L out -larancini-runtime");
+		"g++ -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + " " + phobjsrc->name() + " -L out -larancini-runtime");
 }
 
 /*
