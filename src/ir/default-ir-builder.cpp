@@ -30,7 +30,7 @@ void default_ir_builder::end_chunk()
 	chunk_complete_ = true;
 }
 
-void default_ir_builder::begin_packet(off_t address, const std::string& disassembly)
+void default_ir_builder::begin_packet(off_t address, const std::string &disassembly)
 {
 	if (current_chunk_ == nullptr) {
 		throw std::runtime_error("chunk not in progress");
@@ -47,14 +47,18 @@ void default_ir_builder::begin_packet(off_t address, const std::string& disassem
 	current_pkt_ = std::make_shared<packet>(address, disassembly);
 }
 
-void default_ir_builder::end_packet()
+packet_type default_ir_builder::end_packet()
 {
 	if (!current_pkt_) {
 		throw std::runtime_error("packet not in progress");
 	}
 
+	bool eob = current_pkt_->updates_pc();
+
 	current_chunk_->add_packet(current_pkt_);
 	current_pkt_ = nullptr;
+
+	return eob ? packet_type::end_of_block : packet_type::normal;
 }
 
 void default_ir_builder::insert_action(action_node *a)

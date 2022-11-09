@@ -19,6 +19,8 @@ class ir_builder;
 namespace arancini::input::x86::translators {
 using namespace arancini::ir;
 
+enum class translation_result { normal, end_of_block, fail };
+
 class translator {
 public:
 	translator(ir_builder &builder)
@@ -26,7 +28,7 @@ public:
 	{
 	}
 
-	void translate(off_t address, xed_decoded_inst_t *xed_inst);
+	translation_result translate(off_t address, xed_decoded_inst_t *xed_inst);
 
 protected:
 	virtual void do_translate() = 0;

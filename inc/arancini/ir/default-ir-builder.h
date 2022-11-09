@@ -19,7 +19,7 @@ public:
 	virtual void end_chunk() override;
 
 	virtual void begin_packet(off_t address, const std::string& disassembly = "") override;
-	virtual void end_packet() override;
+	virtual packet_type end_packet() override;
 
 	std::shared_ptr<chunk> get_chunk() const
 	{

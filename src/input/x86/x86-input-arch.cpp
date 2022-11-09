@@ -31,9 +31,9 @@ translation for each category of instructions.
 TODO: This is quite heavy-weight - need to hold instances of translators ready to go, rather than
 instantiating each time.
 */
-static std::unique_ptr<translator> get_translator(ir_builder &builder, off_t address, xed_decoded_inst_t *xed_inst)
+static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclass_enum_t ic)
 {
-	switch (xed_decoded_inst_get_iclass(xed_inst)) {
+	switch (ic) {
 	case XED_ICLASS_MOV:
 	case XED_ICLASS_LEA:
 	case XED_ICLASS_MOVQ:
@@ -163,19 +163,25 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, off_t add
 	case XED_ICLASS_VMULSD:
 		return std::make_unique<fpvec_translator>(builder);
 
-	default: {
-		char buffer[64];
-		xed_format_context(XED_SYNTAX_INTEL, xed_inst, buffer, sizeof(buffer), address, nullptr, 0);
-		std::cerr << "UNSUPPORTED INSTRUCTION @ " << std::hex << address << ": " << buffer << std::endl;
-
-		throw std::runtime_error("unsupported instruction");
-	}
+	default:
+		return nullptr;
 	}
 }
 
-static void translate_instruction(ir_builder &builder, size_t address, xed_decoded_inst_t *xedd)
+static translation_result translate_instruction(ir_builder &builder, size_t address, xed_decoded_inst_t *xedd)
 {
-	get_translator(builder, address, xedd)->translate(address, xedd);
+	auto t = get_translator(builder, xed_decoded_inst_get_iclass(xedd));
+
+	if (t) {
+		return t->translate(address, xedd);
+	} else {
+
+		char buffer[64];
+		xed_format_context(XED_SYNTAX_ATT, xedd, buffer, sizeof(buffer) - 1, address, nullptr, 0);
+		std::cerr << "UNSUPPORTED INSTRUCTION @ " << std::hex << address << ": " << buffer << std::endl;
+
+		return translation_result::fail;
+	}
 }
 
 /*
@@ -214,11 +220,13 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 		xed_uint_t length = xed_decoded_inst_get_length(&xedd);
 
-		translate_instruction(builder, base_address, &xedd);
+		auto r = translate_instruction(builder, base_address, &xedd);
 
-		/* TODO: if (p->updates_pc() && basic_block) {
+		if (r == translation_result::fail) {
+			throw std::runtime_error("instruction translation failure");
+		} else if (r == translation_result::end_of_block && basic_block) {
 			break;
-		}*/
+		}
 
 		offset += length;
 		base_address += length;

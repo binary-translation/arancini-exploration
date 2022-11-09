@@ -3,13 +3,15 @@
 #include <arancini/ir/node.h>
 
 namespace arancini::ir {
+enum packet_type { normal, end_of_block };
+
 class ir_builder {
 public:
 	virtual void begin_chunk() = 0;
 	virtual void end_chunk() = 0;
 
-	virtual void begin_packet(off_t address, const std::string& disassembly = "") = 0;
-	virtual void end_packet() = 0;
+	virtual void begin_packet(off_t address, const std::string &disassembly = "") = 0;
+	virtual packet_type end_packet() = 0;
 
 	/* Nodes */
 

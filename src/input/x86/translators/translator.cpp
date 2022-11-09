@@ -9,7 +9,7 @@
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
 
-void translator::translate(off_t address, xed_decoded_inst_t *xed_inst)
+translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_inst)
 {
 	char buffer[64];
 	xed_format_context(XED_SYNTAX_ATT, xed_inst, buffer, sizeof(buffer) - 1, address, nullptr, 0);
@@ -19,7 +19,7 @@ void translator::translate(off_t address, xed_decoded_inst_t *xed_inst)
 	xed_inst_ = xed_inst;
 	do_translate();
 
-	builder_.end_packet();
+	return builder_.end_packet() == packet_type::end_of_block ? translation_result::end_of_block : translation_result::normal;
 }
 
 action_node *translator::write_operand(int opnum, port &value)
