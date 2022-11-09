@@ -28,4 +28,6 @@ void x86_output_engine_impl::generate(const dynamic_output_personality &p)
 
 	machine_code_builder mcb(p.get_allocator());
 	mcb.write_u8(0);
+
+	//p.entrypoint(mcb.get_base());
 }

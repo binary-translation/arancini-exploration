@@ -13,6 +13,7 @@ class port;
 class action_node;
 class value_node;
 class value_type;
+class ir_builder;
 } // namespace arancini::ir
 
 namespace arancini::input::x86::translators {
@@ -20,12 +21,18 @@ using namespace arancini::ir;
 
 class translator {
 public:
-	std::shared_ptr<packet> translate(off_t address, xed_decoded_inst_t *xed_inst);
+	translator(ir_builder &builder)
+		: builder_(builder)
+	{
+	}
+
+	void translate(off_t address, xed_decoded_inst_t *xed_inst);
 
 protected:
 	virtual void do_translate() = 0;
 
-	std::shared_ptr<packet> pkt() const { return packet_; }
+	ir_builder &builder() const { return builder_; }
+
 	xed_decoded_inst_t *xed_inst() const { return xed_inst_; }
 
 	action_node *write_operand(int opnum, port &value);
@@ -58,12 +65,18 @@ protected:
 	value_type type_of_operand(int opnum);
 
 private:
+	ir_builder &builder_;
 	xed_decoded_inst_t *xed_inst_;
-	std::shared_ptr<packet> packet_;
 };
 
 #define DEFINE_TRANSLATOR(name)                                                                                                                                \
 	class name##_translator : public translator {                                                                                                              \
+	public:                                                                                                                                                    \
+		name##_translator(ir_builder &builder)                                                                                                                 \
+			: translator(builder)                                                                                                                              \
+		{                                                                                                                                                      \
+		}                                                                                                                                                      \
+                                                                                                                                                               \
 	protected:                                                                                                                                                 \
 		virtual void do_translate() override;                                                                                                                  \
 	};

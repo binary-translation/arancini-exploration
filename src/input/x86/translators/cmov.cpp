@@ -1,6 +1,6 @@
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/ir/node.h>
-#include <arancini/ir/packet.h>
+#include <arancini/ir/ir-builder.h>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
@@ -62,6 +62,6 @@ void cmov_translator::do_translate()
 		throw std::runtime_error("unhandled cond mov instruction");
 	}
 
-	auto val = pkt()->insert_csel(cond->val(), read_operand(0)->val(), read_operand(1)->val());
+	auto val = builder().insert_csel(cond->val(), read_operand(0)->val(), read_operand(1)->val());
 	write_operand(0, val->val());
 }

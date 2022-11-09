@@ -1,6 +1,6 @@
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/ir/node.h>
-#include <arancini/ir/packet.h>
+#include <arancini/ir/ir-builder.h>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
@@ -26,9 +26,9 @@ void mov_translator::do_translate()
 	case XED_ICLASS_CQO: {
 		// TODO: Operand sizes
 		auto sign_set = read_reg(value_type::u64(), reg_offsets::rax);
-		sign_set = pkt()->insert_trunc(value_type::u1(), pkt()->insert_asr(sign_set->val(), pkt()->insert_constant_u32(63)->val())->val());
+		sign_set = builder().insert_trunc(value_type::u1(), builder().insert_asr(sign_set->val(), builder().insert_constant_u32(63)->val())->val());
 
-		auto sx = pkt()->insert_csel(sign_set->val(), pkt()->insert_constant_u64(0xffffffffffffffffull)->val(), pkt()->insert_constant_u64(0)->val());
+		auto sx = builder().insert_csel(sign_set->val(), builder().insert_constant_u64(0xffffffffffffffffull)->val(), builder().insert_constant_u64(0)->val());
 		write_reg(reg_offsets::rdx, sx->val());
 		break;
 	}
@@ -36,7 +36,7 @@ void mov_translator::do_translate()
 	case XED_ICLASS_CDQE: {
 		/* Only for 64-bit, other sizes are with CBW/CWDE instructions */
 		auto eax = read_reg(value_type::s32(), reg_to_offset(XED_REG_EAX));
-		auto rax = pkt()->insert_sx(value_type::s64(), eax->val());
+		auto rax = builder().insert_sx(value_type::s64(), eax->val());
 		write_reg(reg_to_offset(XED_REG_RAX), rax->val());
 		break;
 	}
@@ -51,9 +51,9 @@ void mov_translator::do_translate()
 	case XED_ICLASS_MOVSXD: {
 		// TODO: INCORRECT FOR SOME SIZES
 		auto input = read_operand(1);
-		input = pkt()->insert_bitcast(value_type(value_type_class::signed_integer, input->val().type().width()), input->val());
+		input = builder().insert_bitcast(value_type(value_type_class::signed_integer, input->val().type().width()), input->val());
 
-		auto cast = pkt()->insert_sx(value_type::s64(), input->val());
+		auto cast = builder().insert_sx(value_type::s64(), input->val());
 
 		write_operand(0, cast->val());
 		break;
@@ -62,7 +62,7 @@ void mov_translator::do_translate()
 	case XED_ICLASS_MOVZX: {
 		// TODO: Incorrect operand sizes
 		auto input = read_operand(1);
-		auto cast = pkt()->insert_zx(value_type::u64(), input->val());
+		auto cast = builder().insert_zx(value_type::u64(), input->val());
 
 		write_operand(0, cast->val());
 		break;
@@ -70,7 +70,7 @@ void mov_translator::do_translate()
 
 	case XED_ICLASS_MOVD: {
 		auto input = read_operand(1);
-		auto cast = pkt()->insert_zx(value_type::u32(), input->val());
+		auto cast = builder().insert_zx(value_type::u32(), input->val());
 
 		write_operand(0, cast->val());
 		break;

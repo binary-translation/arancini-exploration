@@ -1,6 +1,6 @@
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/ir/node.h>
-#include <arancini/ir/packet.h>
+#include <arancini/ir/ir-builder.h>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
@@ -13,7 +13,7 @@ void unop_translator::do_translate()
 
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
 	case XED_ICLASS_NOT:
-		rslt = pkt()->insert_not(op0->val());
+		rslt = builder().insert_not(op0->val());
 		break;
 
 	default:

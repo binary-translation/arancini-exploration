@@ -1,6 +1,6 @@
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/ir/node.h>
-#include <arancini/ir/packet.h>
+#include <arancini/ir/ir-builder.h>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
@@ -12,20 +12,20 @@ void branch_translator::do_translate()
 	case XED_ICLASS_CALL_NEAR: {
 		// push next insn to stack, write target to pc
 		auto rsp = read_reg(value_type::u64(), reg_to_offset(XED_REG_RSP));
-		auto new_rsp = pkt()->insert_sub(rsp->val(), pkt()->insert_constant_u64(8)->val());
+		auto new_rsp = builder().insert_sub(rsp->val(), builder().insert_constant_u64(8)->val());
 
 		write_reg(reg_to_offset(XED_REG_RSP), new_rsp->val());
 
 		xed_uint_t instruction_length = xed_decoded_inst_get_length(xed_inst());
-		auto next_target_node = pkt()->insert_add(pkt()->insert_read_pc()->val(), pkt()->insert_constant_u64(instruction_length)->val());
-		pkt()->insert_write_mem(new_rsp->val(), next_target_node->val());
+		auto next_target_node = builder().insert_add(builder().insert_read_pc()->val(), builder().insert_constant_u64(instruction_length)->val());
+		builder().insert_write_mem(new_rsp->val(), next_target_node->val());
 
 		int32_t value = xed_decoded_inst_get_branch_displacement(xed_inst());
 		uint64_t target = value + instruction_length;
 
-		auto target_node = pkt()->insert_add(pkt()->insert_read_pc()->val(), pkt()->insert_constant_u64(target)->val());
+		auto target_node = builder().insert_add(builder().insert_read_pc()->val(), builder().insert_constant_u64(target)->val());
 
-		pkt()->insert_write_pc(target_node->val());
+		builder().insert_write_pc(target_node->val());
 		break;
 	}
 
@@ -34,12 +34,12 @@ void branch_translator::do_translate()
 		// pop stack, write to pc
 
 		auto rsp = read_reg(value_type::u64(), reg_to_offset(XED_REG_RSP));
-		auto retaddr = pkt()->insert_read_mem(value_type::u64(), rsp->val());
+		auto retaddr = builder().insert_read_mem(value_type::u64(), rsp->val());
 
-		auto new_rsp = pkt()->insert_add(rsp->val(), pkt()->insert_constant_u64(8)->val());
+		auto new_rsp = builder().insert_add(rsp->val(), builder().insert_constant_u64(8)->val());
 		write_reg(reg_to_offset(XED_REG_RSP), new_rsp->val());
 
-		pkt()->insert_write_pc(retaddr->val());
+		builder().insert_write_pc(retaddr->val());
 
 		break;
 	}
@@ -49,9 +49,9 @@ void branch_translator::do_translate()
 		int32_t branch_displacement = xed_decoded_inst_get_branch_displacement(xed_inst());
 		uint64_t branch_target = branch_displacement + instruction_length;
 
-		auto target = pkt()->insert_add(pkt()->insert_read_pc()->val(), pkt()->insert_constant_u64(branch_target)->val());
+		auto target = builder().insert_add(builder().insert_read_pc()->val(), builder().insert_constant_u64(branch_target)->val());
 
-		pkt()->insert_write_pc(target->val());
+		builder().insert_write_pc(target->val());
 
 		break;
 	}

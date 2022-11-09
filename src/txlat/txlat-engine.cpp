@@ -1,6 +1,7 @@
 #include <arancini/elf/elf-reader.h>
 #include <arancini/input/x86/x86-input-arch.h>
 #include <arancini/ir/chunk.h>
+#include <arancini/ir/default-ir-builder.h>
 #include <arancini/ir/dot-graph-generator.h>
 #include <arancini/output/llvm/llvm-output-engine.h>
 #include <arancini/output/output-personality.h>
@@ -207,10 +208,12 @@ std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arc
 
 	const void *symbol_data = (const void *)((uintptr_t)section->data() + symbol_offset_in_section);
 
+	default_ir_builder irb;
+
 	auto start = std::chrono::high_resolution_clock::now();
-	auto cv = ia.translate_chunk(sym.value(), symbol_data, sym.size(), false);
+	ia.translate_chunk(irb, sym.value(), symbol_data, sym.size(), false);
 	auto dur = std::chrono::high_resolution_clock::now() - start;
 
 	std::cerr << "symbol translation time: " << std::dec << std::chrono::duration_cast<std::chrono::microseconds>(dur).count() << " us" << std::endl;
-	return cv;
+	return irb.get_chunk();
 }
