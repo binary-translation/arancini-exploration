@@ -13,8 +13,9 @@ extern "C" {
 namespace arancini::ir {
 class packet {
 public:
-	packet(off_t address)
+	packet(off_t address, const std::string &disassembly = "")
 		: address_(address)
+		, disasm_(disassembly)
 	{
 	}
 
@@ -48,8 +49,11 @@ public:
 		return false;
 	}
 
+	const std::string &disassembly() const { return disasm_; }
+
 private:
 	off_t address_;
+	std::string disasm_;
 	std::vector<action_node *> actions_;
 };
 } // namespace arancini::ir

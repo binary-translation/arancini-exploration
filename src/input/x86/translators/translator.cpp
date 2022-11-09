@@ -11,7 +11,10 @@ using namespace arancini::input::x86::translators;
 
 void translator::translate(off_t address, xed_decoded_inst_t *xed_inst)
 {
-	builder_.begin_packet(address);
+	char buffer[64];
+	xed_format_context(XED_SYNTAX_ATT, xed_inst, buffer, sizeof(buffer) - 1, address, nullptr, 0);
+
+	builder_.begin_packet(address, std::string(buffer));
 
 	xed_inst_ = xed_inst;
 	do_translate();

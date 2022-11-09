@@ -30,7 +30,7 @@ void default_ir_builder::end_chunk()
 	chunk_complete_ = true;
 }
 
-void default_ir_builder::begin_packet(off_t address)
+void default_ir_builder::begin_packet(off_t address, const std::string& disassembly)
 {
 	if (current_chunk_ == nullptr) {
 		throw std::runtime_error("chunk not in progress");
@@ -44,7 +44,7 @@ void default_ir_builder::begin_packet(off_t address)
 		throw std::runtime_error("packet already in progress");
 	}
 
-	current_pkt_ = std::make_shared<packet>(address);
+	current_pkt_ = std::make_shared<packet>(address, disassembly);
 }
 
 void default_ir_builder::end_packet()

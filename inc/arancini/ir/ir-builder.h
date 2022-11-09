@@ -8,7 +8,7 @@ public:
 	virtual void begin_chunk() = 0;
 	virtual void end_chunk() = 0;
 
-	virtual void begin_packet(off_t address) = 0;
+	virtual void begin_packet(off_t address, const std::string& disassembly = "") = 0;
 	virtual void end_packet() = 0;
 
 	/* Nodes */
