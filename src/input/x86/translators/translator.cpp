@@ -9,12 +9,16 @@
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
 
-translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_inst)
+translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_inst, disassembly_mode mode)
 {
-	char buffer[64];
-	xed_format_context(XED_SYNTAX_ATT, xed_inst, buffer, sizeof(buffer) - 1, address, nullptr, 0);
+	std::string disasm = "";
+	if (mode != disassembly_mode::none) {
+		char buffer[64];
+		xed_format_context(mode == disassembly_mode::intel ? XED_SYNTAX_INTEL : XED_SYNTAX_ATT, xed_inst, buffer, sizeof(buffer) - 1, address, nullptr, 0);
+		disasm = std::string(buffer);
+	}
 
-	builder_.begin_packet(address, std::string(buffer));
+	builder_.begin_packet(address, disasm);
 
 	xed_inst_ = xed_inst;
 	do_translate();

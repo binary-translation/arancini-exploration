@@ -15,6 +15,8 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 		("input,I", po::value<std::string>()->required(), "The ELF file that is being translated") //
 		("output,O", po::value<std::string>()->required(), "The output file that is generated") //
 		("engine,E", po::value<std::string>()->default_value("llvm"), "The engine to use for translation") //
+		("syntax", po::value<std::string>()->default_value("intel"),
+			"Specify the syntax to use when disassembling host instructions (x86 input only: att or intel)") //
 		("graph", po::value<std::string>(), "Creates a DOT graph file representing the input ELF translation") //
 		("no-static", "Do not do any static translation") //
 		("debug", "Enable debugging output");
