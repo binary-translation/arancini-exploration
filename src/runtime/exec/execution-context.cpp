@@ -7,6 +7,9 @@
 #include <asm/prctl.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+#define GM_BASE (void *)0x600000000000ull
+#else
+#define GM_BASE nullptr
 #endif
 
 #include <iostream>
@@ -32,14 +35,17 @@ void *execution_context::add_memory_region(off_t base_address, size_t size)
 	}
 
 	void *base_ptr = (void *)((uintptr_t)memory_ + base_address);
-	mprotect(base_ptr, size, PROT_READ | PROT_WRITE);
+	void *aligned_base_ptr = (void *)(((uintptr_t)base_ptr & ~0xfffull));
+
+	// std::cerr << "amr: bp=" << std::hex << aligned_base_ptr << ", size=" << size << "(" << ((size + 0xfff) & ~0xfffu) << ")" << std::endl;
+	mprotect(aligned_base_ptr, (size + 0xfff) & ~0xfffu, PROT_READ | PROT_WRITE);
 
 	return base_ptr;
 }
 
 void execution_context::allocate_guest_memory()
 {
-	memory_ = mmap(nullptr, memory_size_, PROT_NONE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+	memory_ = mmap(GM_BASE, memory_size_, PROT_NONE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 	if (memory_ == MAP_FAILED) {
 		throw std::runtime_error("Unable to allocate guest memory");
 	}

@@ -34,6 +34,8 @@ public:
 	virtual bool visit_cast_node(cast_node &n) override;
 	virtual bool visit_csel_node(csel_node &n) override;
 	virtual bool visit_bit_shift_node(bit_shift_node &n) override;
+	virtual bool visit_bit_extract_node(bit_extract_node &n) override;
+	virtual bool visit_bit_insert_node(bit_insert_node &n) override;
 	virtual bool visit_port(port &p) override;
 
 private:

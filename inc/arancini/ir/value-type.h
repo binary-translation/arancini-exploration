@@ -39,6 +39,7 @@ public:
 
 	int element_width() const { return element_width_; }
 	value_type_class type_class() const { return tc_; }
+	int nr_elements() const { return nr_elements_; }
 	bool is_vector() const { return nr_elements_ > 1; }
 	int width() const { return element_width_ * nr_elements_; }
 	bool is_floating_point() const { return tc_ == value_type_class::floating_point; }
@@ -50,6 +51,31 @@ public:
 	value_type element_type() const { return value_type(tc_, element_width_, 1); }
 
 	bool equivalent_to(const value_type &o) const { return element_width_ == o.element_width_ && tc_ == o.tc_ && nr_elements_ == o.nr_elements_; }
+
+	value_type get_opposite_signedness() const {
+		value_type_class dst_class;
+
+		if (tc_ == value_type_class::signed_integer)
+			dst_class = value_type_class::unsigned_integer;
+		else if (tc_ == value_type_class::unsigned_integer)
+			dst_class = value_type_class::signed_integer;
+		else
+			throw std::logic_error(__FILE__":" + std::to_string(__LINE__) + ": Initial type must be an integer");
+
+		return value_type(dst_class, element_width_, nr_elements_);
+	}
+
+	value_type get_signed_type() const {
+		if (tc_ == value_type_class::signed_integer || tc_ == value_type_class::unsigned_integer)
+			return value_type(value_type_class::signed_integer, element_width_, nr_elements_);
+		throw std::logic_error(__FILE__":" + std::to_string(__LINE__) + ": Initial type must be an integer");
+	}
+
+	value_type get_unsigned_type() const {
+		if (tc_ == value_type_class::signed_integer || tc_ == value_type_class::unsigned_integer)
+			return value_type(value_type_class::unsigned_integer, element_width_, nr_elements_);
+		throw std::logic_error(__FILE__":" + std::to_string(__LINE__) + ": Initial type must be an integer");
+	}
 
 	std::string to_string() const
 	{

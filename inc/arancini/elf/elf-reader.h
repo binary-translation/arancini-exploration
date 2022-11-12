@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include <elf.h>
+
 namespace arancini::elf {
 enum class section_type { null_section = 0, progbits = 1, symbol_table = 2, string_table = 3 };
 enum class section_flags { shf_write = 1 };
@@ -52,11 +54,12 @@ public:
 
 class symbol {
 public:
-	symbol(const std::string &name, uint64_t value, size_t size, int shidx)
+	symbol(const std::string &name, uint64_t value, size_t size, int shidx, unsigned char info)
 		: name_(name)
 		, value_(value)
 		, size_(size)
 		, shidx_(shidx)
+		, info_(info)
 	{
 	}
 
@@ -67,11 +70,16 @@ public:
 
 	int section_index() const { return shidx_; }
 
+	unsigned char info() const { return info_; }
+
+	bool is_func() const { return ELF64_ST_TYPE(info_) == STT_FUNC; }
+
 private:
 	std::string name_;
 	uint64_t value_;
 	size_t size_;
 	int shidx_;
+	unsigned char info_;
 };
 
 class symbol_table : public section {
@@ -100,6 +108,33 @@ private:
 	std::vector<std::string> strings_;
 };
 
+enum class program_header_type { null_program_header, loadable, dynamic, interp, note, shlib, program_headers, tls };
+
+class program_header {
+public:
+	program_header(program_header_type type, const void *data, off_t address, size_t data_size, size_t mem_size)
+		: type_(type)
+		, data_(data)
+		, address_(address)
+		, data_size_(data_size)
+		, mem_size_(mem_size)
+	{
+	}
+
+	program_header_type type() const { return type_; }
+	const void *data() const { return data_; }
+	off_t address() const { return address_; }
+	size_t data_size() const { return data_size_; }
+	size_t mem_size() const { return mem_size_; }
+
+private:
+	program_header_type type_;
+	const void *data_;
+	off_t address_;
+	size_t data_size_;
+	size_t mem_size_;
+};
+
 class elf_reader {
 public:
 	elf_reader(const std::string &filename);
@@ -108,14 +143,19 @@ public:
 	void parse();
 
 	const std::vector<std::shared_ptr<section>> &sections() const { return sections_; }
+	const std::vector<std::shared_ptr<program_header>> &program_headers() const { return program_headers_; }
 
 	std::shared_ptr<section> get_section(int index) const { return sections_[index]; }
+	std::shared_ptr<program_header> get_program_header(int index) const { return program_headers_[index]; }
 
 private:
 	void *elf_data_;
 	size_t elf_data_size_;
 
 	std::vector<std::shared_ptr<section>> sections_;
+	std::vector<std::shared_ptr<program_header>> program_headers_;
+
+	void parse_program_headers(off_t offset, int count, size_t size);
 
 	void parse_sections(off_t offset, int count, size_t size, int name_table_index);
 	void parse_section(

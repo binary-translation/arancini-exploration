@@ -95,6 +95,7 @@ void elf_reader::parse()
 
 	Elf64_Ehdr elf_header = read<Elf64_Ehdr>(0);
 	parse_sections(elf_header.e_shoff, elf_header.e_shnum, elf_header.e_shentsize, elf_header.e_shstrndx);
+	parse_program_headers(elf_header.e_phoff, elf_header.e_phnum, elf_header.e_phentsize);
 }
 
 void elf_reader::parse_sections(off_t offset, int count, size_t size, int name_table_index)
@@ -138,8 +139,18 @@ void elf_reader::parse_symbol_table(
 		auto sym = read<Elf64_Sym>(offset + i);
 
 		std::string name = readstr(link_offset + sym.st_name);
-		symbols.push_back(symbol(name, sym.st_value, sym.st_size, sym.st_shndx));
+		symbols.push_back(symbol(name, sym.st_value, sym.st_size, sym.st_shndx, sym.st_info));
 	}
 
 	sections_.push_back(std::make_shared<symbol_table>(get_data_ptr(offset), address, size, symbols, name, flags));
+}
+
+void elf_reader::parse_program_headers(off_t offset, int count, size_t size)
+{
+	for (int i = 0; i < count; i++) {
+		auto ph = read<Elf64_Phdr>(offset + (size * i));
+
+		program_headers_.push_back(
+			std::make_shared<program_header>((program_header_type)ph.p_type, get_data_ptr(ph.p_offset), ph.p_vaddr, ph.p_filesz, ph.p_memsz));
+	}
 }

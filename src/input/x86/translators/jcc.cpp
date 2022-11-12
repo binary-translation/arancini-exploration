@@ -1,6 +1,6 @@
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/ir/node.h>
-#include <arancini/ir/packet.h>
+#include <arancini/ir/ir-builder.h>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
@@ -63,12 +63,12 @@ void jcc_translator::do_translate()
 	}
 
 	xed_uint_t instruction_length = xed_decoded_inst_get_length(xed_inst());
-	auto fallthrough = pkt()->insert_add(pkt()->insert_read_pc()->val(), pkt()->insert_constant_u64(instruction_length)->val());
+	auto fallthrough = builder().insert_add(builder().insert_read_pc()->val(), builder().insert_constant_u64(instruction_length)->val());
 
 	int32_t branch_displacement = xed_decoded_inst_get_branch_displacement(xed_inst());
 	uint64_t branch_target = branch_displacement + instruction_length;
 
-	auto target = pkt()->insert_add(pkt()->insert_read_pc()->val(), pkt()->insert_constant_u64(branch_target)->val());
+	auto target = builder().insert_add(builder().insert_read_pc()->val(), builder().insert_constant_u64(branch_target)->val());
 
-	pkt()->insert_write_pc(pkt()->insert_csel(cond->val(), target->val(), fallthrough->val())->val());
+	builder().insert_write_pc(builder().insert_csel(cond->val(), target->val(), fallthrough->val())->val());
 }

@@ -21,7 +21,7 @@ bool dot_graph_generator::visit_chunk_end(chunk &c)
 bool dot_graph_generator::visit_packet_start(packet &p)
 {
 	os_ << "subgraph cluster_" << std::hex << &p << " {" << std::endl;
-	os_ << "label = \"@0x" << std::hex << p.address() << ": " << p.src_inst_str() << "\";" << std::endl;
+	os_ << "label = \"@0x" << std::hex << p.address() << ": " << p.disassembly() << "\";" << std::endl;
 
 	if (last_packet_ && !last_packet_->actions().empty() && !p.actions().empty()) {
 		os_ << "N" << last_packet_->actions().back() << " -> N" << p.actions().front() << " [color=blue];" << std::endl;
@@ -127,6 +127,9 @@ bool dot_graph_generator::visit_cast_node(cast_node &n)
 		break;
 	case cast_op::bitcast:
 		os_ << "bitcast";
+		break;
+	case cast_op::convert:
+		os_ << "convert";
 		break;
 	}
 	os_ << "\"];" << std::endl;
@@ -242,6 +245,20 @@ bool dot_graph_generator::visit_ternary_arith_node(ternary_arith_node &n)
 	return true;
 }
 
+bool dot_graph_generator::visit_bit_extract_node(bit_extract_node &n)
+{
+	os_ << "N" << &n << " [label=\"bit_extract\"];" << std::endl;
+
+	return true;
+}
+
+bool dot_graph_generator::visit_bit_insert_node(bit_insert_node &n)
+{
+	os_ << "N" << &n << " [label=\"bit_insert\"];" << std::endl;
+
+	return true;
+}
+
 bool dot_graph_generator::visit_port(port &p)
 {
 	std::string port_name = "?";
@@ -267,7 +284,7 @@ bool dot_graph_generator::visit_port(port &p)
 	}
 
 	for (auto target : p.targets()) {
-		os_ << "N" << p.owner() << " -> N" << target << " [label=\"" << port_name << ":" << p.type().width() << "\"];" << std::endl;
+		os_ << "N" << p.owner() << " -> N" << target << " [label=\"" << port_name << ":" << p.type().to_string() << "\"];" << std::endl;
 	}
 
 	return true;

@@ -23,6 +23,8 @@ enum class node_kinds {
 	csel,
 	bit_shift,
 	cond_br,
+	bit_extract,
+	bit_insert,
 	vector_extract,
 	vector_insert
 };
@@ -31,9 +33,8 @@ class packet;
 
 class node {
 public:
-	node(packet &owner, node_kinds kind)
-		: owner_(owner)
-		, kind_(kind)
+	node(node_kinds kind)
+		: kind_(kind)
 	{
 	}
 
@@ -44,14 +45,13 @@ public:
 	virtual bool accept(visitor &v) { return v.visit_node(*this); }
 
 private:
-	packet &owner_;
 	node_kinds kind_;
 };
 
 class action_node : public node {
 public:
-	action_node(packet &owner, node_kinds kind)
-		: node(owner, kind)
+	action_node(node_kinds kind)
+		: node(kind)
 	{
 	}
 
@@ -71,16 +71,16 @@ public:
 
 class label_node : public action_node {
 public:
-	label_node(packet &owner)
-		: action_node(owner, node_kinds::label)
+	label_node()
+		: action_node(node_kinds::label)
 	{
 	}
 };
 
 class value_node : public node {
 public:
-	value_node(packet &owner, node_kinds kind, const value_type &vt)
-		: node(owner, kind)
+	value_node(node_kinds kind, const value_type &vt)
+		: node(kind)
 		, value_(port_kinds::value, vt, this)
 	{
 	}
@@ -101,14 +101,14 @@ public:
 		return value_.accept(v);
 	}
 
-private:
+protected:
 	port value_;
 };
 
 class cond_br_node : public action_node {
 public:
-	cond_br_node(packet &owner, port &cond, label_node *target)
-		: action_node(owner, node_kinds::cond_br)
+	cond_br_node(port &cond, label_node *target)
+		: action_node(node_kinds::cond_br)
 		, cond_(cond)
 		, target_(target)
 	{
@@ -133,8 +133,8 @@ private:
 
 class read_pc_node : public value_node {
 public:
-	read_pc_node(packet &owner)
-		: value_node(owner, node_kinds::read_pc, value_type::u64())
+	read_pc_node()
+		: value_node(node_kinds::read_pc, value_type::u64())
 	{
 	}
 
@@ -150,8 +150,8 @@ public:
 
 class write_pc_node : public action_node {
 public:
-	write_pc_node(packet &owner, port &value)
-		: action_node(owner, node_kinds::write_pc)
+	write_pc_node(port &value)
+		: action_node(node_kinds::write_pc)
 		, value_(value)
 	{
 		value.add_target(this);
@@ -180,8 +180,8 @@ private:
 
 class constant_node : public value_node {
 public:
-	constant_node(packet &owner, const value_type &vt, unsigned long cv)
-		: value_node(owner, node_kinds::constant, vt)
+	constant_node(const value_type &vt, unsigned long cv)
+		: value_node(node_kinds::constant, vt)
 		, cvi_(cv)
 	{
 		if (vt.type_class() != value_type_class::signed_integer && vt.type_class() != value_type_class::unsigned_integer) {
@@ -189,8 +189,8 @@ public:
 		}
 	}
 
-	constant_node(packet &owner, const value_type &vt, double cv)
-		: value_node(owner, node_kinds::constant, vt)
+	constant_node(const value_type &vt, double cv)
+		: value_node(node_kinds::constant, vt)
 		, cvf_(cv)
 	{
 		if (vt.type_class() != value_type_class::floating_point) {
@@ -221,8 +221,8 @@ private:
 
 class read_reg_node : public value_node {
 public:
-	read_reg_node(packet &owner, const value_type &vt, unsigned long regoff)
-		: value_node(owner, node_kinds::read_reg, vt)
+	read_reg_node(const value_type &vt, unsigned long regoff)
+		: value_node(node_kinds::read_reg, vt)
 		, regoff_(regoff)
 	{
 	}
@@ -244,8 +244,8 @@ private:
 
 class read_mem_node : public value_node {
 public:
-	read_mem_node(packet &owner, const value_type &vt, port &addr)
-		: value_node(owner, node_kinds::read_mem, vt)
+	read_mem_node(const value_type &vt, port &addr)
+		: value_node(node_kinds::read_mem, vt)
 		, addr_(addr)
 	{
 		addr.add_target(this);
@@ -272,8 +272,8 @@ private:
 
 class write_reg_node : public action_node {
 public:
-	write_reg_node(packet &owner, unsigned long regoff, port &val)
-		: action_node(owner, node_kinds::write_reg)
+	write_reg_node(unsigned long regoff, port &val)
+		: action_node(node_kinds::write_reg)
 		, regoff_(regoff)
 		, val_(val)
 	{
@@ -303,8 +303,8 @@ private:
 
 class write_mem_node : public action_node {
 public:
-	write_mem_node(packet &owner, port &addr, port &val)
-		: action_node(owner, node_kinds::write_mem)
+	write_mem_node(port &addr, port &val)
+		: action_node(node_kinds::write_mem)
 		, addr_(addr)
 		, val_(val)
 	{
@@ -339,8 +339,8 @@ private:
 
 class csel_node : public value_node {
 public:
-	csel_node(packet &owner, port &condition, port &trueval, port &falseval)
-		: value_node(owner, node_kinds::csel, trueval.type())
+	csel_node(port &condition, port &trueval, port &falseval)
+		: value_node(node_kinds::csel, trueval.type())
 		, condition_(condition)
 		, trueval_(trueval)
 		, falseval_(falseval)
@@ -389,8 +389,8 @@ enum class shift_op { lsl, lsr, asr };
 
 class bit_shift_node : public value_node {
 public:
-	bit_shift_node(packet &owner, shift_op op, port &input, port &amount)
-		: value_node(owner, node_kinds::bit_shift, input.type())
+	bit_shift_node(shift_op op, port &input, port &amount)
+		: value_node(node_kinds::bit_shift, input.type())
 		, op_(op)
 		, input_(input)
 		, amount_(amount)
@@ -427,12 +427,12 @@ private:
 	port &amount_;
 };
 
-enum class cast_op { bitcast, zx, sx, trunc };
+enum class cast_op { bitcast, zx, sx, trunc, convert };
 
 class cast_node : public value_node {
 public:
-	cast_node(packet &owner, cast_op op, const value_type &target_type, port &source_value)
-		: value_node(owner, node_kinds::cast, target_type)
+	cast_node(cast_op op, const value_type &target_type, port &source_value)
+		: value_node(node_kinds::cast, target_type)
 		, op_(op)
 		, target_type_(target_type)
 		, source_value_(source_value)
@@ -441,6 +441,11 @@ public:
 			if (target_type.width() != source_value.type().width()) {
 				throw std::logic_error(
 					"cannot bitcast between types with different sizes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
+			}
+		} else if (op == cast_op::convert) {
+			if (target_type.type_class() == source_value.type().type_class()) {
+				throw std::logic_error(
+					"cannot convert between the same type classes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
 			}
 		} else {
 			if (target_type.type_class() != source_value.type().type_class()) {
@@ -476,8 +481,8 @@ private:
 
 class arith_node : public value_node {
 public:
-	arith_node(packet &owner, node_kinds kind, const value_type &type)
-		: value_node(owner, kind, type)
+	arith_node(node_kinds kind, const value_type &type)
+		: value_node(kind, type)
 		, zero_(port_kinds::zero, value_type::u1(), this)
 		, negative_(port_kinds::negative, value_type::u1(), this)
 		, overflow_(port_kinds::overflow, value_type::u1(), this)
@@ -527,8 +532,8 @@ enum class unary_arith_op { bnot, neg, complement };
 
 class unary_arith_node : public arith_node {
 public:
-	unary_arith_node(packet &owner, unary_arith_op op, port &lhs)
-		: arith_node(owner, node_kinds::unary_arith, lhs.type())
+	unary_arith_node(unary_arith_op op, port &lhs)
+		: arith_node(node_kinds::unary_arith, lhs.type())
 		, op_(op)
 		, lhs_(lhs)
 	{
@@ -565,16 +570,19 @@ enum class binary_arith_op { add, sub, mul, div, band, bor, bxor, cmpeq, cmpne }
 
 class binary_arith_node : public arith_node {
 public:
-	binary_arith_node(packet &owner, binary_arith_op op, port &lhs, port &rhs)
-		: arith_node(owner, node_kinds::binary_arith, lhs.type())
+	binary_arith_node(binary_arith_op op, port &lhs, port &rhs)
+		: arith_node(node_kinds::binary_arith, lhs.type())
 		, op_(op)
 		, lhs_(lhs)
 		, rhs_(rhs)
-
 	{
 		if (!lhs.type().equivalent_to(rhs.type())) {
 			throw std::logic_error("incompatible types in binary arith node: lhs=" + lhs.type().to_string() + ", rhs=" + rhs.type().to_string());
 		}
+
+		op_ = op;
+		lhs_ = lhs;
+		rhs_ = rhs;
 
 		lhs.add_target(this);
 		rhs.add_target(this);
@@ -616,8 +624,8 @@ enum class ternary_arith_op { adc, sbb };
 
 class ternary_arith_node : public arith_node {
 public:
-	ternary_arith_node(packet &owner, ternary_arith_op op, port &lhs, port &rhs, port &top)
-		: arith_node(owner, node_kinds::ternary_arith, lhs.type())
+	ternary_arith_node(ternary_arith_op op, port &lhs, port &rhs, port &top)
+		: arith_node(node_kinds::ternary_arith, lhs.type())
 		, op_(op)
 		, lhs_(lhs)
 		, rhs_(rhs)
@@ -666,10 +674,96 @@ private:
 	port &top_;
 };
 
+class bit_extract_node : public value_node {
+public:
+	bit_extract_node(port &value, int from, int length)
+		: value_node(node_kinds::bit_extract, value_type(value_type_class::unsigned_integer, length))
+		, source_value_(value)
+		, from_(from)
+		, length_(length)
+	{
+		if (from + length > source_value_.type().width() - 1) {
+			throw std::logic_error("bit extract range [" + std::to_string(from + length) + ":" + std::to_string(from) + "] is out of bounds from source value ["
+				+ std::to_string(source_value_.type().width()) + ":0]");
+		}
+
+		source_value_.add_target(this);
+	}
+
+	port &source_value() const { return source_value_; }
+
+	virtual bool accept(visitor &v) override
+	{
+		if (!value_node::accept(v)) {
+			return false;
+		}
+
+		if (!v.visit_bit_extract_node(*this)) {
+			return false;
+		}
+
+		if (!value_.owner()->accept(v)) {
+			return false;
+		}
+
+		return true;
+	}
+
+private:
+	port &source_value_;
+	int from_, length_;
+};
+
+class bit_insert_node : public value_node {
+public:
+	bit_insert_node(port &value, port &bits, int to, int length)
+		: value_node(node_kinds::bit_insert, value_type(value_type_class::unsigned_integer, length))
+		, source_value_(value)
+		, bits_(bits)
+		, to_(to)
+		, length_(length)
+	{
+		if (bits.type().width() > value.type().width()) {
+			throw std::runtime_error("width of type of incoming bits cannot be greater than type of value");
+		}
+
+		if (to + length > source_value_.type().width() - 1) {
+			throw std::logic_error("bit insert range [" + std::to_string(to + length) + ":" + std::to_string(to) + "] is out of bounds in target value ["
+				+ std::to_string(source_value_.type().width()) + ":0]");
+		}
+
+		value.add_target(this);
+	}
+
+	port &source_value() const { return source_value_; }
+
+	virtual bool accept(visitor &v) override
+	{
+		if (!value_node::accept(v)) {
+			return false;
+		}
+
+		if (!v.visit_bit_insert_node(*this)) {
+			return false;
+		}
+
+		if (!value_.owner()->accept(v)) {
+			return false;
+		}
+
+		return true;
+	}
+
+private:
+	port &source_value_;
+	port &bits_;
+	int to_, length_;
+};
+
 class vector_node : public value_node {
 public:
-	vector_node(packet &owner, node_kinds kind, const value_type &type, port &vct)
-		: value_node(owner, kind, type)
+	vector_node(node_kinds kind, const value_type &type, port &vct)
+		: value_node(kind, type)
 		, vct_(vct)
 	{
 	}
@@ -681,8 +775,8 @@ private:
 
 class vector_element_node : public vector_node {
 public:
-	vector_element_node(packet &owner, node_kinds kind, const value_type &type, port &vct, int index)
-		: vector_node(owner, kind, type, vct)
+	vector_element_node(node_kinds kind, const value_type &type, port &vct, int index)
+		: vector_node(kind, type, vct)
 		, index_(index)
 	{
 	}
@@ -693,16 +787,16 @@ private:
 
 class vector_extract_node : public vector_element_node {
 public:
-	vector_extract_node(packet &owner, port &vct, int index)
-		: vector_element_node(owner, node_kinds::vector_extract, vct.type().element_type(), vct, index)
+	vector_extract_node(port &vct, int index)
+		: vector_element_node(node_kinds::vector_extract, vct.type().element_type(), vct, index)
 	{
 	}
 };
 
 class vector_insert_node : public vector_element_node {
 public:
-	vector_insert_node(packet &owner, port &vct, int index, port &val)
-		: vector_element_node(owner, node_kinds::vector_insert, vct.type(), vct, index)
+	vector_insert_node(port &vct, int index, port &val)
+		: vector_element_node(node_kinds::vector_insert, vct.type(), vct, index)
 		, val_(val)
 	{
 	}
