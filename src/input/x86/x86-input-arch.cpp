@@ -1,6 +1,7 @@
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/input/x86/x86-input-arch.h>
 #include <arancini/ir/chunk.h>
+#include <arancini/ir/ir-builder.h>
 #include <arancini/ir/node.h>
 #include <arancini/ir/packet.h>
 #include <arancini/ir/port.h>
@@ -9,6 +10,7 @@
 #include <sstream>
 
 using namespace arancini::ir;
+using namespace arancini::input;
 using namespace arancini::input::x86;
 using namespace arancini::input::x86::translators;
 
@@ -29,9 +31,9 @@ translation for each category of instructions.
 TODO: This is quite heavy-weight - need to hold instances of translators ready to go, rather than
 instantiating each time.
 */
-static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_inst_t *xed_inst)
+static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclass_enum_t ic)
 {
-	switch (xed_decoded_inst_get_iclass(xed_inst)) {
+	switch (ic) {
 	case XED_ICLASS_MOV:
 	case XED_ICLASS_LEA:
 	case XED_ICLASS_MOVQ:
@@ -44,7 +46,7 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 	case XED_ICLASS_MOVDQA:
 	case XED_ICLASS_CQO:
 	case XED_ICLASS_CDQE:
-		return std::make_unique<mov_translator>();
+		return std::make_unique<mov_translator>(builder);
 
 	case XED_ICLASS_SETNBE:
 	case XED_ICLASS_SETNB:
@@ -62,7 +64,7 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 	case XED_ICLASS_SETO:
 	case XED_ICLASS_SETP:
 	case XED_ICLASS_SETS:
-		return std::make_unique<setcc_translator>();
+		return std::make_unique<setcc_translator>(builder);
 
 	case XED_ICLASS_JNBE:
 	case XED_ICLASS_JNB:
@@ -80,7 +82,7 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 	case XED_ICLASS_JO:
 	case XED_ICLASS_JP:
 	case XED_ICLASS_JS:
-		return std::make_unique<jcc_translator>();
+		return std::make_unique<jcc_translator>(builder);
 
 	case XED_ICLASS_CMOVNBE:
 	case XED_ICLASS_CMOVNB:
@@ -98,13 +100,13 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 	case XED_ICLASS_CMOVO:
 	case XED_ICLASS_CMOVP:
 	case XED_ICLASS_CMOVS:
-		return std::make_unique<cmov_translator>();
+		return std::make_unique<cmov_translator>(builder);
 
 	case XED_ICLASS_NOP:
 	case XED_ICLASS_HLT:
 	case XED_ICLASS_CPUID:
 	case XED_ICLASS_SYSCALL:
-		return std::make_unique<nop_translator>();
+		return std::make_unique<nop_translator>(builder);
 
 	case XED_ICLASS_XOR:
 	case XED_ICLASS_PXOR:
@@ -118,38 +120,38 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 	case XED_ICLASS_SBB:
 	case XED_ICLASS_CMP:
 	case XED_ICLASS_TEST:
-		return std::make_unique<binop_translator>();
+		return std::make_unique<binop_translator>(builder);
 
 	case XED_ICLASS_PUSH:
 	case XED_ICLASS_POP:
 	case XED_ICLASS_LEAVE:
-		return std::make_unique<stack_translator>();
+		return std::make_unique<stack_translator>(builder);
 
 	case XED_ICLASS_CALL_FAR:
 	case XED_ICLASS_CALL_NEAR:
 	case XED_ICLASS_RET_FAR:
 	case XED_ICLASS_RET_NEAR:
 	case XED_ICLASS_JMP:
-		return std::make_unique<branch_translator>();
+		return std::make_unique<branch_translator>(builder);
 
 	case XED_ICLASS_SAR:
 	case XED_ICLASS_SHR:
 	case XED_ICLASS_SHL:
-		return std::make_unique<shifts_translator>();
+		return std::make_unique<shifts_translator>(builder);
 
 	case XED_ICLASS_NOT:
-		return std::make_unique<unop_translator>();
+		return std::make_unique<unop_translator>(builder);
 
 	case XED_ICLASS_IMUL:
 	case XED_ICLASS_IDIV:
-		return std::make_unique<muldiv_translator>();
+		return std::make_unique<muldiv_translator>(builder);
 
 	case XED_ICLASS_REPE_CMPSB:
-		return std::make_unique<rep_translator>();
+		return std::make_unique<rep_translator>(builder);
 
 	case XED_ICLASS_PUNPCKLQDQ:
 	case XED_ICLASS_PUNPCKLDQ:
-		return std::make_unique<punpck_translator>();
+		return std::make_unique<punpck_translator>(builder);
 
 	case XED_ICLASS_VADDSS:
 	case XED_ICLASS_VSUBSS:
@@ -159,15 +161,26 @@ static std::unique_ptr<translator> get_translator(off_t address, xed_decoded_ins
 	case XED_ICLASS_VSUBSD:
 	case XED_ICLASS_VDIVSD:
 	case XED_ICLASS_VMULSD:
-		return std::make_unique<fpvec_translator>();
+		return std::make_unique<fpvec_translator>(builder);
 
-	default: {
+	default:
+		return nullptr;
+	}
+}
+
+static translation_result translate_instruction(ir_builder &builder, size_t address, xed_decoded_inst_t *xedd, disassembly_syntax da)
+{
+	auto t = get_translator(builder, xed_decoded_inst_get_iclass(xedd));
+
+	if (t) {
+		return t->translate(address, xedd, da == disassembly_syntax::intel ? disassembly_mode::intel : disassembly_mode::att);
+	} else {
+
 		char buffer[64];
-		xed_format_context(XED_SYNTAX_INTEL, xed_inst, buffer, sizeof(buffer), address, nullptr, 0);
+		xed_format_context(da == disassembly_syntax::intel ? XED_SYNTAX_INTEL : XED_SYNTAX_ATT, xedd, buffer, sizeof(buffer) - 1, address, nullptr, 0);
 		std::cerr << "UNSUPPORTED INSTRUCTION @ " << std::hex << address << ": " << buffer << std::endl;
 
-		throw std::runtime_error("unsupported instruction");
-	}
+		return translation_result::fail;
 	}
 }
 
@@ -183,9 +196,9 @@ The translator factory is implemented by the get_translator function.
 All the x86 translators implementations can be found in the
 src/input/x86/translators/ folder.
 */
-std::shared_ptr<chunk> x86_input_arch::translate_chunk(off_t base_address, const void *code, size_t code_size, bool basic_block)
+void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, const void *code, size_t code_size, bool basic_block)
 {
-	auto c = std::make_shared<chunk>();
+	builder.begin_chunk();
 
 	initialise_xed();
 
@@ -207,11 +220,11 @@ std::shared_ptr<chunk> x86_input_arch::translate_chunk(off_t base_address, const
 
 		xed_uint_t length = xed_decoded_inst_get_length(&xedd);
 
-		auto t = get_translator(base_address, &xedd);
-		auto p = t->translate(base_address, &xedd);
-		c->add_packet(p);
+		auto r = translate_instruction(builder, base_address, &xedd, da_);
 
-		if (p->updates_pc() && basic_block) {
+		if (r == translation_result::fail) {
+			throw std::runtime_error("instruction translation failure");
+		} else if (r == translation_result::end_of_block && basic_block) {
 			break;
 		}
 
@@ -219,5 +232,5 @@ std::shared_ptr<chunk> x86_input_arch::translate_chunk(off_t base_address, const
 		base_address += length;
 	} while (offset < code_size);
 
-	return c;
+	builder.end_chunk();
 }

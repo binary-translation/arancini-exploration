@@ -53,12 +53,13 @@ translation *translation_engine::get_translation(unsigned long pc)
 translation *translation_engine::translate(unsigned long pc)
 {
 	void *code = ec_.get_memory_ptr(pc);
+	throw 0;
 
-	auto chunk = ia_.translate_chunk(pc, code, 0x1000, true);
+	/*auto chunk = ia_.translate_chunk(pc, code, 0x1000, true);
 	oe_.add_chunk(chunk);
 
 	dbt_output_personality dop;
 	oe_.generate(dop);
 
-	return nullptr;
+	return new translation(dop.entrypoint());*/
 }

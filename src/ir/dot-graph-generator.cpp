@@ -21,7 +21,7 @@ bool dot_graph_generator::visit_chunk_end(chunk &c)
 bool dot_graph_generator::visit_packet_start(packet &p)
 {
 	os_ << "subgraph cluster_" << std::hex << &p << " {" << std::endl;
-	os_ << "label = \"@0x" << std::hex << p.address() << ": " << p.src_inst_str() << "\";" << std::endl;
+	os_ << "label = \"@0x" << std::hex << p.address() << ": " << p.disassembly() << "\";" << std::endl;
 
 	if (last_packet_ && !last_packet_->actions().empty() && !p.actions().empty()) {
 		os_ << "N" << last_packet_->actions().back() << " -> N" << p.actions().front() << " [color=blue];" << std::endl;
