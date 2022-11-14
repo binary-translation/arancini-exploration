@@ -67,6 +67,7 @@ public:
 	virtual void end_chunk() override { }
 
 	virtual void begin_packet(off_t address, const std::string &disassembly = "") override { }
+
 	virtual packet_type end_packet() override
 	{
 		emit8(0xc3);
