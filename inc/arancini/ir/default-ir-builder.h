@@ -10,15 +10,16 @@ class packet;
 
 class default_ir_builder : public ir_builder {
 public:
-	default_ir_builder()
+	default_ir_builder(bool debug = false)
 		: chunk_complete_(false)
+		, debug_(debug)
 	{
 	}
 
 	virtual void begin_chunk() override;
 	virtual void end_chunk() override;
 
-	virtual void begin_packet(off_t address, const std::string& disassembly = "") override;
+	virtual void begin_packet(off_t address, const std::string &disassembly = "") override;
 	virtual packet_type end_packet() override;
 
 	std::shared_ptr<chunk> get_chunk() const
@@ -32,9 +33,10 @@ public:
 
 protected:
 	virtual void insert_action(action_node *a) override;
+	virtual void process_node(node *a) override;
 
 private:
-	bool chunk_complete_;
+	bool chunk_complete_, debug_;
 	std::shared_ptr<chunk> current_chunk_;
 	std::shared_ptr<packet> current_pkt_;
 };

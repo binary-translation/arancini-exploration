@@ -209,7 +209,7 @@ std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arc
 
 	const void *symbol_data = (const void *)((uintptr_t)section->data() + symbol_offset_in_section);
 
-	default_ir_builder irb;
+	default_ir_builder irb(true);
 
 	auto start = std::chrono::high_resolution_clock::now();
 	ia.translate_chunk(irb, sym.value(), symbol_data, sym.size(), false);
