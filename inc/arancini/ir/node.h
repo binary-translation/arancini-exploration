@@ -49,6 +49,19 @@ public:
 
 	std::shared_ptr<metadata> get_metadata(const std::string &key) const { return md_.at(key); }
 
+	std::vector<std::pair<std::string, std::shared_ptr<metadata>>> get_metadata_of_kind(metadata_kind kind) const
+	{
+		std::vector<std::pair<std::string, std::shared_ptr<metadata>>> r;
+
+		for (auto &n : md_) {
+			if (n.second->kind() == kind) {
+				r.push_back({ n.first, n.second });
+			}
+		}
+
+		return r;
+	}
+
 	std::shared_ptr<metadata> try_get_metadata(const std::string &key) const
 	{
 		auto m = md_.find(key);
