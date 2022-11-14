@@ -264,12 +264,15 @@ public:
 
 protected:
 	virtual void insert_action(action_node *a) = 0;
+	virtual void process_node(node *a) {};
 
 private:
 	template <class T, typename... Args> T *create_and_insert(Args &&...args) { return insert(new T(std::forward<Args>(args)...)); }
 
 	template <class T> T *insert(T *n)
 	{
+		process_node(n);
+
 		if (n->is_action()) {
 			insert_action((action_node *)n);
 		}
