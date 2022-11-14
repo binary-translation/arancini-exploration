@@ -1,8 +1,16 @@
 #pragma once
 
-namespace arancini::output::dynamic::arm64 {
-class arm64_dynamic_output_engine_impl {
-public:
-	void generate();
-};
-} // namespace arancini::output::dynamic::arm64
+namespace arancini::ir {
+class node;
+}
+
+namespace arancini::output::dynamic {
+class machine_code_writer;
+
+namespace arm64 {
+	class arm64_dynamic_output_engine_impl {
+	public:
+		void lower(ir::node *node, machine_code_writer &writer);
+	};
+} // namespace arm64
+} // namespace arancini::output::dynamic

@@ -11,7 +11,7 @@ public:
 	arm64_dynamic_output_engine();
 	~arm64_dynamic_output_engine();
 
-	void generate() override;
+	void lower(ir::node *node, machine_code_writer &writer) override;
 
 private:
 	std::unique_ptr<arm64_dynamic_output_engine_impl> oei_;

@@ -11,7 +11,7 @@ public:
 	x86_dynamic_output_engine();
 	~x86_dynamic_output_engine();
 
-	void generate() override;
+	void lower(ir::node *node, machine_code_writer &writer) override;
 
 private:
 	std::unique_ptr<x86_dynamic_output_engine_impl> oei_;

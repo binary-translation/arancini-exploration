@@ -1,7 +1,9 @@
 #include <arancini/input/x86/x86-input-arch.h>
 #include <arancini/ir/chunk.h>
 #include <arancini/ir/dot-graph-generator.h>
-#include <arancini/output/mc/machine-code-allocator.h>
+#include <arancini/ir/ir-builder.h>
+#include <arancini/output/dynamic/dynamic-output-engine.h>
+#include <arancini/output/dynamic/machine-code-writer.h>
 #include <arancini/runtime/dbt/translation-cache.h>
 #include <arancini/runtime/dbt/translation-engine.h>
 #include <arancini/runtime/dbt/translation.h>
@@ -12,8 +14,8 @@
 
 using namespace arancini::runtime::dbt;
 using namespace arancini::runtime::exec;
-using namespace arancini::output;
-using namespace arancini::output::mc;
+using namespace arancini::output::dynamic;
+using namespace arancini::ir;
 
 translation *translation_engine::get_translation(unsigned long pc)
 {
@@ -30,16 +32,41 @@ translation *translation_engine::get_translation(unsigned long pc)
 	return t;
 }
 
+class dbt_ir_builder : public ir_builder {
+public:
+	dbt_ir_builder(dynamic_output_engine &oe)
+		: oe_(oe)
+	{
+	}
+
+	virtual void begin_chunk() override { writer_.emit8(0xcc); }
+
+	virtual void end_chunk() override { }
+
+	virtual void begin_packet(off_t address, const std::string &disassembly = "") override { }
+
+	virtual packet_type end_packet() override { return packet_type::end_of_block; }
+
+	translation *create_translation()
+	{
+		writer_.finalise();
+		return new translation(writer_.ptr(), writer_.size());
+	}
+
+protected:
+	virtual void insert_action(action_node *a) override { oe_.lower(a, writer_); }
+
+private:
+	dynamic_output_engine &oe_;
+	machine_code_writer writer_;
+};
+
 translation *translation_engine::translate(unsigned long pc)
 {
 	void *code = ec_.get_memory_ptr(pc);
-	throw 0;
 
-	/*auto chunk = ia_.translate_chunk(pc, code, 0x1000, true);
-	oe_.add_chunk(chunk);
+	dbt_ir_builder builder(oe_);
+	ia_.translate_chunk(builder, pc, code, 0x1000, true);
 
-	dbt_output_personality dop;
-	oe_.generate(dop);
-
-	return new translation(dop.entrypoint());*/
+	return builder.create_translation();
 }

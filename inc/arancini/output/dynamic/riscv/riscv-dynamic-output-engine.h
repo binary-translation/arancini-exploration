@@ -11,7 +11,7 @@ public:
 	riscv_dynamic_output_engine();
 	~riscv_dynamic_output_engine();
 
-	void generate() override;
+	virtual void lower(ir::node *node, machine_code_writer &writer) override;
 
 private:
 	std::unique_ptr<riscv_dynamic_output_engine_impl> oei_;
