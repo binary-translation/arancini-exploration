@@ -99,14 +99,17 @@ void muldiv_translator::do_translate()
 		break;
 	}
 
-	case XED_ICLASS_DIV:
+	//case XED_ICLASS_DIV:
 	case XED_ICLASS_IDIV: {
-		// std::cerr << "DIV operand types[" << std::to_string(xed_decoded_inst_noperands(insn)) << "]: op0:" << op0->val().type().to_string() << "; op1: " <<
-		// op1->val().type().to_string() << "; op2: " << op2->val().type().to_string()  << std::endl;
+		/*
+		 * idiv %reg -> idiv %reg %rax %rdx
+		 * rax := quotient, rdx := remainder
+		 * except for the 8bit variant, where al := quotient, ah := remainder
+		 */
 		auto rslt = builder().insert_div(op[0]->val(), op[1]->val());
 
 		write_operand(0, rslt->val());
-		write_flags(rslt, flag_op::ignore, flag_op::set0, flag_op::set0, flag_op::ignore, flag_op::ignore, flag_op::ignore);
+		write_flags(rslt, flag_op::ignore, flag_op::ignore, flag_op::ignore, flag_op::ignore, flag_op::ignore, flag_op::ignore);
 		break;
 	}
 
