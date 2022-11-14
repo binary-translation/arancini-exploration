@@ -1,8 +1,7 @@
 #include <arancini/ir/chunk.h>
 #include <arancini/ir/dot-graph-generator.h>
-#include <arancini/output/output-personality.h>
-#include <arancini/output/static/llvm/llvm-output-engine-impl.h>
-#include <arancini/output/static/llvm/llvm-output-engine.h>
+#include <arancini/output/static/llvm/llvm-static-output-engine-impl.h>
+#include <arancini/output/static/llvm/llvm-static-output-engine.h>
 #include <iostream>
 #include <map>
 #include <sstream>
@@ -12,24 +11,18 @@ using namespace arancini::output::o_static::llvm;
 using namespace arancini::ir;
 using namespace ::llvm;
 
-llvm_output_engine::llvm_output_engine()
-	: oei_(std::make_unique<llvm_output_engine_impl>(*this, chunks()))
+llvm_static_output_engine::llvm_static_output_engine(const std::string &output_filename)
+	: static_output_engine(output_filename)
+	, oei_(std::make_unique<llvm_static_output_engine_impl>(*this, chunks()))
 	, dbg_(false)
 {
 }
 
-llvm_output_engine::~llvm_output_engine() = default;
+llvm_static_output_engine::~llvm_static_output_engine() = default;
 
-void llvm_output_engine::generate(const output_personality &personality)
-{
-	if (personality.kind() != output_personality_kind::personality_static) {
-		throw std::runtime_error("LLVM output engine requires static personality");
-	}
+void llvm_static_output_engine::generate() { oei_->generate(); }
 
-	oei_->generate((const static_output_personality &)personality);
-}
-
-llvm_output_engine_impl::llvm_output_engine_impl(const llvm_output_engine &e, const std::vector<std::shared_ptr<ir::chunk>> &chunks)
+llvm_static_output_engine_impl::llvm_static_output_engine_impl(const llvm_static_output_engine &e, const std::vector<std::shared_ptr<ir::chunk>> &chunks)
 	: e_(e)
 	, chunks_(chunks)
 	, llvm_context_(std::make_unique<LLVMContext>())
@@ -37,7 +30,7 @@ llvm_output_engine_impl::llvm_output_engine_impl(const llvm_output_engine &e, co
 {
 }
 
-void llvm_output_engine_impl::generate(const static_output_personality &personality)
+void llvm_static_output_engine_impl::generate()
 {
 	InitializeAllTargetInfos();
 	InitializeAllTargets();
@@ -47,10 +40,10 @@ void llvm_output_engine_impl::generate(const static_output_personality &personal
 
 	build();
 	optimise();
-	compile(personality.output_file());
+	compile();
 }
 
-void llvm_output_engine_impl::initialise_types()
+void llvm_static_output_engine_impl::initialise_types()
 {
 	// Primitives
 	types.vd = Type::getVoidTy(*llvm_context_);
@@ -88,7 +81,7 @@ void llvm_output_engine_impl::initialise_types()
 	types.dbt_invoke = FunctionType::get(types.i32, { types.cpu_state_ptr }, false);
 }
 
-void llvm_output_engine_impl::create_main_function(Function *loop_fn)
+void llvm_static_output_engine_impl::create_main_function(Function *loop_fn)
 {
 	auto main_fn = Function::Create(types.main_fn, GlobalValue::LinkageTypes::ExternalLinkage, "main", *module_);
 	auto main_entry_block = BasicBlock::Create(*llvm_context_, "main_entry", main_fn);
@@ -112,7 +105,7 @@ void llvm_output_engine_impl::create_main_function(Function *loop_fn)
 	builder.CreateRet(ConstantInt::get(types.i32, 1));
 }
 
-void llvm_output_engine_impl::build()
+void llvm_static_output_engine_impl::build()
 {
 	initialise_types();
 
@@ -175,7 +168,7 @@ void llvm_output_engine_impl::build()
 	}
 }
 
-void llvm_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlock *contblock)
+void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlock *contblock)
 {
 	for (auto c : chunks_) {
 		lower_chunk(pcswitch, contblock, c);
@@ -194,7 +187,7 @@ static std::string reg_name(int regoff)
 	return "guestreg";
 }
 
-Value *llvm_output_engine_impl::materialise_port(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, port &p)
+Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, port &p)
 {
 	auto n = p.owner();
 
@@ -466,7 +459,7 @@ Value *llvm_output_engine_impl::materialise_port(IRBuilder<> &builder, Argument 
 	}
 }
 
-Value *llvm_output_engine_impl::lower_port(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, port &p)
+Value *llvm_static_output_engine_impl::lower_port(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, port &p)
 {
 	auto existing = node_ports_to_llvm_values_.find(&p);
 
@@ -480,7 +473,7 @@ Value *llvm_output_engine_impl::lower_port(IRBuilder<> &builder, Argument *state
 	return v;
 }
 
-Value *llvm_output_engine_impl::lower_node(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, node *a)
+Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, node *a)
 {
 	switch (a->kind()) {
 	case node_kinds::label: {
@@ -559,7 +552,7 @@ Value *llvm_output_engine_impl::lower_node(IRBuilder<> &builder, Argument *state
 	}
 }
 
-void llvm_output_engine_impl::lower_chunk(SwitchInst *pcswitch, BasicBlock *contblock, std::shared_ptr<chunk> c)
+void llvm_static_output_engine_impl::lower_chunk(SwitchInst *pcswitch, BasicBlock *contblock, std::shared_ptr<chunk> c)
 {
 	IRBuilder<> builder(*llvm_context_);
 	std::map<unsigned long, BasicBlock *> blocks;
@@ -611,7 +604,7 @@ void llvm_output_engine_impl::lower_chunk(SwitchInst *pcswitch, BasicBlock *cont
 	}
 }
 
-void llvm_output_engine_impl::optimise()
+void llvm_static_output_engine_impl::optimise()
 {
 	LoopAnalysisManager LAM;
 	FunctionAnalysisManager FAM;
@@ -635,7 +628,7 @@ void llvm_output_engine_impl::optimise()
 	}
 }
 
-void llvm_output_engine_impl::compile(const std::string &output_file_name)
+void llvm_static_output_engine_impl::compile()
 {
 	auto TT = sys::getDefaultTargetTriple();
 	module_->setTargetTriple(TT);
@@ -653,7 +646,7 @@ void llvm_output_engine_impl::compile(const std::string &output_file_name)
 	module_->setDataLayout(TM->createDataLayout());
 
 	std::error_code EC;
-	raw_fd_ostream output_file(output_file_name, EC, sys::fs::OF_None);
+	raw_fd_ostream output_file(e_.output_filename(), EC, sys::fs::OF_None);
 
 	if (EC) {
 		throw std::runtime_error("could not create output file: " + EC.message());

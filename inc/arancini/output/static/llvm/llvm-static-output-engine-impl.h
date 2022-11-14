@@ -1,6 +1,5 @@
 #pragma once
 
-#include <arancini/output/output-engine.h>
 #include <map>
 #include <memory>
 
@@ -39,16 +38,16 @@ class static_output_personality;
 }
 
 namespace arancini::output::o_static::llvm {
-class llvm_output_engine;
+class llvm_static_output_engine;
 
-class llvm_output_engine_impl {
+class llvm_static_output_engine_impl {
 public:
-	llvm_output_engine_impl(const llvm_output_engine &e, const std::vector<std::shared_ptr<ir::chunk>> &chunks);
+	llvm_static_output_engine_impl(const llvm_static_output_engine &e, const std::vector<std::shared_ptr<ir::chunk>> &chunks);
 
-	void generate(const static_output_personality &personality);
+	void generate();
 
 private:
-	const llvm_output_engine &e_;
+	const llvm_static_output_engine &e_;
 	const std::vector<std::shared_ptr<ir::chunk>> &chunks_;
 	std::unique_ptr<::llvm::LLVMContext> llvm_context_;
 	std::unique_ptr<::llvm::Module> module_;
@@ -79,7 +78,7 @@ private:
 	void initialise_types();
 	void create_main_function(::llvm::Function *loop_fn);
 	void optimise();
-	void compile(const std::string &output_file_name);
+	void compile();
 	void lower_chunks(::llvm::SwitchInst *pcswitch, ::llvm::BasicBlock *contblock);
 	void lower_chunk(::llvm::SwitchInst *pcswitch, ::llvm::BasicBlock *contblock, std::shared_ptr<ir::chunk> chunk);
 	::llvm::Value *lower_node(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,

@@ -9,8 +9,8 @@ namespace arancini::input {
 class input_arch;
 }
 
-namespace arancini::output {
-class output_engine;
+namespace arancini::output::dynamic {
+class dynamic_output_engine;
 }
 
 namespace arancini::runtime::exec {
@@ -18,7 +18,7 @@ class execution_thread;
 
 class execution_context {
 public:
-	execution_context(input::input_arch &ia, output::output_engine &oe);
+	execution_context(input::input_arch &ia, output::dynamic::dynamic_output_engine &oe);
 	~execution_context();
 
 	void *add_memory_region(off_t base_address, size_t size);

@@ -3,8 +3,7 @@
 #include <arancini/ir/chunk.h>
 #include <arancini/ir/default-ir-builder.h>
 #include <arancini/ir/dot-graph-generator.h>
-#include <arancini/output/output-personality.h>
-#include <arancini/output/static/llvm/llvm-output-engine.h>
+#include <arancini/output/static/llvm/llvm-static-output-engine.h>
 #include <arancini/txlat/txlat-engine.h>
 #include <arancini/util/tempfile-manager.h>
 #include <arancini/util/tempfile.h>
@@ -24,12 +23,9 @@ using namespace arancini::util;
 static std::set<std::string> allowed_symbols
 	= { "cmpstr", "cmpnum", "swap", "_qsort", "_start", "test", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
 
-static std::map<std::string, std::function<std::unique_ptr<arancini::output::output_engine>()>> translation_engines
-	= { { "llvm", [] { return std::make_unique<llvm_output_engine>(); } } };
-
-void txlat_engine::process_options(arancini::output::output_engine &oe, const boost::program_options::variables_map &cmdline)
+void txlat_engine::process_options(arancini::output::o_static::static_output_engine &oe, const boost::program_options::variables_map &cmdline)
 {
-	if (auto llvmoe = dynamic_cast<llvm_output_engine *>(&oe)) {
+	if (auto llvmoe = dynamic_cast<llvm_static_output_engine *>(&oe)) {
 		llvmoe->set_debug(cmdline.count("debug"));
 	}
 }
@@ -51,6 +47,10 @@ visualisation of the Arancini IR.
 */
 void txlat_engine::translate(const boost::program_options::variables_map &cmdline)
 {
+	// Create a manager for temporary files, as we'll be creating a series of them.  When
+	// this object is destroyed, all temporary files are automatically unlinked.
+	tempfile_manager tf;
+
 	// Parse the input ELF file
 	elf_reader elf(cmdline.at("input").as<std::string>());
 	elf.parse();
@@ -59,21 +59,9 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	auto das = cmdline.at("syntax").as<std::string>() == "att" ? disassembly_syntax::att : disassembly_syntax::intel;
 	auto ia = std::make_unique<arancini::input::x86::x86_input_arch>(das);
 
-	// Figure out the output engine
-	auto requested_engine = cmdline.at("engine").as<std::string>();
-	auto engine_factory = translation_engines.find(requested_engine);
-	if (engine_factory == translation_engines.end()) {
-		std::cerr << "Error: unknown translation engine '" << requested_engine << "'" << std::endl;
-		std::cerr << "Available engines:" << std::endl;
-		for (const auto &e : translation_engines) {
-			std::cerr << "  " << e.first << std::endl;
-		}
-
-		throw std::runtime_error("Unknown translation engine");
-	}
-
-	// Invoke the factory to construct the output engine
-	auto oe = engine_factory->second();
+	// Construct the output engine
+	auto intermediate_file = tf.create_file(".o");
+	auto oe = std::make_shared<arancini::output::o_static::llvm::llvm_static_output_engine>(intermediate_file->name());
 	process_options(*oe, cmdline);
 
 	if (!cmdline.count("no-static")) {
@@ -116,14 +104,8 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		}
 	}
 
-	// Create a manager for temporary files, as we'll be creating a series of them.  When
-	// this object is destroyed, all temporary files are automatically unlinked.
-	tempfile_manager tf;
-
 	// Invoke the output engine, and tell it to write to a temporary file.
-	auto intermediate_file = tf.create_file(".o");
-	static_output_personality sop(intermediate_file->name());
-	oe->generate(sop);
+	oe->generate();
 
 	// Generate loadable sections
 	std::vector<std::pair<std::shared_ptr<tempfile>, std::shared_ptr<program_header>>> phbins;

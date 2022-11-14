@@ -2,8 +2,6 @@
 #include <arancini/ir/chunk.h>
 #include <arancini/ir/dot-graph-generator.h>
 #include <arancini/output/mc/machine-code-allocator.h>
-#include <arancini/output/output-engine.h>
-#include <arancini/output/output-personality.h>
 #include <arancini/runtime/dbt/translation-cache.h>
 #include <arancini/runtime/dbt/translation-engine.h>
 #include <arancini/runtime/dbt/translation.h>
@@ -16,19 +14,6 @@ using namespace arancini::runtime::dbt;
 using namespace arancini::runtime::exec;
 using namespace arancini::output;
 using namespace arancini::output::mc;
-
-class dbt_output_personality : public dynamic_output_personality {
-public:
-	dbt_output_personality()
-		: allocator_(std::make_shared<default_machine_code_allocator>())
-	{
-	}
-
-	virtual std::shared_ptr<machine_code_allocator> get_allocator() const override { return allocator_; }
-
-private:
-	std::shared_ptr<machine_code_allocator> allocator_;
-};
 
 translation *translation_engine::get_translation(unsigned long pc)
 {

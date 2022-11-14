@@ -17,8 +17,8 @@ namespace arancini::input {
 class input_arch;
 }
 
-namespace arancini::output {
-class output_engine;
+namespace arancini::output::o_static {
+class static_output_engine;
 }
 
 namespace arancini::txlat {
@@ -27,7 +27,7 @@ public:
 	void translate(const boost::program_options::variables_map &cmdline);
 
 private:
-	void process_options(arancini::output::output_engine &oe, const boost::program_options::variables_map &cmdline);
+	void process_options(arancini::output::o_static::static_output_engine &oe, const boost::program_options::variables_map &cmdline);
 	std::shared_ptr<ir::chunk> translate_symbol(arancini::input::input_arch &ia, elf::elf_reader &reader, const elf::symbol &sym);
 };
 } // namespace arancini::txlat
