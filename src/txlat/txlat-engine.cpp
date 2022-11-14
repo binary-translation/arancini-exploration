@@ -56,7 +56,8 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	elf.parse();
 
 	// TODO: Figure the input engine out from ELF architecture header
-	auto ia = std::make_unique<arancini::input::x86::x86_input_arch>();
+	auto das = cmdline.at("syntax").as<std::string>() == "att" ? disassembly_syntax::att : disassembly_syntax::intel;
+	auto ia = std::make_unique<arancini::input::x86::x86_input_arch>(das);
 
 	// Figure out the output engine
 	auto requested_engine = cmdline.at("engine").as<std::string>();
@@ -208,7 +209,7 @@ std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arc
 
 	const void *symbol_data = (const void *)((uintptr_t)section->data() + symbol_offset_in_section);
 
-	default_ir_builder irb;
+	default_ir_builder irb(true);
 
 	auto start = std::chrono::high_resolution_clock::now();
 	ia.translate_chunk(irb, sym.value(), symbol_data, sym.size(), false);

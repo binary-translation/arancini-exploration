@@ -69,3 +69,10 @@ void default_ir_builder::insert_action(action_node *a)
 
 	current_pkt_->append_action(a);
 }
+
+void default_ir_builder::process_node(node *n)
+{
+	if (debug_ && current_pkt_) {
+		n->set_metadata("guest-address", std::make_shared<numeric_value_metadata>(current_pkt_->address()));
+	}
+}

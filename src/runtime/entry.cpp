@@ -21,7 +21,7 @@ using namespace arancini::runtime::exec::x86;
 static execution_context *ctx;
 
 // TODO: this needs to depend on something, somehow.  Some kind of variable?
-static arancini::input::x86::x86_input_arch ia;
+static arancini::input::x86::x86_input_arch ia(arancini::input::x86::disassembly_syntax::intel);
 
 #if defined(ARCH_X86_64)
 static arancini::output::x86::x86_output_engine oe;
