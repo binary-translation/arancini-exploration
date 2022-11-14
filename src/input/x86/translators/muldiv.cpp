@@ -20,15 +20,15 @@ void muldiv_translator::do_translate()
 	switch (xed_decoded_inst_get_iclass(insn)) {
 	case XED_ICLASS_MUL: {
 		/* mul %reg is decoded as mul %reg %rax %rdx */
-		auto ax = pkt()->insert_zx(value_type(value_type_class::unsigned_integer, op[1]->val().type().element_width() * 2,
+		auto ax = builder().insert_zx(value_type(value_type_class::unsigned_integer, op[1]->val().type().element_width() * 2,
 								   op[1]->val().type().nr_elements()), op[1]->val());
-		auto castop = pkt()->insert_zx(ax->val().type(), op[0]->val());
-		auto rslt = pkt()->insert_mul(ax->val(), castop->val());
+		auto castop = builder().insert_zx(ax->val().type(), op[0]->val());
+		auto rslt = builder().insert_mul(ax->val(), castop->val());
 		if (op[0]->val().type().width() == 8) {
 			write_reg(reg_to_offset(XED_REG_AX), rslt->val());
 		} else {
-			auto low = pkt()->insert_bit_extract(rslt->val(), 0, op[0]->val().type().width());
-			auto high = pkt()->insert_bit_extract(rslt->val(), op[0]->val().type().width() - 1, op[0]->val().type().width());
+			auto low = builder().insert_bit_extract(rslt->val(), 0, op[0]->val().type().width());
+			auto high = builder().insert_bit_extract(rslt->val(), op[0]->val().type().width() - 1, op[0]->val().type().width());
 
 			write_operand(1, low->val());
 			write_operand(2, high->val());
