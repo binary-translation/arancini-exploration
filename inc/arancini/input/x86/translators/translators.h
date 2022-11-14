@@ -21,8 +21,6 @@ using namespace arancini::ir;
 
 enum class translation_result { normal, end_of_block, fail };
 
-enum class disassembly_mode { none, intel, att };
-
 class translator {
 public:
 	translator(ir_builder &builder)
@@ -30,7 +28,7 @@ public:
 	{
 	}
 
-	translation_result translate(off_t address, xed_decoded_inst_t *xed_inst, disassembly_mode mode);
+	translation_result translate(off_t address, xed_decoded_inst_t *xed_inst, const std::string& disasm);
 
 protected:
 	virtual void do_translate() = 0;
