@@ -82,5 +82,7 @@ int execution_context::invoke(void *cpu_state)
 		return 1;
 	}
 
+	std::cerr << "txln " << txln << std::endl;
+
 	return txln->invoke(cpu_state);
 }
