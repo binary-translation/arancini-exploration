@@ -1,8 +1,11 @@
 #pragma once
 
+#include <map>
+#include <memory>
 #include <stdexcept>
 #include <vector>
 
+#include <arancini/ir/metadata.h>
 #include <arancini/ir/port.h>
 #include <arancini/ir/visitor.h>
 
@@ -29,8 +32,6 @@ enum class node_kinds {
 	vector_insert
 };
 
-class packet;
-
 class node {
 public:
 	node(node_kinds kind)
@@ -44,8 +45,26 @@ public:
 
 	virtual bool accept(visitor &v) { return v.visit_node(*this); }
 
+	void set_metadata(const std::string &key, std::shared_ptr<metadata> value) { md_[key] = value; }
+
+	std::shared_ptr<metadata> get_metadata(const std::string &key) const { return md_.at(key); }
+
+	std::shared_ptr<metadata> try_get_metadata(const std::string &key) const
+	{
+		auto m = md_.find(key);
+
+		if (m == md_.end()) {
+			return nullptr;
+		} else {
+			return m->second;
+		}
+	}
+
+	bool has_metadata(const std::string &key) const { return md_.count(key) > 0; }
+
 private:
 	node_kinds kind_;
+	std::map<std::string, std::shared_ptr<metadata>> md_;
 };
 
 class action_node : public node {
