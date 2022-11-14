@@ -1,14 +1,14 @@
 #include <arancini/ir/chunk.h>
 #include <arancini/ir/dot-graph-generator.h>
-#include <arancini/output/llvm/llvm-output-engine-impl.h>
-#include <arancini/output/llvm/llvm-output-engine.h>
 #include <arancini/output/output-personality.h>
+#include <arancini/output/static/llvm/llvm-output-engine-impl.h>
+#include <arancini/output/static/llvm/llvm-output-engine.h>
 #include <iostream>
 #include <map>
 #include <sstream>
 #include <string>
 
-using namespace arancini::output::llvm;
+using namespace arancini::output::o_static::llvm;
 using namespace arancini::ir;
 using namespace ::llvm;
 

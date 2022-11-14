@@ -1,9 +1,4 @@
 #include <arancini/input/x86/x86-input-arch.h>
-#if defined(ARCH_X86_64)
-#include <arancini/output/x86/x86-output-engine.h>
-#elif defined(ARCH_AARCH64)
-#include <arancini/output/arm64/arm64-output-engine.h>
-#endif
 #include <arancini/ir/chunk.h>
 #include <arancini/ir/dot-graph-generator.h>
 #include <arancini/output/mc/machine-code-allocator.h>

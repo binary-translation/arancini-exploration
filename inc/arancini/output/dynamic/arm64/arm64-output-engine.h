@@ -3,7 +3,7 @@
 #include <arancini/output/output-engine.h>
 #include <memory>
 
-namespace arancini::output::arm64 {
+namespace arancini::output::dynamic::arm64 {
 class arm64_output_engine_impl;
 
 class arm64_output_engine : public output_engine {
@@ -16,4 +16,4 @@ public:
 private:
 	std::unique_ptr<arm64_output_engine_impl> oei_;
 };
-} // namespace arancini::output::arm64
+} // namespace arancini::output::dynamic::arm64

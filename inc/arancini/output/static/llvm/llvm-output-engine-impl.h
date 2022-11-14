@@ -38,7 +38,7 @@ namespace arancini::output {
 class static_output_personality;
 }
 
-namespace arancini::output::llvm {
+namespace arancini::output::o_static::llvm {
 class llvm_output_engine;
 
 class llvm_output_engine_impl {
@@ -89,4 +89,4 @@ private:
 	::llvm::Value *materialise_port(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
 		std::shared_ptr<ir::packet> pkt, ir::port &p);
 };
-} // namespace arancini::output::llvm
+} // namespace arancini::output::o_static::llvm

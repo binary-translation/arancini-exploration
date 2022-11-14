@@ -1,7 +1,7 @@
-#include <arancini/output/arm64/arm64-output-engine-impl.h>
-#include <arancini/output/arm64/arm64-output-engine.h>
+#include <arancini/output/dynamic/arm64/arm64-output-engine-impl.h>
+#include <arancini/output/dynamic/arm64/arm64-output-engine.h>
 
-using namespace arancini::output::arm64;
+using namespace arancini::output::dynamic::arm64;
 
 arm64_output_engine::arm64_output_engine()
 	: oei_(std::make_unique<arm64_output_engine_impl>(chunks()))

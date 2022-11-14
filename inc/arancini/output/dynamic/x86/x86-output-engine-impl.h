@@ -6,7 +6,7 @@ namespace arancini::output {
 class dynamic_output_personality;
 }
 
-namespace arancini::output::x86 {
+namespace arancini::output::dynamic::x86 {
 class x86_output_engine_impl {
 public:
 	x86_output_engine_impl(const std::vector<std::shared_ptr<ir::chunk>> &chunks)
@@ -19,4 +19,4 @@ public:
 private:
 	const std::vector<std::shared_ptr<ir::chunk>> &chunks_;
 };
-} // namespace arancini::output::x86
+} // namespace arancini::output::dynamic::x86

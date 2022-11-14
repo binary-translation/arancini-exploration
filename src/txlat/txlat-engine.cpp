@@ -3,8 +3,8 @@
 #include <arancini/ir/chunk.h>
 #include <arancini/ir/default-ir-builder.h>
 #include <arancini/ir/dot-graph-generator.h>
-#include <arancini/output/llvm/llvm-output-engine.h>
 #include <arancini/output/output-personality.h>
+#include <arancini/output/static/llvm/llvm-output-engine.h>
 #include <arancini/txlat/txlat-engine.h>
 #include <arancini/util/tempfile-manager.h>
 #include <arancini/util/tempfile.h>
@@ -18,18 +18,18 @@ using namespace arancini::ir;
 using namespace arancini::input;
 using namespace arancini::input::x86;
 using namespace arancini::output;
-using namespace arancini::output::llvm;
+using namespace arancini::output::o_static::llvm;
 using namespace arancini::util;
 
 static std::set<std::string> allowed_symbols
 	= { "cmpstr", "cmpnum", "swap", "_qsort", "_start", "test", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
 
 static std::map<std::string, std::function<std::unique_ptr<arancini::output::output_engine>()>> translation_engines
-	= { { "llvm", [] { return std::make_unique<arancini::output::llvm::llvm_output_engine>(); } } };
+	= { { "llvm", [] { return std::make_unique<llvm_output_engine>(); } } };
 
 void txlat_engine::process_options(arancini::output::output_engine &oe, const boost::program_options::variables_map &cmdline)
 {
-	if (auto llvmoe = dynamic_cast<arancini::output::llvm::llvm_output_engine *>(&oe)) {
+	if (auto llvmoe = dynamic_cast<llvm_output_engine *>(&oe)) {
 		llvmoe->set_debug(cmdline.count("debug"));
 	}
 }

@@ -3,7 +3,7 @@
 #include <arancini/output/output-engine.h>
 #include <memory>
 
-namespace arancini::output::llvm {
+namespace arancini::output::o_static::llvm {
 class llvm_output_engine_impl;
 
 class llvm_output_engine : public output_engine {
@@ -21,4 +21,4 @@ private:
 	std::unique_ptr<llvm_output_engine_impl> oei_;
 	bool dbg_;
 };
-} // namespace arancini::output::llvm
+} // namespace arancini::output::o_static::llvm

@@ -2,7 +2,7 @@
 
 #include <arancini/output/output-engine.h>
 
-namespace arancini::output::arm64 {
+namespace arancini::output::dynamic::arm64 {
 class arm64_output_engine_impl {
 public:
 	arm64_output_engine_impl(const std::vector<std::shared_ptr<ir::chunk>> &chunks)
@@ -15,4 +15,4 @@ public:
 private:
 	const std::vector<std::shared_ptr<ir::chunk>> &chunks_;
 };
-} // namespace arancini::output::arm64
+} // namespace arancini::output::dynamic::arm64

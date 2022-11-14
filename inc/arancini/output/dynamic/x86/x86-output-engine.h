@@ -3,7 +3,7 @@
 #include <arancini/output/output-engine.h>
 #include <memory>
 
-namespace arancini::output::x86 {
+namespace arancini::output::dynamic::x86 {
 class x86_output_engine_impl;
 
 class x86_output_engine : public output_engine {
@@ -16,4 +16,4 @@ public:
 private:
 	std::unique_ptr<x86_output_engine_impl> oei_;
 };
-} // namespace arancini::output::x86
+} // namespace arancini::output::dynamic::x86
