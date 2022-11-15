@@ -1,5 +1,4 @@
 #include <arancini/ir/chunk.h>
-#include <arancini/ir/dot-graph-generator.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine-impl.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
 #include <iostream>

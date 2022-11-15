@@ -7,8 +7,6 @@
 #include <arancini/ir/visitor.h>
 
 namespace arancini::ir {
-class visitor;
-
 enum class port_kinds { value, constant, zero, negative, overflow, carry };
 
 class value_node;
@@ -30,7 +28,7 @@ public:
 
 	const std::set<node *> targets() const { return targets_; }
 
-	bool accept(visitor &v);
+	void accept(visitor &v) { v.visit_port(*this); }
 
 private:
 	port_kinds kind_;

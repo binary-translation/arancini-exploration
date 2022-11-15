@@ -23,18 +23,7 @@ public:
 
 	const std::vector<action_node *> &actions() const { return actions_; }
 
-	bool accept(visitor &v)
-	{
-		if (!v.visit_packet_start(*this)) {
-			return false;
-		}
-
-		for (auto n : actions_) {
-			n->accept(v);
-		}
-
-		return v.visit_packet_end(*this);
-	}
+	void accept(visitor &v) { v.visit_packet(*this); }
 
 	off_t address() const { return address_; }
 
