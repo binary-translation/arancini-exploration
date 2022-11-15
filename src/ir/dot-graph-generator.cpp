@@ -115,9 +115,9 @@ void dot_graph_generator::visit_write_reg_node(write_reg_node &n)
 
 void dot_graph_generator::visit_write_mem_node(write_mem_node &n)
 {
-	add_node(&n, "write-mem");
-	add_port_edge(&n.address(), &n);
-	add_port_edge(&n.value(), &n);
+	add_node(&n, "{{<addr>addr|<val>val}|write-mem}");
+	add_port_edge(&n.address(), &n, "addr");
+	add_port_edge(&n.value(), &n, "val");
 
 	default_visitor::visit_write_mem_node(n);
 }
@@ -155,10 +155,11 @@ void dot_graph_generator::visit_cast_node(cast_node &n)
 
 void dot_graph_generator::visit_csel_node(csel_node &n)
 {
-	add_node(&n, "cond-sel");
-	add_port_edge(&n.condition(), &n);
-	add_port_edge(&n.trueval(), &n);
-	add_port_edge(&n.falseval(), &n);
+	add_node(&n, "{{<cond>cond|<tv>true|<fv>false}|cond-sel}");
+
+	add_port_edge(&n.condition(), &n, "cond");
+	add_port_edge(&n.trueval(), &n, "tv");
+	add_port_edge(&n.falseval(), &n, "fv");
 
 	default_visitor::visit_csel_node(n);
 }
@@ -166,6 +167,8 @@ void dot_graph_generator::visit_csel_node(csel_node &n)
 void dot_graph_generator::visit_bit_shift_node(bit_shift_node &n)
 {
 	std::stringstream s;
+
+	s << "{{<val>val|<amt>amount}|";
 
 	switch (n.op()) {
 	case shift_op::asr:
@@ -182,9 +185,11 @@ void dot_graph_generator::visit_bit_shift_node(bit_shift_node &n)
 		break;
 	}
 
+	s << "}";
+
 	add_node(&n, s.str());
-	add_port_edge(&n.input(), &n);
-	add_port_edge(&n.amount(), &n);
+	add_port_edge(&n.input(), &n, "val");
+	add_port_edge(&n.amount(), &n, "amt");
 
 	default_visitor::visit_bit_shift_node(n);
 }
@@ -218,6 +223,8 @@ void dot_graph_generator::visit_binary_arith_node(binary_arith_node &n)
 {
 	std::stringstream s;
 
+	s << "{{<lhs>LHS|<rhs>RHS}|";
+
 	switch (n.op()) {
 	case binary_arith_op::add:
 		s << "add";
@@ -245,9 +252,11 @@ void dot_graph_generator::visit_binary_arith_node(binary_arith_node &n)
 		break;
 	}
 
+	s << "}";
+
 	add_node(&n, s.str());
-	add_port_edge(&n.lhs(), &n);
-	add_port_edge(&n.rhs(), &n);
+	add_port_edge(&n.lhs(), &n, "lhs");
+	add_port_edge(&n.rhs(), &n, "rhs");
 
 	default_visitor::visit_binary_arith_node(n);
 }
@@ -255,6 +264,8 @@ void dot_graph_generator::visit_binary_arith_node(binary_arith_node &n)
 void dot_graph_generator::visit_ternary_arith_node(ternary_arith_node &n)
 {
 	std::stringstream s;
+
+	s << "{{<lhs>LHS|<rhs>RHS|<top>TOP}|";
 
 	switch (n.op()) {
 	case ternary_arith_op::adc:
@@ -268,10 +279,12 @@ void dot_graph_generator::visit_ternary_arith_node(ternary_arith_node &n)
 		break;
 	}
 
+	s << "}";
+
 	add_node(&n, s.str());
-	add_port_edge(&n.lhs(), &n);
-	add_port_edge(&n.rhs(), &n);
-	add_port_edge(&n.top(), &n);
+	add_port_edge(&n.lhs(), &n, "lhs");
+	add_port_edge(&n.rhs(), &n, "rhs");
+	add_port_edge(&n.top(), &n, "top");
 
 	default_visitor::visit_ternary_arith_node(n);
 }

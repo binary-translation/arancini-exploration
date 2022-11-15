@@ -46,7 +46,7 @@ private:
 	node *cur_node_;
 	std::set<node *> seen_;
 
-	void add_node(const node *n, const std::string &label) { os_ << std::hex << "N" << n << " [label=\"" << label << "\"]" << std::endl; }
+	void add_node(const node *n, const std::string &label) { os_ << std::hex << "N" << n << " [shape=Mrecord, label=\"" << label << "\"]" << std::endl; }
 
 	std::string compute_port_label(const port *p) const
 	{
@@ -80,12 +80,18 @@ private:
 		return s.str();
 	}
 
-	void add_port_edge(const port *from, const node *to) { add_edge(from->owner(), to, "black", compute_port_label(from)); }
+	void add_port_edge(const port *from, const node *to, const std::string &link = "") { add_edge(from->owner(), to, "black", compute_port_label(from), link); }
 
-	void add_edge(const node *from, const node *to, const std::string &colour = "black", const std::string &label = "")
+	void add_edge(const node *from, const node *to, const std::string &colour = "black", const std::string &label = "", const std::string &link = "")
 	{
 		os_ << std::hex << "N" << from << " -> "
-			<< "N" << to << " [color=" << colour;
+			<< "N" << to;
+
+		if (link != "") {
+			os_ << ":" << link;
+		}
+
+		os_ << " [color=" << colour;
 
 		if (label != "") {
 			os_ << ", label=\"" << label << "\"";
