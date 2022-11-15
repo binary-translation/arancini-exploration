@@ -1,6 +1,7 @@
 #include <arancini/ir/debug-visitor.h>
 #include <arancini/ir/node.h>
 #include <arancini/output/dynamic/machine-code-writer.h>
+#include <arancini/output/dynamic/x86/machine-code-builder.h>
 #include <arancini/output/dynamic/x86/x86-dynamic-output-engine-impl.h>
 #include <arancini/output/dynamic/x86/x86-dynamic-output-engine.h>
 #include <arancini/output/dynamic/x86/x86-lowering-visitor.h>
@@ -30,8 +31,12 @@ void x86_dynamic_output_engine_impl::lower(ir::node *node, machine_code_writer &
 	std::cerr << "--" << std::endl;
 
 	debug_visitor debugger(std::cerr);
-	x86_lowering_visitor lowerer(writer);
+
+	machine_code_builder builder;
+	x86_lowering_visitor lowerer(builder);
 
 	node->accept(debugger);
 	node->accept(lowerer);
+
+	builder.dump(std::cerr);
 }
