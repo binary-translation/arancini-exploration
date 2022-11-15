@@ -5,6 +5,7 @@ class chunk;
 class packet;
 class node;
 class action_node;
+class label_node;
 class value_node;
 class cond_br_node;
 class read_pc_node;
@@ -23,6 +24,10 @@ class csel_node;
 class bit_shift_node;
 class bit_extract_node;
 class bit_insert_node;
+class vector_node;
+class vector_element_node;
+class vector_extract_node;
+class vector_insert_node;
 class port;
 
 class visitor {
@@ -36,6 +41,7 @@ public:
 	// Nodes
 	virtual bool visit_node(node &n) = 0;
 	virtual bool visit_action_node(action_node &n) = 0;
+	virtual bool visit_label_node(label_node &n) = 0;
 	virtual bool visit_value_node(value_node &n) = 0;
 	virtual bool visit_cond_br_node(cond_br_node &n) = 0;
 	virtual bool visit_read_pc_node(read_pc_node &n) = 0;
@@ -54,6 +60,10 @@ public:
 	virtual bool visit_bit_shift_node(bit_shift_node &n) = 0;
 	virtual bool visit_bit_extract_node(bit_extract_node &n) = 0;
 	virtual bool visit_bit_insert_node(bit_insert_node &n) = 0;
+	virtual bool visit_vector_node(vector_node &n) = 0;
+	virtual bool visit_vector_element_node(vector_element_node &n) = 0;
+	virtual bool visit_vector_extract_node(vector_extract_node &n) = 0;
+	virtual bool visit_vector_insert_node(vector_insert_node &n) = 0;
 
 	virtual bool visit_port(port &p) = 0;
 };

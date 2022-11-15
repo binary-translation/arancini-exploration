@@ -107,6 +107,19 @@ public:
 		: action_node(node_kinds::label)
 	{
 	}
+
+	virtual bool accept(visitor &v) override
+	{
+		if (!action_node::accept(v)) {
+			return false;
+		}
+
+		if (!v.visit_label_node(*this)) {
+			return false;
+		}
+
+		return true;
+	}
 };
 
 class value_node : public node {
@@ -800,9 +813,25 @@ public:
 	{
 	}
 
+	virtual bool accept(visitor &v) override
+	{
+		if (!value_node::accept(v)) {
+			return false;
+		}
+
+		if (!v.visit_vector_node(*this)) {
+			return false;
+		}
+
+		if (!vct_.owner()->accept(v)) {
+			return false;
+		}
+
+		return true;
+	}
+
 private:
 	port &vct_;
-	int index_;
 };
 
 class vector_element_node : public vector_node {
@@ -811,6 +840,19 @@ public:
 		: vector_node(kind, type, vct)
 		, index_(index)
 	{
+	}
+
+	virtual bool accept(visitor &v) override
+	{
+		if (!vector_node::accept(v)) {
+			return false;
+		}
+
+		if (!v.visit_vector_element_node(*this)) {
+			return false;
+		}
+
+		return true;
 	}
 
 private:
@@ -823,6 +865,19 @@ public:
 		: vector_element_node(node_kinds::vector_extract, vct.type().element_type(), vct, index)
 	{
 	}
+
+	virtual bool accept(visitor &v) override
+	{
+		if (!vector_element_node::accept(v)) {
+			return false;
+		}
+
+		if (!v.visit_vector_extract_node(*this)) {
+			return false;
+		}
+
+		return true;
+	}
 };
 
 class vector_insert_node : public vector_element_node {
@@ -831,6 +886,23 @@ public:
 		: vector_element_node(node_kinds::vector_insert, vct.type(), vct, index)
 		, val_(val)
 	{
+	}
+
+	virtual bool accept(visitor &v) override
+	{
+		if (!vector_element_node::accept(v)) {
+			return false;
+		}
+
+		if (!v.visit_vector_insert_node(*this)) {
+			return false;
+		}
+
+		if (!val_.owner()->accept(v)) {
+			return false;
+		}
+
+		return true;
 	}
 
 private:

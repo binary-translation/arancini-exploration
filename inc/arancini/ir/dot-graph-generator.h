@@ -21,6 +21,7 @@ public:
 	virtual bool visit_packet_end(packet &p) override;
 	virtual bool visit_node(node &n) override;
 	virtual bool visit_action_node(action_node &n) override;
+	virtual bool visit_label_node(label_node &n) override;
 	virtual bool visit_value_node(value_node &n) override;
 	virtual bool visit_cond_br_node(cond_br_node &n) override;
 	virtual bool visit_read_pc_node(read_pc_node &n) override;
@@ -39,6 +40,10 @@ public:
 	virtual bool visit_bit_shift_node(bit_shift_node &n) override;
 	virtual bool visit_bit_extract_node(bit_extract_node &n) override;
 	virtual bool visit_bit_insert_node(bit_insert_node &n) override;
+	virtual bool visit_vector_node(vector_node &n) override;
+	virtual bool visit_vector_element_node(vector_element_node &n) override;
+	virtual bool visit_vector_extract_node(vector_extract_node &n) override;
+	virtual bool visit_vector_insert_node(vector_insert_node &n) override;
 	virtual bool visit_port(port &p) override;
 
 private:

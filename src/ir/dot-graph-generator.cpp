@@ -62,6 +62,12 @@ bool dot_graph_generator::visit_action_node(action_node &n)
 	return true;
 }
 
+bool dot_graph_generator::visit_label_node(label_node &n)
+{
+	os_ << "N" << &n << " [label=\"label\"];" << std::endl;
+	return true;
+}
+
 bool dot_graph_generator::visit_value_node(value_node &n) { return true; }
 
 bool dot_graph_generator::visit_cond_br_node(cond_br_node &n)
@@ -247,15 +253,31 @@ bool dot_graph_generator::visit_ternary_arith_node(ternary_arith_node &n)
 
 bool dot_graph_generator::visit_bit_extract_node(bit_extract_node &n)
 {
-	os_ << "N" << &n << " [label=\"bit_extract\"];" << std::endl;
+	os_ << "N" << &n << " [label=\"bit-extract\"];" << std::endl;
 
 	return true;
 }
 
 bool dot_graph_generator::visit_bit_insert_node(bit_insert_node &n)
 {
-	os_ << "N" << &n << " [label=\"bit_insert\"];" << std::endl;
+	os_ << "N" << &n << " [label=\"bit-insert\"];" << std::endl;
 
+	return true;
+}
+
+bool dot_graph_generator::visit_vector_node(vector_node &n) { return true; }
+
+bool dot_graph_generator::visit_vector_element_node(vector_element_node &n) { return true; }
+
+bool dot_graph_generator::visit_vector_extract_node(vector_extract_node &n)
+{
+	os_ << "N" << &n << " [label=\"vector-extract\"];" << std::endl;
+	return true;
+}
+
+bool dot_graph_generator::visit_vector_insert_node(vector_insert_node &n)
+{
+	os_ << "N" << &n << " [label=\"vector-insert\"];" << std::endl;
 	return true;
 }
 
