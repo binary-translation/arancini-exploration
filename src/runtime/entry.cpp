@@ -8,9 +8,13 @@
 #include <unistd.h>
 
 #if defined(ARCH_X86_64)
-#include <arancini/output/x86/x86-output-engine.h>
+#include <arancini/output/dynamic/x86/x86-dynamic-output-engine.h>
 #elif defined(ARCH_AARCH64)
-#include <arancini/output/arm64/arm64-output-engine.h>
+#include <arancini/output/dynamic/arm64/arm64-dynamic-output-engine.h>
+#elif defined(ARCH_RISCV)
+#include <arancini/output/dynamic/riscv/riscv-dynamic-output-engine.h>
+#else
+#error "Unsupported dynamic output architecture"
 #endif
 
 #include <arancini/input/x86/x86-input-arch.h>
@@ -24,11 +28,13 @@ static execution_context *ctx;
 static arancini::input::x86::x86_input_arch ia(arancini::input::x86::disassembly_syntax::intel);
 
 #if defined(ARCH_X86_64)
-static arancini::output::x86::x86_output_engine oe;
+static arancini::output::dynamic::x86::x86_dynamic_output_engine oe;
 #elif defined(ARCH_AARCH64)
-static arancini::output::arm64::arm64_output_engine oe;
+static arancini::output::dynamic::arm64::arm64_dynamic_output_engine oe;
+#elif defined(ARCH_RISCV)
+static arancini::output::dynamic::riscv::riscv_dynamic_output_engine oe;
 #else
-#error "Unsupported output architecture"
+#error "Unsupported dynamic output architecture"
 #endif
 
 /*

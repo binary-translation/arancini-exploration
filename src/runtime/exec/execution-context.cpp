@@ -18,7 +18,7 @@
 
 using namespace arancini::runtime::exec;
 
-execution_context::execution_context(input::input_arch &ia, output::output_engine &oe)
+execution_context::execution_context(input::input_arch &ia, output::dynamic::dynamic_output_engine &oe)
 	: memory_(nullptr)
 	, memory_size_(0x100000000ull)
 	, te_(*this, ia, oe)

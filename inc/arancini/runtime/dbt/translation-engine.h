@@ -6,8 +6,8 @@ namespace arancini::input {
 class input_arch;
 }
 
-namespace arancini::output {
-class output_engine;
+namespace arancini::output::dynamic {
+class dynamic_output_engine;
 }
 
 namespace arancini::runtime::exec {
@@ -21,7 +21,7 @@ class translation;
 
 class translation_engine {
 public:
-	translation_engine(execution_context &ec, input::input_arch &ia, output::output_engine &oe)
+	translation_engine(execution_context &ec, input::input_arch &ia, output::dynamic::dynamic_output_engine &oe)
 		: ec_(ec)
 		, ia_(ia)
 		, oe_(oe)
@@ -36,6 +36,6 @@ private:
 	translation_cache cache_;
 
 	input::input_arch &ia_;
-	output::output_engine &oe_;
+	output::dynamic::dynamic_output_engine &oe_;
 };
 } // namespace arancini::runtime::dbt
