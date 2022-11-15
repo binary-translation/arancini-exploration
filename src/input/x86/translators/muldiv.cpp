@@ -99,17 +99,30 @@ void muldiv_translator::do_translate()
 		break;
 	}
 
-	//case XED_ICLASS_DIV:
+	/*
+	 * Both DIV and IDIV instructions do the same things, except that IDIV is signed and DIV is unsigned
+	 * idiv %reg -> idiv %reg %rax %rdx
+	 * rax := quotient, rdx := remainder
+	 * except for the 8bit variant, where al := quotient, ah := remainder
+	 * TODO: support the 8bit variant properly
+	 */
 	case XED_ICLASS_IDIV: {
-		/*
-		 * idiv %reg -> idiv %reg %rax %rdx
-		 * rax := quotient, rdx := remainder
-		 * except for the 8bit variant, where al := quotient, ah := remainder
-		 */
-		auto rslt = builder().insert_div(op[0]->val(), op[1]->val());
+		auto op0_cast = builder().insert_bitcast(op[0]->val().type().get_signed_type(), op[0]->val());
+		auto op1_cast = builder().insert_bitcast(op[1]->val().type().get_signed_type(), op[1]->val());
 
-		write_operand(0, rslt->val());
-		write_flags(rslt, flag_op::ignore, flag_op::ignore, flag_op::ignore, flag_op::ignore, flag_op::ignore, flag_op::ignore);
+		auto quo = builder().insert_div(op0_cast->val(), op1_cast->val());
+		auto rem = builder().insert_mod(op0_cast->val(), op1_cast->val());
+
+		write_operand(1, quo->val());
+		write_operand(2, rem->val());
+		break;
+	}
+	case XED_ICLASS_DIV: {
+		auto quo = builder().insert_div(op[0]->val(), op[1]->val());
+		auto rem = builder().insert_mod(op[0]->val(), op[1]->val());
+
+		write_operand(1, quo->val());
+		write_operand(2, rem->val());
 		break;
 	}
 
