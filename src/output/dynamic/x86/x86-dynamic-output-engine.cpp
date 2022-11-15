@@ -3,6 +3,7 @@
 #include <arancini/output/dynamic/machine-code-writer.h>
 #include <arancini/output/dynamic/x86/x86-dynamic-output-engine-impl.h>
 #include <arancini/output/dynamic/x86/x86-dynamic-output-engine.h>
+#include <arancini/output/dynamic/x86/x86-lowering-visitor.h>
 #include <iostream>
 #include <stdexcept>
 
@@ -26,8 +27,11 @@ void x86_dynamic_output_engine_impl::lower_epilogue(machine_code_writer &writer)
 
 void x86_dynamic_output_engine_impl::lower(ir::node *node, machine_code_writer &writer)
 {
-	debug_visitor v(std::cerr);
-	node->accept(v);
+	std::cerr << "--" << std::endl;
 
-	throw std::runtime_error("not implemented");
+	debug_visitor debugger(std::cerr);
+	x86_lowering_visitor lowerer(writer);
+
+	node->accept(debugger);
+	node->accept(lowerer);
 }
