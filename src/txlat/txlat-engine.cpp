@@ -106,7 +106,6 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		}
 
 		dot_graph_generator dgg(*o);
-
 		for (auto c : oe->chunks()) {
 			c->accept(dgg);
 		}

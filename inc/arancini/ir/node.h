@@ -43,7 +43,7 @@ public:
 
 	virtual bool is_action() const { return false; }
 
-	virtual bool accept(visitor &v) { return v.visit_node(*this); }
+	virtual void accept(visitor &v) { v.visit_node(*this); }
 
 	void set_metadata(const std::string &key, std::shared_ptr<metadata> value) { md_[key] = value; }
 
@@ -91,13 +91,10 @@ public:
 
 	virtual bool updates_pc() const { return false; }
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!node::accept(v)) {
-			return false;
-		}
-
-		return v.visit_action_node(*this);
+		node::accept(v);
+		v.visit_action_node(*this);
 	}
 };
 
@@ -108,17 +105,10 @@ public:
 	{
 	}
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!action_node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_label_node(*this)) {
-			return false;
-		}
-
-		return true;
+		action_node::accept(v);
+		v.visit_label_node(*this);
 	}
 };
 
@@ -133,17 +123,10 @@ public:
 	port &val() { return value_; }
 	const port &val() const { return value_; }
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_value_node(*this)) {
-			return false;
-		}
-
-		return value_.accept(v);
+		node::accept(v);
+		v.visit_value_node(*this);
 	}
 
 protected:
@@ -162,13 +145,10 @@ public:
 	port &cond() const { return cond_; }
 	label_node *target() const { return target_; }
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!action_node::accept(v)) {
-			return false;
-		}
-
-		return v.visit_cond_br_node(*this);
+		action_node::accept(v);
+		v.visit_cond_br_node(*this);
 	}
 
 private:
@@ -183,13 +163,10 @@ public:
 	{
 	}
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!value_node::accept(v)) {
-			return false;
-		}
-
-		return v.visit_read_pc_node(*this);
+		value_node::accept(v);
+		v.visit_read_pc_node(*this);
 	}
 };
 
@@ -206,17 +183,10 @@ public:
 
 	virtual bool updates_pc() const override { return true; }
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!action_node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_write_pc_node(*this)) {
-			return false;
-		}
-
-		return value_.owner()->accept(v);
+		action_node::accept(v);
+		v.visit_write_pc_node(*this);
 	}
 
 private:
@@ -248,13 +218,10 @@ public:
 
 	bool is_zero() const { return val().type().is_floating_point() ? cvf_ == 0 : cvi_ == 0; }
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!value_node::accept(v)) {
-			return false;
-		}
-
-		return v.visit_constant_node(*this);
+		value_node::accept(v);
+		v.visit_constant_node(*this);
 	}
 
 private:
@@ -274,13 +241,10 @@ public:
 
 	unsigned long regoff() const { return regoff_; }
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!value_node::accept(v)) {
-			return false;
-		}
-
-		return v.visit_read_reg_node(*this);
+		value_node::accept(v);
+		v.visit_read_reg_node(*this);
 	}
 
 private:
@@ -298,17 +262,10 @@ public:
 
 	port &address() const { return addr_; }
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!value_node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_read_mem_node(*this)) {
-			return false;
-		}
-
-		return addr_.owner()->accept(v);
+		value_node::accept(v);
+		v.visit_read_mem_node(*this);
 	}
 
 private:
@@ -328,17 +285,10 @@ public:
 	unsigned long regoff() const { return regoff_; }
 	port &value() const { return val_; }
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!action_node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_write_reg_node(*this)) {
-			return false;
-		}
-
-		return val_.owner()->accept(v);
+		action_node::accept(v);
+		v.visit_write_reg_node(*this);
 	}
 
 private:
@@ -360,21 +310,10 @@ public:
 	port &address() const { return addr_; }
 	port &value() const { return val_; }
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!action_node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_write_mem_node(*this)) {
-			return false;
-		}
-
-		if (!addr_.owner()->accept(v)) {
-			return false;
-		}
-
-		return val_.owner()->accept(v);
+		action_node::accept(v);
+		v.visit_write_mem_node(*this);
 	}
 
 private:
@@ -399,29 +338,10 @@ public:
 	port &trueval() const { return trueval_; }
 	port &falseval() const { return falseval_; }
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!value_node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_csel_node(*this)) {
-			return false;
-		}
-
-		if (!condition_.owner()->accept(v)) {
-			return false;
-		}
-
-		if (!trueval_.owner()->accept(v)) {
-			return false;
-		}
-
-		if (!falseval_.owner()->accept(v)) {
-			return false;
-		}
-
-		return true;
+		value_node::accept(v);
+		v.visit_csel_node(*this);
 	}
 
 private:
@@ -449,21 +369,10 @@ public:
 	port &input() const { return input_; }
 	port &amount() const { return amount_; }
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!value_node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_bit_shift_node(*this)) {
-			return false;
-		}
-
-		if (!input_.owner()->accept(v)) {
-			return false;
-		}
-
-		return amount_.owner()->accept(v);
+		value_node::accept(v);
+		v.visit_bit_shift_node(*this);
 	}
 
 private:
@@ -505,17 +414,10 @@ public:
 
 	port &source_value() const { return source_value_; }
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!value_node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_cast_node(*this)) {
-			return false;
-		}
-
-		return source_value_.owner()->accept(v);
+		value_node::accept(v);
+		v.visit_cast_node(*this);
 	}
 
 private:
@@ -540,33 +442,10 @@ public:
 	port &overflow() { return overflow_; }
 	port &carry() { return carry_; }
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!value_node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_arith_node(*this)) {
-			return false;
-		}
-
-		if (!zero_.accept(v)) {
-			return false;
-		}
-
-		if (!negative_.accept(v)) {
-			return false;
-		}
-
-		if (!overflow_.accept(v)) {
-			return false;
-		}
-
-		if (!carry_.accept(v)) {
-			return false;
-		}
-
-		return true;
+		value_node::accept(v);
+		v.visit_arith_node(*this);
 	}
 
 private:
@@ -589,21 +468,10 @@ public:
 
 	port &lhs() const { return lhs_; }
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!arith_node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_unary_arith_node(*this)) {
-			return false;
-		}
-
-		if (!lhs_.owner()->accept(v)) {
-			return false;
-		}
-
-		return true;
+		arith_node::accept(v);
+		v.visit_unary_arith_node(*this);
 	}
 
 private:
@@ -638,25 +506,10 @@ public:
 	port &lhs() const { return lhs_; }
 	port &rhs() const { return rhs_; }
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!arith_node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_binary_arith_node(*this)) {
-			return false;
-		}
-
-		if (!lhs_.owner()->accept(v)) {
-			return false;
-		}
-
-		if (!rhs_.owner()->accept(v)) {
-			return false;
-		}
-
-		return true;
+		arith_node::accept(v);
+		v.visit_binary_arith_node(*this);
 	}
 
 private:
@@ -687,29 +540,10 @@ public:
 	port &rhs() const { return rhs_; }
 	port &top() const { return top_; }
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!arith_node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_ternary_arith_node(*this)) {
-			return false;
-		}
-
-		if (!lhs_.owner()->accept(v)) {
-			return false;
-		}
-
-		if (!rhs_.owner()->accept(v)) {
-			return false;
-		}
-
-		if (!top_.owner()->accept(v)) {
-			return false;
-		}
-
-		return true;
+		arith_node::accept(v);
+		v.visit_ternary_arith_node(*this);
 	}
 
 private:
@@ -737,21 +571,10 @@ public:
 
 	port &source_value() const { return source_value_; }
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!value_node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_bit_extract_node(*this)) {
-			return false;
-		}
-
-		if (!value_.owner()->accept(v)) {
-			return false;
-		}
-
-		return true;
+		value_node::accept(v);
+		v.visit_bit_extract_node(*this);
 	}
 
 private:
@@ -782,21 +605,12 @@ public:
 
 	port &source_value() const { return source_value_; }
 
-	virtual bool accept(visitor &v) override
+	port &bits() const { return bits_; }
+
+	virtual void accept(visitor &v) override
 	{
-		if (!value_node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_bit_insert_node(*this)) {
-			return false;
-		}
-
-		if (!value_.owner()->accept(v)) {
-			return false;
-		}
-
-		return true;
+		value_node::accept(v);
+		v.visit_bit_insert_node(*this);
 	}
 
 private:
@@ -813,21 +627,12 @@ public:
 	{
 	}
 
-	virtual bool accept(visitor &v) override
+	port &source_vector() const { return vct_; }
+
+	virtual void accept(visitor &v) override
 	{
-		if (!value_node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_vector_node(*this)) {
-			return false;
-		}
-
-		if (!vct_.owner()->accept(v)) {
-			return false;
-		}
-
-		return true;
+		value_node::accept(v);
+		v.visit_vector_node(*this);
 	}
 
 private:
@@ -842,17 +647,10 @@ public:
 	{
 	}
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!vector_node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_vector_element_node(*this)) {
-			return false;
-		}
-
-		return true;
+		vector_node::accept(v);
+		v.visit_vector_element_node(*this);
 	}
 
 private:
@@ -866,17 +664,10 @@ public:
 	{
 	}
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!vector_element_node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_vector_extract_node(*this)) {
-			return false;
-		}
-
-		return true;
+		vector_element_node::accept(v);
+		v.visit_vector_extract_node(*this);
 	}
 };
 
@@ -888,22 +679,13 @@ public:
 	{
 	}
 
-	virtual bool accept(visitor &v) override
+	virtual void accept(visitor &v) override
 	{
-		if (!vector_element_node::accept(v)) {
-			return false;
-		}
-
-		if (!v.visit_vector_insert_node(*this)) {
-			return false;
-		}
-
-		if (!val_.owner()->accept(v)) {
-			return false;
-		}
-
-		return true;
+		vector_element_node::accept(v);
+		v.visit_vector_insert_node(*this);
 	}
+
+	port &insert_value() const { return val_; }
 
 private:
 	port &val_;
