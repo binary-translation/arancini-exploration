@@ -6,286 +6,319 @@
 
 using namespace arancini::ir;
 
-bool dot_graph_generator::visit_chunk_start(chunk &c)
+void dot_graph_generator::visit_chunk(chunk &c)
 {
 	os_ << "digraph chunk {" << std::endl;
-	return true;
+	default_visitor::visit_chunk(c);
+	os_ << " }" << std::endl;
 }
 
-bool dot_graph_generator::visit_chunk_end(chunk &c)
-{
-	os_ << "}" << std::endl;
-	return true;
-}
-
-bool dot_graph_generator::visit_packet_start(packet &p)
+void dot_graph_generator::visit_packet(packet &p)
 {
 	os_ << "subgraph cluster_" << std::hex << &p << " {" << std::endl;
 	os_ << "label = \"@0x" << std::hex << p.address() << ": " << p.disassembly() << "\";" << std::endl;
 
-	if (last_packet_ && !last_packet_->actions().empty() && !p.actions().empty()) {
-		os_ << "N" << last_packet_->actions().back() << " -> N" << p.actions().front() << " [color=blue];" << std::endl;
+	if (current_packet_ && !current_packet_->actions().empty() && !p.actions().empty()) {
+		add_edge(current_packet_->actions().back(), p.actions().front(), "blue");
 	}
 
-	last_packet_ = &p;
+	current_packet_ = &p;
 	last_action_ = nullptr;
 
-	return true;
-}
+	default_visitor::visit_packet(p);
 
-bool dot_graph_generator::visit_packet_end(packet &p)
-{
 	os_ << "}" << std::endl;
-	return true;
 }
 
-bool dot_graph_generator::visit_node(node &n)
+void dot_graph_generator::visit_node(node &n)
 {
 	cur_node_ = &n;
-
-	if (seen_.count(&n)) {
-		return false;
-	}
 	seen_.insert(&n);
 
-	return true;
+	default_visitor::visit_node(n);
 }
 
-bool dot_graph_generator::visit_action_node(action_node &n)
+void dot_graph_generator::visit_action_node(action_node &n)
 {
+	// If there was a "last action", then connect the "last action" to this action node
+	// with a control-flow edge.
 	if (last_action_) {
-		os_ << "N" << last_action_ << " -> N" << &n << " [color=red];" << std::endl;
+		add_edge(last_action_, &n, "red");
 	}
 
+	// Update the current "last action"
 	last_action_ = &n;
 
-	return true;
+	default_visitor::visit_action_node(n);
 }
 
-bool dot_graph_generator::visit_value_node(value_node &n) { return true; }
-
-bool dot_graph_generator::visit_cond_br_node(cond_br_node &n)
+void dot_graph_generator::visit_label_node(label_node &n)
 {
-	os_ << "N" << &n << " [label=\"cond-br\"];" << std::endl;
-	return true;
+	add_node(&n, "label");
+	default_visitor::visit_label_node(n);
 }
 
-bool dot_graph_generator::visit_read_pc_node(read_pc_node &n)
+void dot_graph_generator::visit_cond_br_node(cond_br_node &n)
 {
-	os_ << "N" << &n << " [label=\"read-pc\"];" << std::endl;
-	return true;
+	add_node(&n, "cond-br");
+	default_visitor::visit_cond_br_node(n);
 }
 
-bool dot_graph_generator::visit_write_pc_node(write_pc_node &n)
+void dot_graph_generator::visit_read_pc_node(read_pc_node &n)
 {
-	os_ << "N" << &n << " [label=\"write-pc\"];" << std::endl;
-	return true;
+	add_node(&n, "read-pc");
+	default_visitor::visit_read_pc_node(n);
 }
 
-bool dot_graph_generator::visit_constant_node(constant_node &n)
+void dot_graph_generator::visit_write_pc_node(write_pc_node &n)
 {
-	os_ << "N" << &n << " [label=\"constant #" << n.const_val_i() << "\"];" << std::endl;
-	return true;
+	add_node(&n, "write-pc");
+	add_port_edge(&n.value(), &n);
+	default_visitor::visit_write_pc_node(n);
 }
 
-bool dot_graph_generator::visit_read_reg_node(read_reg_node &n)
+void dot_graph_generator::visit_constant_node(constant_node &n)
 {
-	os_ << "N" << &n << " [label=\"read-reg #" << n.regoff() << "\"];" << std::endl;
-	return true;
+	std::stringstream s;
+	s << "constant #" << std::dec << n.const_val_i();
+
+	add_node(&n, s.str());
+	default_visitor::visit_constant_node(n);
 }
 
-bool dot_graph_generator::visit_read_mem_node(read_mem_node &n)
+void dot_graph_generator::visit_read_reg_node(read_reg_node &n)
 {
-	os_ << "N" << &n << " [label=\"read-mem\"];" << std::endl;
-	return true;
+	std::stringstream s;
+	s << "read-reg #" << std::dec << n.regoff();
+
+	add_node(&n, s.str());
+	default_visitor::visit_read_reg_node(n);
 }
 
-bool dot_graph_generator::visit_write_reg_node(write_reg_node &n)
+void dot_graph_generator::visit_read_mem_node(read_mem_node &n)
 {
-	os_ << "N" << &n << " [label=\"write-reg #" << n.regoff() << "\"];" << std::endl;
-	return true;
+	add_node(&n, "read-mem");
+	add_port_edge(&n.address(), &n);
+	default_visitor::visit_read_mem_node(n);
 }
 
-bool dot_graph_generator::visit_write_mem_node(write_mem_node &n)
+void dot_graph_generator::visit_write_reg_node(write_reg_node &n)
 {
-	os_ << "N" << &n << " [label=\"write-mem\"];" << std::endl;
-	return true;
+	std::stringstream s;
+	s << "write-reg #" << std::dec << n.regoff();
+
+	add_node(&n, s.str());
+	add_port_edge(&n.value(), &n);
+
+	default_visitor::visit_write_reg_node(n);
 }
 
-bool dot_graph_generator::visit_cast_node(cast_node &n)
+void dot_graph_generator::visit_write_mem_node(write_mem_node &n)
 {
-	os_ << "N" << &n << " [label=\"";
+	add_node(&n, "{{<addr>addr|<val>val}|write-mem}");
+	add_port_edge(&n.address(), &n, "addr");
+	add_port_edge(&n.value(), &n, "val");
+
+	default_visitor::visit_write_mem_node(n);
+}
+
+void dot_graph_generator::visit_cast_node(cast_node &n)
+{
+	std::stringstream s;
+
 	switch (n.op()) {
 	case cast_op::sx:
-		os_ << "sx";
+		s << "sx";
 		break;
 	case cast_op::zx:
-		os_ << "zx";
+		s << "zx";
 		break;
 	case cast_op::trunc:
-		os_ << "trunc";
+		s << "trunc";
 		break;
 	case cast_op::bitcast:
-		os_ << "bitcast";
+		s << "bitcast";
 		break;
 	case cast_op::convert:
-		os_ << "convert";
+		s << "convert";
+		break;
+	default:
+		s << "unknown-cast";
 		break;
 	}
-	os_ << "\"];" << std::endl;
-	return true;
+
+	add_node(&n, s.str());
+	add_port_edge(&n.source_value(), &n);
+
+	default_visitor::visit_cast_node(n);
 }
 
-bool dot_graph_generator::visit_csel_node(csel_node &n)
+void dot_graph_generator::visit_csel_node(csel_node &n)
 {
-	os_ << "N" << &n << " [label=\"csel\"];" << std::endl;
-	return true;
+	add_node(&n, "{{<cond>cond|<tv>true|<fv>false}|cond-sel}");
+
+	add_port_edge(&n.condition(), &n, "cond");
+	add_port_edge(&n.trueval(), &n, "tv");
+	add_port_edge(&n.falseval(), &n, "fv");
+
+	default_visitor::visit_csel_node(n);
 }
 
-bool dot_graph_generator::visit_bit_shift_node(bit_shift_node &n)
+void dot_graph_generator::visit_bit_shift_node(bit_shift_node &n)
 {
-	os_ << "N" << &n << " [label=\"";
+	std::stringstream s;
+
+	s << "{{<val>val|<amt>amount}|";
 
 	switch (n.op()) {
 	case shift_op::asr:
-		os_ << "asr";
+		s << "asr";
 		break;
 	case shift_op::lsr:
-		os_ << "lsr";
+		s << "lsr";
 		break;
 	case shift_op::lsl:
-		os_ << "lsl";
+		s << "lsl";
+		break;
+	default:
+		s << "unknown-shift";
 		break;
 	}
 
-	os_ << "\"];" << std::endl;
-	return true;
+	s << "}";
+
+	add_node(&n, s.str());
+	add_port_edge(&n.input(), &n, "val");
+	add_port_edge(&n.amount(), &n, "amt");
+
+	default_visitor::visit_bit_shift_node(n);
 }
 
-bool dot_graph_generator::visit_arith_node(arith_node &n) { return true; }
-
-bool dot_graph_generator::visit_unary_arith_node(unary_arith_node &n)
+void dot_graph_generator::visit_unary_arith_node(unary_arith_node &n)
 {
-	os_ << "N" << &n << " [label=\"";
+	std::stringstream s;
 
 	switch (n.op()) {
 	case unary_arith_op::bnot:
-		os_ << "not";
+		s << "not";
 		break;
 	case unary_arith_op::neg:
-		os_ << "neg";
+		s << "neg";
 		break;
 	case unary_arith_op::complement:
-		os_ << "cmpl";
+		s << "cmpl";
 		break;
 	default:
-		os_ << "???";
+		s << "unknown-unary";
 		break;
 	}
 
-	os_ << "\"];" << std::endl;
+	add_node(&n, s.str());
+	add_port_edge(&n.lhs(), &n);
 
-	return true;
+	default_visitor::visit_unary_arith_node(n);
 }
 
-bool dot_graph_generator::visit_binary_arith_node(binary_arith_node &n)
+void dot_graph_generator::visit_binary_arith_node(binary_arith_node &n)
 {
-	os_ << "N" << &n << " [label=\"";
+	std::stringstream s;
+
+	s << "{{<lhs>LHS|<rhs>RHS}|";
 
 	switch (n.op()) {
 	case binary_arith_op::add:
-		os_ << "add";
+		s << "add";
 		break;
 	case binary_arith_op::sub:
-		os_ << "sub";
+		s << "sub";
 		break;
 	case binary_arith_op::mul:
-		os_ << "mul";
+		s << "mul";
 		break;
 	case binary_arith_op::div:
-		os_ << "div";
+		s << "div";
 		break;
 	case binary_arith_op::band:
-		os_ << "and";
+		s << "and";
 		break;
 	case binary_arith_op::bor:
-		os_ << "or";
+		s << "or";
 		break;
 	case binary_arith_op::bxor:
-		os_ << "xor";
+		s << "xor";
 		break;
 	default:
-		os_ << "???";
+		s << "unknown-binary";
 		break;
 	}
 
-	os_ << "\"];" << std::endl;
+	s << "}";
 
-	return true;
+	add_node(&n, s.str());
+	add_port_edge(&n.lhs(), &n, "lhs");
+	add_port_edge(&n.rhs(), &n, "rhs");
+
+	default_visitor::visit_binary_arith_node(n);
 }
 
-bool dot_graph_generator::visit_ternary_arith_node(ternary_arith_node &n)
+void dot_graph_generator::visit_ternary_arith_node(ternary_arith_node &n)
 {
-	os_ << "N" << &n << " [label=\"";
+	std::stringstream s;
+
+	s << "{{<lhs>LHS|<rhs>RHS|<top>TOP}|";
 
 	switch (n.op()) {
 	case ternary_arith_op::adc:
-		os_ << "adc";
+		s << "adc";
 		break;
 	case ternary_arith_op::sbb:
-		os_ << "sbb";
+		s << "sbb";
 		break;
 	default:
-		os_ << "???";
+		s << "unknown-ternary";
 		break;
 	}
 
-	os_ << "\"];" << std::endl;
+	s << "}";
 
-	return true;
+	add_node(&n, s.str());
+	add_port_edge(&n.lhs(), &n, "lhs");
+	add_port_edge(&n.rhs(), &n, "rhs");
+	add_port_edge(&n.top(), &n, "top");
+
+	default_visitor::visit_ternary_arith_node(n);
 }
 
-bool dot_graph_generator::visit_bit_extract_node(bit_extract_node &n)
+void dot_graph_generator::visit_bit_extract_node(bit_extract_node &n)
 {
-	os_ << "N" << &n << " [label=\"bit_extract\"];" << std::endl;
+	add_node(&n, "bit-extract");
+	add_port_edge(&n.source_value(), &n);
 
-	return true;
+	default_visitor::visit_bit_extract_node(n);
 }
 
-bool dot_graph_generator::visit_bit_insert_node(bit_insert_node &n)
+void dot_graph_generator::visit_bit_insert_node(bit_insert_node &n)
 {
-	os_ << "N" << &n << " [label=\"bit_insert\"];" << std::endl;
+	add_node(&n, "bit-insert");
+	add_port_edge(&n.source_value(), &n);
+	add_port_edge(&n.bits(), &n);
 
-	return true;
+	default_visitor::visit_bit_insert_node(n);
 }
 
-bool dot_graph_generator::visit_port(port &p)
+void dot_graph_generator::visit_vector_extract_node(vector_extract_node &n)
 {
-	std::string port_name = "?";
-	switch (p.kind()) {
-	case port_kinds::value:
-		port_name = "value";
-		break;
-	case port_kinds::zero:
-		port_name = "Z";
-		break;
-	case port_kinds::negative:
-		port_name = "N";
-		break;
-	case port_kinds::overflow:
-		port_name = "V";
-		break;
-	case port_kinds::carry:
-		port_name = "C";
-		break;
-	case port_kinds::constant:
-		port_name = "#";
-		break;
-	}
+	add_node(&n, "vector-extract");
+	add_port_edge(&n.source_vector(), &n);
 
-	for (auto target : p.targets()) {
-		os_ << "N" << p.owner() << " -> N" << target << " [label=\"" << port_name << ":" << p.type().to_string() << "\"];" << std::endl;
-	}
+	default_visitor::visit_vector_extract_node(n);
+}
 
-	return true;
+void dot_graph_generator::visit_vector_insert_node(vector_insert_node &n)
+{
+	add_node(&n, "vector-insert");
+	add_port_edge(&n.source_vector(), &n);
+	add_port_edge(&n.insert_value(), &n);
+
+	default_visitor::visit_vector_insert_node(n);
 }
