@@ -11,6 +11,8 @@ public:
 	x86_dynamic_output_engine();
 	~x86_dynamic_output_engine();
 
+	void lower_prologue(machine_code_writer &writer) override;
+	void lower_epilogue(machine_code_writer &writer) override;
 	void lower(ir::node *node, machine_code_writer &writer) override;
 
 private:

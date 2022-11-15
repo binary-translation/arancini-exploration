@@ -10,6 +10,8 @@ class machine_code_writer;
 namespace x86 {
 	class x86_dynamic_output_engine_impl {
 	public:
+		void lower_prologue(machine_code_writer &writer);
+		void lower_epilogue(machine_code_writer &writer);
 		void lower(ir::node *node, machine_code_writer &writer);
 	};
 } // namespace x86

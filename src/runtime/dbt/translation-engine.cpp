@@ -10,6 +10,7 @@
 #include <arancini/runtime/exec/execution-context.h>
 
 #include <cstdlib>
+#include <iostream>
 #include <stdexcept>
 
 using namespace arancini::runtime::dbt;
@@ -36,16 +37,33 @@ class dbt_ir_builder : public ir_builder {
 public:
 	dbt_ir_builder(dynamic_output_engine &oe)
 		: oe_(oe)
+		, is_eob_(false)
 	{
 	}
 
-	virtual void begin_chunk() override { writer_.emit8(0xcc); }
+	virtual void begin_chunk() override
+	{
+		std::cerr << "dbt: begin chunk" << std::endl;
+		oe_.lower_prologue(writer_);
+	}
 
-	virtual void end_chunk() override { }
+	virtual void end_chunk() override
+	{
+		oe_.lower_epilogue(writer_);
+		std::cerr << "dbt: end chunk" << std::endl;
+	}
 
-	virtual void begin_packet(off_t address, const std::string &disassembly = "") override { }
+	virtual void begin_packet(off_t address, const std::string &disassembly = "") override
+	{
+		std::cerr << "dbt: begin packet " << disassembly << std::endl;
+		is_eob_ = false;
+	}
 
-	virtual packet_type end_packet() override { return packet_type::end_of_block; }
+	virtual packet_type end_packet() override
+	{
+		std::cerr << "dbt: end packet" << std::endl;
+		return is_eob_ ? packet_type::end_of_block : packet_type::normal;
+	}
 
 	translation *create_translation()
 	{
@@ -54,16 +72,26 @@ public:
 	}
 
 protected:
-	virtual void insert_action(action_node *a) override { oe_.lower(a, writer_); }
+	virtual void insert_action(action_node *a) override
+	{
+		if (a->updates_pc()) {
+			is_eob_ = true;
+		}
+
+		oe_.lower(a, writer_);
+	}
 
 private:
 	dynamic_output_engine &oe_;
 	machine_code_writer writer_;
+	bool is_eob_;
 };
 
 translation *translation_engine::translate(unsigned long pc)
 {
 	void *code = ec_.get_memory_ptr(pc);
+
+	std::cerr << "translating pc=" << std::hex << pc << std::endl;
 
 	dbt_ir_builder builder(oe_);
 	ia_.translate_chunk(builder, pc, code, 0x1000, true);
