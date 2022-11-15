@@ -18,7 +18,24 @@ void muldiv_translator::do_translate()
 	}
 
 	switch (xed_decoded_inst_get_iclass(insn)) {
-	// case XED_ICLASS_MUL:
+	case XED_ICLASS_MUL: {
+		/* mul %reg is decoded as mul %reg %rax %rdx */
+		auto ax = builder().insert_zx(value_type(value_type_class::unsigned_integer, op[1]->val().type().element_width() * 2,
+								   op[1]->val().type().nr_elements()), op[1]->val());
+		auto castop = builder().insert_zx(ax->val().type(), op[0]->val());
+		auto rslt = builder().insert_mul(ax->val(), castop->val());
+		if (op[0]->val().type().width() == 8) {
+			write_reg(reg_to_offset(XED_REG_AX), rslt->val());
+		} else {
+			auto low = builder().insert_bit_extract(rslt->val(), 0, op[0]->val().type().width());
+			auto high = builder().insert_bit_extract(rslt->val(), op[0]->val().type().width() - 1, op[0]->val().type().width());
+
+			write_operand(1, low->val());
+			write_operand(2, high->val());
+		}
+		write_flags(rslt, flag_op::ignore, flag_op::update, flag_op::update, flag_op::ignore, flag_op::ignore, flag_op::ignore);
+		break;
+	}
 	case XED_ICLASS_IMUL: {
 		arancini::ir::value_node *rslt;
 
@@ -45,12 +62,6 @@ void muldiv_translator::do_translate()
 				 * 1 operand: RDX:RAX := RAX * op0
 				 * xed decodes this with op[1] = ax and op[2] = dx (and their variants)
 				 */
-				std::cerr << "imul ";
-				for (auto o : op) {
-					std::cerr << o->val().type().to_string() << " ";
-				}
-				std::cerr << std::endl;
-
 				auto ax = builder().insert_bitcast(op[1]->val().type().get_signed_type(), op[1]->val());
 				auto castop = builder().insert_bitcast(ax->val().type(), op[0]->val());
 				ax = builder().insert_sx(
@@ -88,14 +99,30 @@ void muldiv_translator::do_translate()
 		break;
 	}
 
-	case XED_ICLASS_DIV:
+	/*
+	 * Both DIV and IDIV instructions do the same things, except that IDIV is signed and DIV is unsigned
+	 * idiv %reg -> idiv %reg %rax %rdx
+	 * rax := quotient, rdx := remainder
+	 * except for the 8bit variant, where al := quotient, ah := remainder
+	 * TODO: support the 8bit variant properly
+	 */
 	case XED_ICLASS_IDIV: {
-		// std::cerr << "DIV operand types[" << std::to_string(xed_decoded_inst_noperands(insn)) << "]: op0:" << op0->val().type().to_string() << "; op1: " <<
-		// op1->val().type().to_string() << "; op2: " << op2->val().type().to_string()  << std::endl;
-		auto rslt = builder().insert_div(op[0]->val(), op[1]->val());
+		auto op0_cast = builder().insert_bitcast(op[0]->val().type().get_signed_type(), op[0]->val());
+		auto op1_cast = builder().insert_bitcast(op[1]->val().type().get_signed_type(), op[1]->val());
 
-		write_operand(0, rslt->val());
-		write_flags(rslt, flag_op::ignore, flag_op::set0, flag_op::set0, flag_op::ignore, flag_op::ignore, flag_op::ignore);
+		auto quo = builder().insert_div(op0_cast->val(), op1_cast->val());
+		auto rem = builder().insert_mod(op0_cast->val(), op1_cast->val());
+
+		write_operand(1, quo->val());
+		write_operand(2, rem->val());
+		break;
+	}
+	case XED_ICLASS_DIV: {
+		auto quo = builder().insert_div(op[0]->val(), op[1]->val());
+		auto rem = builder().insert_mod(op[0]->val(), op[1]->val());
+
+		write_operand(1, quo->val());
+		write_operand(2, rem->val());
 		break;
 	}
 

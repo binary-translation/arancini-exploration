@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-int64_t test64_1(void)
+int64_t imul_64_1(void)
 {
     int64_t op = 42, rax_val = 10;
     register int64_t *rax asm("rax") = &rax_val;
@@ -18,7 +18,7 @@ int64_t test64_1(void)
     return op;
 }
 
-int8_t test8_1(void)
+int8_t imul_8_1(void)
 {
     int8_t op = 42, al_val = 10;
     int16_t ax_val;
@@ -30,4 +30,43 @@ int8_t test8_1(void)
                    : "r"(sil));
 
     return op;
+}
+
+uint64_t mul_64(void)
+{
+    uint64_t op = 42, rax_val = 55;
+    register uint64_t *ax asm("rax") = &rax_val;
+    register uint64_t *rsi asm("rsi") = &op;
+
+    asm volatile ("mul %0"
+                  : 
+                  : "r"(rsi));
+
+    return rax_val;
+}
+
+uint64_t idiv_64(void)
+{
+    int64_t op = 42, rax_val = 12345;
+    register int64_t *ax asm("rax") = &rax_val;
+    register int64_t *rsi asm("rsi") = &op;
+
+    asm volatile ("idiv %0"
+                  :
+                  : "r"(rsi));
+
+    return rax_val;
+}
+
+uint64_t div_64(void)
+{
+    uint64_t op = 42, rax_val = 12345;
+    register uint64_t *ax asm("rax") = &rax_val;
+    register uint64_t *rsi asm("rsi") = &op;
+
+    asm volatile ("div %0"
+                  :
+                  : "r"(rsi));
+
+    return rax_val;
 }
