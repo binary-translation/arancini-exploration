@@ -4,7 +4,7 @@
 #include <ostream>
 
 namespace arancini::output::dynamic::x86 {
-enum class opcodes { mov, o_and, o_or, o_xor, add, sub };
+enum class opcodes { mov, o_and, o_or, o_xor, add, sub, setz, seto, setc, sets };
 
 enum class operand_kind { none, reg, mem, immediate };
 
@@ -44,40 +44,45 @@ public:
 	{
 		operand r;
 		r.kind = operand_kind::none;
+		r.width = 0;
 		return r;
 	}
 
-	static operand preg(physreg reg)
+	static operand preg(int width, physreg reg)
 	{
 		operand r;
 		r.kind = operand_kind::reg;
+		r.width = width;
 		r.reg_i.rr = regref::preg(reg);
 		return r;
 	}
 
-	static operand vreg(int reg)
+	static operand vreg(int width, int reg)
 	{
 		operand r;
 		r.kind = operand_kind::reg;
+		r.width = width;
 		r.reg_i.rr = regref::vreg(reg);
 		return r;
 	}
 
-	static operand imm(unsigned long val)
+	static operand imm(int width, unsigned long val)
 	{
 		operand r;
 		r.kind = operand_kind::immediate;
+		r.width = width;
 		r.imm_i.val = val;
 
 		return r;
 	}
 
-	static operand mem(const regref &base) { return mem(base, 0); }
+	static operand mem(int width, const regref &base) { return mem(width, base, 0); }
 
-	static operand mem(const regref &base, int displ)
+	static operand mem(int width, const regref &base, int displ)
 	{
 		operand r;
 		r.kind = operand_kind::mem;
+		r.width = width;
 		r.mem_i.base = base;
 		r.mem_i.displacement = displ;
 
@@ -85,6 +90,7 @@ public:
 	};
 
 	operand_kind kind;
+	int width;
 
 	union {
 		struct {
@@ -153,6 +159,11 @@ public:
 	///
 
 	void add_mov(const operand &src, const operand &dst) { add_instruction(instruction(opcodes::mov, src, dst)); }
+	void add_xor(const operand &src, const operand &dst) { add_instruction(instruction(opcodes::o_xor, src, dst)); }
+	void add_setz(const operand &dst) { add_instruction(instruction(opcodes::setz, dst)); }
+	void add_seto(const operand &dst) { add_instruction(instruction(opcodes::seto, dst)); }
+	void add_setc(const operand &dst) { add_instruction(instruction(opcodes::setc, dst)); }
+	void add_sets(const operand &dst) { add_instruction(instruction(opcodes::sets, dst)); }
 
 private:
 	std::list<instruction> instructions_;

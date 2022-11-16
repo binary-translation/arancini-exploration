@@ -1,19 +1,10 @@
 #pragma once
 
 #include <arancini/output/dynamic/dynamic-output-engine.h>
-#include <memory>
 
 namespace arancini::output::dynamic::riscv {
-class riscv_dynamic_output_engine_impl;
-
 class riscv_dynamic_output_engine : public dynamic_output_engine {
 public:
-	riscv_dynamic_output_engine();
-	~riscv_dynamic_output_engine();
-
-	virtual void lower(ir::node *node, machine_code_writer &writer) override;
-
-private:
-	std::unique_ptr<riscv_dynamic_output_engine_impl> oei_;
+	virtual std::shared_ptr<translation_context> create_translation_context(machine_code_writer &writer) override;
 };
 } // namespace arancini::output::dynamic::riscv

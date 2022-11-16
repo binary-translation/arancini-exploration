@@ -1,19 +1,10 @@
 #pragma once
 
 #include <arancini/output/dynamic/dynamic-output-engine.h>
-#include <memory>
 
 namespace arancini::output::dynamic::arm64 {
-class arm64_dynamic_output_engine_impl;
-
 class arm64_dynamic_output_engine : public dynamic_output_engine {
 public:
-	arm64_dynamic_output_engine();
-	~arm64_dynamic_output_engine();
-
-	void lower(ir::node *node, machine_code_writer &writer) override;
-
-private:
-	std::unique_ptr<arm64_dynamic_output_engine_impl> oei_;
+	virtual std::shared_ptr<translation_context> create_translation_context(machine_code_writer &writer) override;
 };
 } // namespace arancini::output::dynamic::arm64

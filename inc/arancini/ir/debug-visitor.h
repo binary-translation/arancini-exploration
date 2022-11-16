@@ -53,6 +53,7 @@ private:
 	std::map<const node *, std::string> node_names_;
 
 	std::string get_node_name(const node *n) const { return node_names_.at(n); }
+	std::string get_port_name(const port &n) const { return node_names_.at(n.owner()) + ":v(" + n.type().to_string() + ")"; }
 
 	void indent() { level_++; }
 	void outdent() { level_--; }

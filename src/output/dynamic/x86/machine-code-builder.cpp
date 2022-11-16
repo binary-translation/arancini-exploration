@@ -3,7 +3,7 @@
 
 using namespace arancini::output::dynamic::x86;
 
-static const char *mnemonics[] = { "mov", "and", "or", "xor", "add", "sub" };
+static const char *mnemonics[] = { "mov", "and", "or", "xor", "add", "sub", "setz", "seto", "setc", "sets" };
 
 void instruction::dump(std::ostream &os) const
 {
@@ -14,10 +14,13 @@ void instruction::dump(std::ostream &os) const
 	}
 
 	for (int i = 0; i < sizeof(operands) / sizeof(operands[0]); i++) {
+		if (operands[i].kind == operand_kind::none) {
+			continue;
+		}
+
 		if (i > 0) {
-			if (operands[i].kind != operand_kind::none) {
-				os << ", ";
-			}
+			os << ", ";
+
 		} else {
 			os << " ";
 		}
@@ -52,6 +55,8 @@ void operand::dump(std::ostream &os) const
 		os << "$0x" << std::hex << imm_i.val;
 		break;
 	}
+
+	os << ":" << std::dec << width;
 }
 
 static const char *regnames[] = { "rax", "rcx", "rdx", "rbx", "rsi", "rdi", "rsp", "rbp" };

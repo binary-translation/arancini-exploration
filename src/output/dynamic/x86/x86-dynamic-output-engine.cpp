@@ -1,42 +1,10 @@
-#include <arancini/ir/debug-visitor.h>
-#include <arancini/ir/node.h>
-#include <arancini/output/dynamic/machine-code-writer.h>
-#include <arancini/output/dynamic/x86/machine-code-builder.h>
-#include <arancini/output/dynamic/x86/x86-dynamic-output-engine-impl.h>
 #include <arancini/output/dynamic/x86/x86-dynamic-output-engine.h>
-#include <arancini/output/dynamic/x86/x86-lowering-visitor.h>
-#include <iostream>
-#include <stdexcept>
+#include <arancini/output/dynamic/x86/x86-translation-context.h>
 
+using namespace arancini::output::dynamic;
 using namespace arancini::output::dynamic::x86;
-using namespace arancini::ir;
 
-x86_dynamic_output_engine::x86_dynamic_output_engine()
-	: oei_(std::make_unique<x86_dynamic_output_engine_impl>())
+std::shared_ptr<translation_context> x86_dynamic_output_engine::create_translation_context(machine_code_writer &writer)
 {
-}
-
-x86_dynamic_output_engine::~x86_dynamic_output_engine() = default;
-
-void x86_dynamic_output_engine::lower_prologue(machine_code_writer &writer) { oei_->lower_prologue(writer); }
-void x86_dynamic_output_engine::lower_epilogue(machine_code_writer &writer) { oei_->lower_epilogue(writer); }
-void x86_dynamic_output_engine::lower(ir::node *node, machine_code_writer &writer) { oei_->lower(node, writer); }
-
-void x86_dynamic_output_engine_impl::lower_prologue(machine_code_writer &writer) { writer.emit8(0xcc); }
-
-void x86_dynamic_output_engine_impl::lower_epilogue(machine_code_writer &writer) { }
-
-void x86_dynamic_output_engine_impl::lower(ir::node *node, machine_code_writer &writer)
-{
-	std::cerr << "--" << std::endl;
-
-	debug_visitor debugger(std::cerr);
-
-	machine_code_builder builder;
-	x86_lowering_visitor lowerer(builder);
-
-	node->accept(debugger);
-	node->accept(lowerer);
-
-	builder.dump(std::cerr);
+	return std::make_shared<x86_translation_context>(writer);
 }
