@@ -37,6 +37,7 @@ private:
 		return v;
 	}
 
+	operand operand_for_port(ir::port &p);
 	operand vreg_operand_for_port(ir::port &p);
 
 	void materialise(ir::node *n);

@@ -8,7 +8,12 @@ class machine_code_writer;
 }
 
 namespace arancini::output::dynamic::x86 {
-enum class opcodes { invalid, mov, o_and, o_or, o_xor, add, sub, setz, seto, setc, sets };
+
+// #define DEFOP(n) n,
+
+enum class opcodes { invalid, mov, movz, movs, o_and, o_or, o_xor, add, sub, setz, seto, setc, sets };
+
+// #undef DEFOP
 
 enum class operand_kind { none, reg, mem, immediate };
 
@@ -42,6 +47,12 @@ struct regref {
 	};
 
 	void dump(std::ostream &os) const;
+
+	void allocate(physreg p)
+	{
+		kind = regref_kind::phys;
+		preg_i = p;
+	}
 };
 
 class operand {
@@ -176,6 +187,9 @@ public:
 
 	void dump(std::ostream &os) const;
 	void emit(machine_code_writer &writer) const;
+	void kill() { opcode_ = opcodes::invalid; }
+
+	bool dead() const { return opcode_ == opcodes::invalid; }
 
 	opcodes opcode() const { return opcode_; }
 
@@ -213,6 +227,16 @@ public:
 	void add_mov(const operand &src, const operand &dst)
 	{
 		add_instruction(instruction(opcodes::mov, instruction_operand::use(src), instruction_operand::def(dst)));
+	}
+
+	void add_movz(const operand &src, const operand &dst)
+	{
+		add_instruction(instruction(opcodes::movz, instruction_operand::use(src), instruction_operand::def(dst)));
+	}
+
+	void add_movs(const operand &src, const operand &dst)
+	{
+		add_instruction(instruction(opcodes::movs, instruction_operand::use(src), instruction_operand::def(dst)));
 	}
 
 	void add_xor(const operand &src, const operand &dst)

@@ -64,11 +64,20 @@ operand x86_translation_context::vreg_operand_for_port(port &p)
 	return operand::vreg(p.type().element_width(), port_to_vreg_.at(&p));
 }
 
+operand x86_translation_context::operand_for_port(port &p)
+{
+	if (p.owner()->kind() == node_kinds::constant) {
+		return operand::imm(p.type().element_width(), ((constant_node *)p.owner())->const_val_i());
+	}
+
+	return vreg_operand_for_port(p);
+}
+
 static operand guestreg_operand(int width, int regoff) { return operand::mem(width, regref::preg(physreg::rbp), regoff); }
 
 void x86_translation_context::materialise_write_reg(write_reg_node *n)
 {
-	builder_.add_mov(vreg_operand_for_port(n->value()), guestreg_operand(n->value().type().element_width(), n->regoff()));
+	builder_.add_mov(operand_for_port(n->value()), guestreg_operand(n->value().type().element_width(), n->regoff()));
 }
 
 void x86_translation_context::materialise_read_reg(read_reg_node *n)
@@ -109,7 +118,15 @@ void x86_translation_context::materialise_binary_arith(binary_arith_node *n)
 void x86_translation_context::materialise_cast(cast_node *n)
 {
 	int dst_vreg = alloc_vreg_for_port(n->val());
-	builder_.add_mov(vreg_operand_for_port(n->source_value()), operand::vreg(n->val().type().element_width(), dst_vreg));
+
+	switch (n->op()) {
+	case cast_op::zx:
+		builder_.add_movz(vreg_operand_for_port(n->source_value()), operand::vreg(n->val().type().element_width(), dst_vreg));
+        break;
+
+	default:
+		throw std::runtime_error("unsupported cast operation");
+	}
 }
 
 void x86_translation_context::materialise_constant(constant_node *n)

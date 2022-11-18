@@ -8,7 +8,7 @@
 using namespace arancini::output::dynamic;
 using namespace arancini::output::dynamic::x86;
 
-static const char *mnemonics[] = { "invalid", "mov", "and", "or", "xor", "add", "sub", "setz", "seto", "setc", "sets" };
+static const char *mnemonics[] = { "invalid", "mov", "movz", "movs", "and", "or", "xor", "add", "sub", "setz", "seto", "setc", "sets" };
 
 void instruction::dump(std::ostream &os) const
 {
@@ -38,7 +38,7 @@ void instruction::dump(std::ostream &os) const
 
 void instruction::emit(machine_code_writer &writer) const
 {
-	if (opcode_ == opcodes::invalid) {
+	if (dead()) {
 		return;
 	}
 
@@ -92,23 +92,26 @@ void regref::dump(std::ostream &os) const
 	}
 }
 
+#define DEBUG_STREAM std::cerr
+// #define DEBUG_REGALLOC
+
 void machine_code_builder::allocate()
 {
 	// reverse linear scan allocator
-
-	std::cerr << "REGISTER ALLOCATION" << std::endl;
+#ifdef DEBUG_REGALLOC
+	DEBUG_STREAM << "REGISTER ALLOCATION" << std::endl;
+#endif
 
 	std::unordered_map<int, physreg> vreg_to_preg;
-	std::unordered_map<physreg, int> preg_to_vreg;
-	std::bitset<6> avail_physregs;
-
-	avail_physregs = 0x3f;
+	std::bitset<6> avail_physregs = 0x3f;
 
 	for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
 		auto &insn = *RI;
 
-		std::cerr << "considering instruction ";
-		insn.dump(std::cerr);
+#ifdef DEBUG_REGALLOC
+		DEBUG_STREAM << "considering instruction ";
+		insn.dump(DEBUG_STREAM);
+#endif
 
 		// kill defs first
 		for (int i = 0; i < instruction::NR_OPERANDS; i++) {
@@ -116,8 +119,10 @@ void machine_code_builder::allocate()
 
 			// Only regs can be /real/ defs
 			if (o.is_def() && o.oper().kind == operand_kind::reg) {
-				std::cerr << "  DEF ";
-				o.oper().dump(std::cerr);
+#ifdef DEBUG_REGALLOC
+				DEBUG_STREAM << "  DEF ";
+				o.oper().dump(DEBUG_STREAM);
+#endif
 
 				if (o.oper().reg_i.rr.kind == regref_kind::virt) {
 					int vri = o.oper().reg_i.rr.vreg_i;
@@ -127,19 +132,30 @@ void machine_code_builder::allocate()
 					if (alloc != vreg_to_preg.end()) {
 						physreg i = alloc->second;
 
-						std::cerr << " allocated to " << (int)i;
-						avail_physregs.set((int)i);
-						preg_to_vreg.erase(i);
+#ifdef DEBUG_REGALLOC
+						DEBUG_STREAM << " allocated to " << regnames[(int)i] << " -- releasing";
+#endif
 
-						o.oper().reg_i.rr.kind = regref_kind::phys;
-						o.oper().reg_i.rr.preg_i = i;
+						avail_physregs.set((int)i);
+
+						o.oper().reg_i.rr.allocate(i);
 					} else {
-						std::cerr << " not allocated";
+#ifdef DEBUG_REGALLOC
+						DEBUG_STREAM << " not allocated - killing instruction" << std::endl;
+#endif
+						insn.kill();
+						break;
 					}
 				}
 
-				std::cerr << std::endl;
+#ifdef DEBUG_REGALLOC
+				DEBUG_STREAM << std::endl;
+#endif
 			}
+		}
+
+		if (insn.dead()) {
+			continue;
 		}
 
 		// alloc uses next
@@ -148,32 +164,37 @@ void machine_code_builder::allocate()
 
 			// We only care about REG uses - but we also need to consider REGs used in MEM expressions
 			if (o.is_use() && o.oper().kind == operand_kind::reg) {
-				std::cerr << "  USE ";
+#ifdef DEBUG_REGALLOC
+				DEBUG_STREAM << "  USE ";
 				o.oper().dump(std::cerr);
+#endif
 
 				if (o.oper().reg_i.rr.kind == regref_kind::virt) {
 					int vri = o.oper().reg_i.rr.vreg_i;
 
 					if (!vreg_to_preg.count(vri)) {
-
 						auto allocation = avail_physregs._Find_first();
 						avail_physregs.flip(allocation);
 
 						vreg_to_preg[vri] = (physreg)allocation;
-						preg_to_vreg[(physreg)allocation] = vri;
 
-						std::cerr << " allocating vreg to " << allocation;
+#ifdef DEBUG_REGALLOC
+						DEBUG_STREAM << " allocating vreg to " << regnames[allocation];
+#endif
 
-						o.oper().reg_i.rr.kind = regref_kind::phys;
-						o.oper().reg_i.rr.preg_i = (physreg)allocation;
+						o.oper().reg_i.rr.allocate((physreg)allocation);
 					}
 				}
 
-				std::cerr << std::endl;
+#ifdef DEBUG_REGALLOC
+				DEBUG_STREAM << std::endl;
+#endif
 			} else if (o.oper().kind == operand_kind::mem) {
-				std::cerr << "  USE ";
+#ifdef DEBUG_REGALLOC
+				DEBUG_STREAM << "  USE ";
 				o.oper().mem_i.base.dump(std::cerr);
-				std::cerr << std::endl;
+				DEBUG_STREAM << std::endl;
+#endif
 			}
 		}
 
