@@ -40,7 +40,20 @@ void binop_translator::do_translate()
 	case XED_ICLASS_SBB:
 		rslt = builder().insert_sbb(op0->val(), op1->val(), auto_cast(op0->val().type(), read_reg(value_type::u1(), reg_offsets::cf))->val());
 		break;
+	case XED_ICLASS_PADDD: {
+		// only the SSE2 version of the instruction with xmm registers is supported, not the "normal" one with GPRs
+		auto lhs = builder().insert_bitcast(value_type::vector(value_type::u32(), 4), op0->val());
+		auto rhs = builder().insert_bitcast(value_type::vector(value_type::u32(), 4), op1->val());
 
+		for (int i = 0; i < 4; i++) {
+			auto res = builder().insert_add(builder().insert_vector_extract(lhs->val(), i)->val(),
+											builder().insert_vector_extract(rhs->val(), i)->val());
+			lhs = builder().insert_vector_insert(lhs->val(), i, res->val());
+		}
+		rslt = builder().insert_bitcast(value_type::u128(), lhs->val());
+
+		break;
+	}
 	default:
 		throw std::runtime_error("unsupported binop");
 	}
