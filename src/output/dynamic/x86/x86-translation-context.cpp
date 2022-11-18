@@ -15,7 +15,7 @@ void x86_translation_context::end_instruction() { std::cerr << "end insn" << std
 void x86_translation_context::end_block()
 {
 	std::cerr << "end block" << std::endl;
-	builder_.dump(std::cerr);
+	builder_.finalise(writer());
 }
 
 void x86_translation_context::lower(node *n)
