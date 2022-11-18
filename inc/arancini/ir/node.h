@@ -561,8 +561,8 @@ public:
 		, from_(from)
 		, length_(length)
 	{
-		if (from + length > source_value_.type().width() - 1) {
-			throw std::logic_error("bit extract range [" + std::to_string(from + length) + ":" + std::to_string(from) + "] is out of bounds from source value ["
+		if (from + length - 1 > source_value_.type().width() - 1) {
+			throw std::logic_error("bit extract range [" + std::to_string(from + length - 1) + ":" + std::to_string(from) + "] is out of bounds from source value ["
 				+ std::to_string(source_value_.type().width()) + ":0]");
 		}
 
@@ -595,8 +595,8 @@ public:
 			throw std::runtime_error("width of type of incoming bits cannot be greater than type of value");
 		}
 
-		if (to + length > source_value_.type().width() - 1) {
-			throw std::logic_error("bit insert range [" + std::to_string(to + length) + ":" + std::to_string(to) + "] is out of bounds in target value ["
+		if (to + length - 1 > source_value_.type().width() - 1) {
+			throw std::logic_error("bit insert range [" + std::to_string(to + length - 1) + ":" + std::to_string(to) + "] is out of bounds in target value ["
 				+ std::to_string(source_value_.type().width()) + ":0]");
 		}
 
