@@ -585,7 +585,7 @@ private:
 class bit_insert_node : public value_node {
 public:
 	bit_insert_node(port &value, port &bits, int to, int length)
-		: value_node(node_kinds::bit_insert, value_type(value_type_class::unsigned_integer, length))
+		: value_node(node_kinds::bit_insert, value.type())
 		, source_value_(value)
 		, bits_(bits)
 		, to_(to)
