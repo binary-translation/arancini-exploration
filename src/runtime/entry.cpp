@@ -94,7 +94,7 @@ static void load_gph(execution_context *ctx, const guest_program_header_metadata
 	void *ptr = ctx->add_memory_region(md->load_address, md->memory_size);
 
 	// Debugging information
-	std::cerr << "loading gph load-addr=" << std::hex << md->load_address << ", mem-size=" << md->memory_size << ", file-size=" << md->file_size
+	std::cerr << "loading gph load-addr=" << std::hex << md->load_address << ", mem-size=" << md->memory_size << ", end=" << (md->load_address + md->memory_size) << ", file-size=" << md->file_size
 			  << ", target=" << ptr << std::endl;
 
 	// Copy the data from the host binary into the new allocated region of emulated
