@@ -202,7 +202,7 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 	std::cerr << "chunk @ " << std::hex << base_address << " code=" << code << ", size=" << code_size << std::endl;
 
 	size_t offset = 0;
-	do {
+	while (offset < code_size) {
 		xed_decoded_inst_t xedd;
 		xed_decoded_inst_zero(&xedd);
 		xed_decoded_inst_set_mode(&xedd, XED_MACHINE_MODE_LONG_64, XED_ADDRESS_WIDTH_64b);
@@ -225,7 +225,7 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 		offset += length;
 		base_address += length;
-	} while (offset < code_size);
+	}
 
 	builder.end_chunk();
 }
