@@ -150,10 +150,12 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 		return std::make_unique<muldiv_translator>(builder);
 
 	case XED_ICLASS_REPE_CMPSB:
+	case XED_ICLASS_REP_STOSQ:
 		return std::make_unique<rep_translator>(builder);
 
 	case XED_ICLASS_PUNPCKLQDQ:
 	case XED_ICLASS_PUNPCKLDQ:
+	case XED_ICLASS_PUNPCKLWD:
 		return std::make_unique<punpck_translator>(builder);
 
 	case XED_ICLASS_VADDSS:
