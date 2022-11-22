@@ -90,7 +90,7 @@ void llvm_static_output_engine_impl::create_main_function(Function *loop_fn)
 	IRBuilder<> builder(*llvm_context_);
 	builder.SetInsertPoint(main_entry_block);
 	auto init_dbt_result
-		= builder.CreateCall(module_->getOrInsertFunction("initialise_dynamic_runtime", types.init_dbt), { ConstantInt::get(types.i64, 0x4016b0) });
+		= builder.CreateCall(module_->getOrInsertFunction("initialise_dynamic_runtime", types.init_dbt), { ConstantInt::get(types.i64, e_.get_entrypoint()) });
 
 	auto is_not_null = builder.CreateCmp(CmpInst::Predicate::ICMP_NE, builder.CreatePtrToInt(init_dbt_result, types.i64), ConstantInt::get(types.i64, 0));
 

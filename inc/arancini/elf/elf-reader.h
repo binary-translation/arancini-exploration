@@ -142,6 +142,8 @@ public:
 
 	void parse();
 
+	off_t get_entrypoint() const { return entrypoint_; }
+
 	const std::vector<std::shared_ptr<section>> &sections() const { return sections_; }
 	const std::vector<std::shared_ptr<program_header>> &program_headers() const { return program_headers_; }
 
@@ -151,6 +153,7 @@ public:
 private:
 	void *elf_data_;
 	size_t elf_data_size_;
+	off_t entrypoint_;
 
 	std::vector<std::shared_ptr<section>> sections_;
 	std::vector<std::shared_ptr<program_header>> program_headers_;
