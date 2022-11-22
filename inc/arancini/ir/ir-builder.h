@@ -134,8 +134,14 @@ public:
 	/// @brief division
 	/// @param lhs dividend
 	/// @param rhs divisor
-	/// @return a div node lhs / rhs
+	/// @return a div node: lhs / rhs
 	value_node *insert_div(port &lhs, port &rhs) { return create_and_insert<binary_arith_node>(binary_arith_op::div, lhs, rhs); }
+
+	/// @brief modulo
+	/// @param lhs dividend
+	/// @param rhs divisor
+	/// @return a mod node: lhs % rhs
+	value_node *insert_mod(port &lhs, port &rhs) { return create_and_insert<binary_arith_node>(binary_arith_op::mod, lhs, rhs); }
 
 	/// @brief bitwise and
 	/// @param lhs first operand

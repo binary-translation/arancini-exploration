@@ -238,6 +238,9 @@ void dot_graph_generator::visit_binary_arith_node(binary_arith_node &n)
 	case binary_arith_op::div:
 		s << "div";
 		break;
+	case binary_arith_op::mod:
+		s << "mod";
+		break;
 	case binary_arith_op::band:
 		s << "and";
 		break;

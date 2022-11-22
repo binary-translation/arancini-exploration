@@ -137,7 +137,9 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_NOT:
 		return std::make_unique<unop_translator>(builder);
 
+	case XED_ICLASS_MUL:
 	case XED_ICLASS_IMUL:
+	case XED_ICLASS_DIV:
 	case XED_ICLASS_IDIV:
 		return std::make_unique<muldiv_translator>(builder);
 

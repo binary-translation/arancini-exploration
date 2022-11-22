@@ -108,6 +108,15 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	// Invoke the output engine, and tell it to write to a temporary file.
 	oe->generate();
 
+	// If the main output command-line option was not specified, then don't go any further.
+	if (!cmdline.count("output")) {
+		return;
+	}
+
+	// --------------- //
+
+	// An output file was specified, so continue to build the translated binary.
+
 	// Generate loadable sections
 	std::vector<std::pair<std::shared_ptr<tempfile>, std::shared_ptr<program_header>>> phbins;
 
