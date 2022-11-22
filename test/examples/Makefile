@@ -1,33 +1,40 @@
 FILES = fib matmul
 
-%_O0.out: %.c
-	gcc $< -o $@ -O0 --static
+O_LEVELS := O0 O1 O2 O3 Ofast Os
 
-%_O1.out: %.c
-	gcc $< -o $@ -O1 --static
+TARGETS := $(foreach M,static dynamic,$(foreach F,$(FILES),$(foreach L,$(O_LEVELS),$(F)_$(L).$(M).out)))
 
-%_O2.out: %.c
-	gcc $< -o $@ -O2 --static
+default-cflags := -g -Wall -no-pie
+default-ldflags := -no-pie
 
-%_O3.out: %.c
-	gcc $< -o $@ -O3 --static
-
-%_Ofast.out: %.c
-	gcc $< -o $@ -Ofast -march=native -mavx -msse3 -ffast-math --static
-
-%_Os.out: %.c
-	gcc $< -o $@ -Os --static
-
-fib: fib_O0.out fib_O1.out fib_O2.out fib_O3.out fib_Ofast.out fib_Os.out
-	
-matmul: matmul_O0.out matmul_O1.out matmul_O2.out matmul_O3.out matmul_Ofast.out matmul_Os.out
-	
-
-all: $(FILES)
+all: $(TARGETS)
 
 clean:
 	$(RM) *.o
-	$(RM) *.out
-	$(RM) $(FILES)
+	$(RM) $(TARGETS)
 
-.PHONY: clean
+%.static.out: %.o
+	gcc -o $@ -static $(default-ldflags) $<
+
+%.dynamic.out: %.o
+	gcc -o $@ $(default-ldflags) $<
+
+%_O0.o: %.c
+	gcc -c -O0 $(default-cflags) -o $@ $<
+
+%_O1.o: %.c
+	gcc -c -O1 $(default-cflags) -o $@ $<
+
+%_O2.o: %.c
+	gcc -c -O2 $(default-cflags) -o $@ $<
+
+%_O3.o: %.c
+	gcc -c -O3 $(default-cflags) -o $@ $<
+
+%_Ofast.o: %.c
+	gcc -c -Ofast -march=native -mavx -msse3 -ffast-math $(default-cflags) -o $@ $<
+
+%_Os.o: %.c
+	gcc -c -Os $(default-cflags) -o $@ $<
+
+.PHONY: .FORCE clean
