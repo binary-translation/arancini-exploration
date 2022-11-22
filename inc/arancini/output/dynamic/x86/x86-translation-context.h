@@ -39,6 +39,7 @@ private:
 
 	operand operand_for_port(ir::port &p);
 	operand vreg_operand_for_port(ir::port &p);
+	int vreg_for_port(ir::port &p) const { return port_to_vreg_.at(&p); }
 
 	void materialise(ir::node *n);
 	void materialise_read_reg(ir::read_reg_node *n);
@@ -46,5 +47,9 @@ private:
 	void materialise_binary_arith(ir::binary_arith_node *n);
 	void materialise_cast(ir::cast_node *n);
 	void materialise_constant(ir::constant_node *n);
+	void materialise_read_mem(ir::read_mem_node *n);
+	void materialise_write_mem(ir::write_mem_node *n);
+	void materialise_read_pc(ir::read_pc_node *n);
+	void materialise_write_pc(ir::write_pc_node *n);
 };
 } // namespace arancini::output::dynamic::x86
