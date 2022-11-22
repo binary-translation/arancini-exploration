@@ -20,6 +20,7 @@ enum class operand_kind { none, reg, mem, immediate };
 enum class operand_mode { read, write, readwrite };
 
 enum class physreg { rax, rcx, rdx, rbx, rsi, rdi, rsp, rbp };
+enum class segreg { none, fs, gs };
 
 enum class regref_kind { phys, virt };
 
@@ -95,11 +96,14 @@ public:
 
 	static operand mem(int width, const regref &base) { return mem(width, base, 0); }
 
-	static operand mem(int width, const regref &base, int displ)
+	static operand mem(int width, const regref &base, int displ) { return mem(width, segreg::none, base, displ); };
+
+	static operand mem(int width, segreg seg, const regref &base, int displ)
 	{
 		operand r;
 		r.kind = operand_kind::mem;
 		r.width = width;
+		r.mem_i.seg = seg;
 		r.mem_i.base = base;
 		r.mem_i.displacement = displ;
 
@@ -115,6 +119,7 @@ public:
 		} reg_i;
 
 		struct {
+			segreg seg;
 			regref base;
 			int displacement;
 		} mem_i;
@@ -242,6 +247,21 @@ public:
 	void add_xor(const operand &src, const operand &dst)
 	{
 		add_instruction(instruction(opcodes::o_xor, instruction_operand::use(src), instruction_operand::usedef(dst)));
+	}
+
+	void add_and(const operand &src, const operand &dst)
+	{
+		add_instruction(instruction(opcodes::o_and, instruction_operand::use(src), instruction_operand::usedef(dst)));
+	}
+
+	void add_add(const operand &src, const operand &dst)
+	{
+		add_instruction(instruction(opcodes::add, instruction_operand::use(src), instruction_operand::usedef(dst)));
+	}
+
+	void add_sub(const operand &src, const operand &dst)
+	{
+		add_instruction(instruction(opcodes::sub, instruction_operand::use(src), instruction_operand::usedef(dst)));
 	}
 
 	void add_setz(const operand &dst) { add_instruction(instruction(opcodes::setz, instruction_operand::def(dst))); }
