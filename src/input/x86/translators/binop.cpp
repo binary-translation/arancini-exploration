@@ -47,6 +47,12 @@ void binop_translator::do_translate()
 		rslt = builder().insert_add(lhs->val(), rhs->val());
 		break;
 	}
+	case XED_ICLASS_PADDW: {
+		auto lhs = builder().insert_bitcast(value_type::vector(value_type::u16(), 8), op0->val());
+		auto rhs = builder().insert_bitcast(value_type::vector(value_type::u16(), 8), op1->val());
+		rslt = builder().insert_add(lhs->val(), rhs->val());
+		break;
+	}
 	default:
 		throw std::runtime_error("unsupported binop");
 	}
