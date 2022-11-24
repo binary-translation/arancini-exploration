@@ -382,14 +382,16 @@ private:
 };
 
 enum class cast_op { bitcast, zx, sx, trunc, convert };
+enum class fp_convert_type { none, round, trunc };
 
 class cast_node : public value_node {
 public:
-	cast_node(cast_op op, const value_type &target_type, port &source_value)
+	cast_node(cast_op op, const value_type &target_type, port &source_value, fp_convert_type convert_type)
 		: value_node(node_kinds::cast, target_type)
 		, op_(op)
 		, target_type_(target_type)
 		, source_value_(source_value)
+		, convert_type_(convert_type)
 	{
 		if (op == cast_op::bitcast) {
 			if (target_type.width() != source_value.type().width()) {
@@ -397,9 +399,11 @@ public:
 					"cannot bitcast between types with different sizes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
 			}
 		} else if (op == cast_op::convert) {
-			if (target_type.type_class() == source_value.type().type_class()) {
-				throw std::logic_error(
-					"cannot convert between the same type classes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
+			if ((target_type.type_class() != value_type_class::floating_point) && (source_value.type().type_class() != value_type_class::floating_point)) {
+				if (target_type.type_class() == source_value.type().type_class()) {
+					throw std::logic_error(
+						"cannot convert between the same non-FP type classes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
+				}
 			}
 		} else {
 			if (target_type.type_class() != source_value.type().type_class()) {
@@ -407,7 +411,17 @@ public:
 			}
 		}
 
+		if ((convert_type != fp_convert_type::none) && (op != cast_op::convert)) {
+			throw std::logic_error(
+				"convert type should be 'none' if the cast_op is not 'convert' target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
+		}
+
 		source_value.add_target(this);
+	}
+
+	cast_node(cast_op op, const value_type &target_type, port &source_value)
+		: cast_node(op, target_type, source_value, fp_convert_type::none)
+	{
 	}
 
 	cast_op op() const { return op_; }
@@ -424,6 +438,7 @@ private:
 	cast_op op_;
 	value_type target_type_;
 	port &source_value_;
+	fp_convert_type convert_type_;
 };
 
 class arith_node : public value_node {
