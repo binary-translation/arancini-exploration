@@ -120,8 +120,15 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_SBB:
 	case XED_ICLASS_CMP:
 	case XED_ICLASS_TEST:
+	//SSE2 binary operations
+	case XED_ICLASS_PADDQ:
 	case XED_ICLASS_PADDD:
 	case XED_ICLASS_PADDW:
+	case XED_ICLASS_PADDB:
+	case XED_ICLASS_PSUBQ:
+	case XED_ICLASS_PSUBD:
+	case XED_ICLASS_PSUBW:
+	case XED_ICLASS_PSUBB:
 		return std::make_unique<binop_translator>(builder);
 
 	case XED_ICLASS_PUSH:

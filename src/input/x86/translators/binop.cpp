@@ -40,8 +40,14 @@ void binop_translator::do_translate()
 	case XED_ICLASS_SBB:
 		rslt = builder().insert_sbb(op0->val(), op1->val(), auto_cast(op0->val().type(), read_reg(value_type::u1(), reg_offsets::cf))->val());
 		break;
+	// only the SSE2 version of the instruction with xmm registers is supported, not the "normal" one with GPRs
+	case XED_ICLASS_PADDQ: {
+		auto lhs = builder().insert_bitcast(value_type::vector(value_type::u64(), 2), op0->val());
+		auto rhs = builder().insert_bitcast(value_type::vector(value_type::u64(), 2), op1->val());
+		rslt = builder().insert_add(lhs->val(), rhs->val());
+		break;
+	}
 	case XED_ICLASS_PADDD: {
-		// only the SSE2 version of the instruction with xmm registers is supported, not the "normal" one with GPRs
 		auto lhs = builder().insert_bitcast(value_type::vector(value_type::u32(), 4), op0->val());
 		auto rhs = builder().insert_bitcast(value_type::vector(value_type::u32(), 4), op1->val());
 		rslt = builder().insert_add(lhs->val(), rhs->val());
@@ -51,6 +57,36 @@ void binop_translator::do_translate()
 		auto lhs = builder().insert_bitcast(value_type::vector(value_type::u16(), 8), op0->val());
 		auto rhs = builder().insert_bitcast(value_type::vector(value_type::u16(), 8), op1->val());
 		rslt = builder().insert_add(lhs->val(), rhs->val());
+		break;
+	}
+	case XED_ICLASS_PADDB: {
+		auto lhs = builder().insert_bitcast(value_type::vector(value_type::u8(), 16), op0->val());
+		auto rhs = builder().insert_bitcast(value_type::vector(value_type::u8(), 16), op1->val());
+		rslt = builder().insert_add(lhs->val(), rhs->val());
+		break;
+	}
+	case XED_ICLASS_PSUBQ: {
+		auto lhs = builder().insert_bitcast(value_type::vector(value_type::u64(), 2), op0->val());
+		auto rhs = builder().insert_bitcast(value_type::vector(value_type::u64(), 2), op1->val());
+		rslt = builder().insert_sub(lhs->val(), rhs->val());
+		break;
+	}
+	case XED_ICLASS_PSUBD: {
+		auto lhs = builder().insert_bitcast(value_type::vector(value_type::u32(), 4), op0->val());
+		auto rhs = builder().insert_bitcast(value_type::vector(value_type::u32(), 4), op1->val());
+		rslt = builder().insert_sub(lhs->val(), rhs->val());
+		break;
+	}
+	case XED_ICLASS_PSUBW: {
+		auto lhs = builder().insert_bitcast(value_type::vector(value_type::u16(), 8), op0->val());
+		auto rhs = builder().insert_bitcast(value_type::vector(value_type::u16(), 8), op1->val());
+		rslt = builder().insert_sub(lhs->val(), rhs->val());
+		break;
+	}
+	case XED_ICLASS_PSUBB: {
+		auto lhs = builder().insert_bitcast(value_type::vector(value_type::u8(), 16), op0->val());
+		auto rhs = builder().insert_bitcast(value_type::vector(value_type::u8(), 16), op1->val());
+		rslt = builder().insert_sub(lhs->val(), rhs->val());
 		break;
 	}
 	default:
