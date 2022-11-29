@@ -68,6 +68,15 @@ void mov_translator::do_translate()
 		break;
 	}
 
+	case XED_ICLASS_MOVSX: {
+		auto input = read_operand(1);
+		auto dest = read_operand(0);
+		auto cast = builder().insert_sx(dest->val().type(), input->val());
+
+		write_operand(0, cast->val());
+		break;
+	}
+
 	case XED_ICLASS_MOVD: {
 		auto input = read_operand(1);
 		auto cast = builder().insert_zx(value_type::u32(), input->val());
@@ -79,13 +88,35 @@ void mov_translator::do_translate()
 	case XED_ICLASS_MOVHPS:
 	case XED_ICLASS_MOVUPS:
 	case XED_ICLASS_MOVAPS:
-	case XED_ICLASS_MOVDQA: {
+	case XED_ICLASS_MOVDQA:
+	case XED_ICLASS_MOVAPD: {
 		// TODO: INCORRECT FOR SOME SIZES
 
 		auto src = read_operand(1);
 		// auto dst = read_operand(pkt, xed_inst, 0);
 		// auto result = pkt->insert_or(dst->val(), )
 		write_operand(0, src->val());
+		break;
+	}
+
+	case XED_ICLASS_MOVSS: {
+		// movss xmm1, xmm2: dst[31..0] = src[31..0], dst[MAXVAL..32] are unmodified
+		// movss xmm1, m32: dst[31..0] = src[31..0], dst[127..32] = 0, dst[MAXVAL..128] are unmodified
+		auto dst = read_operand(0);
+		auto src = read_operand(1);
+
+		dst = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), src->val());
+		value_node *val;
+
+		if (src->val().type().element_width() == 128) {
+			src = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), src->val());
+			val = builder().insert_vector_extract(src->val(), 0);
+		} else {
+			src = builder().insert_bitcast(value_type::f32(), src->val());
+			val = src;
+		}
+		auto rslt = builder().insert_vector_insert(dst->val(), 0, val->val());
+		write_operand(0, rslt->val());
 		break;
 	}
 
