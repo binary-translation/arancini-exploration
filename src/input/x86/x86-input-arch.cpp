@@ -38,12 +38,15 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_LEA:
 	case XED_ICLASS_MOVQ:
 	case XED_ICLASS_MOVD:
+	case XED_ICLASS_MOVSX:
 	case XED_ICLASS_MOVSXD:
 	case XED_ICLASS_MOVZX:
 	case XED_ICLASS_MOVHPS:
 	case XED_ICLASS_MOVUPS:
 	case XED_ICLASS_MOVAPS:
 	case XED_ICLASS_MOVDQA:
+	case XED_ICLASS_MOVAPD:
+	case XED_ICLASS_MOVSS:
 	case XED_ICLASS_CQO:
 	case XED_ICLASS_CDQE:
 		return std::make_unique<mov_translator>(builder);
