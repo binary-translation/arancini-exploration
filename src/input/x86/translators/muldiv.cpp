@@ -87,6 +87,7 @@ void muldiv_translator::do_translate()
 				auto op2_ext = builder().insert_sx(op1_ext->val().type(), op2_cast->val());
 				rslt = builder().insert_mul(op1_ext->val(), op2_ext->val());
 				auto trunc_rslt = builder().insert_trunc(op[0]->val().type().get_signed_type(), rslt->val());
+				trunc_rslt = builder().insert_bitcast(op[0]->val().type(), trunc_rslt->val());
 				write_operand(0, trunc_rslt->val());
 				break;
 			}
