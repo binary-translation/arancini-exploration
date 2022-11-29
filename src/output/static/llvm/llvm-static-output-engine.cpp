@@ -247,6 +247,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		case 128:
 			ty = types.i128;
 			break;
+
 		default:
 			throw std::runtime_error("unsupported memory load width");
 		}
