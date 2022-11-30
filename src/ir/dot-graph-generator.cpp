@@ -19,7 +19,7 @@ void dot_graph_generator::visit_packet(packet &p)
 	os_ << "label = \"@0x" << std::hex << p.address() << ": " << p.disassembly() << "\";" << std::endl;
 
 	if (current_packet_ && !current_packet_->actions().empty() && !p.actions().empty()) {
-		add_edge(current_packet_->actions().back(), p.actions().front(), "blue");
+		add_edge(current_packet_->actions().back(), p.actions().front(), "blue2");
 	}
 
 	current_packet_ = &p;
@@ -43,7 +43,7 @@ void dot_graph_generator::visit_action_node(action_node &n)
 	// If there was a "last action", then connect the "last action" to this action node
 	// with a control-flow edge.
 	if (last_action_) {
-		add_edge(last_action_, &n, "red");
+		add_edge(last_action_, &n, "red2");
 	}
 
 	// Update the current "last action"
@@ -54,13 +54,24 @@ void dot_graph_generator::visit_action_node(action_node &n)
 
 void dot_graph_generator::visit_label_node(label_node &n)
 {
-	add_node(&n, "label");
+	std::stringstream s;
+	s << "label [" << n.name() << "]";
+	add_node(&n, s.str());
 	default_visitor::visit_label_node(n);
+}
+
+void dot_graph_generator::visit_br_node(br_node &n)
+{
+	add_node(&n, "br");
+	add_control_edge(&n, n.target());
+	default_visitor::visit_br_node(n);
 }
 
 void dot_graph_generator::visit_cond_br_node(cond_br_node &n)
 {
 	add_node(&n, "cond-br");
+	add_control_edge(&n, n.target());
+	add_port_edge(&n.cond(), &n, "cond");
 	default_visitor::visit_cond_br_node(n);
 }
 
