@@ -20,6 +20,7 @@ public:
 	virtual void visit_node(node &n) override;
 	virtual void visit_action_node(action_node &n) override;
 	virtual void visit_label_node(label_node &n) override;
+	virtual void visit_br_node(br_node &n) override;
 	virtual void visit_cond_br_node(cond_br_node &n) override;
 	virtual void visit_read_pc_node(read_pc_node &n) override;
 	virtual void visit_write_pc_node(write_pc_node &n) override;
@@ -81,6 +82,8 @@ private:
 	}
 
 	void add_port_edge(const port *from, const node *to, const std::string &link = "") { add_edge(from->owner(), to, "black", compute_port_label(from), link); }
+
+	void add_control_edge(const node *from, const node *to, const std::string &link = "") { add_edge(from, to, "green3", "", link); }
 
 	void add_edge(const node *from, const node *to, const std::string &colour = "black", const std::string &label = "", const std::string &link = "")
 	{

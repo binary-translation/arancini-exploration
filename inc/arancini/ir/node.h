@@ -25,6 +25,7 @@ enum class node_kinds {
 	cast,
 	csel,
 	bit_shift,
+	br,
 	cond_br,
 	bit_extract,
 	bit_insert,
@@ -100,16 +101,26 @@ public:
 
 class label_node : public action_node {
 public:
-	label_node()
+	label_node(std::string name)
 		: action_node(node_kinds::label)
+		, name_(name)
 	{
 	}
+
+	label_node()
+		: label_node("")
+	{
+	}
+
+	const std::string name() { return name_; }
 
 	virtual void accept(visitor &v) override
 	{
 		action_node::accept(v);
 		v.visit_label_node(*this);
 	}
+
+	std::string name_;
 };
 
 class value_node : public node {
@@ -133,6 +144,31 @@ protected:
 	port value_;
 };
 
+class br_node : public action_node {
+public:
+	br_node(label_node *target)
+		: action_node(node_kinds::br)
+		, target_(target)
+	{
+	}
+
+	label_node *target() const { return target_; }
+
+	void add_br_target(label_node *n)
+	{
+		target_ = n;
+	}
+
+	virtual void accept(visitor &v) override
+	{
+		action_node::accept(v);
+		v.visit_br_node(*this);
+	}
+
+private:
+	label_node *target_;
+};
+
 class cond_br_node : public action_node {
 public:
 	cond_br_node(port &cond, label_node *target)
@@ -140,10 +176,16 @@ public:
 		, cond_(cond)
 		, target_(target)
 	{
+		cond.add_target(this);
 	}
 
 	port &cond() const { return cond_; }
 	label_node *target() const { return target_; }
+
+	void add_br_target(label_node *n)
+	{
+		target_ = n;
+	}
 
 	virtual void accept(visitor &v) override
 	{
