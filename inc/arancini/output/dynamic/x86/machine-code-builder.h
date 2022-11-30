@@ -168,23 +168,40 @@ private:
 	bool def_;
 };
 
+enum class iform {
+	invalid,
+	f_n,
+	f_r,
+	f_m,
+	f_rr,
+	f_rm,
+	f_mr,
+	f_ir,
+	f_im,
+};
+
+// enum raw_opcodes { mov_rr = 0x89, mov_rm = 0x89, mov_mr = 0x8b, mov_ir = 0xb8, mov_im = 0xc7 };
+
 class instruction {
 public:
 	static const int NR_OPERANDS = 4;
 
 	instruction(opcodes o)
 		: opcode_(o)
+		, iform_(iform::invalid)
 	{
 	}
 
 	instruction(opcodes o, const instruction_operand &o1)
 		: opcode_(o)
+		, iform_(iform::invalid)
 	{
 		operands_[0] = o1;
 	}
 
 	instruction(opcodes o, const instruction_operand &o1, const instruction_operand &o2)
 		: opcode_(o)
+		, iform_(iform::invalid)
 	{
 		operands_[0] = o1;
 		operands_[1] = o2;
@@ -201,8 +218,57 @@ public:
 	const instruction_operand &get_operand(int o) const { return operands_[o]; }
 	instruction_operand &get_operand(int o) { return operands_[o]; }
 
+	iform get_iform() const
+	{
+		if (iform_ != iform::invalid) {
+			return iform_;
+		}
+
+		switch (operands_[0].oper().kind) {
+		case operand_kind::none:
+			iform_ = iform::f_n;
+			break;
+
+		case operand_kind::reg:
+			switch (operands_[1].oper().kind) {
+			case operand_kind::none:
+				iform_ = iform::f_r;
+				break;
+			case operand_kind::reg:
+				iform_ = iform::f_rr;
+				break;
+			case operand_kind::mem:
+				iform_ = iform::f_rm;
+				break;
+			}
+
+		case operand_kind::mem:
+			switch (operands_[1].oper().kind) {
+			case operand_kind::none:
+				iform_ = iform::f_m;
+				break;
+			case operand_kind::reg:
+				iform_ = iform::f_mr;
+				break;
+			}
+
+		case operand_kind::immediate:
+			switch (operands_[1].oper().kind) {
+			case operand_kind::reg:
+				iform_ = iform::f_ir;
+				break;
+			case operand_kind::mem:
+				iform_ = iform::f_im;
+				break;
+			}
+		}
+
+		return iform_;
+	}
+
 private:
 	opcodes opcode_;
+	mutable iform iform_;
 	instruction_operand operands_[NR_OPERANDS];
 };
 
@@ -219,12 +285,12 @@ public:
 
 	void finalise(machine_code_writer &writer)
 	{
-		std::cerr << "BEFORE REGALLOC" << std::endl;
-		dump(std::cerr);
+		// std::cerr << "BEFORE REGALLOC" << std::endl;
+		// dump(std::cerr);
 		allocate();
-		std::cerr << "AFTER REGALLOC" << std::endl;
-		dump(std::cerr);
-		std::cerr << "---" << std::endl;
+		// std::cerr << "AFTER REGALLOC" << std::endl;
+		// dump(std::cerr);
+		// std::cerr << "---" << std::endl;
 
 		emit(writer);
 	}

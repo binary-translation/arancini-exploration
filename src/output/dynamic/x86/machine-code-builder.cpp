@@ -5,6 +5,10 @@
 #include <set>
 #include <unordered_map>
 
+extern "C" {
+#include <xed/xed-interface.h>
+}
+
 using namespace arancini::output::dynamic;
 using namespace arancini::output::dynamic::x86;
 
@@ -36,13 +40,48 @@ void instruction::dump(std::ostream &os) const
 	os << std::endl;
 }
 
+static void emit_opcode_rr(machine_code_writer& writer, int opcode, physreg r, physreg rm)
+{
+
+}
+
+static void emit_opcode_rm(machine_code_writer& writer, int opcode, int r, int base, int index, int scale, int displ)
+{
+
+}
+
 void instruction::emit(machine_code_writer &writer) const
 {
 	if (dead()) {
 		return;
 	}
 
-	writer.emit8(0xcc);
+	switch (opcode_) {
+	case opcodes::mov:
+		switch (get_iform()) {
+		case iform::f_rr:
+			writer.emit8(0x89);
+			writer.emit8(0);
+			break;
+		case iform::f_rm:
+			writer.emit8(0x89);
+			writer.emit8(0);
+			break;
+		case iform::f_mr:
+			writer.emit8(0x8b);
+			writer.emit8(0);
+			break;
+		case iform::f_ir:
+			writer.emit8(0xb8);
+			writer.emit32(0);
+			break;
+		case iform::f_im:
+			writer.emit8(0xc7);
+			writer.emit32(0);
+			break;
+		}
+		break;
+	}
 }
 
 void operand::dump(std::ostream &os) const
@@ -207,5 +246,30 @@ void machine_code_builder::emit(machine_code_writer &writer)
 {
 	for (const auto &i : instructions_) {
 		i.emit(writer);
+	}
+
+	std::cerr << "***** GENERATED MACHINE CODE" << std::endl;
+
+	off_t base_address = 0;
+	size_t offset = 0;
+	while (offset < writer.size()) {
+		xed_decoded_inst_t xedd;
+		xed_decoded_inst_zero(&xedd);
+		xed_decoded_inst_set_mode(&xedd, XED_MACHINE_MODE_LONG_64, XED_ADDRESS_WIDTH_64b);
+		xed_decoded_inst_set_input_chip(&xedd, XED_CHIP_ALL);
+
+		xed_error_enum_t xed_error = xed_decode(&xedd, &((const unsigned char *)writer.ptr())[offset], writer.size() - offset);
+		if (xed_error != XED_ERROR_NONE) {
+			throw std::runtime_error("unable to decode instruction: " + std::to_string(xed_error));
+		}
+
+		xed_uint_t length = xed_decoded_inst_get_length(&xedd);
+
+		char buffer[64];
+		xed_format_context(XED_SYNTAX_ATT, &xedd, buffer, sizeof(buffer) - 1, base_address, nullptr, 0);
+		std::cerr << buffer << std::endl;
+
+		offset += length;
+		base_address += length;
 	}
 }
