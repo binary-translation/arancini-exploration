@@ -19,7 +19,7 @@ class ir_builder;
 namespace arancini::input::x86::translators {
 using namespace arancini::ir;
 
-enum class translation_result { normal, end_of_block, fail };
+enum class translation_result { normal, noop, end_of_block, fail };
 
 enum class disassembly_mode { none, intel, att };
 
