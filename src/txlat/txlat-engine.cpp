@@ -103,13 +103,14 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		}
 	}
 
-	// Invoke the output engine, and tell it to write to a temporary file.
-	oe->generate();
 
 	// If the main output command-line option was not specified, then don't go any further.
 	if (!cmdline.count("output")) {
 		return;
 	}
+
+	// Invoke the output engine, and tell it to write to a temporary file.
+	oe->generate();
 
 	// --------------- //
 
