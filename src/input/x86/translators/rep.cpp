@@ -30,7 +30,7 @@ void rep_translator::do_translate()
 
 		auto ecx_eq_0 = builder().insert_cmpeq(new_ecx->val(), builder().insert_constant_u32(0)->val());
 
-		auto zf = read_reg(value_type::u1(), reg_offsets::zf);
+		auto zf = read_reg(value_type::u1(), reg_offsets::ZF);
 
 		auto termcond = builder().insert_or(builder().insert_trunc(value_type::u1(), ecx_eq_0->val())->val(), builder().insert_not(zf->val())->val());
 

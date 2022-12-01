@@ -63,18 +63,22 @@ void llvm_static_output_engine_impl::initialise_types()
 	// 22 XMM0...
 	// 38 FS, 38 GS
 	auto state_elements = std::vector<Type *>({
-		types.i64, // 0: RIP
-		types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, // 1: AX, CX, DX, BX, SP, BP, SI, DI
-		types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, // 9: R8, R9, R10, R11, R12, R13, R14, R15
-		types.i8, types.i8, types.i8, types.i8, types.i8, // 17: ZF, CF, OF, SF, PF
-		types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, // 22: XMM0--7
-		types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, // 30: XMM8--15
-		types.i64, types.i64 // 38: FS, GS
+	/*types.i64, // 0: RIP
+	types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, // 1: AX, CX, DX, BX, SP, BP, SI, DI
+	types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, // 9: R8, R9, R10, R11, R12, R13, R14, R15
+	types.i8, types.i8, types.i8, types.i8, types.i8, // 17: ZF, CF, OF, SF, PF
+	types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, // 22: XMM0--7
+	types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, // 30: XMM8--15
+	types.i64, types.i64 // 38: FS, GS*/
+
+#define DEFREG(idx, ctype, ltype, name) types.ltype,
+#include <arancini/input/x86/reg.def>
+#undef DEFREG
 	});
 
 	types.cpu_state = StructType::get(*llvm_context_, state_elements, false);
-        if (!types.cpu_state->isLiteral())
-	  types.cpu_state->setName("cpu_state_struct");
+	if (!types.cpu_state->isLiteral())
+		types.cpu_state->setName("cpu_state_struct");
 	types.cpu_state_ptr = PointerType::get(types.cpu_state, 0);
 
 	// Functions
@@ -179,17 +183,22 @@ void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlo
 	}
 }
 
-static const char *regnames[]
-	= { "rip", "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "zf", "cf", "of", "sf", "pf" };
+static const char *regnames[] = {
+#define DEFREG(idx, ctype, ltype, name) "" #name,
+#include <arancini/input/x86/reg.def>
+#undef DEFREG
+};
 
-static std::string reg_name(int regoff)
+static std::string reg_name(int regidx)
 {
-	if ((size_t)regoff < (sizeof(regnames) / sizeof(regnames[0]))) {
-		return regnames[regoff];
+	if ((size_t)regidx < (sizeof(regnames) / sizeof(regnames[0]))) {
+		return regnames[regidx];
 	}
 
 	return "guestreg";
 }
+
+static int reg_index(int regoff) { return regoff; }
 
 Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, port &p)
 {
@@ -259,8 +268,8 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 	case node_kinds::read_reg: {
 		auto rrn = (read_reg_node *)n;
-		auto src_reg = builder.CreateGEP(
-			types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, rrn->regoff()) }, reg_name(rrn->regoff()));
+		auto src_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, reg_index(rrn->regoff())) },
+			reg_name(reg_index(rrn->regoff())));
 
 		if (auto src_reg_i = ::llvm::dyn_cast<Instruction>(src_reg)) {
 			src_reg_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, reg_file_alias_scope_));
@@ -551,8 +560,8 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 		// std::cerr << "wreg off=" << wrn->regoff() << std::endl;
 
-		auto dest_reg = builder.CreateGEP(
-			types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, wrn->regoff()) }, reg_name(wrn->regoff()));
+		auto dest_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, reg_index(wrn->regoff())) },
+			reg_name(reg_index(wrn->regoff())));
 
 		auto *reg_type = ((GetElementPtrInst*)dest_reg)->getResultElementType();
 
