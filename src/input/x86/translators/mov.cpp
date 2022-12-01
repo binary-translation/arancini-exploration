@@ -23,13 +23,30 @@ void mov_translator::do_translate()
 		break;
 	}
 
-	case XED_ICLASS_CQO: {
-		// TODO: Operand sizes
-		auto sign_set = read_reg(value_type::u64(), reg_offsets::rax);
-		sign_set = builder().insert_trunc(value_type::u1(), builder().insert_asr(sign_set->val(), builder().insert_constant_u32(63)->val())->val());
+	case XED_ICLASS_CWD: {
+		auto ax = read_reg(value_type::s16(), reg_to_offset(XED_REG_AX));
+		auto sx = builder().insert_sx(value_type::s32(), ax->val());
+		auto hi = builder().insert_bit_extract(sx->val(), 16, 16);
 
-		auto sx = builder().insert_csel(sign_set->val(), builder().insert_constant_u64(0xffffffffffffffffull)->val(), builder().insert_constant_u64(0)->val());
-		write_reg(reg_offsets::rdx, sx->val());
+		write_reg(reg_to_offset(XED_REG_DX), hi->val());
+		break;
+	}
+
+	case XED_ICLASS_CQO: {
+		auto rax = read_reg(value_type::s64(), reg_to_offset(XED_REG_RAX));
+		auto sx = builder().insert_sx(value_type::s128(), rax->val());
+		auto hi = builder().insert_bit_extract(sx->val(), 64, 64);
+
+		write_reg(reg_to_offset(XED_REG_RDX), hi->val());
+		break;
+	}
+
+	case XED_ICLASS_CDQ: {
+		auto eax = read_reg(value_type::s32(), reg_to_offset(XED_REG_EAX));
+		auto sx = builder().insert_sx(value_type::s64(), eax->val());
+		auto hi = builder().insert_bit_extract(sx->val(), 32, 32);
+
+		write_reg(reg_to_offset(XED_REG_EDX), hi->val());
 		break;
 	}
 
