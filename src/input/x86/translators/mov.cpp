@@ -25,11 +25,11 @@ void mov_translator::do_translate()
 
 	case XED_ICLASS_CQO: {
 		// TODO: Operand sizes
-		auto sign_set = read_reg(value_type::u64(), reg_offsets::rax);
+		auto sign_set = read_reg(value_type::u64(), reg_offsets::RAX);
 		sign_set = builder().insert_trunc(value_type::u1(), builder().insert_asr(sign_set->val(), builder().insert_constant_u32(63)->val())->val());
 
 		auto sx = builder().insert_csel(sign_set->val(), builder().insert_constant_u64(0xffffffffffffffffull)->val(), builder().insert_constant_u64(0)->val());
-		write_reg(reg_offsets::rdx, sx->val());
+		write_reg(reg_offsets::RDX, sx->val());
 		break;
 	}
 

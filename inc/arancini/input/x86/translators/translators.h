@@ -1,5 +1,6 @@
 #pragma once
 
+#include <arancini/runtime/exec/x86/x86-cpu-state.h>
 #include <cstdlib>
 #include <memory>
 
@@ -46,19 +47,25 @@ protected:
 	/**
 	 * @brief Offset to hardware registers
 	 */
-	enum class reg_offsets { rip = 0, /**< rip: instruction pointer */
-							 rax = 1, /**< rax: GP register */
-							 rcx = 2, /**< rcx: GP register */
-							 rdx = 3, /**< rdx: GP register */
-							 rbx = 4, /**< rbx: GP register */
-							 zf = 17, /**< zf: zero flag */
-							 cf = 18, /**< cf: carry flag */
-							 of = 19, /**< of: overflow flag */
-							 sf = 20, /**< sf: sign flag */
-							 pf = 21, /**< pf: parity flag */
-							 xmm0 = 22, /**< xmm0: XMM register */
+	/*enum class reg_offsets { rip = 0, / **< rip: instruction pointer * /
+							 rax = 1, / **< rax: GP register * /
+							 rcx = 2, / **< rcx: GP register * /
+							 rdx = 3, / **< rdx: GP register * /
+							 rbx = 4, / **< rbx: GP register * /
+							 zf = 17, / **< zf: zero flag * /
+							 cf = 18, / **< cf: carry flag * /
+							 of = 19, / **< of: overflow flag * /
+							 sf = 20, / **< sf: sign flag * /
+							 pf = 21, / **< pf: parity flag * /
+							 xmm0 = 22, / **< xmm0: XMM register * /
 							 fs = 38,
-							 gs = 39 };
+							 gs = 39 };*/
+
+	enum class reg_offsets {
+#define DEFREG(index, ctype, ltype, name) name = X86_OFFSET_OF(name),
+#include <arancini/input/x86/reg.def>
+#undef DEFREG
+	};
 
 	action_node *write_reg(reg_offsets reg, port &value);
 	value_node *read_reg(const value_type &vt, reg_offsets reg);
