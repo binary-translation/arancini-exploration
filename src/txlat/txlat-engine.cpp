@@ -71,7 +71,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 				auto st = std::static_pointer_cast<symbol_table>(s);
 				for (const auto &sym : st->symbols()) {
 					// if (allowed_symbols.count(sym.name())) {
-					if (sym.is_func()) {
+					if (sym.is_func() && sym.size()) {
 						oe->add_chunk(translate_symbol(*ia, elf, sym));
 					}
 				}
@@ -187,9 +187,7 @@ x86 symbol sections to the Arancini IR.
 */
 std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arch &ia, elf_reader &reader, const symbol &sym)
 {
-	// std::cerr << "translating symbol " << sym.name() << ", value=" << std::hex << sym.value() << ", size=" << sym.size() << ", section=" <<
-	// sym.section_index()
-	//		  << std::endl;
+	std::cerr << "translating symbol " << sym.name() << ", value=" << std::hex << sym.value() << ", size=" << sym.size() << ", section=" << sym.section_index() << std::endl;
 
 	auto section = reader.get_section(sym.section_index());
 	if (!section) {
