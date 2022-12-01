@@ -20,6 +20,7 @@ public:
 	static value_type s16() { return value_type(value_type_class::signed_integer, 16); }
 	static value_type s32() { return value_type(value_type_class::signed_integer, 32); }
 	static value_type s64() { return value_type(value_type_class::signed_integer, 64); }
+	static value_type s128() { return value_type(value_type_class::signed_integer, 128); }
 	static value_type f32() { return value_type(value_type_class::floating_point, 32); }
 	static value_type f64() { return value_type(value_type_class::floating_point, 64); }
 
