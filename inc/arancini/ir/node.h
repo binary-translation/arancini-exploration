@@ -447,7 +447,7 @@ public:
 						"cannot convert between the same non-FP type classes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
 				}
 			}
-		} else {
+		} else  if (op != cast_op::zx) {
 			if (target_type.type_class() != source_value.type().type_class()) {
 				throw std::logic_error("cannot cast between type classes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
 			}
