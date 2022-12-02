@@ -31,14 +31,14 @@ void binop_translator::do_translate()
 		rslt = builder().insert_add(op0->val(), op1->val());
 		break;
 	case XED_ICLASS_ADC:
-		rslt = builder().insert_adc(op0->val(), op1->val(), auto_cast(op0->val().type(), read_reg(value_type::u1(), reg_offsets::cf))->val());
+		rslt = builder().insert_adc(op0->val(), op1->val(), auto_cast(op0->val().type(), read_reg(value_type::u1(), reg_offsets::CF))->val());
 		break;
 	case XED_ICLASS_SUB:
 	case XED_ICLASS_CMP:
 		rslt = builder().insert_sub(op0->val(), op1->val());
 		break;
 	case XED_ICLASS_SBB:
-		rslt = builder().insert_sbb(op0->val(), op1->val(), auto_cast(op0->val().type(), read_reg(value_type::u1(), reg_offsets::cf))->val());
+		rslt = builder().insert_sbb(op0->val(), op1->val(), auto_cast(op0->val().type(), read_reg(value_type::u1(), reg_offsets::CF))->val());
 		break;
 	// only the SSE2 version of the instruction with xmm registers is supported, not the "normal" one with GPRs
 	case XED_ICLASS_PADDQ: {

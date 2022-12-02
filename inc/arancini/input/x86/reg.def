@@ -1,0 +1,50 @@
+// Program Counter
+DEFREG(0, uint64_t, i64, PC)
+
+// GPRs
+DEFREG(1, uint64_t, i64, RAX)
+DEFREG(2, uint64_t, i64, RCX)
+DEFREG(3, uint64_t, i64, RDX)
+DEFREG(4, uint64_t, i64, RBX)
+DEFREG(5, uint64_t, i64, RSP)
+DEFREG(6, uint64_t, i64, RBP)
+DEFREG(7, uint64_t, i64, RSI)
+DEFREG(8, uint64_t, i64, RDI)
+DEFREG(9, uint64_t, i64, R8)
+DEFREG(10, uint64_t, i64, R9)
+DEFREG(11, uint64_t, i64, R10)
+DEFREG(12, uint64_t, i64, R11)
+DEFREG(13, uint64_t, i64, R12)
+DEFREG(14, uint64_t, i64, R13)
+DEFREG(15, uint64_t, i64, R14)
+DEFREG(16, uint64_t, i64, R15)
+
+// XMMs
+DEFREG(17, uint128_t, i128, XMM0)
+DEFREG(18, uint128_t, i128, XMM1)
+DEFREG(19, uint128_t, i128, XMM2)
+DEFREG(20, uint128_t, i128, XMM3)
+DEFREG(21, uint128_t, i128, XMM4)
+DEFREG(22, uint128_t, i128, XMM5)
+DEFREG(23, uint128_t, i128, XMM6)
+DEFREG(24, uint128_t, i128, XMM7)
+DEFREG(25, uint128_t, i128, XMM8)
+DEFREG(26, uint128_t, i128, XMM9)
+DEFREG(27, uint128_t, i128, XMM10)
+DEFREG(28, uint128_t, i128, XMM11)
+DEFREG(29, uint128_t, i128, XMM12)
+DEFREG(30, uint128_t, i128, XMM13)
+DEFREG(31, uint128_t, i128, XMM14)
+DEFREG(32, uint128_t, i128, XMM15)
+
+// Flags
+DEFREG(33, uint8_t, i8, ZF)
+DEFREG(34, uint8_t, i8, CF)
+DEFREG(35, uint8_t, i8, OF)
+DEFREG(36, uint8_t, i8, SF)
+DEFREG(37, uint8_t, i8, PF)
+DEFREG(38, uint8_t, i8, DF)
+
+// Seg
+DEFREG(39, uint64_t, i64, FS)
+DEFREG(40, uint64_t, i64, GS)
