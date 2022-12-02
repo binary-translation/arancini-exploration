@@ -1,5 +1,6 @@
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/ir/node.h>
+#include <arancini/ir/ir-builder.h>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
@@ -61,5 +62,5 @@ void setcc_translator::do_translate()
 		throw std::runtime_error("unhandled setcc instruction");
 	}
 
-	write_operand(0, cond->val());
+	write_operand(0, builder().insert_zx(value_type::u8(), cond->val())->val());
 }
