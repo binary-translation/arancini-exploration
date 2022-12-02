@@ -50,26 +50,41 @@ action_node *translator::write_operand(int opnum, port &value)
 		auto regclass = xed_reg_class(reg);
 
 		switch (regclass) {
-		case XED_REG_CLASS_GPR:
-			if (value.type().width() == 64) {
+		case XED_REG_CLASS_GPR: {
+			auto width = value.type().width();
+			switch (width) {
+			// Behaviour is extracted from the Intel® 64 and IA-32 Architectures Software Developer’s Manual, Volume 1 Basic Architecture, Section 3.4.1.1
+			case 64: // e.g. RAX
+				// value is bitcast to u64 and written
 				if (value.type().type_class() == value_type_class::signed_integer) {
 					return write_reg(reg_to_offset(reg), builder_.insert_bitcast(value_type::u64(), value)->val());
 				} else {
 					return write_reg(reg_to_offset(reg), value);
 				}
-			} else {
-				// TODO: AH behaviour
-				if (value.type().width() == 32) {
-					// EAX behaviour
-					return write_reg(reg_to_offset(reg), builder_.insert_zx(value_type::u64(), value)->val());
-				} else {
-					// AX/AL behaviour
-					auto orig = read_reg(value_type::u32(), reg_to_offset(reg));
-					auto repl = builder_.insert_or(orig->val(), builder_.insert_zx(value_type::u32(), value)->val());
-
-					return write_reg(reg_to_offset(reg), builder_.insert_zx(value_type::u64(), repl->val())->val());
-				}
+			case 32: // e.g. EAX
+				// x86_64 requires that the high 32bit are zeroed when writing to 32bit version of registers
+				return write_reg(reg_to_offset(reg), builder_.insert_zx(value_type::u64(), value)->val());
+			case 16: { // e.g. AX
+				// x86_64 requires that the upper bits [63..16] are untouched
+				auto orig = read_reg(value_type::u64(), reg_to_offset(reg));
+				auto res = builder_.insert_bit_insert(orig->val(), value, 0, 16);
+				return write_reg(reg_to_offset(reg), res->val());
 			}
+			case 8: { // e.g. AL/AH
+				// x86_64 requires that the upper bits [63..16/8] are untouched
+				auto orig = read_reg(value_type::u64(), reg_to_offset(reg));
+				value_node *res;
+				if (reg >= XED_REG_AL && reg <= XED_REG_DIL) { // lower 8 bits
+					res = builder_.insert_bit_insert(orig->val(), value, 0, 8);
+				} else { // bits [15..8]
+					res = builder_.insert_bit_insert(orig->val(), value, 8, 8);
+				}
+				return write_reg(reg_to_offset(reg), res->val());
+			}
+			default:
+				throw std::runtime_error("" + std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": unsupported general purpose register size: " + std::to_string(width));
+			}
+		}
 
 		case XED_REG_CLASS_XMM:
 			return write_reg(reg_to_offset(reg), builder_.insert_zx(value_type::u128(), value)->val());
