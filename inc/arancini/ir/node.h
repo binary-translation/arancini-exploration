@@ -425,8 +425,9 @@ public:
 	}
 
 	cast_op op() const { return op_; }
-
+        
 	port &source_value() const { return source_value_; }
+        value_type &target_type() { return target_type_; }
 
 	virtual void accept(visitor &v) override
 	{

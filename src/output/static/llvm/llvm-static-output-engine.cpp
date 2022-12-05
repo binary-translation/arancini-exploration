@@ -1,3 +1,4 @@
+#include "llvm/Support/raw_ostream.h"
 #include <arancini/ir/chunk.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine-impl.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
@@ -281,7 +282,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		if (p.kind() == port_kinds::value) {
 			auto lhs = lower_port(builder, state_arg, pkt, ban->lhs());
 			auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
-
+			
 			switch (ban->op()) {
 			case binary_arith_op::bxor:
 				return builder.CreateXor(lhs, rhs);
@@ -380,9 +381,26 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 				throw std::runtime_error("unsupported trunc width");
 			}
 
-		case cast_op::bitcast:
-			return val;
+		case cast_op::bitcast: {
+			if (cn->target_type().is_vector()) {
+				switch (cn->target_type().element_width()) {
+				case 1:
+					return builder.CreateBitCast(val, ::llvm::VectorType::get(types.i1, cn->target_type().nr_elements(), false));
+				case 8:
+					return builder.CreateBitCast(val, ::llvm::VectorType::get(types.i8, cn->target_type().nr_elements(), false));
+				case 16:
+					return builder.CreateBitCast(val, ::llvm::VectorType::get(types.i16, cn->target_type().nr_elements(), false));
+				case 32:
+					return builder.CreateBitCast(val, ::llvm::VectorType::get(types.i32, cn->target_type().nr_elements(), false));
+				case 64:
+					return builder.CreateBitCast(val, ::llvm::VectorType::get(types.i64, cn->target_type().nr_elements(), false));
 
+				default:
+					throw std::runtime_error("unsupported bitcast element width");
+				}
+			}
+			return val;
+		}
 		default:
 			throw std::runtime_error("unsupported cast op");
 		}
@@ -499,13 +517,20 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto dest_reg = builder.CreateGEP(
 			types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, wrn->regoff()) }, reg_name(wrn->regoff()));
 
+		auto *reg_type = ((GetElementPtrInst*)dest_reg)->getResultElementType();
+
 		if (auto dest_reg_i = ::llvm::dyn_cast<Instruction>(dest_reg)) {
 			dest_reg_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, reg_file_alias_scope_));
 		}
 
 		auto val = lower_port(builder, state_arg, pkt, wrn->value());
+                
+		//Bitcast the resulting value to the type of the register
+		//since the operations can happen on different type after
+		//other casting operations.
+		auto reg_val = builder.CreateBitCast(val, reg_type);
 
-		return builder.CreateStore(val, dest_reg);
+		return builder.CreateStore(reg_val, dest_reg);
 	}
 
 	case node_kinds::write_mem: {
