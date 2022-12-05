@@ -15,6 +15,19 @@ target_link_libraries(arancini-runtime
                       PRIVATE
                       xed
                       arancini-ir
-                      arancini-input-x86
-                      arancini-output-x86)
+                      arancini-input-x86)
+
+if (TARGET arancini-output-x86)
+    target_link_libraries(arancini-runtime
+                          PRIVATE
+                          arancini-output-x86)
+elseif (TARGET arancini-output-arm64)
+    target_link_libraries(arancini-runtime
+                          PRIVATE
+                          arancini-output-arm64)
+else ()
+    target_link_libraries(arancini-runtime
+                          PRIVATE
+                          arancini-output-riscv)
+endif ()
 
