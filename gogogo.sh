@@ -1,5 +1,14 @@
-#!/bin/sh
+#! /bin/sh
 
-export LD_LIBRARY_PATH=out/
+# Fail on error
+set -e
 
-make && out/txlat test/hello --llvm && g++ -o generated -no-pie generated.o -L out -larancini-runtime && $PREFIX ./generated
+# Build project
+cmake -B build -S .
+cmake --build build -j$(nproc)
+
+# Run translator
+out/txlat test/hello --llvm
+g++ -o generated -no-pie generated.o -L out -larancini-runtime
+$PREFIX ./generated
+

@@ -1,0 +1,58 @@
+cmake_minimum_required(VERSION 3.24)
+project(get-xed)
+
+function (get_xed)
+    # Include ExternalProject for managing the build
+    include(FetchContent)
+
+    # Try to clone with git
+    message("Attempting to clone XED submodule")
+
+    # Determine if git is available
+    find_package(Git QUIET)
+    if (NOT Git_FOUND OR NOT EXISTS "${CMAKE_SOURCE_DIR}/.git")
+        message(FATAL_ERROR "Git not found, cannot close submodule")
+    endif ()
+
+    # Determine if python is available
+    find_package(Python3 COMPONENTS Interpreter)
+    if (NOT Python3_FOUND)
+        message (FATAL_ERROR "Python3 is required for building XED")
+    endif ()
+
+    # Set directory variables
+    set(XED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/intel-xed/xed)
+    set(XED_BINARY_DIR ${CMAKE_BINARY_DIR}/obj)
+
+    # Get submodule: both mbuild and xed are needed, the submodule update
+    # fetches both
+    # Build with the found python executable
+    FetchContent_Declare(XED
+        DOWNLOAD_COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
+        BINARY_DIR ${XED_BINARY_DIR}
+    )
+
+    # Populate XED directory
+    FetchContent_MakeAvailable(XED)
+
+    # Build target
+    add_custom_target(xed-build
+        COMMAND ${Python3_EXECUTABLE} ${XED_DIR}/mfile.py --extra-flags=-fPIC
+        BYPRODUCTS ${XED_BINARY_DIR}
+    )
+
+    # Add imported XED library
+    add_library(xed INTERFACE)
+    set(XED_LIBRARIES xed)
+    set(XED_INCLUDE_DIRS ${XED_DIR}/include/public)
+    set(XED_GENERATED_INCLUDE_DIRS ${XED_BINARY_DIR}/wkit/include/xed)
+    target_include_directories(xed
+                               INTERFACE
+                               ${XED_INCLUDE_DIRS}
+                               ${XED_GENERATED_INCLUDE_DIRS})
+    target_link_libraries(xed INTERFACE ${XED_BINARY_DIR}/libxed.a)
+
+    # Add dependency to build target
+    add_dependencies(xed xed-build)
+endfunction ()
+

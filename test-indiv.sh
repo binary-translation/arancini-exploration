@@ -1,5 +1,11 @@
 #!/bin/sh
 
-export LD_LIBRARY_PATH=out/
+# Fail on error
+set -e
 
-make && make -C test && out/txlat test/indiv --llvm && g++ -o generated -no-pie generated.o -L out -larancini-runtime && ./generated
+# Build project
+cmake -B build -S .
+cmake --build build -j$(nproc)
+
+out/txlat test/indiv --llvm && g++ -o generated -no-pie generated.o -L out -larancini-runtime && ./generated
+

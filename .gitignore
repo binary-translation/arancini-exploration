@@ -3,5 +3,6 @@
 **.a
 **.d
 out/
+build/
 .vscode/
 generated.S
