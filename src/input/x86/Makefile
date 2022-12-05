@@ -7,3 +7,5 @@ extra-objs := $(xed-lib)
 target := libarancini-input-x86.so
 target-ldflags := -shared
 target-cxxflags := -fPIC -I $(xed-inc)
+
+needs := arancini-ir

@@ -1,16 +1,26 @@
-#include <arancini/output/dynamic/x86/x86-dynamic-output-engine-impl.h>
 #include <arancini/output/dynamic/x86/x86-dynamic-output-engine.h>
-#include <stdexcept>
+#include <arancini/output/dynamic/x86/x86-translation-context.h>
 
-using namespace arancini::output::dynamic::x86;
-
-x86_dynamic_output_engine::x86_dynamic_output_engine()
-	: oei_(std::make_unique<x86_dynamic_output_engine_impl>())
-{
+extern "C" {
+#include <xed/xed-interface.h>
 }
 
-x86_dynamic_output_engine::~x86_dynamic_output_engine() = default;
+using namespace arancini::output::dynamic;
+using namespace arancini::output::dynamic::x86;
 
-void x86_dynamic_output_engine::lower(ir::node *node, machine_code_writer &writer) { oei_->lower(node, writer); }
+static void initialise_xed()
+{
+	static bool has_initialised_xed = false;
 
-void x86_dynamic_output_engine_impl::lower(ir::node *node, machine_code_writer &writer) { throw std::runtime_error("not implemented"); }
+	if (!has_initialised_xed) {
+		xed_tables_init();
+		has_initialised_xed = true;
+	}
+}
+
+x86_dynamic_output_engine::x86_dynamic_output_engine() { initialise_xed(); }
+
+std::shared_ptr<translation_context> x86_dynamic_output_engine::create_translation_context(machine_code_writer &writer)
+{
+	return std::make_shared<x86_translation_context>(writer);
+}

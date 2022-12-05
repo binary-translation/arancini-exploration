@@ -66,6 +66,7 @@ private:
 elf_reader::elf_reader(const std::string &filename)
 	: elf_data_(nullptr)
 	, elf_data_size_(0)
+	, entrypoint_(0)
 {
 	unmanaged_file f(filename);
 
@@ -94,6 +95,7 @@ void elf_reader::parse()
 	}
 
 	Elf64_Ehdr elf_header = read<Elf64_Ehdr>(0);
+	entrypoint_ = elf_header.e_entry;
 	parse_sections(elf_header.e_shoff, elf_header.e_shnum, elf_header.e_shentsize, elf_header.e_shstrndx);
 	parse_program_headers(elf_header.e_phoff, elf_header.e_phnum, elf_header.e_phentsize);
 }

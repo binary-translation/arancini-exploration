@@ -34,13 +34,17 @@ void *execution_context::add_memory_region(off_t base_address, size_t size)
 		throw std::runtime_error("memory region out of bounds");
 	}
 
-	void *base_ptr = (void *)((uintptr_t)memory_ + base_address);
-	void *aligned_base_ptr = (void *)(((uintptr_t)base_ptr & ~0xfffull));
+	uintptr_t base_ptr = (uintptr_t)memory_ + base_address;
+	uintptr_t aligned_base_ptr = base_ptr & ~0xfffull;
+	uintptr_t base_ptr_off = base_ptr & 0xfffull;
+	uintptr_t aligned_size = (size + base_ptr_off + 0xfff) & ~0xfffull;
 
-	// std::cerr << "amr: bp=" << std::hex << aligned_base_ptr << ", size=" << size << "(" << ((size + 0xfff) & ~0xfffu) << ")" << std::endl;
-	mprotect(aligned_base_ptr, (size + 0xfff) & ~0xfffu, PROT_READ | PROT_WRITE);
+	std::cerr << "amr: base-pointer=" << std::hex << base_ptr << ", aligned-base-ptr=" << aligned_base_ptr << ", base-ptr-off=" << base_ptr_off
+			  << ", size=" << size << ", aligned-size=" << aligned_size << std::endl;
 
-	return base_ptr;
+	mprotect((void *)aligned_base_ptr, aligned_size, PROT_READ | PROT_WRITE);
+
+	return (void *)base_ptr;
 }
 
 void execution_context::allocate_guest_memory()

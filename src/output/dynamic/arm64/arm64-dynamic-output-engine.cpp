@@ -1,16 +1,11 @@
-#include <arancini/output/dynamic/arm64/arm64-dynamic-output-engine-impl.h>
 #include <arancini/output/dynamic/arm64/arm64-dynamic-output-engine.h>
+#include <arancini/output/dynamic/arm64/arm64-translation-context.h>
 #include <stdexcept>
 
+using namespace arancini::output::dynamic;
 using namespace arancini::output::dynamic::arm64;
 
-arm64_dynamic_output_engine::arm64_dynamic_output_engine()
-	: oei_(std::make_unique<arm64_dynamic_output_engine_impl>())
+std::shared_ptr<translation_context> arm64_dynamic_output_engine::create_translation_context(machine_code_writer &writer)
 {
+	return std::make_shared<arm64_translation_context>(writer);
 }
-
-arm64_dynamic_output_engine::~arm64_dynamic_output_engine() = default;
-
-void arm64_dynamic_output_engine::lower(ir::node *node, machine_code_writer &writer) { oei_->lower(node, writer); }
-
-void arm64_dynamic_output_engine_impl::lower(ir::node *node, machine_code_writer &writer) { throw std::runtime_error("not implemented"); }

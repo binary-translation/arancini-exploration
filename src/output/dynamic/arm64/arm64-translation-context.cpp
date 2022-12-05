@@ -1,0 +1,9 @@
+#include <arancini/output/dynamic/arm64/arm64-translation-context.h>
+
+using namespace arancini::output::dynamic::arm64;
+
+void arm64_translation_context::begin_block() { }
+void arm64_translation_context::begin_instruction() { }
+void arm64_translation_context::end_instruction() { }
+void arm64_translation_context::end_block() { }
+void arm64_translation_context::lower(ir::node *n) { }

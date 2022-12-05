@@ -64,6 +64,8 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	auto oe = std::make_shared<arancini::output::o_static::llvm::llvm_static_output_engine>(intermediate_file->name());
 	process_options(*oe, cmdline);
 
+	oe->set_entrypoint(elf.get_entrypoint());
+
 	if (!cmdline.count("no-static")) {
 		// Loop over each symbol table, and translate the symbol.
 		for (auto s : elf.sections()) {

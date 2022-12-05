@@ -1,16 +1,11 @@
-#include <arancini/output/dynamic/riscv/riscv-dynamic-output-engine-impl.h>
 #include <arancini/output/dynamic/riscv/riscv-dynamic-output-engine.h>
+#include <arancini/output/dynamic/riscv/riscv-translation-context.h>
 #include <stdexcept>
 
+using namespace arancini::output::dynamic;
 using namespace arancini::output::dynamic::riscv;
 
-riscv_dynamic_output_engine::riscv_dynamic_output_engine()
-	: oei_(std::make_unique<riscv_dynamic_output_engine_impl>())
+std::shared_ptr<translation_context> riscv_dynamic_output_engine::create_translation_context(machine_code_writer &writer)
 {
+	return std::make_shared<riscv_translation_context>(writer);
 }
-
-riscv_dynamic_output_engine::~riscv_dynamic_output_engine() = default;
-
-void riscv_dynamic_output_engine::lower(ir::node *node, machine_code_writer &writer) { oei_->lower(node, writer); }
-
-void riscv_dynamic_output_engine_impl::lower(ir::node *node, machine_code_writer &writer) { throw std::runtime_error("not implemented"); }
