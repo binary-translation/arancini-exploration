@@ -180,6 +180,30 @@ value_node *translator::read_operand(int opnum)
 	}
 }
 
+ssize_t translator::get_operand_width(int opnum)
+{
+	const xed_inst_t *insn = xed_decoded_inst_inst(xed_inst());
+	auto operand = xed_inst_operand(insn, opnum);
+	auto opname = xed_operand_name(operand);
+
+	switch (opname) {
+	case XED_OPERAND_REG0:
+	case XED_OPERAND_REG1:
+	case XED_OPERAND_REG2: {
+		auto reg = xed_decoded_inst_get_reg(xed_inst(), opname);
+		return xed_get_register_width_bits(reg);
+	}
+	case XED_OPERAND_IMM0: {
+		return xed_decoded_inst_get_immediate_width_bits(xed_inst());
+	}
+	case XED_OPERAND_MEM0: {
+		return xed_decoded_inst_get_memory_operand_length(xed_inst(), 0);
+	}
+	default:
+		throw std::runtime_error("unsupported operand width query");
+	}
+}
+
 value_node *translator::compute_address(int mem_idx)
 {
 	auto base_reg = xed_decoded_inst_get_base_reg(xed_inst(), mem_idx);
