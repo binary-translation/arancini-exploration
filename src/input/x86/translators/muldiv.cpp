@@ -87,6 +87,7 @@ void muldiv_translator::do_translate()
 				auto op2_ext = builder().insert_sx(op1_ext->val().type(), op2_cast->val());
 				rslt = builder().insert_mul(op1_ext->val(), op2_ext->val());
 				auto trunc_rslt = builder().insert_trunc(op[0]->val().type().get_signed_type(), rslt->val());
+				trunc_rslt = builder().insert_bitcast(op[0]->val().type(), trunc_rslt->val());
 				write_operand(0, trunc_rslt->val());
 				break;
 			}
@@ -102,24 +103,46 @@ void muldiv_translator::do_translate()
 	/*
 	 * Both DIV and IDIV instructions do the same things, except that IDIV is signed and DIV is unsigned
 	 * idiv %reg -> idiv %reg %rax %rdx
+	 * %rdx:%rax = dividend, %reg = divisor
 	 * rax := quotient, rdx := remainder
 	 * except for the 8bit variant, where al := quotient, ah := remainder
 	 * TODO: support the 8bit variant properly
 	 */
 	case XED_ICLASS_IDIV: {
-		auto op0_cast = builder().insert_bitcast(op[0]->val().type().get_signed_type(), op[0]->val());
-		auto op1_cast = builder().insert_bitcast(op[1]->val().type().get_signed_type(), op[1]->val());
+		auto input_size = op[1]->val().type().element_width();
 
-		auto quo = builder().insert_div(op0_cast->val(), op1_cast->val());
-		auto rem = builder().insert_mod(op0_cast->val(), op1_cast->val());
+		auto dividend = builder().insert_zx(value_type(value_type_class::unsigned_integer, input_size * 2, 1), op[1]->val());
+		dividend = builder().insert_bit_insert(dividend->val(), op[2]->val(), input_size, input_size);
+		dividend = builder().insert_bitcast(dividend->val().type().get_signed_type(), dividend->val());
+
+		auto divisor = builder().insert_bitcast(op[0]->val().type().get_signed_type(), op[0]->val());
+		auto out_type = divisor->val().type();
+		divisor = builder().insert_sx(dividend->val().type(), divisor->val());
+
+		auto quo = builder().insert_div(divisor->val(), dividend->val());
+		auto rem = builder().insert_mod(divisor->val(), dividend->val());
+
+		quo = builder().insert_trunc(out_type, quo->val());
+		rem = builder().insert_trunc(out_type, rem->val());
 
 		write_operand(1, quo->val());
 		write_operand(2, rem->val());
 		break;
 	}
 	case XED_ICLASS_DIV: {
-		auto quo = builder().insert_div(op[0]->val(), op[1]->val());
-		auto rem = builder().insert_mod(op[0]->val(), op[1]->val());
+		auto input_size = op[1]->val().type().element_width();
+		auto u_double_t = value_type(value_type_class::unsigned_integer, input_size * 2, 1);
+
+		auto dividend = builder().insert_zx(u_double_t, op[1]->val());
+		dividend = builder().insert_bit_insert(dividend->val(), op[2]->val(), input_size, input_size);
+
+		auto divisor = builder().insert_zx(u_double_t, op[0]->val());
+
+		auto quo = builder().insert_div(dividend->val(), divisor->val());
+		auto rem = builder().insert_mod(dividend->val(), divisor->val());
+
+		quo = builder().insert_trunc(op[1]->val().type(), quo->val());
+		rem = builder().insert_trunc(op[1]->val().type(), rem->val());
 
 		write_operand(1, quo->val());
 		write_operand(2, rem->val());

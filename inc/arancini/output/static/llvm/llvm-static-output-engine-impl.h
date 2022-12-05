@@ -66,6 +66,19 @@ private:
 		::llvm::FunctionType *loop_fn;
 		::llvm::FunctionType *init_dbt;
 		::llvm::FunctionType *dbt_invoke;
+
+		::llvm::IntegerType *integer(unsigned width) {
+			switch(width) {
+			case 1: return i1;
+			case 8: return i8;
+			case 16: return i16;
+			case 32: return i32;
+			case 64: return i64;
+			case 128: return i128;
+			default:
+			throw std::runtime_error("unsupported integer width");
+			}
+		}
 	} types;
 
 	::llvm::MDNode *guest_mem_alias_scope_;

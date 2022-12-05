@@ -33,12 +33,15 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_LEA:
 	case XED_ICLASS_MOVQ:
 	case XED_ICLASS_MOVD:
+	case XED_ICLASS_MOVSX:
 	case XED_ICLASS_MOVSXD:
 	case XED_ICLASS_MOVZX:
 	case XED_ICLASS_MOVHPS:
 	case XED_ICLASS_MOVUPS:
 	case XED_ICLASS_MOVAPS:
 	case XED_ICLASS_MOVDQA:
+	case XED_ICLASS_MOVAPD:
+	case XED_ICLASS_MOVSS:
 	case XED_ICLASS_CQO:
 	case XED_ICLASS_CDQE:
 		return std::make_unique<mov_translator>(builder);
@@ -115,6 +118,15 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_SBB:
 	case XED_ICLASS_CMP:
 	case XED_ICLASS_TEST:
+	//SSE2 binary operations
+	case XED_ICLASS_PADDQ:
+	case XED_ICLASS_PADDD:
+	case XED_ICLASS_PADDW:
+	case XED_ICLASS_PADDB:
+	case XED_ICLASS_PSUBQ:
+	case XED_ICLASS_PSUBD:
+	case XED_ICLASS_PSUBW:
+	case XED_ICLASS_PSUBB:
 		return std::make_unique<binop_translator>(builder);
 
 	case XED_ICLASS_PUSH:
@@ -144,10 +156,13 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 		return std::make_unique<muldiv_translator>(builder);
 
 	case XED_ICLASS_REPE_CMPSB:
+	case XED_ICLASS_REP_STOSQ:
 		return std::make_unique<rep_translator>(builder);
 
 	case XED_ICLASS_PUNPCKLQDQ:
 	case XED_ICLASS_PUNPCKLDQ:
+	case XED_ICLASS_PUNPCKLWD:
+	case XED_ICLASS_PUNPCKHWD:
 		return std::make_unique<punpck_translator>(builder);
 
 	case XED_ICLASS_VADDSS:
@@ -158,6 +173,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_VSUBSD:
 	case XED_ICLASS_VDIVSD:
 	case XED_ICLASS_VMULSD:
+	case XED_ICLASS_CVTSD2SS:
 		return std::make_unique<fpvec_translator>(builder);
 
 	default:

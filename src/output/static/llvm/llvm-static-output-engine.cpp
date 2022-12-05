@@ -1,3 +1,4 @@
+#include "llvm/Support/raw_ostream.h"
 #include <arancini/ir/chunk.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine-impl.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
@@ -42,6 +43,8 @@ void llvm_static_output_engine_impl::generate()
 	compile();
 }
 
+
+
 void llvm_static_output_engine_impl::initialise_types()
 {
 	// Primitives
@@ -70,7 +73,8 @@ void llvm_static_output_engine_impl::initialise_types()
 	});
 
 	types.cpu_state = StructType::get(*llvm_context_, state_elements, false);
-	types.cpu_state->setName("cpu_state_struct");
+        if (!types.cpu_state->isLiteral())
+	  types.cpu_state->setName("cpu_state_struct");
 	types.cpu_state_ptr = PointerType::get(types.cpu_state, 0);
 
 	// Functions
@@ -144,6 +148,7 @@ void llvm_static_output_engine_impl::build()
 	builder.CreateBr(loop_block);
 
 	builder.SetInsertPoint(loop_block);
+
 	auto program_counter_val = builder.CreateLoad(types.i64, program_counter, "pc");
 	auto pcswitch = builder.CreateSwitch(program_counter_val, switch_to_dbt);
 
@@ -193,21 +198,26 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 	switch (p.owner()->kind()) {
 	case node_kinds::constant: {
 		auto cn = (constant_node *)n;
-
+		
+		::llvm::Type *ty;
 		switch (cn->val().type().width()) {
 		case 1:
 		case 8:
-			return ConstantInt::get(types.i8, cn->const_val_i());
+			ty = types.i8;
+			break;
 		case 16:
-			return ConstantInt::get(types.i16, cn->const_val_i());
+			ty = types.i16;
+			break;
 		case 32:
-			return ConstantInt::get(types.i32, cn->const_val_i());
+			ty = types.i32;
+			break;
 		case 64:
-			return ConstantInt::get(types.i64, cn->const_val_i());
-
+			ty = types.i64;
+			break;
 		default:
 			throw std::runtime_error("unsupported constant width");
 		}
+		return ConstantInt::get(ty, cn->const_val_i());
 	}
 
 	case node_kinds::read_mem: {
@@ -220,25 +230,28 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			address_ptr_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, guest_mem_alias_scope_));
 		}
 
-		LoadInst *li;
+		::llvm::Type *ty;
 		switch (rmn->val().type().width()) {
 		case 8:
-			li = builder.CreateLoad(types.i8, address_ptr);
+			ty = types.i8;
 			break;
 		case 16:
-			li = builder.CreateLoad(types.i16, address_ptr);
+			ty = types.i16;
 			break;
 		case 32:
-			li = builder.CreateLoad(types.i32, address_ptr);
+			ty = types.i32;
 			break;
 		case 64:
-			li = builder.CreateLoad(types.i64, address_ptr);
+			ty = types.i64;
 			break;
-
+		case 128:
+			ty = types.i128;
+			break;
 		default:
 			throw std::runtime_error("unsupported memory load width");
 		}
 
+		LoadInst *li = builder.CreateLoad(ty, address_ptr);
 		li->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(li->getContext(), guest_mem_alias_scope_));
 		return li;
 	}
@@ -252,23 +265,30 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			src_reg_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, reg_file_alias_scope_));
 		}
 
+		::llvm::Type *ty;
 		switch (rrn->val().type().width()) {
 		case 1:
-			return builder.CreateLoad(types.i1, src_reg);
+			ty = types.i1;
+			break;
 		case 8:
-			return builder.CreateLoad(types.i8, src_reg);
+			ty = types.i8;
+			break;
 		case 16:
-			return builder.CreateLoad(types.i16, src_reg);
+			ty = types.i16;
+			break;
 		case 32:
-			return builder.CreateLoad(types.i32, src_reg);
+			ty = types.i32;
+			break;
 		case 64:
-			return builder.CreateLoad(types.i64, src_reg);
+			ty = types.i64;
+			break;
 		case 128:
-			return builder.CreateLoad(types.i128, src_reg);
-
+			ty = types.i128;
+			break;
 		default:
 			throw std::runtime_error("unsupported register width " + std::to_string(rrn->val().type().width()) + " in load");
 		}
+		return builder.CreateLoad(ty, src_reg);
 	}
 
 	case node_kinds::binary_arith: {
@@ -277,7 +297,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		if (p.kind() == port_kinds::value) {
 			auto lhs = lower_port(builder, state_arg, pkt, ban->lhs());
 			auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
-
+			
 			switch (ban->op()) {
 			case binary_arith_op::bxor:
 				return builder.CreateXor(lhs, rhs);
@@ -326,59 +346,97 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 		auto val = lower_port(builder, state_arg, pkt, cn->source_value());
 
+		::llvm::Type *ty;
 		switch (cn->op()) {
 		case cast_op::zx:
 			switch (cn->val().type().width()) {
 			case 8:
-				return builder.CreateZExt(val, types.i8);
+				ty = types.i8;
+				break;
 			case 16:
-				return builder.CreateZExt(val, types.i16);
+				ty = types.i16;
+				break;
 			case 32:
-				return builder.CreateZExt(val, types.i32);
+				ty = types.i32;
+				break;
 			case 64:
-				return builder.CreateZExt(val, types.i64);
+				ty = types.i64;
+				break;
 			case 128:
-				return builder.CreateZExt(val, types.i128);
+				ty = types.i128;
+				break;
 
 			default:
 				throw std::runtime_error("unsupported zx width " + std::to_string(cn->val().type().width()));
 			}
+			return builder.CreateZExt(val, ty);
 
 		case cast_op::sx:
 			switch (cn->val().type().width()) {
 			case 16:
-				return builder.CreateSExt(val, types.i16);
+				ty = types.i16;
+				break;
 			case 32:
-				return builder.CreateSExt(val, types.i32);
+				ty = types.i32;
+				break;
 			case 64:
-				return builder.CreateSExt(val, types.i64);
+				ty = types.i64;
+				break;
 			case 128:
-				return builder.CreateSExt(val, types.i128);
-
+				ty = types.i128;
+				break;
 			default:
 				throw std::runtime_error("unsupported sx width");
 			}
+			return builder.CreateSExt(val, ty);
 
 		case cast_op::trunc:
 			switch (cn->val().type().width()) {
 			case 1:
-				return builder.CreateTrunc(val, types.i1);
+				ty = types.i1;
+				break;
 			case 8:
-				return builder.CreateTrunc(val, types.i8);
+				ty = types.i8;
+				break;
 			case 16:
-				return builder.CreateTrunc(val, types.i16);
+				ty = types.i16;
+				break;
 			case 32:
-				return builder.CreateTrunc(val, types.i32);
+				ty = types.i32;
+				break;
 			case 64:
-				return builder.CreateTrunc(val, types.i64);
-
+				ty = types.i64;
+				break;
 			default:
 				throw std::runtime_error("unsupported trunc width");
 			}
+			return builder.CreateTrunc(val, ty);
 
-		case cast_op::bitcast:
+		case cast_op::bitcast: {
+			if (cn->target_type().is_vector()) {
+				switch (cn->target_type().element_width()) {
+				case 1:
+					ty = types.i1;
+					break;
+				case 8:
+					ty = types.i8;
+					break;
+				case 16:
+					ty = types.i16;
+					break;
+				case 32:
+					ty = types.i32;
+					break;
+				case 64:
+					ty = types.i64;
+					break;
+				default:
+					throw std::runtime_error("unsupported bitcast element width");
+				}
+				return builder.CreateBitCast(val, ::llvm::VectorType::get(ty, cn->target_type().nr_elements(), false));
+			}
 			return val;
-
+		}
 		default:
 			throw std::runtime_error("unsupported cast op");
 		}
@@ -495,13 +553,20 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto dest_reg = builder.CreateGEP(
 			types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, wrn->regoff()) }, reg_name(wrn->regoff()));
 
+		auto *reg_type = ((GetElementPtrInst*)dest_reg)->getResultElementType();
+
 		if (auto dest_reg_i = ::llvm::dyn_cast<Instruction>(dest_reg)) {
 			dest_reg_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, reg_file_alias_scope_));
 		}
 
 		auto val = lower_port(builder, state_arg, pkt, wrn->value());
+                
+		//Bitcast the resulting value to the type of the register
+		//since the operations can happen on different type after
+		//other casting operations.
+		auto reg_val = builder.CreateBitCast(val, reg_type);
 
-		return builder.CreateStore(val, dest_reg);
+		return builder.CreateStore(reg_val, dest_reg);
 	}
 
 	case node_kinds::write_mem: {

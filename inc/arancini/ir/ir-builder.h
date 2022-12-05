@@ -217,6 +217,7 @@ public:
 	/// @param value The value being converted
 	/// @return A cast node
 	value_node *insert_convert(const value_type &target_type, port &value) { return create_and_insert<cast_node>(cast_op::convert, target_type, value); }
+	value_node *insert_convert(const value_type &target_type, port &value, fp_convert_type convert_type) { return create_and_insert<cast_node>(cast_op::convert, target_type, value, convert_type); }
 
 	value_node *insert_csel(port &condition, port &trueval, port &falseval) { return create_and_insert<csel_node>(condition, trueval, falseval); }
 

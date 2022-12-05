@@ -382,14 +382,16 @@ private:
 };
 
 enum class cast_op { bitcast, zx, sx, trunc, convert };
+enum class fp_convert_type { none, round, trunc };
 
 class cast_node : public value_node {
 public:
-	cast_node(cast_op op, const value_type &target_type, port &source_value)
+	cast_node(cast_op op, const value_type &target_type, port &source_value, fp_convert_type convert_type)
 		: value_node(node_kinds::cast, target_type)
 		, op_(op)
 		, target_type_(target_type)
 		, source_value_(source_value)
+		, convert_type_(convert_type)
 	{
 		if (op == cast_op::bitcast) {
 			if (target_type.width() != source_value.type().width()) {
@@ -397,9 +399,11 @@ public:
 					"cannot bitcast between types with different sizes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
 			}
 		} else if (op == cast_op::convert) {
-			if (target_type.type_class() == source_value.type().type_class()) {
-				throw std::logic_error(
-					"cannot convert between the same type classes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
+			if ((target_type.type_class() != value_type_class::floating_point) && (source_value.type().type_class() != value_type_class::floating_point)) {
+				if (target_type.type_class() == source_value.type().type_class()) {
+					throw std::logic_error(
+						"cannot convert between the same non-FP type classes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
+				}
 			}
 		} else {
 			if (target_type.type_class() != source_value.type().type_class()) {
@@ -407,12 +411,23 @@ public:
 			}
 		}
 
+		if ((convert_type != fp_convert_type::none) && (op != cast_op::convert)) {
+			throw std::logic_error(
+				"convert type should be 'none' if the cast_op is not 'convert' target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
+		}
+
 		source_value.add_target(this);
 	}
 
-	cast_op op() const { return op_; }
+	cast_node(cast_op op, const value_type &target_type, port &source_value)
+		: cast_node(op, target_type, source_value, fp_convert_type::none)
+	{
+	}
 
+	cast_op op() const { return op_; }
+        
 	port &source_value() const { return source_value_; }
+        value_type &target_type() { return target_type_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -424,6 +439,7 @@ private:
 	cast_op op_;
 	value_type target_type_;
 	port &source_value_;
+	fp_convert_type convert_type_;
 };
 
 class arith_node : public value_node {
@@ -561,8 +577,8 @@ public:
 		, from_(from)
 		, length_(length)
 	{
-		if (from + length > source_value_.type().width() - 1) {
-			throw std::logic_error("bit extract range [" + std::to_string(from + length) + ":" + std::to_string(from) + "] is out of bounds from source value ["
+		if (from + length - 1 > source_value_.type().width() - 1) {
+			throw std::logic_error("bit extract range [" + std::to_string(from + length - 1) + ":" + std::to_string(from) + "] is out of bounds from source value ["
 				+ std::to_string(source_value_.type().width()) + ":0]");
 		}
 
@@ -585,7 +601,7 @@ private:
 class bit_insert_node : public value_node {
 public:
 	bit_insert_node(port &value, port &bits, int to, int length)
-		: value_node(node_kinds::bit_insert, value_type(value_type_class::unsigned_integer, length))
+		: value_node(node_kinds::bit_insert, value.type())
 		, source_value_(value)
 		, bits_(bits)
 		, to_(to)
@@ -595,8 +611,8 @@ public:
 			throw std::runtime_error("width of type of incoming bits cannot be greater than type of value");
 		}
 
-		if (to + length > source_value_.type().width() - 1) {
-			throw std::logic_error("bit insert range [" + std::to_string(to + length) + ":" + std::to_string(to) + "] is out of bounds in target value ["
+		if (to + length - 1 > source_value_.type().width() - 1) {
+			throw std::logic_error("bit insert range [" + std::to_string(to + length - 1) + ":" + std::to_string(to) + "] is out of bounds in target value ["
 				+ std::to_string(source_value_.type().width()) + ":0]");
 		}
 

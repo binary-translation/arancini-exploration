@@ -140,15 +140,17 @@ value_node *translator::read_operand(int opnum)
 	case XED_OPERAND_MEM0: {
 		auto addr = compute_address(0);
 
-		switch (xed_decoded_inst_get_operand_width(xed_inst())) {
-		case 8:
+		switch (xed_decoded_inst_get_memory_operand_length(xed_inst(), 0)) {
+		case 1:
 			return builder_.insert_read_mem(value_type::u8(), addr->val());
-		case 16:
+		case 2:
 			return builder_.insert_read_mem(value_type::u16(), addr->val());
-		case 32:
+		case 4:
 			return builder_.insert_read_mem(value_type::u32(), addr->val());
-		case 64:
+		case 8:
 			return builder_.insert_read_mem(value_type::u64(), addr->val());
+		case 16:
+			return builder_.insert_read_mem(value_type::u128(), addr->val());
 
 		default:
 			throw std::runtime_error("invalid memory width in read");
