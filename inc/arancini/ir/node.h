@@ -25,6 +25,7 @@ enum class node_kinds {
 	cast,
 	csel,
 	bit_shift,
+	br,
 	cond_br,
 	bit_extract,
 	bit_insert,
@@ -100,16 +101,26 @@ public:
 
 class label_node : public action_node {
 public:
-	label_node()
+	label_node(std::string name)
 		: action_node(node_kinds::label)
+		, name_(name)
 	{
 	}
+
+	label_node()
+		: label_node("")
+	{
+	}
+
+	const std::string name() { return name_; }
 
 	virtual void accept(visitor &v) override
 	{
 		action_node::accept(v);
 		v.visit_label_node(*this);
 	}
+
+	std::string name_;
 };
 
 class value_node : public node {
@@ -133,6 +144,28 @@ protected:
 	port value_;
 };
 
+class br_node : public action_node {
+public:
+	br_node(label_node *target)
+		: action_node(node_kinds::br)
+		, target_(target)
+	{
+	}
+
+	label_node *target() const { return target_; }
+
+	void add_br_target(label_node *n) { target_ = n; }
+
+	virtual void accept(visitor &v) override
+	{
+		action_node::accept(v);
+		v.visit_br_node(*this);
+	}
+
+private:
+	label_node *target_;
+};
+
 class cond_br_node : public action_node {
 public:
 	cond_br_node(port &cond, label_node *target)
@@ -140,10 +173,13 @@ public:
 		, cond_(cond)
 		, target_(target)
 	{
+		cond.add_target(this);
 	}
 
 	port &cond() const { return cond_; }
 	label_node *target() const { return target_; }
+
+	void add_br_target(label_node *n) { target_ = n; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -401,19 +437,19 @@ public:
 		} else if (op == cast_op::convert) {
 			if ((target_type.type_class() != value_type_class::floating_point) && (source_value.type().type_class() != value_type_class::floating_point)) {
 				if (target_type.type_class() == source_value.type().type_class()) {
-					throw std::logic_error(
-						"cannot convert between the same non-FP type classes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
+					throw std::logic_error("cannot convert between the same non-FP type classes target=" + target_type.to_string()
+						+ ", source=" + source_value.type().to_string());
 				}
 			}
-		} else {
+		} else  if (op != cast_op::zx) {
 			if (target_type.type_class() != source_value.type().type_class()) {
 				throw std::logic_error("cannot cast between type classes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
 			}
 		}
 
 		if ((convert_type != fp_convert_type::none) && (op != cast_op::convert)) {
-			throw std::logic_error(
-				"convert type should be 'none' if the cast_op is not 'convert' target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
+			throw std::logic_error("convert type should be 'none' if the cast_op is not 'convert' target=" + target_type.to_string()
+				+ ", source=" + source_value.type().to_string());
 		}
 
 		source_value.add_target(this);
@@ -578,8 +614,8 @@ public:
 		, length_(length)
 	{
 		if (from + length - 1 > source_value_.type().width() - 1) {
-			throw std::logic_error("bit extract range [" + std::to_string(from + length - 1) + ":" + std::to_string(from) + "] is out of bounds from source value ["
-				+ std::to_string(source_value_.type().width()) + ":0]");
+			throw std::logic_error("bit extract range [" + std::to_string(from + length - 1) + ":" + std::to_string(from)
+				+ "] is out of bounds from source value [" + std::to_string(source_value_.type().width()) + ":0]");
 		}
 
 		source_value_.add_target(this);

@@ -33,10 +33,11 @@ public:
 
 	virtual void visit_value_node(value_node &n) override { }
 
+	virtual void visit_br_node(br_node &n) override { }
+
 	virtual void visit_cond_br_node(cond_br_node &n) override
 	{
 		n.cond().accept(*this);
-		n.target()->accept(*this);
 	}
 
 	virtual void visit_read_pc_node(read_pc_node &n) override { }

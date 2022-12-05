@@ -148,11 +148,11 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point)
 	// the guest program, and an emulated stack pointer at the top of the
 	// emulated address space.
 	x86_cpu_state *x86_state = (x86_cpu_state *)main_thread->get_cpu_state();
-	x86_state->pc = entry_point;
-	x86_state->rsp = 0x100000000 - 8;
+	x86_state->PC = entry_point;
+	x86_state->RSP = 0x100000000 - 8;
 
 	// Report on various information for useful debugging purposes.
-	std::cerr << "state @ " << (void *)x86_state << ", pc @ " << std::hex << x86_state->pc << ", stack @ " << std::hex << x86_state->rsp << std::endl;
+	std::cerr << "state @ " << (void *)x86_state << ", pc @ " << std::hex << x86_state->PC << ", stack @ " << std::hex << x86_state->RSP << std::endl;
 
 	// Initialisation of the runtime is complete - return a pointer to the raw CPU state structure
 	// so that the static code can use it for emulation.

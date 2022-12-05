@@ -70,6 +70,12 @@ public:
 	/// @brief Returns a node representing a label used for internal control-flow puproses.
 	/// @return A label node.
 	label_node *insert_label() { return create_and_insert<label_node>(); }
+	label_node *insert_label(std::string name) { return create_and_insert<label_node>(name); }
+
+	/// @brief Return a node representing an unconditional branch
+	/// @param target The label node that is the target of the branch
+	/// @return An action node
+	action_node *insert_br(label_node *target) { return create_and_insert<br_node>(target); }
 
 	/// @brief Returns a node representing a conditional branch.  The branch will be taken if the condition evaluates to true.
 	/// @param cond The condition on which to branch.  Non-zero means to take the branch, zero means to NOT take the branch.

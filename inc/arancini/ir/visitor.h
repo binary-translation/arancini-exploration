@@ -7,6 +7,7 @@ class node;
 class action_node;
 class label_node;
 class value_node;
+class br_node;
 class cond_br_node;
 class read_pc_node;
 class write_pc_node;
@@ -40,6 +41,7 @@ public:
 	virtual void visit_action_node(action_node &n) = 0;
 	virtual void visit_label_node(label_node &n) = 0;
 	virtual void visit_value_node(value_node &n) = 0;
+	virtual void visit_br_node(br_node &n) = 0;
 	virtual void visit_cond_br_node(cond_br_node &n) = 0;
 	virtual void visit_read_pc_node(read_pc_node &n) = 0;
 	virtual void visit_write_pc_node(write_pc_node &n) = 0;

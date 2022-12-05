@@ -11,19 +11,29 @@ using namespace arancini::input::x86::translators;
 
 translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_inst, disassembly_mode mode)
 {
-	std::string disasm = "";
-	if (mode != disassembly_mode::none) {
-		char buffer[64];
-		xed_format_context(mode == disassembly_mode::intel ? XED_SYNTAX_INTEL : XED_SYNTAX_ATT, xed_inst, buffer, sizeof(buffer) - 1, address, nullptr, 0);
-		disasm = std::string(buffer);
+	switch (xed_decoded_inst_get_iclass(xed_inst)) {
+	// TODO: this is a bad way of avoiding empty packets. Should be done by checking that the translator is a nop_translator, not hardcoded switch case
+	case XED_ICLASS_NOP:
+	case XED_ICLASS_HLT:
+	case XED_ICLASS_CPUID:
+	case XED_ICLASS_SYSCALL:
+		return translation_result::noop;
+
+	default:
+		std::string disasm = "";
+		if (mode != disassembly_mode::none) {
+			char buffer[64];
+			xed_format_context(mode == disassembly_mode::intel ? XED_SYNTAX_INTEL : XED_SYNTAX_ATT, xed_inst, buffer, sizeof(buffer) - 1, address, nullptr, 0);
+			disasm = std::string(buffer);
+		}
+
+		builder_.begin_packet(address, disasm);
+
+		xed_inst_ = xed_inst;
+		do_translate();
+
+		return builder_.end_packet() == packet_type::end_of_block ? translation_result::end_of_block : translation_result::normal;
 	}
-
-	builder_.begin_packet(address, disasm);
-
-	xed_inst_ = xed_inst;
-	do_translate();
-
-	return builder_.end_packet() == packet_type::end_of_block ? translation_result::end_of_block : translation_result::normal;
 }
 
 action_node *translator::write_operand(int opnum, port &value)
@@ -40,26 +50,41 @@ action_node *translator::write_operand(int opnum, port &value)
 		auto regclass = xed_reg_class(reg);
 
 		switch (regclass) {
-		case XED_REG_CLASS_GPR:
-			if (value.type().width() == 64) {
+		case XED_REG_CLASS_GPR: {
+			auto width = value.type().width();
+			switch (width) {
+			// Behaviour is extracted from the Intel® 64 and IA-32 Architectures Software Developer’s Manual, Volume 1 Basic Architecture, Section 3.4.1.1
+			case 64: // e.g. RAX
+				// value is bitcast to u64 and written
 				if (value.type().type_class() == value_type_class::signed_integer) {
 					return write_reg(reg_to_offset(reg), builder_.insert_bitcast(value_type::u64(), value)->val());
 				} else {
 					return write_reg(reg_to_offset(reg), value);
 				}
-			} else {
-				// TODO: AH behaviour
-				if (value.type().width() == 32) {
-					// EAX behaviour
-					return write_reg(reg_to_offset(reg), builder_.insert_zx(value_type::u64(), value)->val());
-				} else {
-					// AX/AL behaviour
-					auto orig = read_reg(value_type::u32(), reg_to_offset(reg));
-					auto repl = builder_.insert_or(orig->val(), builder_.insert_zx(value_type::u32(), value)->val());
-
-					return write_reg(reg_to_offset(reg), builder_.insert_zx(value_type::u64(), repl->val())->val());
-				}
+			case 32: // e.g. EAX
+				// x86_64 requires that the high 32bit are zeroed when writing to 32bit version of registers
+				return write_reg(reg_to_offset(reg), builder_.insert_zx(value_type::u64(), value)->val());
+			case 16: { // e.g. AX
+				// x86_64 requires that the upper bits [63..16] are untouched
+				auto orig = read_reg(value_type::u64(), reg_to_offset(reg));
+				auto res = builder_.insert_bit_insert(orig->val(), value, 0, 16);
+				return write_reg(reg_to_offset(reg), res->val());
 			}
+			case 8: { // e.g. AL/AH
+				// x86_64 requires that the upper bits [63..16/8] are untouched
+				auto orig = read_reg(value_type::u64(), reg_to_offset(reg));
+				value_node *res;
+				if (reg >= XED_REG_AL && reg <= XED_REG_DIL) { // lower 8 bits
+					res = builder_.insert_bit_insert(orig->val(), value, 0, 8);
+				} else { // bits [15..8]
+					res = builder_.insert_bit_insert(orig->val(), value, 8, 8);
+				}
+				return write_reg(reg_to_offset(reg), res->val());
+			}
+			default:
+				throw std::runtime_error("" + std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": unsupported general purpose register size: " + std::to_string(width));
+			}
+		}
 
 		case XED_REG_CLASS_XMM:
 			return write_reg(reg_to_offset(reg), builder_.insert_zx(value_type::u128(), value)->val());
@@ -197,9 +222,9 @@ value_node *translator::compute_address(int mem_idx)
 	}
 
 	if (seg == XED_REG_FS) {
-		address_base = builder_.insert_add(address_base->val(), read_reg(value_type::u64(), reg_offsets::fs)->val());
+		address_base = builder_.insert_add(address_base->val(), read_reg(value_type::u64(), reg_offsets::FS)->val());
 	} else if (seg == XED_REG_GS) {
-		address_base = builder_.insert_add(address_base->val(), read_reg(value_type::u64(), reg_offsets::gs)->val());
+		address_base = builder_.insert_add(address_base->val(), read_reg(value_type::u64(), reg_offsets::GS)->val());
 	}
 
 	return address_base;
@@ -209,10 +234,10 @@ translator::reg_offsets translator::reg_to_offset(xed_reg_enum_t reg)
 {
 	switch (xed_reg_class(reg)) {
 	case XED_REG_CLASS_GPR:
-		return (reg_offsets)((xed_get_largest_enclosing_register(reg) - XED_REG_RAX) + (int)reg_offsets::rax);
+		return (reg_offsets)((((xed_get_largest_enclosing_register(reg) - XED_REG_RAX) + (int)reg_offsets::RAX)) * 8);
 
 	case XED_REG_CLASS_XMM:
-		return (reg_offsets)((reg - XED_REG_XMM0) + (int)reg_offsets::xmm0);
+		return (reg_offsets)(((reg - XED_REG_XMM0) + (int)reg_offsets::XMM0) * 16);
 
 	default:
 		throw std::runtime_error("unsupported register class when computing offset");
@@ -227,18 +252,18 @@ void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
 {
 	switch (zf) {
 	case flag_op::set0:
-		write_reg(reg_offsets::zf, builder_.insert_constant_i(value_type::u1(), 0)->val());
+		write_reg(reg_offsets::ZF, builder_.insert_constant_i(value_type::u1(), 0)->val());
 		break;
 
 	case flag_op::set1:
-		write_reg(reg_offsets::zf, builder_.insert_constant_i(value_type::u1(), 1)->val());
+		write_reg(reg_offsets::ZF, builder_.insert_constant_i(value_type::u1(), 1)->val());
 		break;
 
 	case flag_op::update:
 		if (op->kind() == node_kinds::unary_arith || op->kind() == node_kinds::binary_arith || op->kind() == node_kinds::ternary_arith) {
-			write_reg(reg_offsets::zf, ((arith_node *)op)->zero());
+			write_reg(reg_offsets::ZF, ((arith_node *)op)->zero());
 		} else if (op->kind() == node_kinds::constant) {
-			write_reg(reg_offsets::zf, builder_.insert_constant_i(value_type::u1(), ((constant_node *)op)->is_zero())->val());
+			write_reg(reg_offsets::ZF, builder_.insert_constant_i(value_type::u1(), ((constant_node *)op)->is_zero())->val());
 		} else {
 			throw std::runtime_error("unsupported operation node type for ZF");
 		}
@@ -250,16 +275,16 @@ void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
 
 	switch (cf) {
 	case flag_op::set0:
-		write_reg(reg_offsets::cf, builder_.insert_constant_i(value_type::u1(), 0)->val());
+		write_reg(reg_offsets::CF, builder_.insert_constant_i(value_type::u1(), 0)->val());
 		break;
 
 	case flag_op::set1:
-		write_reg(reg_offsets::cf, builder_.insert_constant_i(value_type::u1(), 1)->val());
+		write_reg(reg_offsets::CF, builder_.insert_constant_i(value_type::u1(), 1)->val());
 		break;
 
 	case flag_op::update:
 		if (op->kind() == node_kinds::binary_arith || op->kind() == node_kinds::ternary_arith) {
-			write_reg(reg_offsets::cf, ((arith_node *)op)->carry());
+			write_reg(reg_offsets::CF, ((arith_node *)op)->carry());
 		} else {
 			throw std::runtime_error("unsupported operation node type for CF");
 		}
@@ -271,16 +296,16 @@ void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
 
 	switch (of) {
 	case flag_op::set0:
-		write_reg(reg_offsets::of, builder_.insert_constant_i(value_type::u1(), 0)->val());
+		write_reg(reg_offsets::OF, builder_.insert_constant_i(value_type::u1(), 0)->val());
 		break;
 
 	case flag_op::set1:
-		write_reg(reg_offsets::of, builder_.insert_constant_i(value_type::u1(), 1)->val());
+		write_reg(reg_offsets::OF, builder_.insert_constant_i(value_type::u1(), 1)->val());
 		break;
 
 	case flag_op::update:
 		if (op->kind() == node_kinds::binary_arith || op->kind() == node_kinds::ternary_arith) {
-			write_reg(reg_offsets::of, ((arith_node *)op)->overflow());
+			write_reg(reg_offsets::OF, ((arith_node *)op)->overflow());
 		} else {
 			throw std::runtime_error("unsupported operation node type for OF");
 		}
@@ -292,19 +317,19 @@ void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
 
 	switch (sf) {
 	case flag_op::set0:
-		write_reg(reg_offsets::sf, builder_.insert_constant_i(value_type::u1(), 0)->val());
+		write_reg(reg_offsets::SF, builder_.insert_constant_i(value_type::u1(), 0)->val());
 		break;
 
 	case flag_op::set1:
-		write_reg(reg_offsets::sf, builder_.insert_constant_i(value_type::u1(), 1)->val());
+		write_reg(reg_offsets::SF, builder_.insert_constant_i(value_type::u1(), 1)->val());
 		break;
 
 	case flag_op::update:
 		if (op->kind() == node_kinds::unary_arith || op->kind() == node_kinds::binary_arith || op->kind() == node_kinds::ternary_arith) {
-			write_reg(reg_offsets::sf, ((arith_node *)op)->negative());
+			write_reg(reg_offsets::SF, ((arith_node *)op)->negative());
 		} else if (op->kind() == node_kinds::constant) {
 			// TODO: INCORRECT
-			write_reg(reg_offsets::sf, builder_.insert_constant_i(value_type::u1(), ((constant_node *)op)->const_val_i() < 0)->val());
+			write_reg(reg_offsets::SF, builder_.insert_constant_i(value_type::u1(), ((constant_node *)op)->const_val_i() < 0)->val());
 		} else {
 			throw std::runtime_error("unsupported operation node type for SF");
 		}
@@ -319,94 +344,94 @@ value_node *translator::compute_cond(cond_type ct)
 {
 	switch (ct) {
 	case cond_type::nbe: {
-		auto ncf = builder_.insert_not(read_reg(value_type::u1(), reg_offsets::cf)->val());
-		auto nzf = builder_.insert_not(read_reg(value_type::u1(), reg_offsets::zf)->val());
+		auto ncf = builder_.insert_not(read_reg(value_type::u1(), reg_offsets::CF)->val());
+		auto nzf = builder_.insert_not(read_reg(value_type::u1(), reg_offsets::ZF)->val());
 		return builder_.insert_and(ncf->val(), nzf->val());
 	}
 
 	case cond_type::nb: {
-		auto ncf = builder_.insert_not(read_reg(value_type::u1(), reg_offsets::cf)->val());
+		auto ncf = builder_.insert_not(read_reg(value_type::u1(), reg_offsets::CF)->val());
 		return ncf;
 	}
 
 	case cond_type::b: {
-		auto cf = read_reg(value_type::u1(), reg_offsets::cf);
+		auto cf = read_reg(value_type::u1(), reg_offsets::CF);
 		return cf;
 	}
 
 	case cond_type::be: {
-		auto cf = read_reg(value_type::u1(), reg_offsets::cf);
-		auto zf = read_reg(value_type::u1(), reg_offsets::zf);
+		auto cf = read_reg(value_type::u1(), reg_offsets::CF);
+		auto zf = read_reg(value_type::u1(), reg_offsets::ZF);
 		return builder_.insert_or(cf->val(), zf->val());
 	}
 
 	case cond_type::z: {
-		auto zf = read_reg(value_type::u1(), reg_offsets::zf);
+		auto zf = read_reg(value_type::u1(), reg_offsets::ZF);
 		return zf;
 	}
 
 	case cond_type::nle: {
-		auto nzf = builder_.insert_not(read_reg(value_type::u1(), reg_offsets::zf)->val());
-		auto sf = read_reg(value_type::u1(), reg_offsets::sf);
-		auto of = read_reg(value_type::u1(), reg_offsets::of);
+		auto nzf = builder_.insert_not(read_reg(value_type::u1(), reg_offsets::ZF)->val());
+		auto sf = read_reg(value_type::u1(), reg_offsets::SF);
+		auto of = read_reg(value_type::u1(), reg_offsets::OF);
 
 		return builder_.insert_and(nzf->val(), builder_.insert_cmpeq(sf->val(), of->val())->val());
 	}
 
 	case cond_type::nl: {
-		auto sf = read_reg(value_type::u1(), reg_offsets::sf);
-		auto of = read_reg(value_type::u1(), reg_offsets::of);
+		auto sf = read_reg(value_type::u1(), reg_offsets::SF);
+		auto of = read_reg(value_type::u1(), reg_offsets::OF);
 
 		return builder_.insert_cmpeq(sf->val(), of->val());
 	}
 
 	case cond_type::l: {
-		auto sf = read_reg(value_type::u1(), reg_offsets::sf);
-		auto of = read_reg(value_type::u1(), reg_offsets::of);
+		auto sf = read_reg(value_type::u1(), reg_offsets::SF);
+		auto of = read_reg(value_type::u1(), reg_offsets::OF);
 
 		return builder_.insert_cmpne(sf->val(), of->val());
 	}
 
 	case cond_type::le: {
-		auto zf = read_reg(value_type::u1(), reg_offsets::zf);
-		auto sf = read_reg(value_type::u1(), reg_offsets::sf);
-		auto of = read_reg(value_type::u1(), reg_offsets::of);
+		auto zf = read_reg(value_type::u1(), reg_offsets::ZF);
+		auto sf = read_reg(value_type::u1(), reg_offsets::SF);
+		auto of = read_reg(value_type::u1(), reg_offsets::OF);
 
 		return builder_.insert_or(zf->val(), builder_.insert_cmpne(sf->val(), of->val())->val());
 	}
 
 	case cond_type::nz: {
-		auto nzf = builder_.insert_not(read_reg(value_type::u1(), reg_offsets::zf)->val());
+		auto nzf = builder_.insert_not(read_reg(value_type::u1(), reg_offsets::ZF)->val());
 		return nzf;
 	}
 
 	case cond_type::no: {
-		auto nof = builder_.insert_not(read_reg(value_type::u1(), reg_offsets::of)->val());
+		auto nof = builder_.insert_not(read_reg(value_type::u1(), reg_offsets::OF)->val());
 		return nof;
 	}
 
 	case cond_type::np: {
-		auto npf = builder_.insert_not(read_reg(value_type::u1(), reg_offsets::pf)->val());
+		auto npf = builder_.insert_not(read_reg(value_type::u1(), reg_offsets::PF)->val());
 		return npf;
 	}
 
 	case cond_type::ns: {
-		auto nsf = builder_.insert_not(read_reg(value_type::u1(), reg_offsets::sf)->val());
+		auto nsf = builder_.insert_not(read_reg(value_type::u1(), reg_offsets::SF)->val());
 		return nsf;
 	}
 
 	case cond_type::o: {
-		auto of = read_reg(value_type::u1(), reg_offsets::of);
+		auto of = read_reg(value_type::u1(), reg_offsets::OF);
 		return of;
 	}
 
 	case cond_type::p: {
-		auto pf = read_reg(value_type::u1(), reg_offsets::pf);
+		auto pf = read_reg(value_type::u1(), reg_offsets::PF);
 		return pf;
 	}
 
 	case cond_type::s: {
-		auto sf = read_reg(value_type::u1(), reg_offsets::sf);
+		auto sf = read_reg(value_type::u1(), reg_offsets::SF);
 		return sf;
 	}
 
