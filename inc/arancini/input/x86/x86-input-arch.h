@@ -7,8 +7,9 @@ enum class disassembly_syntax { att, intel };
 
 class x86_input_arch : public input_arch {
 public:
-	x86_input_arch(disassembly_syntax da)
-		: da_(da)
+	x86_input_arch(bool debug, disassembly_syntax da)
+		: input_arch(debug)
+		, da_(da)
 	{
 	}
 

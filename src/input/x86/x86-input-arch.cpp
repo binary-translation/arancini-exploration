@@ -183,18 +183,21 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	}
 }
 
-static translation_result translate_instruction(ir_builder &builder, size_t address, xed_decoded_inst_t *xedd, disassembly_syntax da)
+static translation_result translate_instruction(ir_builder &builder, size_t address, xed_decoded_inst_t *xedd, bool debug, disassembly_syntax da)
 {
+	std::string disasm = "";
+
+	if (debug) {
+		char buffer[64];
+		xed_format_context(da == disassembly_syntax::intel ? XED_SYNTAX_INTEL : XED_SYNTAX_ATT, xedd, buffer, sizeof(buffer) - 1, address, nullptr, 0);
+		disasm = std::string(buffer);
+	}
+
 	auto t = get_translator(builder, xed_decoded_inst_get_iclass(xedd));
 
 	if (t) {
-		return t->translate(address, xedd, da == disassembly_syntax::intel ? disassembly_mode::intel : disassembly_mode::att);
+		return t->translate(address, xedd, disasm);
 	} else {
-
-		char buffer[64];
-		xed_format_context(da == disassembly_syntax::intel ? XED_SYNTAX_INTEL : XED_SYNTAX_ATT, xedd, buffer, sizeof(buffer) - 1, address, nullptr, 0);
-		std::cerr << "UNSUPPORTED INSTRUCTION @ " << std::hex << address << ": " << buffer << std::endl;
-
 		return translation_result::fail;
 	}
 }
@@ -235,7 +238,7 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 		xed_uint_t length = xed_decoded_inst_get_length(&xedd);
 
-		auto r = translate_instruction(builder, base_address, &xedd, da_);
+		auto r = translate_instruction(builder, base_address, &xedd, debug(), da_);
 
 		if (r == translation_result::fail) {
 			throw std::runtime_error("instruction translation failure");

@@ -9,7 +9,7 @@
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
 
-translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_inst, disassembly_mode mode)
+translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_inst, const std::string& disasm)
 {
 	switch (xed_decoded_inst_get_iclass(xed_inst)) {
 	// TODO: this is a bad way of avoiding empty packets. Should be done by checking that the translator is a nop_translator, not hardcoded switch case
@@ -20,13 +20,6 @@ translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_
 		return translation_result::noop;
 
 	default:
-		std::string disasm = "";
-		if (mode != disassembly_mode::none) {
-			char buffer[64];
-			xed_format_context(mode == disassembly_mode::intel ? XED_SYNTAX_INTEL : XED_SYNTAX_ATT, xed_inst, buffer, sizeof(buffer) - 1, address, nullptr, 0);
-			disasm = std::string(buffer);
-		}
-
 		builder_.begin_packet(address, disasm);
 
 		xed_inst_ = xed_inst;
