@@ -1,5 +1,6 @@
 #pragma once
 
+#include <arancini/output/dynamic/riscv64/machineCode/assembler_riscv.h>
 #include <arancini/output/dynamic/translation-context.h>
 
 namespace arancini::output::dynamic::riscv64 {
@@ -15,5 +16,10 @@ public:
 	virtual void end_instruction() override;
 	virtual void end_block() override;
 	virtual void lower(ir::node *n) override;
+
+private:
+	Assembler assembler{RV_GC};
+
+	Register materialise(const ir::node *n);
 };
 } // namespace arancini::output::dynamic::riscv64
