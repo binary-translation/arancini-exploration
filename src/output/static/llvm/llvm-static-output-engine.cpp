@@ -715,7 +715,16 @@ void llvm_static_output_engine_impl::compile()
 
 	TargetOptions TO;
 	auto RM = Optional<Reloc::Model>();
-	auto TM = T->createTargetMachine(TT, "generic", "", TO, RM);
+#if defined(ARCH_RISCV64)
+	const char *features = "+m,+a,+f,+d,+c";
+	const char *cpu = "generic-rv64";
+	TO.MCOptions.ABIName="lp64d";
+#else
+	const char *features = "";
+	const char *cpu = "generic";
+#endif
+
+	auto TM = T->createTargetMachine(TT, cpu, features, TO, RM);
 
 	module_->setDataLayout(TM->createDataLayout());
 
