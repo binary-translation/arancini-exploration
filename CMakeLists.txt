@@ -1,8 +1,12 @@
 cmake_minimum_required(VERSION 3.24)
 project(arancini LANGUAGES C CXX)
 
+# Get host architecture
+include(cmake/utils.cmake)
+get_arch(ARCH)
+
 # Build flags
-set(ARCH "X86_64" CACHE STRING "Target architecture for the Dynamic Binary Translation unit")
+set(ARCH ${ARCH} CACHE STRING "Target architecture for the Dynamic Binary Translation unit")
 set_property(CACHE ARCH PROPERTY STRINGS "X86_64" "RISCV" "AARCH64")
 
 option(BUILD_TESTS "Enable build of tests" OFF)
