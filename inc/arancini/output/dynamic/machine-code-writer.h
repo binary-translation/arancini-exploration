@@ -1,12 +1,14 @@
 #pragma once
 
-#include <cstdlib>
+#include <arancini/output/dynamic/machine-code-allocator.h>
+#include <iostream>
 
 namespace arancini::output::dynamic {
 class machine_code_writer {
 public:
-	machine_code_writer()
-		: code_ptr_(nullptr)
+	machine_code_writer(machine_code_allocator &allocator)
+		: allocator_(allocator)
+		, code_ptr_(nullptr)
 		, code_size_(0)
 		, alloc_size_(0)
 	{
@@ -29,8 +31,10 @@ public:
 
 	void finalise()
 	{
-		code_ptr_ = std::realloc(code_ptr_, code_size_);
+		code_ptr_ = allocator_.allocate(code_ptr_, code_size_);
 		alloc_size_ = code_size_;
+
+		std::cerr << "mc: finalise: ptr=" << std::hex << code_ptr_ << ", size=" << alloc_size_ << std::endl;
 	}
 
 private:
@@ -43,10 +47,11 @@ private:
 				alloc_size_ *= 2;
 			}
 
-			code_ptr_ = std::realloc(code_ptr_, alloc_size_);
+			code_ptr_ = allocator_.allocate(code_ptr_, alloc_size_);
 		}
 	}
 
+	machine_code_allocator &allocator_;
 	void *code_ptr_;
 	size_t code_size_;
 	size_t alloc_size_;
