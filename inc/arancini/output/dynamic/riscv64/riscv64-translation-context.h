@@ -21,5 +21,6 @@ private:
 	Assembler assembler{RV_GC};
 
 	Register materialise(const ir::node *n);
+	Register materialiseConstant(int64_t imm);
 };
 } // namespace arancini::output::dynamic::riscv64
