@@ -6,27 +6,15 @@
 using namespace arancini::output::dynamic::x86;
 using namespace arancini::ir;
 
-void x86_translation_context::begin_block() { std::cerr << "begin block" << std::endl; }
+void x86_translation_context::begin_block() { std::cerr << "INPUT ASSEMBLY:" << std::endl; }
 
-void x86_translation_context::begin_instruction() { std::cerr << "begin insn" << std::endl; }
+void x86_translation_context::begin_instruction(off_t address, const std::string &disasm) { std::cerr << "  " << std::hex << address << ": " << disasm << std::endl; }
 
-void x86_translation_context::end_instruction() { std::cerr << "end insn" << std::endl; }
+void x86_translation_context::end_instruction() { }
 
-void x86_translation_context::end_block()
-{
-	std::cerr << "end block" << std::endl;
-	builder_.finalise(writer());
-}
+void x86_translation_context::end_block() { builder_.finalise(writer()); }
 
-void x86_translation_context::lower(node *n)
-{
-	std::cerr << "lower node" << std::endl;
-
-	debug_visitor v(std::cerr);
-	n->accept(v);
-
-	materialise(n);
-}
+void x86_translation_context::lower(node *n) { materialise(n); }
 
 void x86_translation_context::materialise(node *n)
 {
@@ -174,8 +162,8 @@ void x86_translation_context::materialise_read_pc(read_pc_node *n)
 
 void x86_translation_context::materialise_write_pc(write_pc_node *n)
 {
-	//int dst_vreg = alloc_vreg_for_port(n->val());
-	//builder_.add_mov(operand::imm(n->val().type().element_width(), 0x1234), operand::vreg(n->val().type().element_width(), dst_vreg));
+	// int dst_vreg = alloc_vreg_for_port(n->val());
+	// builder_.add_mov(operand::imm(n->val().type().element_width(), 0x1234), operand::vreg(n->val().type().element_width(), dst_vreg));
 }
 
 void x86_translation_context::materialise_read_mem(read_mem_node *n)

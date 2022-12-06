@@ -285,13 +285,7 @@ public:
 
 	void finalise(machine_code_writer &writer)
 	{
-		// std::cerr << "BEFORE REGALLOC" << std::endl;
-		// dump(std::cerr);
 		allocate();
-		// std::cerr << "AFTER REGALLOC" << std::endl;
-		// dump(std::cerr);
-		// std::cerr << "---" << std::endl;
-
 		emit(writer);
 	}
 

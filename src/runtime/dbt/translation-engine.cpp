@@ -48,10 +48,8 @@ public:
 
 	virtual void begin_packet(off_t address, const std::string &disassembly = "") override
 	{
-		std::cerr << "dbt: lowering: " << disassembly << std::endl;
 		is_eob_ = false;
-
-		tctx_->begin_instruction();
+		tctx_->begin_instruction(address, disassembly);
 	}
 
 	virtual packet_type end_packet() override

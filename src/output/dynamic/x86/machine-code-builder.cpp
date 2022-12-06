@@ -40,15 +40,9 @@ void instruction::dump(std::ostream &os) const
 	os << std::endl;
 }
 
-static void emit_opcode_rr(machine_code_writer& writer, int opcode, physreg r, physreg rm)
-{
+static void emit_opcode_rr(machine_code_writer &writer, int opcode, physreg r, physreg rm) { }
 
-}
-
-static void emit_opcode_rm(machine_code_writer& writer, int opcode, int r, int base, int index, int scale, int displ)
-{
-
-}
+static void emit_opcode_rm(machine_code_writer &writer, int opcode, int r, int base, int index, int scale, int displ) { }
 
 void instruction::emit(machine_code_writer &writer) const
 {
@@ -248,9 +242,11 @@ void machine_code_builder::emit(machine_code_writer &writer)
 		i.emit(writer);
 	}
 
-	std::cerr << "***** GENERATED MACHINE CODE" << std::endl;
+	std::cerr << "OUTPUT ASSEMBLY:" << std::endl;
 
-	off_t base_address = 0;
+	const unsigned char *code = (const unsigned char *)writer.ptr();
+
+	off_t base_address = (off_t)code;
 	size_t offset = 0;
 	while (offset < writer.size()) {
 		xed_decoded_inst_t xedd;
@@ -258,7 +254,7 @@ void machine_code_builder::emit(machine_code_writer &writer)
 		xed_decoded_inst_set_mode(&xedd, XED_MACHINE_MODE_LONG_64, XED_ADDRESS_WIDTH_64b);
 		xed_decoded_inst_set_input_chip(&xedd, XED_CHIP_ALL);
 
-		xed_error_enum_t xed_error = xed_decode(&xedd, &((const unsigned char *)writer.ptr())[offset], writer.size() - offset);
+		xed_error_enum_t xed_error = xed_decode(&xedd, &code[offset], writer.size() - offset);
 		if (xed_error != XED_ERROR_NONE) {
 			throw std::runtime_error("unable to decode instruction: " + std::to_string(xed_error));
 		}
@@ -267,7 +263,7 @@ void machine_code_builder::emit(machine_code_writer &writer)
 
 		char buffer[64];
 		xed_format_context(XED_SYNTAX_ATT, &xedd, buffer, sizeof(buffer) - 1, base_address, nullptr, 0);
-		std::cerr << buffer << std::endl;
+		std::cerr << "  " << std::hex << base_address << ": " << buffer << std::endl;
 
 		offset += length;
 		base_address += length;
