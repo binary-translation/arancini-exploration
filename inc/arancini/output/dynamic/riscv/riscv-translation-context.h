@@ -11,7 +11,7 @@ public:
 	}
 
 	virtual void begin_block() override;
-	virtual void begin_instruction() override;
+	virtual void begin_instruction(off_t address, const std::string& disasm) override;
 	virtual void end_instruction() override;
 	virtual void end_block() override;
 	virtual void lower(ir::node *n) override;

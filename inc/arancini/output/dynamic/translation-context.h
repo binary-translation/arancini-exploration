@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdlib>
+#include <string>
+
 namespace arancini::ir {
 class node;
 }
@@ -15,7 +18,7 @@ public:
 	}
 
 	virtual void begin_block() = 0;
-	virtual void begin_instruction() = 0;
+	virtual void begin_instruction(off_t address, const std::string &disasm) = 0;
 	virtual void end_instruction() = 0;
 	virtual void end_block() = 0;
 
