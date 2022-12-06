@@ -25,9 +25,11 @@ elseif (TARGET arancini-output-arm64)
     target_link_libraries(arancini-runtime
                           PRIVATE
                           arancini-output-arm64)
-else ()
+elseif (TARGET arancini-output-riscv)
     target_link_libraries(arancini-runtime
                           PRIVATE
                           arancini-output-riscv)
+else ()
+    message(FATAL_ERROR "No output DBT library was built; set ARCH correctly")
 endif ()
 
