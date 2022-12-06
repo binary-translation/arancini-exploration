@@ -18,6 +18,7 @@
 #endif
 
 #include <arancini/input/x86/x86-input-arch.h>
+#include <sys/ucontext.h>
 
 using namespace arancini::runtime::exec;
 using namespace arancini::runtime::exec::x86;
@@ -42,7 +43,14 @@ static arancini::output::dynamic::riscv64::riscv64_dynamic_output_engine oe;
  */
 static void segv_handler(int signo, siginfo_t *info, void *context)
 {
-	std::cerr << "SEGMENTATION FAULT: code=" << std::hex << info->si_code << ", host-virtual-address=" << std::hex << info->si_addr;
+#if defined(ARCH_X86_64)
+	unsigned long rip = ((ucontext_t *)context)->uc_mcontext.gregs[REG_RIP];
+#else
+	unsigned long rip = 0;
+#endif
+
+	std::cerr << "SEGMENTATION FAULT: code=" << std::hex << info->si_code << ", rip=" << std::hex << rip << ", host-virtual-address=" << std::hex
+			  << info->si_addr;
 
 	uintptr_t emulated_base = (uintptr_t)ctx->get_memory_ptr(0);
 	if ((uintptr_t)info->si_addr >= emulated_base) {
@@ -94,8 +102,8 @@ static void load_gph(execution_context *ctx, const guest_program_header_metadata
 	void *ptr = ctx->add_memory_region(md->load_address, md->memory_size);
 
 	// Debugging information
-	std::cerr << "loading gph load-addr=" << std::hex << md->load_address << ", mem-size=" << md->memory_size << ", end=" << (md->load_address + md->memory_size) << ", file-size=" << md->file_size
-			  << ", target=" << ptr << std::endl;
+	std::cerr << "loading gph load-addr=" << std::hex << md->load_address << ", mem-size=" << md->memory_size
+			  << ", end=" << (md->load_address + md->memory_size) << ", file-size=" << md->file_size << ", target=" << ptr << std::endl;
 
 	// Copy the data from the host binary into the new allocated region of emulated
 	// guest memory.  This should be only of the specified file size, because the file size
