@@ -32,7 +32,7 @@ static arancini::output::dynamic::x86::x86_dynamic_output_engine oe;
 #elif defined(ARCH_AARCH64)
 static arancini::output::dynamic::arm64::arm64_dynamic_output_engine oe;
 #elif defined(ARCH_RISCV64)
-static arancini::output::dynamic::riscv::riscv_dynamic_output_engine oe;
+static arancini::output::dynamic::riscv64::riscv64_dynamic_output_engine oe;
 #else
 #error "Unsupported dynamic output architecture"
 #endif
