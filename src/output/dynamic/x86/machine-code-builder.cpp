@@ -256,7 +256,8 @@ void machine_code_builder::emit(machine_code_writer &writer)
 
 		xed_error_enum_t xed_error = xed_decode(&xedd, &code[offset], writer.size() - offset);
 		if (xed_error != XED_ERROR_NONE) {
-			throw std::runtime_error("unable to decode instruction: " + std::to_string(xed_error));
+			// throw std::runtime_error("unable to decode instruction: " + std::to_string(xed_error));
+			break;
 		}
 
 		xed_uint_t length = xed_decoded_inst_get_length(&xedd);

@@ -60,8 +60,10 @@ public:
 
 	translation *create_translation()
 	{
-		writer_.finalise();
-		return new translation(writer_.ptr(), writer_.size());
+		auto &writer = tctx_->writer();
+
+		writer.finalise();
+		return new translation(writer.ptr(), writer.size());
 	}
 
 protected:
@@ -76,7 +78,6 @@ protected:
 
 private:
 	std::shared_ptr<translation_context> tctx_;
-	machine_code_writer writer_;
 	bool is_eob_;
 };
 
@@ -86,7 +87,8 @@ translation *translation_engine::translate(unsigned long pc)
 
 	std::cerr << "translating pc=" << std::hex << pc << std::endl;
 
-	machine_code_writer writer;
+	arena_machine_code_allocator a(code_arena_);
+	machine_code_writer writer(a);
 	auto ctx = oe_.create_translation_context(writer);
 
 	dbt_ir_builder builder(ctx);

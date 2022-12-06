@@ -1,5 +1,6 @@
 #pragma once
 
+#include <arancini/output/dynamic/machine-code-allocator.h>
 #include <arancini/runtime/dbt/translation-cache.h>
 
 namespace arancini::input {
@@ -25,6 +26,7 @@ public:
 		: ec_(ec)
 		, ia_(ia)
 		, oe_(oe)
+		, code_arena_(0x100000000)
 	{
 	}
 
@@ -34,6 +36,7 @@ public:
 private:
 	execution_context &ec_;
 	translation_cache cache_;
+	output::dynamic::arena code_arena_;
 
 	input::input_arch &ia_;
 	output::dynamic::dynamic_output_engine &oe_;
