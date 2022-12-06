@@ -12,7 +12,7 @@
 #elif defined(ARCH_AARCH64)
 #include <arancini/output/dynamic/arm64/arm64-dynamic-output-engine.h>
 #elif defined(ARCH_RISCV64)
-#include <arancini/output/dynamic/riscv/riscv-dynamic-output-engine.h>
+#include <arancini/output/dynamic/riscv64/riscv64-dynamic-output-engine.h>
 #else
 #error "Unsupported dynamic output architecture"
 #endif
