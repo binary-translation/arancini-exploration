@@ -11,7 +11,7 @@
 #include <arancini/output/dynamic/x86/x86-dynamic-output-engine.h>
 #elif defined(ARCH_AARCH64)
 #include <arancini/output/dynamic/arm64/arm64-dynamic-output-engine.h>
-#elif defined(ARCH_RISCV)
+#elif defined(ARCH_RISCV64)
 #include <arancini/output/dynamic/riscv/riscv-dynamic-output-engine.h>
 #else
 #error "Unsupported dynamic output architecture"
@@ -31,7 +31,7 @@ static arancini::input::x86::x86_input_arch ia(true, arancini::input::x86::disas
 static arancini::output::dynamic::x86::x86_dynamic_output_engine oe;
 #elif defined(ARCH_AARCH64)
 static arancini::output::dynamic::arm64::arm64_dynamic_output_engine oe;
-#elif defined(ARCH_RISCV)
+#elif defined(ARCH_RISCV64)
 static arancini::output::dynamic::riscv::riscv_dynamic_output_engine oe;
 #else
 #error "Unsupported dynamic output architecture"
