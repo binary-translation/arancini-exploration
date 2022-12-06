@@ -60,7 +60,7 @@ Register riscv64_translation_context::materialise(const node *n)
 			assembler.not_(outReg, srcReg1);
 			break;
 		default:
-			throw std::runtime_error("unsupported binary arithmetic operation");
+			throw std::runtime_error("unsupported unary arithmetic operation");
 		}
 
 	} break;
@@ -73,6 +73,7 @@ Register riscv64_translation_context::materialise(const node *n)
 	}
 	return ZERO;
 }
+
 Register riscv64_translation_context::materialise_ternary_arith(ternary_arith_node *n2)
 {
 	Register outReg = T0;
@@ -323,6 +324,7 @@ Register riscv64_translation_context::materialise_bit_shift(bit_shift_node *n2)
 
 	return outReg;
 }
+
 Register riscv64_translation_context::materialise_binary_arith(binary_arith_node *n2)
 {
 	Register outReg = T0;
@@ -452,6 +454,8 @@ standardPath:
 			assembler.srai(outReg, outReg, 64 - n2->val().type().width());
 			break;
 		}
+		assembler.sub(outReg, srcReg1, srcReg2);
+
 		assembler.sgtz(CF, srcReg2);
 		assembler.slt(OF, outReg, srcReg1);
 		assembler.xor_(OF, OF, CF); // OF FIXME Assumes outReg!=srcReg1 && outReg!=srcReg2
@@ -679,3 +683,4 @@ Register riscv64_translation_context::materialise_constant(int64_t imm)
 	}
 	return outReg;
 }
+

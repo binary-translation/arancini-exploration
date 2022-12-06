@@ -205,7 +205,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 	switch (p.owner()->kind()) {
 	case node_kinds::constant: {
 		auto cn = (constant_node *)n;
-		
+
 		::llvm::Type *ty;
 		switch (cn->val().type().width()) {
 		case 1:
@@ -305,7 +305,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		if (p.kind() == port_kinds::value) {
 			auto lhs = lower_port(builder, state_arg, pkt, ban->lhs());
 			auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
-			
+
 			switch (ban->op()) {
 			case binary_arith_op::bxor:
 				return builder.CreateXor(lhs, rhs);
@@ -568,7 +568,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		}
 
 		auto val = lower_port(builder, state_arg, pkt, wrn->value());
-                
+
 		//Bitcast the resulting value to the type of the register
 		//since the operations can happen on different type after
 		//other casting operations.

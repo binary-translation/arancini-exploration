@@ -28,3 +28,4 @@ private:
 	Register materialise_bit_shift(ir::bit_shift_node *n2);
 };
 } // namespace arancini::output::dynamic::riscv64
+
