@@ -184,6 +184,12 @@ public:
 	/// @return a cmpne node: lhs != rhs
 	value_node *insert_cmpne(port &lhs, port &rhs) { return create_and_insert<binary_arith_node>(binary_arith_op::cmpne, lhs, rhs); }
 
+	/// @brief compare greater than
+	/// @param lhs
+	/// @param rhs
+	/// @return a cmpgt node: lhs > rhs
+	value_node *insert_cmpgt(port &lhs, port &rhs) { return create_and_insert<binary_arith_node>(binary_arith_op::cmpgt, lhs, rhs); }
+
 	/// @brief zero extend a value to a larger width (does not preserve the sign)
 	/// @param target_type new type
 	/// @param value value to extend
