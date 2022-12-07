@@ -59,9 +59,18 @@ void mov_translator::do_translate()
 	}
 
 	case XED_ICLASS_MOVQ: {
-		// TODO: INCORRECT FOR SOME SIZES
-		auto op1 = read_operand(1);
-		write_operand(0, op1->val());
+		// up to SSE2
+		auto src = read_operand(1);
+
+		if (src->val().type().width() == 128) {
+			src = builder().insert_bit_extract(src->val(), 0, 64);
+		}
+
+		if (get_operand_width(0) == 128) {
+			src = builder().insert_zx(value_type::u128(), src->val());
+		}
+
+		write_operand(0, src->val());
 		break;
 	}
 
