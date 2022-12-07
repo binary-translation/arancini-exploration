@@ -121,9 +121,7 @@ void mov_translator::do_translate()
 		// movss xmm1, m32: dst[31..0] = src[31..0], dst[127..32] = 0, dst[MAXVAL..128] are unmodified
 		auto dst = read_operand(0);
 		auto src = read_operand(1);
-
-		dst = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), src->val());
-		value_node *val;
+		value_node *val, *rslt;
 
 		if (src->val().type().element_width() == 128) {
 			src = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), src->val());
@@ -132,7 +130,13 @@ void mov_translator::do_translate()
 			src = builder().insert_bitcast(value_type::f32(), src->val());
 			val = src;
 		}
-		auto rslt = builder().insert_vector_insert(dst->val(), 0, val->val());
+
+		if (dst->val().type().element_width() == 128) {
+			dst = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), dst->val());
+			rslt = builder().insert_vector_insert(dst->val(), 0, val->val());
+		} else {
+			rslt = val;
+		}
 		write_operand(0, rslt->val());
 		break;
 	}
