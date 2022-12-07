@@ -21,6 +21,6 @@ add_library(arancini-output-llvm
 
 target_include_directories(arancini-output-llvm PUBLIC ${INCLUDE_PATH})
 target_link_directories(arancini-output-llvm PRIVATE ${LLVM_LIBRARY_DIRS})
-target_link_libraries(arancini-output-llvm PRIVATE xed arancini-ir LLVM)
+target_link_libraries(arancini-output-llvm PRIVATE xed arancini-ir LLVM LLVMSupport)
 target_compile_definitions(arancini-output-llvm PRIVATE ${LLVM_FLAGS})
 
