@@ -180,6 +180,9 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_CVTSD2SS:
 		return std::make_unique<fpvec_translator>(builder);
 
+	case XED_ICLASS_PSHUFD:
+		return std::make_unique<shuffle_translator>(builder);
+
 	default:
 		return nullptr;
 	}
