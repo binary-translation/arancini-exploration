@@ -106,6 +106,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_HLT:
 	case XED_ICLASS_CPUID:
 	case XED_ICLASS_SYSCALL:
+	case XED_ICLASS_PREFETCHNTA:
 		return std::make_unique<nop_translator>(builder);
 
 	case XED_ICLASS_XOR:
