@@ -120,6 +120,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_SBB:
 	case XED_ICLASS_CMP:
 	case XED_ICLASS_TEST:
+	case XED_ICLASS_COMISS:
 	//SSE2 binary operations
 	case XED_ICLASS_PADDQ:
 	case XED_ICLASS_PADDD:
