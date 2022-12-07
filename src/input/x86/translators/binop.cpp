@@ -89,6 +89,18 @@ void binop_translator::do_translate()
 		rslt = builder().insert_sub(lhs->val(), rhs->val());
 		break;
 	}
+	case XED_ICLASS_XADD: {
+        auto dst = read_operand(0);
+        auto src = read_operand(1);
+
+        auto sum = builder().insert_add(src->val(), dst->val());
+
+        write_flags(sum, flag_op::update, flag_op::update, flag_op::update, flag_op::update, flag_op::update, flag_op::update);
+
+        write_operand(1, dst->val());
+        write_operand(0, sum->val());
+        break;
+    }
 	case XED_ICLASS_COMISS: {
 		// comiss op0 op1: compares the lowest fp32 value of op0 and op1 and sets EFLAGS such as:
 		// op0 > op1: ZF = PF = CF = 0
@@ -175,6 +187,7 @@ void binop_translator::do_translate()
 	case XED_ICLASS_CMP:
 	case XED_ICLASS_TEST:
 	case XED_ICLASS_COMISS:
+	case XED_ICLASS_XADD:
 		break;
 
 	default:
