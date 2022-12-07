@@ -33,11 +33,11 @@ void mov_translator::do_translate()
 	}
 
 	case XED_ICLASS_CQO: {
-		auto rax = read_reg(value_type::s64(), reg_to_offset(XED_REG_RAX));
+		auto rax = read_reg(value_type::s64(), reg_offsets::RAX);
 		auto sx = builder().insert_sx(value_type::s128(), rax->val());
 		auto hi = builder().insert_bit_extract(sx->val(), 64, 64);
 
-		write_reg(reg_to_offset(XED_REG_RDX), hi->val());
+		write_reg(reg_offsets::RDX, hi->val());
 		break;
 	}
 
@@ -54,7 +54,7 @@ void mov_translator::do_translate()
 		/* Only for 64-bit, other sizes are with CBW/CWDE instructions */
 		auto eax = read_reg(value_type::s32(), reg_to_offset(XED_REG_EAX));
 		auto rax = builder().insert_sx(value_type::s64(), eax->val());
-		write_reg(reg_to_offset(XED_REG_RAX), rax->val());
+		write_reg(reg_offsets::RAX, rax->val());
 		break;
 	}
 
