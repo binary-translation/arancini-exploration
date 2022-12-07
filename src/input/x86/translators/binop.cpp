@@ -225,9 +225,6 @@ void binop_translator::do_translate()
 		write_flags(rslt, flag_op::update, flag_op::update, flag_op::update, flag_op::update, flag_op::update, flag_op::update);
 		break;
 
-	case XED_ICLASS_COMISS:
-		break;
-
 	default:
 		break;
 	}
