@@ -120,4 +120,5 @@ DEFINE_TRANSLATOR(muldiv)
 DEFINE_TRANSLATOR(rep)
 DEFINE_TRANSLATOR(punpck)
 DEFINE_TRANSLATOR(fpvec)
+DEFINE_TRANSLATOR(shuffle)
 } // namespace arancini::input::x86::translators
