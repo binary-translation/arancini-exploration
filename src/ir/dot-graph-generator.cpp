@@ -267,6 +267,9 @@ void dot_graph_generator::visit_binary_arith_node(binary_arith_node &n)
 	case binary_arith_op::cmpne:
 		s << "cmpne";
 		break;
+	case binary_arith_op::cmpgt:
+		s << "cmpgt";
+		break;
 	default:
 		s << "unknown-binary";
 		break;
