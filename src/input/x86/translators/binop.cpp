@@ -101,6 +101,19 @@ void binop_translator::do_translate()
         write_operand(0, sum->val());
         break;
     }
+	case XED_ICLASS_BT: {
+		auto src = read_operand(0);
+		auto pos = read_operand(1);
+
+		pos = builder().insert_zx(src->val().type(), pos->val());
+		auto shift = builder().insert_lsl(builder().insert_constant_i(pos->val().type(), 1)->val(), pos->val());
+		auto and_node = builder().insert_and(src->val(), shift->val());
+		auto rslt = builder().insert_lsr(and_node->val(), pos->val());
+		rslt = builder().insert_trunc(value_type::u1(), rslt->val());
+
+		write_reg(reg_offsets::CF, rslt->val());
+		break;
+	}
 	case XED_ICLASS_COMISS: {
 		// comiss op0 op1: compares the lowest fp32 value of op0 and op1 and sets EFLAGS such as:
 		// op0 > op1: ZF = PF = CF = 0
@@ -186,6 +199,7 @@ void binop_translator::do_translate()
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
 	case XED_ICLASS_CMP:
 	case XED_ICLASS_TEST:
+	case XED_ICLASS_BT:
 	case XED_ICLASS_COMISS:
 	case XED_ICLASS_XADD:
 		break;
