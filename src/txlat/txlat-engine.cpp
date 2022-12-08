@@ -57,7 +57,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
 	// TODO: Figure the input engine out from ELF architecture header
 	auto das = cmdline.at("syntax").as<std::string>() == "att" ? disassembly_syntax::att : disassembly_syntax::intel;
-	auto ia = std::make_unique<arancini::input::x86::x86_input_arch>(cmdline.count("debug"), das);
+	auto ia = std::make_unique<arancini::input::x86::x86_input_arch>(cmdline.count("debug") || cmdline.count("graph"), das);
 
 	// Construct the output engine
 	auto intermediate_file = tf.create_file(".o");
