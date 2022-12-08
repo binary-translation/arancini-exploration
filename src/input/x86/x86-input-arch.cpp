@@ -153,6 +153,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 		return std::make_unique<shifts_translator>(builder);
 
 	case XED_ICLASS_NOT:
+	case XED_ICLASS_NEG:
 		return std::make_unique<unop_translator>(builder);
 
 	case XED_ICLASS_MUL:
