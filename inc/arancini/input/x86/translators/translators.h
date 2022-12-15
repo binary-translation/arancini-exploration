@@ -41,6 +41,7 @@ protected:
 	action_node *write_operand(int opnum, port &value);
 	value_node *read_operand(int opnum);
 	ssize_t get_operand_width(int opnum);
+	bool is_memory_operand(int opnum);
 	value_node *compute_address(int mem_idx);
 
 	/**
