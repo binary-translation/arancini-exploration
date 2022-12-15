@@ -3,7 +3,7 @@
 #include <arancini/ir/node.h>
 #include <arancini/ir/port.h>
 #include <arancini/output/dynamic/translation-context.h>
-#include <arancini/output/dynamic/x86/machine-code-builder.h>
+#include <arancini/output/dynamic/x86/x86-instruction-builder.h>
 #include <map>
 #include <set>
 
@@ -23,10 +23,12 @@ public:
 	virtual void lower(ir::node *n) override;
 
 private:
-	machine_code_builder builder_;
+	x86_instruction_builder builder_;
 	std::set<ir::node *> materialised_nodes_;
 	std::map<ir::port *, int> port_to_vreg_;
 	int next_vreg_;
+
+	void do_register_allocation();
 
 	int alloc_vreg() { return next_vreg_++; }
 
@@ -37,8 +39,9 @@ private:
 		return v;
 	}
 
-	operand operand_for_port(ir::port &p);
-	operand vreg_operand_for_port(ir::port &p);
+	// operand operand_for_port(ir::port &p);
+	// operand vreg_operand_for_port(ir::port &p);
+	x86_register vreg_operand_for_port(ir::port &p);
 	int vreg_for_port(ir::port &p) const { return port_to_vreg_.at(&p); }
 
 	void materialise(ir::node *n);
