@@ -40,9 +40,18 @@ void instruction::dump(std::ostream &os) const
 	os << std::endl;
 }
 
-static void emit_opcode_rr(machine_code_writer &writer, int opcode, physreg r, physreg rm) { }
+static void emit_modrm(machine_code_writer &writer, int mod, int reg, int rm) { writer.emit8(0); }
 
-static void emit_opcode_rm(machine_code_writer &writer, int opcode, int r, int base, int index, int scale, int displ) { }
+enum class mod_types { base_disp0 = 0, base_disp8 = 1, base_disp32 = 2, reg = 3 };
+
+static void emit_opcode_modrm(machine_code_writer &writer, int opcode, mod_types mod, physreg reg, physreg rm)
+{
+	writer.emit8(opcode);
+
+	int mreg = (int)reg;
+	int mrm = (int)reg;
+	writer.emit8(((int)mod << 7) | (mreg << 3) | mrm);
+}
 
 void instruction::emit(machine_code_writer &writer) const
 {
@@ -52,18 +61,17 @@ void instruction::emit(machine_code_writer &writer) const
 
 	switch (opcode_) {
 	case opcodes::mov:
+		// 89: mov rm, r (16, 32, 64)
+		// 8b: mov r, rm (16, 32, 64)
 		switch (get_iform()) {
 		case iform::f_rr:
-			writer.emit8(0x89);
-			writer.emit8(0);
+			emit_opcode_modrm(writer, 0x89, mod_types::reg, operands_[0].oper().reg_i.rr.preg_i, operands_[1].oper().reg_i.rr.preg_i);
 			break;
 		case iform::f_rm:
-			writer.emit8(0x89);
-			writer.emit8(0);
+			emit_opcode_modrm(writer, 0x89, mod_types::base_disp0, operands_[0].oper().reg_i.rr.preg_i, operands_[1].oper().reg_i.rr.preg_i);
 			break;
 		case iform::f_mr:
-			writer.emit8(0x8b);
-			writer.emit8(0);
+			emit_opcode_modrm(writer, 0x8b, mod_types::base_disp0, operands_[0].oper().reg_i.rr.preg_i, operands_[1].oper().reg_i.rr.preg_i);
 			break;
 		case iform::f_ir:
 			writer.emit8(0xb8);
@@ -108,7 +116,7 @@ void operand::dump(std::ostream &os) const
 
 void instruction_operand::dump(std::ostream &os) const { operand_.dump(os); }
 
-static const char *regnames[] = { "rax", "rcx", "rdx", "rbx", "rsi", "rdi", "rsp", "rbp" };
+static const char *regnames[] = { "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15" };
 
 void regref::dump(std::ostream &os) const
 {
@@ -238,7 +246,10 @@ void machine_code_builder::allocate()
 
 void machine_code_builder::emit(machine_code_writer &writer)
 {
+	std::cerr << "INTERMEDIATE ASSEMBLY:" << std::endl;
 	for (const auto &i : instructions_) {
+		if (!i.dead())
+			i.dump(std::cerr);
 		i.emit(writer);
 	}
 
