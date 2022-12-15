@@ -75,6 +75,23 @@ public:
 		n.top().accept(*this);
 	}
 
+	virtual void visit_atomic_node(atomic_node &n) override { }
+
+	virtual void visit_unary_atomic_node(unary_atomic_node &n) override { n.lhs().accept(*this); }
+
+	virtual void visit_binary_atomic_node(binary_atomic_node &n) override
+	{
+		n.lhs().accept(*this);
+		n.rhs().accept(*this);
+	}
+
+	virtual void visit_ternary_atomic_node(ternary_atomic_node &n) override
+	{
+		n.lhs().accept(*this);
+		n.rhs().accept(*this);
+		n.top().accept(*this);
+	}
+
 	virtual void visit_cast_node(cast_node &n) override { n.source_value().accept(*this); }
 
 	virtual void visit_csel_node(csel_node &n) override
@@ -118,6 +135,11 @@ public:
 
 		seen_.insert(p.owner());
 		p.owner()->accept(*this);
+	}
+
+	virtual bool seen_node(node *n) override
+	{
+		return seen_.count(n) > 0;
 	}
 
 private:

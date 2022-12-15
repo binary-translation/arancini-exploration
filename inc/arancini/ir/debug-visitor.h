@@ -32,6 +32,9 @@ public:
 	virtual void visit_unary_arith_node(unary_arith_node &n) override;
 	virtual void visit_binary_arith_node(binary_arith_node &n) override;
 	virtual void visit_ternary_arith_node(ternary_arith_node &n) override;
+	virtual void visit_unary_atomic_node(unary_atomic_node &n) override;
+	virtual void visit_binary_atomic_node(binary_atomic_node &n) override;
+	virtual void visit_ternary_atomic_node(ternary_atomic_node &n) override;
 	virtual void visit_cast_node(cast_node &n) override;
 	virtual void visit_csel_node(csel_node &n) override;
 	virtual void visit_bit_shift_node(bit_shift_node &n) override;

@@ -287,11 +287,21 @@ void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
 		break;
 
 	case flag_op::update:
-		if (op->kind() == node_kinds::unary_arith || op->kind() == node_kinds::binary_arith || op->kind() == node_kinds::ternary_arith) {
+		switch (op->kind()) {
+		case node_kinds::unary_arith:
+		case node_kinds::binary_arith:
+		case node_kinds::ternary_arith:
 			write_reg(reg_offsets::ZF, ((arith_node *)op)->zero());
-		} else if (op->kind() == node_kinds::constant) {
+			break;
+		case node_kinds::unary_atomic:
+		case node_kinds::binary_atomic:
+		case node_kinds::ternary_atomic:
+			write_reg(reg_offsets::ZF, ((atomic_node *)op)->zero());
+			break;
+		case node_kinds::constant:
 			write_reg(reg_offsets::ZF, builder_.insert_constant_i(value_type::u1(), ((constant_node *)op)->is_zero())->val());
-		} else {
+			break;
+		default:
 			throw std::runtime_error("unsupported operation node type for ZF");
 		}
 		break;
@@ -310,9 +320,16 @@ void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
 		break;
 
 	case flag_op::update:
-		if (op->kind() == node_kinds::binary_arith || op->kind() == node_kinds::ternary_arith) {
+		switch (op->kind()) {
+		case node_kinds::binary_arith:
+		case node_kinds::ternary_arith:
 			write_reg(reg_offsets::CF, ((arith_node *)op)->carry());
-		} else {
+			break;
+		case node_kinds::binary_atomic:
+		case node_kinds::ternary_atomic:
+			write_reg(reg_offsets::CF, ((atomic_node *)op)->carry());
+			break;
+		default:
 			throw std::runtime_error("unsupported operation node type for CF");
 		}
 		break;
@@ -331,9 +348,16 @@ void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
 		break;
 
 	case flag_op::update:
-		if (op->kind() == node_kinds::binary_arith || op->kind() == node_kinds::ternary_arith) {
+		switch (op->kind()) {
+		case node_kinds::binary_arith:
+		case node_kinds::ternary_arith:
 			write_reg(reg_offsets::OF, ((arith_node *)op)->overflow());
-		} else {
+			break;
+		case node_kinds::binary_atomic:
+		case node_kinds::ternary_atomic:
+			write_reg(reg_offsets::OF, ((atomic_node *)op)->overflow());
+			break;
+		default:
 			throw std::runtime_error("unsupported operation node type for OF");
 		}
 		break;
@@ -352,12 +376,21 @@ void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
 		break;
 
 	case flag_op::update:
-		if (op->kind() == node_kinds::unary_arith || op->kind() == node_kinds::binary_arith || op->kind() == node_kinds::ternary_arith) {
+		switch (op->kind()) {
+		case node_kinds::unary_arith:
+		case node_kinds::binary_arith:
+		case node_kinds::ternary_arith:
 			write_reg(reg_offsets::SF, ((arith_node *)op)->negative());
-		} else if (op->kind() == node_kinds::constant) {
-			// TODO: INCORRECT
+			break;
+		case node_kinds::unary_atomic:
+		case node_kinds::binary_atomic:
+		case node_kinds::ternary_atomic:
+			write_reg(reg_offsets::SF, ((atomic_node *)op)->negative());
+			break;
+		case node_kinds::constant:
 			write_reg(reg_offsets::SF, builder_.insert_constant_i(value_type::u1(), ((constant_node *)op)->const_val_i() < 0)->val());
-		} else {
+			break;
+		default:
 			throw std::runtime_error("unsupported operation node type for SF");
 		}
 		break;

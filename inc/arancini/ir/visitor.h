@@ -20,6 +20,10 @@ class arith_node;
 class unary_arith_node;
 class binary_arith_node;
 class ternary_arith_node;
+class atomic_node;
+class unary_atomic_node;
+class binary_atomic_node;
+class ternary_atomic_node;
 class cast_node;
 class csel_node;
 class bit_shift_node;
@@ -54,6 +58,10 @@ public:
 	virtual void visit_unary_arith_node(unary_arith_node &n) = 0;
 	virtual void visit_binary_arith_node(binary_arith_node &n) = 0;
 	virtual void visit_ternary_arith_node(ternary_arith_node &n) = 0;
+	virtual void visit_atomic_node(atomic_node &n) = 0;
+	virtual void visit_unary_atomic_node(unary_atomic_node &n) = 0;
+	virtual void visit_binary_atomic_node(binary_atomic_node &n) = 0;
+	virtual void visit_ternary_atomic_node(ternary_atomic_node &n) = 0;
 	virtual void visit_cast_node(cast_node &n) = 0;
 	virtual void visit_csel_node(csel_node &n) = 0;
 	virtual void visit_bit_shift_node(bit_shift_node &n) = 0;
@@ -65,5 +73,7 @@ public:
 	virtual void visit_vector_insert_node(vector_insert_node &n) = 0;
 
 	virtual void visit_port(port &p) = 0;
+
+	virtual bool seen_node(node *n) = 0;
 };
 } // namespace arancini::ir
