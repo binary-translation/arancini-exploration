@@ -18,6 +18,9 @@ enum class node_kinds {
 	unary_arith,
 	binary_arith,
 	ternary_arith,
+	unary_atomic,
+	binary_atomic,
+	ternary_atomic,
 	read_reg,
 	read_mem,
 	write_reg,
@@ -81,10 +84,36 @@ private:
 	std::map<std::string, std::shared_ptr<metadata>> md_;
 };
 
-class action_node : public node {
+class value_node : public node {
+public:
+	value_node(node_kinds kind, const value_type &vt)
+		: node(kind)
+		, value_(port_kinds::value, vt, this)
+	{
+	}
+
+	port &val() { return value_; }
+	const port &val() const { return value_; }
+
+	virtual void accept(visitor &v) override
+	{
+		node::accept(v);
+		v.visit_value_node(*this);
+	}
+
+protected:
+	port value_;
+};
+
+class action_node : public value_node {
 public:
 	action_node(node_kinds kind)
-		: node(kind)
+		: value_node(kind, value_type(value_type_class::none, 0, 0))
+	{
+	}
+
+	action_node(node_kinds kind, const value_type &vt)
+		: value_node(kind, vt)
 	{
 	}
 
@@ -94,6 +123,8 @@ public:
 
 	virtual void accept(visitor &v) override
 	{
+		if (v.seen_node(this))
+			return;
 		node::accept(v);
 		v.visit_action_node(*this);
 	}
@@ -121,27 +152,6 @@ public:
 	}
 
 	std::string name_;
-};
-
-class value_node : public node {
-public:
-	value_node(node_kinds kind, const value_type &vt)
-		: node(kind)
-		, value_(port_kinds::value, vt, this)
-	{
-	}
-
-	port &val() { return value_; }
-	const port &val() const { return value_; }
-
-	virtual void accept(visitor &v) override
-	{
-		node::accept(v);
-		v.visit_value_node(*this);
-	}
-
-protected:
-	port value_;
 };
 
 class br_node : public action_node {
@@ -600,6 +610,133 @@ public:
 
 private:
 	ternary_arith_op op_;
+	port &lhs_;
+	port &rhs_;
+	port &top_;
+};
+
+class atomic_node : public action_node {
+public:
+	atomic_node(node_kinds kind, value_type vt)
+		: action_node(kind, vt)
+		, zero_(port_kinds::zero, value_type::u1(), this)
+		, negative_(port_kinds::negative, value_type::u1(), this)
+		, overflow_(port_kinds::overflow, value_type::u1(), this)
+		, carry_(port_kinds::carry, value_type::u1(), this)
+	{
+	}
+
+	port &value() { return value_; }
+	port &zero() { return zero_; }
+	port &negative() { return negative_; }
+	port &overflow() { return overflow_; }
+	port &carry() { return carry_; }
+
+	virtual void accept(visitor &v) override
+	{
+		if (v.seen_node(this))
+			return;
+		action_node::accept(v);
+		v.visit_atomic_node(*this);
+	}
+
+private:
+	port zero_, negative_, overflow_, carry_;
+};
+
+enum class unary_atomic_op { neg, bnot };
+class unary_atomic_node : public atomic_node {
+public:
+	unary_atomic_node(unary_atomic_op op, port &lhs)
+		: atomic_node(node_kinds::unary_atomic, lhs.type())
+		, op_(op)
+		, lhs_(lhs)
+	{
+		lhs.add_target(this);
+	}
+
+	unary_atomic_op op() const { return op_; }
+
+	port &lhs() const { return lhs_; }
+
+	virtual void accept(visitor &v) override
+	{
+		if (v.seen_node(this))
+			return;
+		atomic_node::accept(v);
+		v.visit_unary_atomic_node(*this);
+	}
+
+private:
+	unary_atomic_op op_;
+	port &lhs_;
+};
+
+enum class binary_atomic_op { add, sub, band, bor, xadd, bxor, btc, btr, bts };
+
+class binary_atomic_node : public atomic_node {
+public:
+	binary_atomic_node(binary_atomic_op op, port &lhs, port &rhs)
+		: atomic_node(node_kinds::binary_atomic, lhs.type())
+		, op_(op)
+		, lhs_(lhs)
+		, rhs_(rhs)
+	{
+		lhs.add_target(this);
+		rhs.add_target(this);
+	}
+
+	binary_atomic_op op() const { return op_; }
+
+	port &lhs() const { return lhs_; }
+	port &rhs() const { return rhs_; }
+
+	virtual void accept(visitor &v) override
+	{
+		if (v.seen_node(this))
+			return;
+		atomic_node::accept(v);
+		v.visit_binary_atomic_node(*this);
+	}
+
+private:
+	binary_atomic_op op_;
+	port &lhs_;
+	port &rhs_;
+};
+
+enum class ternary_atomic_op { adc, sbb, cmpxchg };
+
+class ternary_atomic_node : public atomic_node {
+public:
+	ternary_atomic_node(ternary_atomic_op op, port &lhs, port &rhs, port &top)
+		: atomic_node(node_kinds::ternary_atomic, lhs.type())
+		, op_(op)
+		, lhs_(lhs)
+		, rhs_(rhs)
+		, top_(top)
+	{
+		lhs.add_target(this);
+		rhs.add_target(this);
+		top.add_target(this);
+	}
+
+	ternary_atomic_op op() const { return op_; }
+
+	port &lhs() const { return lhs_; }
+	port &rhs() const { return rhs_; }
+	port &top() const { return top_; }
+
+	virtual void accept(visitor &v) override
+	{
+		if (v.seen_node(this))
+			return;
+		atomic_node::accept(v);
+		v.visit_ternary_atomic_node(*this);
+	}
+
+private:
+	ternary_atomic_op op_;
 	port &lhs_;
 	port &rhs_;
 	port &top_;

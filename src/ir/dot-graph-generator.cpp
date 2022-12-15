@@ -312,6 +312,107 @@ void dot_graph_generator::visit_ternary_arith_node(ternary_arith_node &n)
 	default_visitor::visit_ternary_arith_node(n);
 }
 
+void dot_graph_generator::visit_unary_atomic_node(unary_atomic_node &n)
+{
+	std::stringstream s;
+
+	switch (n.op()) {
+	case unary_atomic_op::bnot:
+		s << "atomic not";
+		break;
+	case unary_atomic_op::neg:
+		s << "atomic neg";
+		break;
+	default:
+		s << "unknown-atomic-unary";
+		break;
+	}
+
+	add_node(&n, s.str());
+	add_port_edge(&n.lhs(), &n);
+
+	default_visitor::visit_unary_atomic_node(n);
+}
+
+void dot_graph_generator::visit_binary_atomic_node(binary_atomic_node &n)
+{
+	std::stringstream s;
+
+	s << "{{<lhs>LHS|<rhs>RHS}|";
+
+	switch (n.op()) {
+	case binary_atomic_op::add:
+		s << "atomic add";
+		break;
+	case binary_atomic_op::sub:
+		s << "atomic sub";
+		break;
+	case binary_atomic_op::band:
+		s << "atomic and";
+		break;
+	case binary_atomic_op::bor:
+		s << "atomic bor";
+		break;
+	case binary_atomic_op::xadd:
+		s << "atomic xadd";
+		break;
+	case binary_atomic_op::bxor:
+		s << "atomic xor";
+		break;
+	case binary_atomic_op::btc:
+		s << "atomic btc";
+		break;
+	case binary_atomic_op::btr:
+		s << "atomic btr";
+		break;
+	case binary_atomic_op::bts:
+		s << "atomic bts";
+		break;
+	default:
+		s << "unknown-atomic-binary";
+		break;
+	}
+
+	s << "}";
+
+	add_node(&n, s.str());
+	add_port_edge(&n.lhs(), &n, "lhs");
+	add_port_edge(&n.rhs(), &n, "rhs");
+
+	default_visitor::visit_binary_atomic_node(n);
+}
+
+void dot_graph_generator::visit_ternary_atomic_node(ternary_atomic_node &n)
+{
+	std::stringstream s;
+
+	s << "{{<lhs>LHS|<rhs>RHS|<top>TOP}|";
+
+	switch (n.op()) {
+	case ternary_atomic_op::adc:
+		s << "atomic adc";
+		break;
+	case ternary_atomic_op::sbb:
+		s << "atomic sbb";
+		break;
+	case ternary_atomic_op::cmpxchg:
+		s << "atomic cmpxchg";
+		break;
+	default:
+		s << "unknown-atomic-ternary";
+		break;
+	}
+
+	s << "}";
+
+	add_node(&n, s.str());
+	add_port_edge(&n.lhs(), &n, "lhs");
+	add_port_edge(&n.rhs(), &n, "rhs");
+	add_port_edge(&n.top(), &n, "top");
+
+	default_visitor::visit_ternary_atomic_node(n);
+}
+
 void dot_graph_generator::visit_bit_extract_node(bit_extract_node &n)
 {
 	add_node(&n, "bit-extract");
