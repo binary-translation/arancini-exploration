@@ -122,4 +122,5 @@ DEFINE_TRANSLATOR(rep)
 DEFINE_TRANSLATOR(punpck)
 DEFINE_TRANSLATOR(fpvec)
 DEFINE_TRANSLATOR(shuffle)
+DEFINE_TRANSLATOR(atomic)
 } // namespace arancini::input::x86::translators
