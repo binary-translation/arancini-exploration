@@ -205,6 +205,15 @@ ssize_t translator::get_operand_width(int opnum)
 	}
 }
 
+bool translator::is_memory_operand(int opnum)
+{
+	const xed_inst_t *insn = xed_decoded_inst_inst(xed_inst());
+	auto operand = xed_inst_operand(insn, opnum);
+	auto opname = xed_operand_name(operand);
+
+	return (opname == XED_OPERAND_MEM0);
+}
+
 value_node *translator::compute_address(int mem_idx)
 {
 	auto base_reg = xed_decoded_inst_get_base_reg(xed_inst(), mem_idx);
