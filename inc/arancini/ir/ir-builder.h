@@ -190,6 +190,8 @@ public:
 	/// @return a cmpgt node: lhs > rhs
 	value_node *insert_cmpgt(port &lhs, port &rhs) { return create_and_insert<binary_arith_node>(binary_arith_op::cmpgt, lhs, rhs); }
 
+	action_node *insert_atomic_xadd(port &lhs, port &rhs) { return create_and_insert<binary_atomic_node>(binary_atomic_op::xadd, lhs, rhs); }
+
 	/// @brief zero extend a value to a larger width (does not preserve the sign)
 	/// @param target_type new type
 	/// @param value value to extend
