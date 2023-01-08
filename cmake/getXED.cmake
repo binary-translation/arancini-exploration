@@ -8,12 +8,6 @@ function (get_xed)
     # Try to clone with git
     message("Attempting to clone XED submodule")
 
-    # Determine if git is available
-    find_package(Git QUIET)
-    if (NOT Git_FOUND OR NOT EXISTS "${CMAKE_SOURCE_DIR}/.git")
-        message(FATAL_ERROR "Git not found, cannot close submodule")
-    endif ()
-
     # Determine if python is available
     find_package(Python3 COMPONENTS Interpreter)
     if (NOT Python3_FOUND)
@@ -24,13 +18,25 @@ function (get_xed)
     set(XED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/intel-xed/xed)
     set(XED_BINARY_DIR ${CMAKE_BINARY_DIR}/obj)
 
-    # Get submodule: both mbuild and xed are needed, the submodule update
-    # fetches both
-    # Build with the found python executable
-    FetchContent_Declare(XED
-        DOWNLOAD_COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
-        BINARY_DIR ${XED_BINARY_DIR}
-    )
+    # Determine if git is available
+    find_package(Git QUIET)
+    if (NOT Git_FOUND OR NOT EXISTS "${CMAKE_SOURCE_DIR}/.git")
+        # Fetch XED from repo
+        message(STATUS "Git not found: fetching release")
+
+        # Note: use URL to download from github
+        FetchContent_Declare(XED
+            URL https://github.com/intelxed/xed/archive/refs/tags/v2022.10.11.tar.gz
+        )
+    else ()
+        # Get submodule: both mbuild and xed are needed, the submodule update
+        # fetches both
+        # Build with the found python executable
+        FetchContent_Declare(XED
+            DOWNLOAD_COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
+            BINARY_DIR ${XED_BINARY_DIR}
+        )
+    endif ()
 
     # Populate XED directory
     FetchContent_MakeAvailable(XED)
