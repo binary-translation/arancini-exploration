@@ -1,15 +1,20 @@
+# Retrieve the architecture of the system
+#
+# ARCH - output variable
 function (get_arch ARCH)
-    set(ARCH ${CMAKE_HOST_SYSTEM_PROCESSOR})
+    # Convert architecture string to lowecase
+    string(TOLOWER ${CMAKE_HOST_SYSTEM_PROCESSOR} ARCH)
 
-    if (${ARCH} MATCHES "^(x86|X86|x32|x64|x64|x86_64|X86_64)$")
+    # Compare to all possible variants for x86, ARM, RISC-V
+    if (${ARCH} MATCHES "^(x86|x32|x64|x86_64)$")
         set(ARCH X86_64)
     endif ()
 
-    if (${ARCH} MATCHES "^(arm|ARM|AR64|AARCH64|AARCH32)$")
+    if (${ARCH} MATCHES "^(arm|ar64|aarch64|aarch32)$")
         set(ARCH AARCH64)
     endif ()
 
-    if (${ARCH} MATCHES "^(riscv64|riscv|RISCV|RISCV64)$")
+    if (${ARCH} MATCHES "^(riscv64|riscv)$")
         set(ARCH RISCV)
     endif ()
 
