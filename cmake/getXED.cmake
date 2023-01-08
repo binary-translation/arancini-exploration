@@ -17,6 +17,7 @@ function (get_xed)
     # Set directory variables
     set(XED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/intel-xed/xed)
     set(XED_BINARY_DIR ${CMAKE_BINARY_DIR}/obj)
+    set(XED_PATCH ${CMAKE_CURRENT_SOURCE_DIR}/xed-riscv.patch)
 
     # Determine if git is available
     find_package(Git QUIET)
@@ -27,14 +28,19 @@ function (get_xed)
         # Note: use URL to download from github
         FetchContent_Declare(XED
             URL https://github.com/intelxed/xed/archive/refs/tags/v2022.10.11.tar.gz
+            SOURCE_DIR ${XED_DIR}
         )
     else ()
         # Get submodule: both mbuild and xed are needed, the submodule update
         # fetches both
         # Build with the found python executable
+        # Note: applies patch for RISC-V support (-N to disable reversing the
+        # patch when rebuilding)
         FetchContent_Declare(XED
             DOWNLOAD_COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
             BINARY_DIR ${XED_BINARY_DIR}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            PATCH_COMMAND cd ${CMAKE_CURRENT_SOURCE_DIR} && patch -N -p0 < ${XED_PATCH}
         )
     endif ()
 
@@ -42,9 +48,10 @@ function (get_xed)
     FetchContent_MakeAvailable(XED)
 
     # Build target
-    add_custom_target(xed-build
+    add_custom_target(xed-build ALL
         COMMAND ${Python3_EXECUTABLE} ${XED_DIR}/mfile.py --extra-flags=-fPIC
         BYPRODUCTS ${XED_BINARY_DIR}
+        USES_TERMINAL
     )
 
     # Add imported XED library
