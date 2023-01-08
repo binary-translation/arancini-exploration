@@ -19,17 +19,40 @@ function (get_xed)
     set(XED_BINARY_DIR ${CMAKE_BINARY_DIR}/obj)
     set(XED_PATCH ${CMAKE_CURRENT_SOURCE_DIR}/xed-riscv.patch)
 
+    # Find patch
+    find_program(PATCH
+        NAMES patch
+        PATH_SUFFIXES usr/bin
+    )
+
+    # Patch needed to implement RISC-V support in XED
+    if (NOT PATCH)
+        message(FATAL_ERROR "patch not found - install to proceed")
+    endif ()
+
     # Determine if git is available
     find_package(Git QUIET)
     if (NOT Git_FOUND OR NOT EXISTS "${CMAKE_SOURCE_DIR}/.git")
         # Fetch XED from repo
         message(STATUS "Git not found: fetching release")
 
-        # Note: use URL to download from github
-        FetchContent_Declare(XED
-            URL https://github.com/intelxed/xed/archive/refs/tags/v2022.10.11.tar.gz
-            SOURCE_DIR ${XED_DIR}
+        set(MBUILD_DIR ${XED_DIR}/../mbuild)
+        FetchContent_Declare(XED-MBUILD
+            URL https://github.com/intelxed/mbuild/archive/refs/heads/main.zip
+            DOWNLOAD_DIR ${XED_DIR}/../
+            SOURCE_DIR ${MBUILD_DIR}
+            PATCH_COMMAND cd ${CMAKE_CURRENT_SOURCE_DIR} && patch -N -p0 < ${XED_PATCH}
         )
+
+        FetchContent_Declare(XED
+            URL https://github.com/intelxed/xed/archive/refs/heads/main.zip
+            DOWNLOAD_DIR ${XED_DIR}/../
+            SOURCE_DIR ${XED_DIR}
+            BINARY_DIR ${XED_BINARY_DIR}
+        )
+
+        FetchContent_Populate(XED-MBUILD)
+        FetchContent_MakeAvailable(XED-MBUILD)
     else ()
         # Get submodule: both mbuild and xed are needed, the submodule update
         # fetches both
@@ -39,7 +62,6 @@ function (get_xed)
         FetchContent_Declare(XED
             DOWNLOAD_COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
             BINARY_DIR ${XED_BINARY_DIR}
-            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
             PATCH_COMMAND cd ${CMAKE_CURRENT_SOURCE_DIR} && patch -N -p0 < ${XED_PATCH}
         )
     endif ()
