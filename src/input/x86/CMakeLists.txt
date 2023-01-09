@@ -20,6 +20,7 @@ add_library(arancini-input-x86
             translators/setcc.cpp
             translators/shifts.cpp
             translators/stack.cpp
+            translators/shuffle.cpp
             translators/translator.cpp
             translators/unop.cpp)
 
