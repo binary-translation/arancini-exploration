@@ -41,7 +41,7 @@ function (get_xed)
             URL https://github.com/intelxed/mbuild/archive/refs/heads/main.zip
             DOWNLOAD_DIR ${XED_DIR}/../
             SOURCE_DIR ${MBUILD_DIR}
-            PATCH_COMMAND cd ${CMAKE_CURRENT_SOURCE_DIR} && patch -N -p0 < ${XED_PATCH}
+            PATCH_COMMAND cd ${CMAKE_CURRENT_SOURCE_DIR} && patch -N -p0 < ${XED_PATCH} || true
         )
 
         FetchContent_Declare(XED
@@ -62,16 +62,22 @@ function (get_xed)
         FetchContent_Declare(XED
             DOWNLOAD_COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
             BINARY_DIR ${XED_BINARY_DIR}
-            PATCH_COMMAND cd ${CMAKE_CURRENT_SOURCE_DIR} && patch -N -p0 < ${XED_PATCH}
+            PATCH_COMMAND cd ${CMAKE_CURRENT_SOURCE_DIR} && patch -N -p0 < ${XED_PATCH} || true
         )
     endif ()
 
     # Populate XED directory
     FetchContent_MakeAvailable(XED)
 
+    if (CMAKE_FIND_ROOT_PATH)
+        set(MBUILD_EXTRA --toolchain ${CMAKE_FIND_ROOT_PATH})
+    endif ()
+
     # Build target
     add_custom_target(xed-build ALL
-        COMMAND ${Python3_EXECUTABLE} ${XED_DIR}/mfile.py --extra-flags=-fPIC
+        COMMAND ${Python3_EXECUTABLE} ${XED_DIR}/mfile.py
+                --extra-flags=-fPIC
+                ${MBUILD_EXTRA}
         BYPRODUCTS ${XED_BINARY_DIR}
         USES_TERMINAL
     )
