@@ -13,5 +13,4 @@ add_library(arancini-core
 
 set(INCLUDE_PATH ../../inc)
 target_include_directories(arancini-core PUBLIC ${INCLUDE_PATH})
-# TODO: make shared-only
 
