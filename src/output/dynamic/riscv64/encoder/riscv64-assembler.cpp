@@ -2,7 +2,7 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-#include <arancini/output/dynamic/riscv64/machineCode/assembler_riscv.h>
+#include <arancini/output/dynamic/riscv64/encoder/riscv64-assembler.h>
 
 #include <cstdlib>
 

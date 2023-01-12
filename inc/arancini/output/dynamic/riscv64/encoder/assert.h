@@ -5,7 +5,7 @@
 #ifndef VM_ASSERT_H_
 #define VM_ASSERT_H_
 
-#include <arancini/output/dynamic/riscv64/machineCode/globals.h>
+#include <arancini/output/dynamic/riscv64/encoder/globals.h>
 
 //TODO
 #define DEBUG

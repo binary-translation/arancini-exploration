@@ -11,9 +11,9 @@
 #include <atomic>
 #include <sstream>
 
-#include <arancini/output/dynamic/riscv64/machineCode/assert.h>
-#include <arancini/output/dynamic/riscv64/machineCode/globals.h>
-#include <arancini/output/dynamic/riscv64/machineCode/utils.h>
+#include <arancini/output/dynamic/riscv64/encoder/assert.h>
+#include <arancini/output/dynamic/riscv64/encoder/globals.h>
+#include <arancini/output/dynamic/riscv64/encoder/utils.h>
 
 namespace arancini::output::dynamic::riscv64 {
 

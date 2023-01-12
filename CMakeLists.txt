@@ -6,8 +6,8 @@ include(cmake/utils.cmake)
 get_arch(ARCH)
 
 # Build flags
-set(ARCH ${ARCH} CACHE STRING "Target architecture for the Dynamic Binary Translation unit")
-set_property(CACHE ARCH PROPERTY STRINGS "X86_64" "RISCV" "AARCH64")
+set(DBT_ARCH ${ARCH} CACHE STRING "Target architecture for the Dynamic Binary Translation unit")
+set_property(CACHE DBT_ARCH PROPERTY STRINGS X86_64 RISCV64 AARCH64)
 
 option(BUILD_TESTS "Enable build of tests" OFF)
 
@@ -34,18 +34,14 @@ add_subdirectory(src/input/x86)
 add_subdirectory(src/output/static/llvm)
 
 # Build X86_64 DBT
-if (ARCH STREQUAL "X86_64")
+if (DBT_ARCH STREQUAL "X86_64")
     add_subdirectory(src/output/dynamic/x86)
-endif ()
-
-# Build ARM64 DBT
-if (ARCH STREQUAL "AARCH64")
+elseif (DBT_ARCH STREQUAL "AARCH64")
     add_subdirectory(src/output/dynamic/arm64)
-endif ()
-
-# Build RISC-V DBT
-if (ARCH STREQUAL "RISCV")
-    add_subdirectory(src/output/dynamic/riscv)
+elseif (DBT_ARCH STREQUAL "RISCV64")
+    add_subdirectory(src/output/dynamic/riscv64)
+else ()
+    message(FATAL_ERROR "Invalid ARCH specified: valid values are X86_64, AARCH64, RISCV64")
 endif ()
 
 # Note: build after architecture-specific DBT build

@@ -8,8 +8,8 @@
 #include <atomic>
 
 #include <arancini/output/dynamic/machine-code-writer.h>
-#include <arancini/output/dynamic/riscv64/machineCode/assert.h>
-#include <arancini/output/dynamic/riscv64/machineCode/constants_riscv.h>
+#include <arancini/output/dynamic/riscv64/encoder/assert.h>
+#include <arancini/output/dynamic/riscv64/encoder/riscv64-constants.h>
 
 namespace arancini::output::dynamic::riscv64 {
 

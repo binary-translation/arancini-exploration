@@ -1,5 +1,5 @@
 #include <arancini/ir/node.h>
-#include <arancini/output/dynamic/riscv64/machineCode/constants_riscv.h>
+#include <arancini/output/dynamic/riscv64/encoder/riscv64-constants.h>
 #include <arancini/output/dynamic/riscv64/riscv64-translation-context.h>
 
 using namespace arancini::output::dynamic::riscv64;

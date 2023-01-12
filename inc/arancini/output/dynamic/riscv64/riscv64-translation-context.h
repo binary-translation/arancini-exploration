@@ -1,6 +1,6 @@
 #pragma once
 
-#include <arancini/output/dynamic/riscv64/machineCode/assembler_riscv.h>
+#include <arancini/output/dynamic/riscv64/encoder/riscv64-assembler.h>
 #include <arancini/output/dynamic/translation-context.h>
 
 namespace arancini::output::dynamic::riscv64 {

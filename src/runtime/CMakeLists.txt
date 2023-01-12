@@ -25,7 +25,7 @@ elseif (TARGET arancini-output-arm64)
     target_link_libraries(arancini-runtime
                           PRIVATE
                           arancini-output-arm64)
-elseif (TARGET arancini-output-riscv)
+elseif (TARGET arancini-output-riscv64)
     target_link_libraries(arancini-runtime
                           PRIVATE
                           arancini-output-riscv)
