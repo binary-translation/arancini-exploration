@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 3.22)
 project(arancini-test-examples LANGUAGES C)
 
 set(LEVELS O0 O1 O2 O3 Ofast Os)
