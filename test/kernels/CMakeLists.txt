@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 3.22)
 project(arancini-test-kernels)
 
 # Function to get files with a glob pattern and build objects
