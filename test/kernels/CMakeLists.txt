@@ -6,7 +6,6 @@ function(glob_build PREFIX GLOB)
     file(GLOB SOURCES "${GLOB}")
 
     foreach (SRC ${SOURCES})
-        # TODO: handle properly extension
         get_filename_component(TARGET ${SRC} NAME_WE)
         add_library(${PREFIX}_${TARGET} OBJECT ${SRC})
     endforeach ()

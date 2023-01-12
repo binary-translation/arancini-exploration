@@ -17,6 +17,3 @@ target_include_directories(arancini-ir
 
 target_link_libraries(arancini-ir PUBLIC xed)
 
-# TODO: specify -fpic
-# TODO: does this need to be shared?
-
