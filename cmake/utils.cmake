@@ -15,7 +15,7 @@ function (get_arch ARCH)
     endif ()
 
     if (${ARCH} MATCHES "^(riscv64|riscv)$")
-        set(ARCH RISCV)
+        set(ARCH RISCV64)
     endif ()
 
     # Set ARCH as the return value
