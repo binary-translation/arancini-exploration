@@ -7,6 +7,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_library(arancini-input-x86
             SHARED
             x86-input-arch.cpp
+            translators/atomic.cpp
             translators/binop.cpp
             translators/branch.cpp
             translators/cmov.cpp
