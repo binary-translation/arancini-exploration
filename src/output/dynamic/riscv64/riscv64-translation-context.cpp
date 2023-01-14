@@ -196,42 +196,158 @@ Register riscv64_translation_context::materialise(const node *n)
 			case 128:
 				// Split calculation
 				assembler.mul(outReg, srcReg1, srcReg2);
-				if (n2->val().type().element_type().type_class() == ir::value_type_class::signed_integer) {
+				switch (n2->val().type().element_type().type_class()) {
+
+				case value_type_class::signed_integer:
 					assembler.mulh(outReg2, srcReg1, srcReg2);
 					assembler.srai(CF, outReg, 64);
 					assembler.xor_(CF, CF, outReg2);
 					assembler.snez(CF, CF);
-				} else {
+					break;
+				case value_type_class::unsigned_integer:
 					assembler.mulhu(outReg2, srcReg1, srcReg2);
 					assembler.snez(CF, outReg2);
+					break;
+				default:
+					throw std::runtime_error("Unsupported value type for multiply");
 				}
 				assembler.mv(OF, CF);
 				break;
-			case 64:
-				assembler.mul(outReg, srcReg1, srcReg2);
-				if (n2->val().type().element_type().type_class() == ir::value_type_class::signed_integer) {
-					assembler.sraiw(CF, outReg, 32);
-					assembler.srli(CF, CF, 32);
-					assembler.snez(CF, CF);
-				} else {
 
-					// assembler.snez(CF,);
-				}
-				break;
+			case 64:
 			case 32:
 			case 16:
-			case 8:
-				// TODO
+				assembler.mul(outReg, srcReg1, srcReg2); // Assumes proper signed/unsigned extension from 32/16/8 bits
+
+				switch (n2->val().type().element_type().type_class()) {
+
+				case value_type_class::signed_integer:
+					if (n2->val().type().width() == 64) {
+						assembler.sextw(CF, outReg);
+					} else {
+						assembler.slli(CF, outReg, 64 - (n2->val().type().width()) / 2);
+						assembler.srai(CF, outReg, 64 - (n2->val().type().width()) / 2);
+					}
+					assembler.xor_(CF, CF, outReg);
+					assembler.snez(CF, CF);
+					break;
+				case value_type_class::unsigned_integer:
+					assembler.srli(CF, outReg, n2->val().type().width() / 2);
+					assembler.snez(CF, outReg2);
+					break;
+				default:
+					throw std::runtime_error("Unsupported value type for multiply");
+				}
+				assembler.mv(OF, CF);
 				break;
 			}
 		case binary_arith_op::div:
+			switch (n2->val().type().width()) {
+			case 128: // Fixme 128 bits not natively supported on RISCV, assuming just extended 64 bit value
+			case 64:
+				switch (n2->val().type().element_type().type_class()) {
+
+				case value_type_class::signed_integer:
+					assembler.div(outReg, srcReg1, srcReg2);
+					break;
+				case value_type_class::unsigned_integer:
+					assembler.divu(outReg, srcReg1, srcReg2);
+					break;
+				default:
+					throw std::runtime_error("Unsupported value type for divide");
+				}
+				break;
+			case 32:
+				switch (n2->val().type().element_type().type_class()) {
+
+				case value_type_class::signed_integer:
+					assembler.divw(outReg, srcReg1, srcReg2);
+					break;
+				case value_type_class::unsigned_integer:
+					assembler.divuw(outReg, srcReg1, srcReg2);
+					break;
+				default:
+					throw std::runtime_error("Unsupported value type for divide");
+				}
+				break;
+			case 16:
+				switch (n2->val().type().element_type().type_class()) {
+
+				case value_type_class::signed_integer:
+					assembler.divw(outReg, srcReg1, srcReg2);
+					assembler.slli(outReg, outReg, 48);
+					assembler.srai(outReg, outReg, 48);
+					break;
+				case value_type_class::unsigned_integer:
+					assembler.divuw(outReg, srcReg1, srcReg2);
+					assembler.slli(outReg, outReg, 48);
+					assembler.srli(outReg, outReg, 48);
+					break;
+				default:
+					throw std::runtime_error("Unsupported value type for divide");
+				}
+				break;
+			}
+
 		case binary_arith_op::mod:
+			switch (n2->val().type().width()) {
+			case 128: // Fixme 128 bits not natively supported on RISCV, assuming just extended 64 bit value
+			case 64:
+				switch (n2->val().type().element_type().type_class()) {
+
+				case value_type_class::signed_integer:
+					assembler.rem(outReg, srcReg1, srcReg2);
+					break;
+				case value_type_class::unsigned_integer:
+					assembler.remu(outReg, srcReg1, srcReg2);
+					break;
+				default:
+					throw std::runtime_error("Unsupported value type for divide");
+				}
+				break;
+			case 32:
+				switch (n2->val().type().element_type().type_class()) {
+
+				case value_type_class::signed_integer:
+					assembler.remw(outReg, srcReg1, srcReg2);
+					break;
+				case value_type_class::unsigned_integer:
+					assembler.remuw(outReg, srcReg1, srcReg2);
+					break;
+				default:
+					throw std::runtime_error("Unsupported value type for divide");
+				}
+				break;
+			case 16:
+				switch (n2->val().type().element_type().type_class()) {
+
+				case value_type_class::signed_integer:
+					assembler.remw(outReg, srcReg1, srcReg2);
+					assembler.slli(outReg, outReg, 48);
+					assembler.srai(outReg, outReg, 48);
+					break;
+				case value_type_class::unsigned_integer:
+					assembler.remuw(outReg, srcReg1, srcReg2);
+					assembler.slli(outReg, outReg, 48);
+					assembler.srli(outReg, outReg, 48);
+					break;
+				default:
+					throw std::runtime_error("Unsupported value type for divide");
+				}
+				break;
+			}
+
 		case binary_arith_op::cmpeq:
+			assembler.xor_(outReg, srcReg1, srcReg2);
+			assembler.seqz(outReg, outReg);
 		case binary_arith_op::cmpne:
+			assembler.xor_(outReg, srcReg1, srcReg2);
+			assembler.snez(outReg, outReg);
 		case binary_arith_op::cmpgt:
 			throw std::runtime_error("unsupported binary arithmetic operation");
 		}
 
+		// TODO those should only be set on add, sub, xor, or, and
 		assembler.seqz(ZF, outReg); // ZF
 		assembler.sltz(SF, outReg); // SF
 
