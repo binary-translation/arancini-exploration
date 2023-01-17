@@ -13,5 +13,5 @@ add_library(arancini-output-riscv64
 
 target_include_directories(arancini-output-riscv64 PUBLIC ${INCLUDE_PATH})
 target_link_libraries(arancini-output-riscv64 PRIVATE arancini-ir)
-target_compile_definitions(arancini-output-riscv64 PUBLIC ARCH_RISCV)
+target_compile_definitions(arancini-output-riscv64 PUBLIC ARCH_RISCV64)
 
