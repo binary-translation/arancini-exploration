@@ -716,8 +716,10 @@ void llvm_static_output_engine_impl::compile()
 	TargetOptions TO;
 	auto RM = Optional<Reloc::Model>();
 #if defined(ARCH_RISCV64)
+	//Add multiply(M), atomics(A), single(F) and double(D) precision float and compressed(C) extensions
 	const char *features = "+m,+a,+f,+d,+c";
 	const char *cpu = "generic-rv64";
+	//Specify abi as 64 bits using double float registers
 	TO.MCOptions.ABIName="lp64d";
 #else
 	const char *features = "";
