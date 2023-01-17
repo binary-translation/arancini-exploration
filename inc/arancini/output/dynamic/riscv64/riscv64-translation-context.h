@@ -22,5 +22,6 @@ private:
 
 	Register materialise(const ir::node *n);
 	Register materialiseConstant(int64_t imm);
+	Register materialiseBinaryArith(ir::binary_arith_node *n2);
 };
 } // namespace arancini::output::dynamic::riscv64

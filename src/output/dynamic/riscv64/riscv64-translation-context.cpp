@@ -43,320 +43,323 @@ Register riscv64_translation_context::materialise(const node *n)
 		return materialiseConstant((int64_t)((constant_node *)n)->const_val_i());
 	}
 	case node_kinds::binary_arith: {
-		auto n2 = (binary_arith_node *)n;
-		Register outReg = T0;
-		Register outReg2 = T1;
-
-		Register srcReg1 = materialise(n2->lhs().owner());
-
-		if (n2->rhs().owner()->kind() == node_kinds::constant) {
-			// Could also work for LHS except sub
-			// TODO Probably incorrect to just cast to signed 64bit
-			auto imm = (intptr_t)((constant_node *)(n2->rhs().owner()))->const_val_i();
-			if (imm)
-
-				if (IsITypeImm(imm)) {
-					switch (n2->op()) {
-
-					case binary_arith_op::sub:
-						if (imm == -2048) { // Can happen with inversion
-							goto standardPath;
-						}
-						switch (n2->val().type().width()) {
-						case 64:
-							assembler.addi(outReg, srcReg1, -imm);
-							break;
-						case 32:
-							assembler.addiw(outReg, srcReg1, -imm);
-							break;
-						case 8:
-						case 16:
-							assembler.addi(outReg, srcReg1, -imm);
-							assembler.slli(outReg, outReg, 64 - n2->val().type().width());
-							assembler.srai(outReg, outReg, 64 - n2->val().type().width());
-							break;
-						}
-						assembler.sltu(CF, srcReg1, outReg); // CF FIXME Assumes outReg!=srcReg1
-						assembler.slt(OF, outReg, srcReg1); // OF FIXME Assumes outReg!=srcReg1
-						if (imm > 0) {
-							assembler.xori(OF, OF, 1); // Invert on positive
-						}
-						break;
-
-					case binary_arith_op::add:
-
-						switch (n2->val().type().width()) {
-						case 64:
-							assembler.addi(outReg, srcReg1, imm);
-							break;
-						case 32:
-							assembler.addiw(outReg, srcReg1, -imm);
-							break;
-						case 8:
-						case 16:
-							assembler.addi(outReg, srcReg1, imm);
-							assembler.slli(outReg, outReg, 64 - n2->val().type().width());
-							assembler.srai(outReg, outReg, 64 - n2->val().type().width());
-							break;
-						}
-
-						assembler.sltu(CF, outReg, srcReg1); // CF FIXME Assumes outReg!=srcReg1
-						assembler.slt(OF, outReg, srcReg1); // OF FIXME Assumes outReg!=srcReg1
-						if (imm < 0) {
-							assembler.xori(OF, OF, 1); // Invert on negative
-						}
-
-						break;
-					// Binary operations preserve sign extension
-					case binary_arith_op::band:
-						assembler.andi(outReg, srcReg1, imm);
-						break;
-					case binary_arith_op::bor:
-						assembler.ori(outReg, srcReg1, imm);
-						break;
-					case binary_arith_op::bxor:
-						assembler.xori(outReg, srcReg1, imm);
-						break;
-					default:
-						// No-op Go to standard path
-						goto standardPath;
-					}
-
-					assembler.seqz(ZF, outReg); // ZF
-					assembler.sltz(SF, outReg); // SF
-
-					return outReg;
-				}
-		}
-
-	standardPath:
-		Register srcReg2 = materialise(n2->rhs().owner());
-		switch (n2->op()) {
-
-		case binary_arith_op::add:
-			switch (n2->val().type().width()) {
-			case 64:
-				assembler.add(outReg, srcReg1, srcReg2);
-				break;
-			case 32:
-				assembler.addw(outReg, srcReg1, srcReg2);
-				break;
-			case 8:
-			case 16:
-				assembler.add(outReg, srcReg1, srcReg2);
-				assembler.slli(outReg, outReg, 64 - n2->val().type().width());
-				assembler.srai(outReg, outReg, 64 - n2->val().type().width());
-				break;
-			}
-
-			assembler.sltz(CF, srcReg1);
-			assembler.slt(OF, outReg, srcReg2);
-			assembler.xor_(OF, OF, CF); // OF FIXME Assumes outReg!=srcReg1 && outReg!=srcReg2
-
-			assembler.sltu(CF, outReg, srcReg2); // CF (Allows typical x86 case of regSrc1==outReg) FIXME Assumes outReg!=srcReg2
-			break;
-
-		case binary_arith_op::sub:
-			switch (n2->val().type().width()) {
-			case 64:
-				assembler.sub(outReg, srcReg1, srcReg2);
-				break;
-			case 32:
-				assembler.subw(outReg, srcReg1, srcReg2);
-				break;
-			case 8:
-			case 16:
-				assembler.sub(outReg, srcReg1, srcReg2);
-				assembler.slli(outReg, outReg, 64 - n2->val().type().width());
-				assembler.srai(outReg, outReg, 64 - n2->val().type().width());
-				break;
-			}
-			assembler.sub(outReg, srcReg1, srcReg2);
-
-			assembler.sgtz(CF, srcReg2);
-			assembler.slt(OF, outReg, srcReg1);
-			assembler.xor_(OF, OF, CF); // OF FIXME Assumes outReg!=srcReg1 && outReg!=srcReg2
-
-			assembler.sltu(CF, srcReg1, outReg); // CF FIXME Assumes outReg!=srcReg1
-			break;
-
-		// Binary operations preserve sign extension
-		case binary_arith_op::band:
-			assembler.and_(outReg, srcReg1, srcReg2);
-			break;
-		case binary_arith_op::bor:
-			assembler.or_(outReg, srcReg1, srcReg2);
-			break;
-		case binary_arith_op::bxor:
-			assembler.xor_(outReg, srcReg1, srcReg2);
-			break;
-
-		case binary_arith_op::mul:
-			switch (n2->val().type().width()) {
-			case 128:
-				// Split calculation
-				assembler.mul(outReg, srcReg1, srcReg2);
-				switch (n2->val().type().element_type().type_class()) {
-
-				case value_type_class::signed_integer:
-					assembler.mulh(outReg2, srcReg1, srcReg2);
-					assembler.srai(CF, outReg, 64);
-					assembler.xor_(CF, CF, outReg2);
-					assembler.snez(CF, CF);
-					break;
-				case value_type_class::unsigned_integer:
-					assembler.mulhu(outReg2, srcReg1, srcReg2);
-					assembler.snez(CF, outReg2);
-					break;
-				default:
-					throw std::runtime_error("Unsupported value type for multiply");
-				}
-				assembler.mv(OF, CF);
-				break;
-
-			case 64:
-			case 32:
-			case 16:
-				assembler.mul(outReg, srcReg1, srcReg2); // Assumes proper signed/unsigned extension from 32/16/8 bits
-
-				switch (n2->val().type().element_type().type_class()) {
-
-				case value_type_class::signed_integer:
-					if (n2->val().type().width() == 64) {
-						assembler.sextw(CF, outReg);
-					} else {
-						assembler.slli(CF, outReg, 64 - (n2->val().type().width()) / 2);
-						assembler.srai(CF, outReg, 64 - (n2->val().type().width()) / 2);
-					}
-					assembler.xor_(CF, CF, outReg);
-					assembler.snez(CF, CF);
-					break;
-				case value_type_class::unsigned_integer:
-					assembler.srli(CF, outReg, n2->val().type().width() / 2);
-					assembler.snez(CF, outReg2);
-					break;
-				default:
-					throw std::runtime_error("Unsupported value type for multiply");
-				}
-				assembler.mv(OF, CF);
-				break;
-			}
-		case binary_arith_op::div:
-			switch (n2->val().type().width()) {
-			case 128: // Fixme 128 bits not natively supported on RISCV, assuming just extended 64 bit value
-			case 64:
-				switch (n2->val().type().element_type().type_class()) {
-
-				case value_type_class::signed_integer:
-					assembler.div(outReg, srcReg1, srcReg2);
-					break;
-				case value_type_class::unsigned_integer:
-					assembler.divu(outReg, srcReg1, srcReg2);
-					break;
-				default:
-					throw std::runtime_error("Unsupported value type for divide");
-				}
-				break;
-			case 32:
-				switch (n2->val().type().element_type().type_class()) {
-
-				case value_type_class::signed_integer:
-					assembler.divw(outReg, srcReg1, srcReg2);
-					break;
-				case value_type_class::unsigned_integer:
-					assembler.divuw(outReg, srcReg1, srcReg2);
-					break;
-				default:
-					throw std::runtime_error("Unsupported value type for divide");
-				}
-				break;
-			case 16:
-				switch (n2->val().type().element_type().type_class()) {
-
-				case value_type_class::signed_integer:
-					assembler.divw(outReg, srcReg1, srcReg2);
-					assembler.slli(outReg, outReg, 48);
-					assembler.srai(outReg, outReg, 48);
-					break;
-				case value_type_class::unsigned_integer:
-					assembler.divuw(outReg, srcReg1, srcReg2);
-					assembler.slli(outReg, outReg, 48);
-					assembler.srli(outReg, outReg, 48);
-					break;
-				default:
-					throw std::runtime_error("Unsupported value type for divide");
-				}
-				break;
-			}
-
-		case binary_arith_op::mod:
-			switch (n2->val().type().width()) {
-			case 128: // Fixme 128 bits not natively supported on RISCV, assuming just extended 64 bit value
-			case 64:
-				switch (n2->val().type().element_type().type_class()) {
-
-				case value_type_class::signed_integer:
-					assembler.rem(outReg, srcReg1, srcReg2);
-					break;
-				case value_type_class::unsigned_integer:
-					assembler.remu(outReg, srcReg1, srcReg2);
-					break;
-				default:
-					throw std::runtime_error("Unsupported value type for divide");
-				}
-				break;
-			case 32:
-				switch (n2->val().type().element_type().type_class()) {
-
-				case value_type_class::signed_integer:
-					assembler.remw(outReg, srcReg1, srcReg2);
-					break;
-				case value_type_class::unsigned_integer:
-					assembler.remuw(outReg, srcReg1, srcReg2);
-					break;
-				default:
-					throw std::runtime_error("Unsupported value type for divide");
-				}
-				break;
-			case 16:
-				switch (n2->val().type().element_type().type_class()) {
-
-				case value_type_class::signed_integer:
-					assembler.remw(outReg, srcReg1, srcReg2);
-					assembler.slli(outReg, outReg, 48);
-					assembler.srai(outReg, outReg, 48);
-					break;
-				case value_type_class::unsigned_integer:
-					assembler.remuw(outReg, srcReg1, srcReg2);
-					assembler.slli(outReg, outReg, 48);
-					assembler.srli(outReg, outReg, 48);
-					break;
-				default:
-					throw std::runtime_error("Unsupported value type for divide");
-				}
-				break;
-			}
-
-		case binary_arith_op::cmpeq:
-			assembler.xor_(outReg, srcReg1, srcReg2);
-			assembler.seqz(outReg, outReg);
-		case binary_arith_op::cmpne:
-			assembler.xor_(outReg, srcReg1, srcReg2);
-			assembler.snez(outReg, outReg);
-		case binary_arith_op::cmpgt:
-			throw std::runtime_error("unsupported binary arithmetic operation");
-		}
-
-		// TODO those should only be set on add, sub, xor, or, and
-		assembler.seqz(ZF, outReg); // ZF
-		assembler.sltz(SF, outReg); // SF
-
-		return outReg;
+		return materialiseBinaryArith((binary_arith_node *)n);
 	}
 	default:
 		throw std::runtime_error("unsupported node");
 	}
 	return ZERO;
+}
+Register riscv64_translation_context::materialiseBinaryArith(binary_arith_node *n2)
+{
+	Register outReg = T0;
+	Register outReg2 = T1;
+
+	Register srcReg1 = materialise(n2->lhs().owner());
+
+	if (n2->rhs().owner()->kind() == node_kinds::constant) {
+		// Could also work for LHS except sub
+		// TODO Probably incorrect to just cast to signed 64bit
+		auto imm = (intptr_t)((constant_node *)(n2->rhs().owner()))->const_val_i();
+		if (imm)
+
+			if (IsITypeImm(imm)) {
+				switch (n2->op()) {
+
+				case binary_arith_op::sub:
+					if (imm == -2048) { // Can happen with inversion
+						goto standardPath;
+					}
+					switch (n2->val().type().width()) {
+					case 64:
+						assembler.addi(outReg, srcReg1, -imm);
+						break;
+					case 32:
+						assembler.addiw(outReg, srcReg1, -imm);
+						break;
+					case 8:
+					case 16:
+						assembler.addi(outReg, srcReg1, -imm);
+						assembler.slli(outReg, outReg, 64 - n2->val().type().width());
+						assembler.srai(outReg, outReg, 64 - n2->val().type().width());
+						break;
+					}
+					assembler.sltu(CF, srcReg1, outReg); // CF FIXME Assumes outReg!=srcReg1
+					assembler.slt(OF, outReg, srcReg1); // OF FIXME Assumes outReg!=srcReg1
+					if (imm > 0) {
+						assembler.xori(OF, OF, 1); // Invert on positive
+					}
+					break;
+
+				case binary_arith_op::add:
+
+					switch (n2->val().type().width()) {
+					case 64:
+						assembler.addi(outReg, srcReg1, imm);
+						break;
+					case 32:
+						assembler.addiw(outReg, srcReg1, -imm);
+						break;
+					case 8:
+					case 16:
+						assembler.addi(outReg, srcReg1, imm);
+						assembler.slli(outReg, outReg, 64 - n2->val().type().width());
+						assembler.srai(outReg, outReg, 64 - n2->val().type().width());
+						break;
+					}
+
+					assembler.sltu(CF, outReg, srcReg1); // CF FIXME Assumes outReg!=srcReg1
+					assembler.slt(OF, outReg, srcReg1); // OF FIXME Assumes outReg!=srcReg1
+					if (imm < 0) {
+						assembler.xori(OF, OF, 1); // Invert on negative
+					}
+
+					break;
+				// Binary operations preserve sign extension
+				case binary_arith_op::band:
+					assembler.andi(outReg, srcReg1, imm);
+					break;
+				case binary_arith_op::bor:
+					assembler.ori(outReg, srcReg1, imm);
+					break;
+				case binary_arith_op::bxor:
+					assembler.xori(outReg, srcReg1, imm);
+					break;
+				default:
+					// No-op Go to standard path
+					goto standardPath;
+				}
+
+				assembler.seqz(ZF, outReg); // ZF
+				assembler.sltz(SF, outReg); // SF
+
+				return outReg;
+			}
+	}
+
+standardPath:
+	Register srcReg2 = materialise(n2->rhs().owner());
+	switch (n2->op()) {
+
+	case binary_arith_op::add:
+		switch (n2->val().type().width()) {
+		case 64:
+			assembler.add(outReg, srcReg1, srcReg2);
+			break;
+		case 32:
+			assembler.addw(outReg, srcReg1, srcReg2);
+			break;
+		case 8:
+		case 16:
+			assembler.add(outReg, srcReg1, srcReg2);
+			assembler.slli(outReg, outReg, 64 - n2->val().type().width());
+			assembler.srai(outReg, outReg, 64 - n2->val().type().width());
+			break;
+		}
+
+		assembler.sltz(CF, srcReg1);
+		assembler.slt(OF, outReg, srcReg2);
+		assembler.xor_(OF, OF, CF); // OF FIXME Assumes outReg!=srcReg1 && outReg!=srcReg2
+
+		assembler.sltu(CF, outReg, srcReg2); // CF (Allows typical x86 case of regSrc1==outReg) FIXME Assumes outReg!=srcReg2
+		break;
+
+	case binary_arith_op::sub:
+		switch (n2->val().type().width()) {
+		case 64:
+			assembler.sub(outReg, srcReg1, srcReg2);
+			break;
+		case 32:
+			assembler.subw(outReg, srcReg1, srcReg2);
+			break;
+		case 8:
+		case 16:
+			assembler.sub(outReg, srcReg1, srcReg2);
+			assembler.slli(outReg, outReg, 64 - n2->val().type().width());
+			assembler.srai(outReg, outReg, 64 - n2->val().type().width());
+			break;
+		}
+		assembler.sub(outReg, srcReg1, srcReg2);
+
+		assembler.sgtz(CF, srcReg2);
+		assembler.slt(OF, outReg, srcReg1);
+		assembler.xor_(OF, OF, CF); // OF FIXME Assumes outReg!=srcReg1 && outReg!=srcReg2
+
+		assembler.sltu(CF, srcReg1, outReg); // CF FIXME Assumes outReg!=srcReg1
+		break;
+
+	// Binary operations preserve sign extension
+	case binary_arith_op::band:
+		assembler.and_(outReg, srcReg1, srcReg2);
+		break;
+	case binary_arith_op::bor:
+		assembler.or_(outReg, srcReg1, srcReg2);
+		break;
+	case binary_arith_op::bxor:
+		assembler.xor_(outReg, srcReg1, srcReg2);
+		break;
+
+	case binary_arith_op::mul:
+		switch (n2->val().type().width()) {
+		case 128:
+			// Split calculation
+			assembler.mul(outReg, srcReg1, srcReg2);
+			switch (n2->val().type().element_type().type_class()) {
+
+			case value_type_class::signed_integer:
+				assembler.mulh(outReg2, srcReg1, srcReg2);
+				assembler.srai(CF, outReg, 64);
+				assembler.xor_(CF, CF, outReg2);
+				assembler.snez(CF, CF);
+				break;
+			case value_type_class::unsigned_integer:
+				assembler.mulhu(outReg2, srcReg1, srcReg2);
+				assembler.snez(CF, outReg2);
+				break;
+			default:
+				throw std::runtime_error("Unsupported value type for multiply");
+			}
+			assembler.mv(OF, CF);
+			break;
+
+		case 64:
+		case 32:
+		case 16:
+			assembler.mul(outReg, srcReg1, srcReg2); // Assumes proper signed/unsigned extension from 32/16/8 bits
+
+			switch (n2->val().type().element_type().type_class()) {
+
+			case value_type_class::signed_integer:
+				if (n2->val().type().width() == 64) {
+					assembler.sextw(CF, outReg);
+				} else {
+					assembler.slli(CF, outReg, 64 - (n2->val().type().width()) / 2);
+					assembler.srai(CF, outReg, 64 - (n2->val().type().width()) / 2);
+				}
+				assembler.xor_(CF, CF, outReg);
+				assembler.snez(CF, CF);
+				break;
+			case value_type_class::unsigned_integer:
+				assembler.srli(CF, outReg, n2->val().type().width() / 2);
+				assembler.snez(CF, outReg2);
+				break;
+			default:
+				throw std::runtime_error("Unsupported value type for multiply");
+			}
+			assembler.mv(OF, CF);
+			break;
+		}
+	case binary_arith_op::div:
+		switch (n2->val().type().width()) {
+		case 128: // Fixme 128 bits not natively supported on RISCV, assuming just extended 64 bit value
+		case 64:
+			switch (n2->val().type().element_type().type_class()) {
+
+			case value_type_class::signed_integer:
+				assembler.div(outReg, srcReg1, srcReg2);
+				break;
+			case value_type_class::unsigned_integer:
+				assembler.divu(outReg, srcReg1, srcReg2);
+				break;
+			default:
+				throw std::runtime_error("Unsupported value type for divide");
+			}
+			break;
+		case 32:
+			switch (n2->val().type().element_type().type_class()) {
+
+			case value_type_class::signed_integer:
+				assembler.divw(outReg, srcReg1, srcReg2);
+				break;
+			case value_type_class::unsigned_integer:
+				assembler.divuw(outReg, srcReg1, srcReg2);
+				break;
+			default:
+				throw std::runtime_error("Unsupported value type for divide");
+			}
+			break;
+		case 16:
+			switch (n2->val().type().element_type().type_class()) {
+
+			case value_type_class::signed_integer:
+				assembler.divw(outReg, srcReg1, srcReg2);
+				assembler.slli(outReg, outReg, 48);
+				assembler.srai(outReg, outReg, 48);
+				break;
+			case value_type_class::unsigned_integer:
+				assembler.divuw(outReg, srcReg1, srcReg2);
+				assembler.slli(outReg, outReg, 48);
+				assembler.srli(outReg, outReg, 48);
+				break;
+			default:
+				throw std::runtime_error("Unsupported value type for divide");
+			}
+			break;
+		}
+
+	case binary_arith_op::mod:
+		switch (n2->val().type().width()) {
+		case 128: // Fixme 128 bits not natively supported on RISCV, assuming just extended 64 bit value
+		case 64:
+			switch (n2->val().type().element_type().type_class()) {
+
+			case value_type_class::signed_integer:
+				assembler.rem(outReg, srcReg1, srcReg2);
+				break;
+			case value_type_class::unsigned_integer:
+				assembler.remu(outReg, srcReg1, srcReg2);
+				break;
+			default:
+				throw std::runtime_error("Unsupported value type for divide");
+			}
+			break;
+		case 32:
+			switch (n2->val().type().element_type().type_class()) {
+
+			case value_type_class::signed_integer:
+				assembler.remw(outReg, srcReg1, srcReg2);
+				break;
+			case value_type_class::unsigned_integer:
+				assembler.remuw(outReg, srcReg1, srcReg2);
+				break;
+			default:
+				throw std::runtime_error("Unsupported value type for divide");
+			}
+			break;
+		case 16:
+			switch (n2->val().type().element_type().type_class()) {
+
+			case value_type_class::signed_integer:
+				assembler.remw(outReg, srcReg1, srcReg2);
+				assembler.slli(outReg, outReg, 48);
+				assembler.srai(outReg, outReg, 48);
+				break;
+			case value_type_class::unsigned_integer:
+				assembler.remuw(outReg, srcReg1, srcReg2);
+				assembler.slli(outReg, outReg, 48);
+				assembler.srli(outReg, outReg, 48);
+				break;
+			default:
+				throw std::runtime_error("Unsupported value type for divide");
+			}
+			break;
+		}
+
+	case binary_arith_op::cmpeq:
+		assembler.xor_(outReg, srcReg1, srcReg2);
+		assembler.seqz(outReg, outReg);
+	case binary_arith_op::cmpne:
+		assembler.xor_(outReg, srcReg1, srcReg2);
+		assembler.snez(outReg, outReg);
+	case binary_arith_op::cmpgt:
+		throw std::runtime_error("unsupported binary arithmetic operation");
+	}
+
+	// TODO those should only be set on add, sub, xor, or, and
+	assembler.seqz(ZF, outReg); // ZF
+	assembler.sltz(SF, outReg); // SF
+
+	return outReg;
 }
 Register riscv64_translation_context::materialiseConstant(int64_t imm)
 {
