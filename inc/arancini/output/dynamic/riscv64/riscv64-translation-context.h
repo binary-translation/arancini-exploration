@@ -21,7 +21,7 @@ private:
 	Assembler assembler{RV_GC};
 
 	Register materialise(const ir::node *n);
-	Register materialiseConstant(int64_t imm);
-	Register materialiseBinaryArith(ir::binary_arith_node *n2);
+	Register materialise_constant(int64_t imm);
+	Register materialise_binary_arith(ir::binary_arith_node *n2);
 };
 } // namespace arancini::output::dynamic::riscv64

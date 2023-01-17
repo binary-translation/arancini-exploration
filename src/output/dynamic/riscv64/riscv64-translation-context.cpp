@@ -40,17 +40,17 @@ Register riscv64_translation_context::materialise(const node *n)
 
 	} break;
 	case node_kinds::constant: {
-		return materialiseConstant((int64_t)((constant_node *)n)->const_val_i());
+		return materialise_constant((int64_t)((constant_node *)n)->const_val_i());
 	}
 	case node_kinds::binary_arith: {
-		return materialiseBinaryArith((binary_arith_node *)n);
+		return materialise_binary_arith((binary_arith_node *)n);
 	}
 	default:
 		throw std::runtime_error("unsupported node");
 	}
 	return ZERO;
 }
-Register riscv64_translation_context::materialiseBinaryArith(binary_arith_node *n2)
+Register riscv64_translation_context::materialise_binary_arith(binary_arith_node *n2)
 {
 	Register outReg = T0;
 	Register outReg2 = T1;
@@ -359,7 +359,7 @@ standardPath:
 
 	return outReg;
 }
-Register riscv64_translation_context::materialiseConstant(int64_t imm)
+Register riscv64_translation_context::materialise_constant(int64_t imm)
 {
 	// Optimizations with left or right shift at the end not implemented (for constants with trailing or leading zeroes)
 
@@ -394,7 +394,7 @@ Register riscv64_translation_context::materialiseConstant(int64_t imm)
 			}
 		}
 
-		materialiseConstant(val);
+		materialise_constant(val);
 
 		if (shiftAmnt) {
 			assembler.slli(outReg, outReg, shiftAmnt);
