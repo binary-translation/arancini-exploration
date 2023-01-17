@@ -179,8 +179,6 @@ standardPath:
 			assembler.srai(outReg, outReg, 64 - n2->val().type().width());
 			break;
 		}
-		assembler.sub(outReg, srcReg1, srcReg2);
-
 		assembler.sgtz(CF, srcReg2);
 		assembler.slt(OF, outReg, srcReg1);
 		assembler.xor_(OF, OF, CF); // OF FIXME Assumes outReg!=srcReg1 && outReg!=srcReg2
