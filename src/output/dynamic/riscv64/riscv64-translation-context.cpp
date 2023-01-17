@@ -45,6 +45,24 @@ Register riscv64_translation_context::materialise(const node *n)
 	case node_kinds::binary_arith: {
 		return materialise_binary_arith((binary_arith_node *)n);
 	}
+
+	case node_kinds::unary_arith: {
+		auto n2 = (unary_arith_node *)n;
+		Register outReg = T0;
+
+		Register srcReg1 = materialise(n2->lhs().owner());
+		switch (n2->op()) {
+
+		case unary_arith_op::bnot:
+			assembler.not_(outReg, srcReg1);
+			break;
+		default:
+			throw std::runtime_error("unsupported binary arithmetic operation");
+		}
+
+	} break;
+
+
 	default:
 		throw std::runtime_error("unsupported node");
 	}
