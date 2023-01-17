@@ -61,12 +61,119 @@ Register riscv64_translation_context::materialise(const node *n)
 		}
 
 	} break;
-
+	case node_kinds::ternary_arith: {
+		return materialise_ternary_arith((ternary_arith_node *)n);
+	}
 
 	default:
 		throw std::runtime_error("unsupported node");
 	}
 	return ZERO;
+}
+Register riscv64_translation_context::materialise_ternary_arith(ternary_arith_node *n2)
+{
+	Register outReg = T0;
+
+	Register srcReg1 = materialise(n2->lhs().owner());
+	Register srcReg2 = materialise(n2->rhs().owner());
+	Register srcReg3 = materialise(n2->top().owner());
+	switch (n2->op()) {
+		// TODO Immediate handling
+
+	case ternary_arith_op::adc:
+		// Temporary: Add carry in
+		switch (n2->val().type().width()) {
+		case 64:
+			assembler.add(ZF, srcReg2, srcReg3);
+			break;
+		case 32:
+			assembler.addw(ZF, srcReg2, srcReg3);
+			break;
+		case 8:
+		case 16:
+			assembler.add(ZF, srcReg2, srcReg3);
+			assembler.slli(ZF, ZF, 64 - n2->val().type().width());
+			assembler.srai(ZF, ZF, 64 - n2->val().type().width());
+			break;
+		}
+
+		assembler.slt(OF, ZF, srcReg2); // Temporary overflow
+		assembler.sltu(CF, ZF, srcReg2); // Temporary carry
+
+		// Normal add
+		switch (n2->val().type().width()) {
+		case 64:
+			assembler.add(outReg, srcReg1, ZF);
+			break;
+		case 32:
+			assembler.addw(outReg, srcReg1, ZF);
+			break;
+		case 8:
+		case 16:
+			assembler.add(outReg, srcReg1, ZF);
+			assembler.slli(outReg, outReg, 64 - n2->val().type().width());
+			assembler.srai(outReg, outReg, 64 - n2->val().type().width());
+			break;
+		}
+
+		assembler.sltu(SF, outReg, ZF); // Normal carry out
+		assembler.or_(CF, CF, SF); // Total carry out
+
+		assembler.sltz(SF, srcReg1);
+		assembler.slt(ZF, outReg, ZF);
+		assembler.xor_(ZF, ZF, SF); // Normal overflow out
+		assembler.xor_(OF, OF, ZF); // Total overflow out
+
+		break;
+	case ternary_arith_op::sbb:
+		// Temporary: Add carry in
+		switch (n2->val().type().width()) {
+		case 64:
+			assembler.add(ZF, srcReg2, srcReg3);
+			break;
+		case 32:
+			assembler.addw(ZF, srcReg2, srcReg3);
+			break;
+		case 8:
+		case 16:
+			assembler.add(ZF, srcReg2, srcReg3);
+			assembler.slli(ZF, ZF, 64 - n2->val().type().width());
+			assembler.srai(ZF, ZF, 64 - n2->val().type().width());
+			break;
+		}
+
+		assembler.slt(OF, ZF, srcReg2); // Temporary overflow
+		assembler.sltu(CF, ZF, srcReg2); // Temporary carry
+
+		switch (n2->val().type().width()) {
+		case 64:
+			assembler.sub(outReg, srcReg1, ZF);
+		case 32:
+			assembler.subw(outReg, srcReg1, ZF);
+		case 16:
+			assembler.sub(outReg, srcReg1, ZF);
+			assembler.slli(outReg, outReg, 64 - n2->val().type().width());
+			assembler.srai(outReg, outReg, 64 - n2->val().type().width());
+			break;
+		}
+
+		assembler.sltu(SF, srcReg1, outReg); // Normal carry out
+		assembler.or_(CF, CF, SF); // Total carry out
+
+		assembler.sgtz(SF, ZF);
+		assembler.slt(ZF, outReg, srcReg1);
+		assembler.xor_(ZF, ZF, SF); // Normal overflow out
+		assembler.xor_(OF, OF, ZF); // Total overflow out
+
+		break;
+	default:
+		throw std::runtime_error("unsupported binary arithmetic operation");
+	}
+
+	assembler.seqz(ZF, outReg); // ZF
+	assembler.sltz(SF, outReg); // SF
+
+	return outReg;
 }
 Register riscv64_translation_context::materialise_binary_arith(binary_arith_node *n2)
 {
