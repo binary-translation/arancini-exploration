@@ -74,12 +74,18 @@ function (get_xed)
     endif ()
 
     # Build target
-    add_custom_target(xed-build ALL
+    file(GLOB_RECURSE XED_DEPENDENCES "${XED_DIR}/*")
+    add_custom_command(OUTPUT ${XED_BINARY_DIR}/libxed.a
         COMMAND ${Python3_EXECUTABLE} ${XED_DIR}/mfile.py
                 --extra-flags=-fPIC
                 ${MBUILD_EXTRA}
         BYPRODUCTS ${XED_BINARY_DIR}
+        DEPENDS ${XED_DEPENDENCES}
         USES_TERMINAL
+    )
+
+    add_custom_target(xed-build ALL
+        DEPENDS ${XED_BINARY_DIR}/libxed.a
     )
 
     # Add imported XED library
