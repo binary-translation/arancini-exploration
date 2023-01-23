@@ -198,8 +198,6 @@ static std::string reg_name(int regidx)
 	return "guestreg";
 }
 
-static int reg_index(int regoff) { return regoff; }
-
 Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, port &p)
 {
 	auto n = p.owner();
@@ -268,8 +266,8 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 	case node_kinds::read_reg: {
 		auto rrn = (read_reg_node *)n;
-		auto src_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, reg_index(rrn->regoff())) },
-			reg_name(reg_index(rrn->regoff())));
+		auto src_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, rrn->regidx()) },
+			reg_name(rrn->regidx()));
 
 		if (auto src_reg_i = ::llvm::dyn_cast<Instruction>(src_reg)) {
 			src_reg_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, reg_file_alias_scope_));
@@ -560,8 +558,8 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 		// std::cerr << "wreg off=" << wrn->regoff() << std::endl;
 
-		auto dest_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, reg_index(wrn->regoff())) },
-			reg_name(reg_index(wrn->regoff())));
+		auto dest_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, wrn->regidx()) },
+			reg_name(wrn->regidx()));
 
 		auto *reg_type = ((GetElementPtrInst*)dest_reg)->getResultElementType();
 

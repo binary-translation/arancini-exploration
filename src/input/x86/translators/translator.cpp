@@ -271,9 +271,13 @@ translator::reg_offsets translator::reg_to_offset(xed_reg_enum_t reg)
 	}
 }
 
-action_node *translator::write_reg(reg_offsets reg, port &value) { return builder_.insert_write_reg((unsigned long)reg, value); }
+unsigned long translator::offset_to_idx(reg_offsets reg) {
+	return off_to_idx[(unsigned long)reg];
+};
 
-value_node *translator::read_reg(const value_type &vt, reg_offsets reg) { return builder_.insert_read_reg(vt, (unsigned long)reg); }
+action_node *translator::write_reg(reg_offsets reg, port &value) { return builder_.insert_write_reg((unsigned long)reg, offset_to_idx(reg), value); }
+
+value_node *translator::read_reg(const value_type &vt, reg_offsets reg) { return builder_.insert_read_reg(vt, (unsigned long)reg, offset_to_idx(reg)); }
 
 void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of, flag_op sf, flag_op pf, flag_op af)
 {
