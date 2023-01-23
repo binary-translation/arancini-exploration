@@ -25,5 +25,6 @@ private:
 	Register materialise_constant(int64_t imm);
 	Register materialise_binary_arith(ir::binary_arith_node *n2);
 	Register materialise_ternary_arith(ir::ternary_arith_node *n2);
+	Register materialise_bit_shift(ir::bit_shift_node *n2);
 };
 } // namespace arancini::output::dynamic::riscv64

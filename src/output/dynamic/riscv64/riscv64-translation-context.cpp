@@ -39,6 +39,9 @@ Register riscv64_translation_context::materialise(const node *n)
 		}
 
 	} break;
+	case node_kinds::bit_shift: {
+		return materialise_bit_shift((bit_shift_node *)n);
+	}
 	case node_kinds::constant: {
 		return materialise_constant((int64_t)((constant_node *)n)->const_val_i());
 	}
@@ -170,6 +173,151 @@ Register riscv64_translation_context::materialise_ternary_arith(ternary_arith_no
 		throw std::runtime_error("unsupported binary arithmetic operation");
 	}
 
+	assembler.seqz(ZF, outReg); // ZF
+	assembler.sltz(SF, outReg); // SF
+
+	return outReg;
+}
+Register riscv64_translation_context::materialise_bit_shift(bit_shift_node *n2)
+{
+	Register outReg = T4;
+
+	Register srcReg = materialise(n2->input().owner());
+
+	if (n2->amount().kind() == port_kinds::constant) {
+		auto amt = (intptr_t)((constant_node *)n2->amount().owner())->const_val_i() & 0x3f;
+		if (amt == 0) {
+			return srcReg;
+		}
+		switch (n2->op()) {
+		case shift_op::lsl:
+			assembler.srli(CF, srcReg, n2->val().type().width() - amt); // CF
+
+			if (amt == 1) {
+				assembler.srli(OF, srcReg, n2->val().type().width() - amt - 1); // OF
+				assembler.xor_(OF, OF, CF);
+				assembler.andi(OF, OF, 1);
+			}
+
+			switch (n2->val().type().width()) {
+			case 64:
+				assembler.slli(outReg, srcReg, amt);
+				break;
+			case 32:
+				assembler.slliw(outReg, srcReg, amt);
+				break;
+			case 8:
+			case 16:
+				assembler.slli(outReg, srcReg, amt + (64 - n2->val().type().width()));
+				assembler.srai(outReg, srcReg, (64 - n2->val().type().width()));
+				break;
+			}
+
+			break;
+		case shift_op::lsr:
+			assembler.srli(CF, srcReg, amt - 1); // CF
+			switch (n2->val().type().width()) {
+			case 64:
+				assembler.srli(outReg, srcReg, amt);
+				break;
+			case 32:
+				assembler.srliw(outReg, srcReg, amt);
+				break;
+			case 16:
+				assembler.slli(outReg, srcReg, 48);
+				assembler.srli(outReg, srcReg, 48 + amt);
+				break;
+			case 8:
+				assembler.andi(outReg, srcReg, 0xff);
+				assembler.srli(outReg, srcReg, amt);
+				break;
+			}
+			if (amt == 1) {
+				assembler.srli(OF, srcReg, n2->val().type().width() - 1);
+				assembler.andi(OF, OF, 1); // OF
+			}
+			break;
+		case shift_op::asr:
+			assembler.srli(CF, srcReg, amt - 1); // CF
+			assembler.srai(outReg, srcReg, amt); // Sign extension preserved
+			if (amt == 1) {
+				assembler.li(OF, 0);
+			}
+			break;
+		}
+
+		assembler.andi(CF, CF, 1); // CF
+
+		assembler.seqz(ZF, outReg); // ZF
+		assembler.sltz(SF, outReg); // SF
+
+		return outReg;
+	}
+
+	auto amount = materialise(n2->amount().owner());
+	assembler.subi(OF, amount, 1);
+
+	switch (n2->op()) {
+	case shift_op::lsl:
+		assembler.sll(CF, srcReg, OF); // CF in highest bit
+
+		switch (n2->val().type().width()) {
+		case 64:
+			assembler.sll(outReg, srcReg, amount);
+			break;
+		case 32:
+			assembler.sllw(outReg, srcReg, amount);
+			break;
+		case 8:
+		case 16:
+			assembler.sll(outReg, srcReg, amount);
+			assembler.slli(outReg, srcReg, (64 - n2->val().type().width()));
+			assembler.srai(outReg, srcReg, (64 - n2->val().type().width()));
+			break;
+		}
+
+		assembler.xor_(OF, outReg, CF); // OF in highest bit
+
+		assembler.srli(CF, CF, n2->val().type().width() - 1);
+
+		assembler.srli(OF, OF, n2->val().type().width() - 1);
+		assembler.andi(OF, OF, 1); // OF
+		break;
+	case shift_op::lsr:
+		assembler.srl(CF, srcReg, OF); // CF
+		switch (n2->val().type().width()) {
+		case 64:
+			assembler.srl(outReg, srcReg, amount);
+			break;
+		case 32:
+			assembler.srlw(outReg, srcReg, amount);
+			break;
+		case 16:
+			assembler.slli(outReg, srcReg, 48);
+			assembler.srli(outReg, srcReg, 48);
+			assembler.srl(outReg, srcReg, amount);
+			break;
+		case 8:
+			assembler.andi(outReg, srcReg, 0xff);
+			assembler.srl(outReg, srcReg, amount);
+			break;
+		}
+
+		// Undefined on shift amt > 1 (use same formula as amt == 1)
+		assembler.srli(OF, srcReg, n2->val().type().width() - 1);
+		assembler.andi(OF, OF, 1); // OF
+
+		break;
+	case shift_op::asr:
+		assembler.srl(CF, srcReg, OF); // CF
+		assembler.li(OF, 0); // OF
+
+		assembler.sra(outReg, srcReg, amount); // Sign extension preserved
+
+		break;
+	}
+
+	assembler.andi(CF, CF, 1); // Limit CF to single bit
 	assembler.seqz(ZF, outReg); // ZF
 	assembler.sltz(SF, outReg); // SF
 
