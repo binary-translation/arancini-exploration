@@ -11,6 +11,9 @@ set_property(CACHE DBT_ARCH PROPERTY STRINGS X86_64 RISCV64 AARCH64)
 
 option(BUILD_TESTS "Enable build of tests" OFF)
 
+message(STATUS "Detected local architecture ${ARCH}")
+message(STATUS "Building DBT for architecture ${DBT_ARCH}")
+
 # Specify binary output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/out/${CMAKE_BUILD_TYPE})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/out/${CMAKE_BUILD_TYPE})
