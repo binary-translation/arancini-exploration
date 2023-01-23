@@ -1,5 +1,6 @@
 #pragma once
 
+#include <arancini/ir/node.h>
 #include <arancini/output/dynamic/riscv64/encoder/riscv64-assembler.h>
 #include <arancini/output/dynamic/translation-context.h>
 
