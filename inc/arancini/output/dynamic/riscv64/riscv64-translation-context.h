@@ -19,13 +19,15 @@ public:
 	virtual void lower(ir::node *n) override;
 
 private:
-	Assembler assembler{RV_GC};
+	Assembler assembler_{RV_GC};
 
 	Register materialise(const ir::node *n);
+	Register materialise_write_reg(const ir::write_reg_node& n);
 	Register materialise_constant(int64_t imm);
-	Register materialise_binary_arith(ir::binary_arith_node *n2);
-	Register materialise_ternary_arith(ir::ternary_arith_node *n2);
-	Register materialise_bit_shift(ir::bit_shift_node *n2);
+	Register materialise_unary_arith(const ir::unary_arith_node &n);
+	Register materialise_binary_arith(const ir::binary_arith_node &n);
+	Register materialise_ternary_arith(const ir::ternary_arith_node &n);
+	Register materialise_bit_shift(const ir::bit_shift_node &n2);
 };
 } // namespace arancini::output::dynamic::riscv64
 

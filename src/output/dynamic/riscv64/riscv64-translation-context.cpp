@@ -20,551 +20,547 @@ void riscv64_translation_context::begin_instruction(off_t address, const std::st
 void riscv64_translation_context::end_instruction() { }
 void riscv64_translation_context::end_block() { }
 void riscv64_translation_context::lower(ir::node *n) { materialise(n); }
+
+static inline bool is_flag(const port& value) { return value.type().width() == 1; }
+static inline bool is_gpr(const port& value) { return value.type().width() == 64; }
+
 Register riscv64_translation_context::materialise(const node *n)
 {
+    if (!n)
+        throw std::runtime_error("RISC-V DBT received NULL pointer to node");
+
 	switch (n->kind()) {
-	case node_kinds::write_reg: {
-
-		auto n2 = (write_reg_node *)n;
-
-		port &value = n2->value();
-		if (value.type().width() == 1) { // Flags
-			// TODO
-		} else if (value.type().width() == 64) { // GPR
-
-			Register regVal = materialise(value.owner());
-			assembler.sd(regVal, { FP, static_cast<intptr_t>(n2->regoff()) });
-		} else {
-			throw std::runtime_error("Unsupported width on register write");
-		}
-
-	} break;
-	case node_kinds::bit_shift: {
-		return materialise_bit_shift((bit_shift_node *)n);
-	}
-	case node_kinds::constant: {
+	case node_kinds::bit_shift:
+		return materialise_bit_shift(*reinterpret_cast<const bit_shift_node *>(n));
+	case node_kinds::write_reg:
+        return materialise_write_reg(*reinterpret_cast<const write_reg_node*>(n));
+	case node_kinds::constant:
 		return materialise_constant((int64_t)((constant_node *)n)->const_val_i());
-	}
-	case node_kinds::binary_arith: {
-		return materialise_binary_arith((binary_arith_node *)n);
-	}
-
-	case node_kinds::unary_arith: {
-		auto n2 = (unary_arith_node *)n;
-		Register outReg = T0;
-
-		Register srcReg1 = materialise(n2->lhs().owner());
-		switch (n2->op()) {
-
-		case unary_arith_op::bnot:
-			assembler.not_(outReg, srcReg1);
-			break;
-		default:
-			throw std::runtime_error("unsupported unary arithmetic operation");
-		}
-
-	} break;
-	case node_kinds::ternary_arith: {
-		return materialise_ternary_arith((ternary_arith_node *)n);
-	}
-
+	case node_kinds::binary_arith:
+		return materialise_binary_arith(*reinterpret_cast<const binary_arith_node *>(n));
+	case node_kinds::unary_arith:
+        return materialise_unary_arith(*reinterpret_cast<const unary_arith_node*>(n));
+	case node_kinds::ternary_arith:
+		return materialise_ternary_arith(*reinterpret_cast<const ternary_arith_node *>(n));
 	default:
 		throw std::runtime_error("unsupported node");
 	}
-	return ZERO;
 }
 
-Register riscv64_translation_context::materialise_ternary_arith(ternary_arith_node *n2)
-{
-	Register outReg = T0;
+Register riscv64_translation_context::materialise_write_reg(const write_reg_node &n) {
+    const port &value = n.val();
+    if (is_flag(value)) { // Flags
+        // TODO
+    } else if (is_gpr(value)) { // GPR
+        Register reg = materialise(value.owner());
+        assembler_.sd(reg, { FP, static_cast<intptr_t>(n.regoff()) });
+    }
 
-	Register srcReg1 = materialise(n2->lhs().owner());
-	Register srcReg2 = materialise(n2->rhs().owner());
-	Register srcReg3 = materialise(n2->top().owner());
-	switch (n2->op()) {
+    throw std::runtime_error("Unsupported width on register write");
+}
+
+Register riscv64_translation_context::materialise_unary_arith(const unary_arith_node& n) {
+		Register out_reg = T0;
+
+		Register src_reg = materialise(n.lhs().owner());
+		if (n.op() == unary_arith_op::bnot)
+			assembler_.not_(out_reg, src_reg);
+        else
+			throw std::runtime_error("unsupported unary arithmetic operation");
+}
+
+Register riscv64_translation_context::materialise_ternary_arith(const ternary_arith_node &n)
+{
+	Register out_reg = T0;
+
+	Register src_reg1 = materialise(n.lhs().owner());
+	Register src_reg2 = materialise(n.rhs().owner());
+	Register src_reg3 = materialise(n.top().owner());
+	switch (n.op()) {
 		// TODO Immediate handling
 
 	case ternary_arith_op::adc:
 		// Temporary: Add carry in
-		switch (n2->val().type().width()) {
+		switch (n.val().type().width()) {
 		case 64:
-			assembler.add(ZF, srcReg2, srcReg3);
+			assembler_.add(ZF, src_reg2, src_reg3);
 			break;
 		case 32:
-			assembler.addw(ZF, srcReg2, srcReg3);
+			assembler_.addw(ZF, src_reg2, src_reg3);
 			break;
 		case 8:
 		case 16:
-			assembler.add(ZF, srcReg2, srcReg3);
-			assembler.slli(ZF, ZF, 64 - n2->val().type().width());
-			assembler.srai(ZF, ZF, 64 - n2->val().type().width());
+			assembler_.add(ZF, src_reg2, src_reg3);
+			assembler_.slli(ZF, ZF, 64 - n.val().type().width());
+			assembler_.srai(ZF, ZF, 64 - n.val().type().width());
 			break;
 		}
 
-		assembler.slt(OF, ZF, srcReg2); // Temporary overflow
-		assembler.sltu(CF, ZF, srcReg2); // Temporary carry
+		assembler_.slt(OF, ZF, src_reg2); // Temporary overflow
+		assembler_.sltu(CF, ZF, src_reg2); // Temporary carry
 
 		// Normal add
-		switch (n2->val().type().width()) {
+		switch (n.val().type().width()) {
 		case 64:
-			assembler.add(outReg, srcReg1, ZF);
+			assembler_.add(out_reg, src_reg1, ZF);
 			break;
 		case 32:
-			assembler.addw(outReg, srcReg1, ZF);
+			assembler_.addw(out_reg, src_reg1, ZF);
 			break;
 		case 8:
 		case 16:
-			assembler.add(outReg, srcReg1, ZF);
-			assembler.slli(outReg, outReg, 64 - n2->val().type().width());
-			assembler.srai(outReg, outReg, 64 - n2->val().type().width());
+			assembler_.add(out_reg, src_reg1, ZF);
+			assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
+			assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
 			break;
 		}
 
-		assembler.sltu(SF, outReg, ZF); // Normal carry out
-		assembler.or_(CF, CF, SF); // Total carry out
+		assembler_.sltu(SF, out_reg, ZF); // Normal carry out
+		assembler_.or_(CF, CF, SF); // Total carry out
 
-		assembler.sltz(SF, srcReg1);
-		assembler.slt(ZF, outReg, ZF);
-		assembler.xor_(ZF, ZF, SF); // Normal overflow out
-		assembler.xor_(OF, OF, ZF); // Total overflow out
+		assembler_.sltz(SF, src_reg1);
+		assembler_.slt(ZF, out_reg, ZF);
+		assembler_.xor_(ZF, ZF, SF); // Normal overflow out
+		assembler_.xor_(OF, OF, ZF); // Total overflow out
 
 		break;
 	case ternary_arith_op::sbb:
 		// Temporary: Add carry in
-		switch (n2->val().type().width()) {
+		switch (n.val().type().width()) {
 		case 64:
-			assembler.add(ZF, srcReg2, srcReg3);
+			assembler_.add(ZF, src_reg2, src_reg3);
 			break;
 		case 32:
-			assembler.addw(ZF, srcReg2, srcReg3);
+			assembler_.addw(ZF, src_reg2, src_reg3);
 			break;
 		case 8:
 		case 16:
-			assembler.add(ZF, srcReg2, srcReg3);
-			assembler.slli(ZF, ZF, 64 - n2->val().type().width());
-			assembler.srai(ZF, ZF, 64 - n2->val().type().width());
+			assembler_.add(ZF, src_reg2, src_reg3);
+			assembler_.slli(ZF, ZF, 64 - n.val().type().width());
+			assembler_.srai(ZF, ZF, 64 - n.val().type().width());
 			break;
 		}
 
-		assembler.slt(OF, ZF, srcReg2); // Temporary overflow
-		assembler.sltu(CF, ZF, srcReg2); // Temporary carry
+		assembler_.slt(OF, ZF, src_reg2); // Temporary overflow
+		assembler_.sltu(CF, ZF, src_reg2); // Temporary carry
 
-		switch (n2->val().type().width()) {
+		switch (n.val().type().width()) {
 		case 64:
-			assembler.sub(outReg, srcReg1, ZF);
+			assembler_.sub(out_reg, src_reg1, ZF);
 		case 32:
-			assembler.subw(outReg, srcReg1, ZF);
+			assembler_.subw(out_reg, src_reg1, ZF);
 		case 16:
-			assembler.sub(outReg, srcReg1, ZF);
-			assembler.slli(outReg, outReg, 64 - n2->val().type().width());
-			assembler.srai(outReg, outReg, 64 - n2->val().type().width());
+			assembler_.sub(out_reg, src_reg1, ZF);
+			assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
+			assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
 			break;
 		}
 
-		assembler.sltu(SF, srcReg1, outReg); // Normal carry out
-		assembler.or_(CF, CF, SF); // Total carry out
+		assembler_.sltu(SF, src_reg1, out_reg); // Normal carry out
+		assembler_.or_(CF, CF, SF); // Total carry out
 
-		assembler.sgtz(SF, ZF);
-		assembler.slt(ZF, outReg, srcReg1);
-		assembler.xor_(ZF, ZF, SF); // Normal overflow out
-		assembler.xor_(OF, OF, ZF); // Total overflow out
+		assembler_.sgtz(SF, ZF);
+		assembler_.slt(ZF, out_reg, src_reg1);
+		assembler_.xor_(ZF, ZF, SF); // Normal overflow out
+		assembler_.xor_(OF, OF, ZF); // Total overflow out
 
 		break;
 	default:
 		throw std::runtime_error("unsupported binary arithmetic operation");
 	}
 
-	assembler.seqz(ZF, outReg); // ZF
-	assembler.sltz(SF, outReg); // SF
+	assembler_.seqz(ZF, out_reg); // ZF
+	assembler_.sltz(SF, out_reg); // SF
 
-	return outReg;
+	return out_reg;
 }
-Register riscv64_translation_context::materialise_bit_shift(bit_shift_node *n2)
+
+Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node &n)
 {
-	Register outReg = T4;
+	Register out_reg = T4;
 
-	Register srcReg = materialise(n2->input().owner());
+	Register src_reg = materialise(n.input().owner());
 
-	if (n2->amount().kind() == port_kinds::constant) {
-		auto amt = (intptr_t)((constant_node *)n2->amount().owner())->const_val_i() & 0x3f;
+	if (n.amount().kind() == port_kinds::constant) {
+		auto amt = (intptr_t)((constant_node *)n.amount().owner())->const_val_i() & 0x3f;
 		if (amt == 0) {
-			return srcReg;
+			return src_reg;
 		}
-		switch (n2->op()) {
+		switch (n.op()) {
 		case shift_op::lsl:
-			assembler.srli(CF, srcReg, n2->val().type().width() - amt); // CF
+			assembler_.srli(CF, src_reg, n.val().type().width() - amt); // CF
 
 			if (amt == 1) {
-				assembler.srli(OF, srcReg, n2->val().type().width() - amt - 1); // OF
-				assembler.xor_(OF, OF, CF);
-				assembler.andi(OF, OF, 1);
+				assembler_.srli(OF, src_reg, n.val().type().width() - amt - 1); // OF
+				assembler_.xor_(OF, OF, CF);
+				assembler_.andi(OF, OF, 1);
 			}
 
-			switch (n2->val().type().width()) {
+			switch (n.val().type().width()) {
 			case 64:
-				assembler.slli(outReg, srcReg, amt);
+				assembler_.slli(out_reg, src_reg, amt);
 				break;
 			case 32:
-				assembler.slliw(outReg, srcReg, amt);
+				assembler_.slliw(out_reg, src_reg, amt);
 				break;
 			case 8:
 			case 16:
-				assembler.slli(outReg, srcReg, amt + (64 - n2->val().type().width()));
-				assembler.srai(outReg, srcReg, (64 - n2->val().type().width()));
+				assembler_.slli(out_reg, src_reg, amt + (64 - n.val().type().width()));
+				assembler_.srai(out_reg, src_reg, (64 - n.val().type().width()));
 				break;
 			}
 
 			break;
 		case shift_op::lsr:
-			assembler.srli(CF, srcReg, amt - 1); // CF
-			switch (n2->val().type().width()) {
+			assembler_.srli(CF, src_reg, amt - 1); // CF
+			switch (n.val().type().width()) {
 			case 64:
-				assembler.srli(outReg, srcReg, amt);
+				assembler_.srli(out_reg, src_reg, amt);
 				break;
 			case 32:
-				assembler.srliw(outReg, srcReg, amt);
+				assembler_.srliw(out_reg, src_reg, amt);
 				break;
 			case 16:
-				assembler.slli(outReg, srcReg, 48);
-				assembler.srli(outReg, srcReg, 48 + amt);
+				assembler_.slli(out_reg, src_reg, 48);
+				assembler_.srli(out_reg, src_reg, 48 + amt);
 				break;
 			case 8:
-				assembler.andi(outReg, srcReg, 0xff);
-				assembler.srli(outReg, srcReg, amt);
+				assembler_.andi(out_reg, src_reg, 0xff);
+				assembler_.srli(out_reg, src_reg, amt);
 				break;
 			}
 			if (amt == 1) {
-				assembler.srli(OF, srcReg, n2->val().type().width() - 1);
-				assembler.andi(OF, OF, 1); // OF
+				assembler_.srli(OF, src_reg, n.val().type().width() - 1);
+				assembler_.andi(OF, OF, 1); // OF
 			}
 			break;
 		case shift_op::asr:
-			assembler.srli(CF, srcReg, amt - 1); // CF
-			assembler.srai(outReg, srcReg, amt); // Sign extension preserved
+			assembler_.srli(CF, src_reg, amt - 1); // CF
+			assembler_.srai(out_reg, src_reg, amt); // Sign extension preserved
 			if (amt == 1) {
-				assembler.li(OF, 0);
+				assembler_.li(OF, 0);
 			}
 			break;
 		}
 
-		assembler.andi(CF, CF, 1); // CF
+		assembler_.andi(CF, CF, 1); // CF
 
-		assembler.seqz(ZF, outReg); // ZF
-		assembler.sltz(SF, outReg); // SF
+		assembler_.seqz(ZF, out_reg); // ZF
+		assembler_.sltz(SF, out_reg); // SF
 
-		return outReg;
+		return out_reg;
 	}
 
-	auto amount = materialise(n2->amount().owner());
-	assembler.subi(OF, amount, 1);
+	auto amount = materialise(n.amount().owner());
+	assembler_.subi(OF, amount, 1);
 
-	switch (n2->op()) {
+	switch (n.op()) {
 	case shift_op::lsl:
-		assembler.sll(CF, srcReg, OF); // CF in highest bit
+		assembler_.sll(CF, src_reg, OF); // CF in highest bit
 
-		switch (n2->val().type().width()) {
+		switch (n.val().type().width()) {
 		case 64:
-			assembler.sll(outReg, srcReg, amount);
+			assembler_.sll(out_reg, src_reg, amount);
 			break;
 		case 32:
-			assembler.sllw(outReg, srcReg, amount);
+			assembler_.sllw(out_reg, src_reg, amount);
 			break;
 		case 8:
 		case 16:
-			assembler.sll(outReg, srcReg, amount);
-			assembler.slli(outReg, srcReg, (64 - n2->val().type().width()));
-			assembler.srai(outReg, srcReg, (64 - n2->val().type().width()));
+			assembler_.sll(out_reg, src_reg, amount);
+			assembler_.slli(out_reg, src_reg, (64 - n.val().type().width()));
+			assembler_.srai(out_reg, src_reg, (64 - n.val().type().width()));
 			break;
 		}
 
-		assembler.xor_(OF, outReg, CF); // OF in highest bit
+		assembler_.xor_(OF, out_reg, CF); // OF in highest bit
 
-		assembler.srli(CF, CF, n2->val().type().width() - 1);
+		assembler_.srli(CF, CF, n.val().type().width() - 1);
 
-		assembler.srli(OF, OF, n2->val().type().width() - 1);
-		assembler.andi(OF, OF, 1); // OF
+		assembler_.srli(OF, OF, n.val().type().width() - 1);
+		assembler_.andi(OF, OF, 1); // OF
 		break;
 	case shift_op::lsr:
-		assembler.srl(CF, srcReg, OF); // CF
-		switch (n2->val().type().width()) {
+		assembler_.srl(CF, src_reg, OF); // CF
+		switch (n.val().type().width()) {
 		case 64:
-			assembler.srl(outReg, srcReg, amount);
+			assembler_.srl(out_reg, src_reg, amount);
 			break;
 		case 32:
-			assembler.srlw(outReg, srcReg, amount);
+			assembler_.srlw(out_reg, src_reg, amount);
 			break;
 		case 16:
-			assembler.slli(outReg, srcReg, 48);
-			assembler.srli(outReg, srcReg, 48);
-			assembler.srl(outReg, srcReg, amount);
+			assembler_.slli(out_reg, src_reg, 48);
+			assembler_.srli(out_reg, src_reg, 48);
+			assembler_.srl(out_reg, src_reg, amount);
 			break;
 		case 8:
-			assembler.andi(outReg, srcReg, 0xff);
-			assembler.srl(outReg, srcReg, amount);
+			assembler_.andi(out_reg, src_reg, 0xff);
+			assembler_.srl(out_reg, src_reg, amount);
 			break;
 		}
 
 		// Undefined on shift amt > 1 (use same formula as amt == 1)
-		assembler.srli(OF, srcReg, n2->val().type().width() - 1);
-		assembler.andi(OF, OF, 1); // OF
+		assembler_.srli(OF, src_reg, n.val().type().width() - 1);
+		assembler_.andi(OF, OF, 1); // OF
 
 		break;
 	case shift_op::asr:
-		assembler.srl(CF, srcReg, OF); // CF
-		assembler.li(OF, 0); // OF
+		assembler_.srl(CF, src_reg, OF); // CF
+		assembler_.li(OF, 0); // OF
 
-		assembler.sra(outReg, srcReg, amount); // Sign extension preserved
+		assembler_.sra(out_reg, src_reg, amount); // Sign extension preserved
 
 		break;
 	}
 
-	assembler.andi(CF, CF, 1); // Limit CF to single bit
-	assembler.seqz(ZF, outReg); // ZF
-	assembler.sltz(SF, outReg); // SF
+	assembler_.andi(CF, CF, 1); // Limit CF to single bit
+	assembler_.seqz(ZF, out_reg); // ZF
+	assembler_.sltz(SF, out_reg); // SF
 
-	return outReg;
+	return out_reg;
 }
 
-Register riscv64_translation_context::materialise_binary_arith(binary_arith_node *n2)
+Register riscv64_translation_context::materialise_binary_arith(const binary_arith_node &n)
 {
-	Register outReg = T0;
-	Register outReg2 = T1;
+	Register out_reg = T0;
+	Register out_reg2 = T1;
 
-	Register srcReg1 = materialise(n2->lhs().owner());
+	Register src_reg1 = materialise(n.lhs().owner());
 
-	if (n2->rhs().owner()->kind() == node_kinds::constant) {
+	if (n.rhs().owner()->kind() == node_kinds::constant) {
 		// Could also work for LHS except sub
 		// TODO Probably incorrect to just cast to signed 64bit
-		auto imm = (intptr_t)((constant_node *)(n2->rhs().owner()))->const_val_i();
+		auto imm = (intptr_t)((constant_node *)(n.rhs().owner()))->const_val_i();
 		if (imm)
 
 			if (IsITypeImm(imm)) {
-				switch (n2->op()) {
+				switch (n.op()) {
 
 				case binary_arith_op::sub:
 					if (imm == -2048) { // Can happen with inversion
 						goto standardPath;
 					}
-					switch (n2->val().type().width()) {
+					switch (n.val().type().width()) {
 					case 64:
-						assembler.addi(outReg, srcReg1, -imm);
+						assembler_.addi(out_reg, src_reg1, -imm);
 						break;
 					case 32:
-						assembler.addiw(outReg, srcReg1, -imm);
+						assembler_.addiw(out_reg, src_reg1, -imm);
 						break;
 					case 8:
 					case 16:
-						assembler.addi(outReg, srcReg1, -imm);
-						assembler.slli(outReg, outReg, 64 - n2->val().type().width());
-						assembler.srai(outReg, outReg, 64 - n2->val().type().width());
+						assembler_.addi(out_reg, src_reg1, -imm);
+						assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
+						assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
 						break;
 					}
-					assembler.sltu(CF, srcReg1, outReg); // CF FIXME Assumes outReg!=srcReg1
-					assembler.slt(OF, outReg, srcReg1); // OF FIXME Assumes outReg!=srcReg1
+					assembler_.sltu(CF, src_reg1, out_reg); // CF FIXME Assumes out_reg!=src_reg1
+					assembler_.slt(OF, out_reg, src_reg1); // OF FIXME Assumes out_reg!=src_reg1
 					if (imm > 0) {
-						assembler.xori(OF, OF, 1); // Invert on positive
+						assembler_.xori(OF, OF, 1); // Invert on positive
 					}
 					break;
 
 				case binary_arith_op::add:
 
-					switch (n2->val().type().width()) {
+					switch (n.val().type().width()) {
 					case 64:
-						assembler.addi(outReg, srcReg1, imm);
+						assembler_.addi(out_reg, src_reg1, imm);
 						break;
 					case 32:
-						assembler.addiw(outReg, srcReg1, -imm);
+						assembler_.addiw(out_reg, src_reg1, -imm);
 						break;
 					case 8:
 					case 16:
-						assembler.addi(outReg, srcReg1, imm);
-						assembler.slli(outReg, outReg, 64 - n2->val().type().width());
-						assembler.srai(outReg, outReg, 64 - n2->val().type().width());
+						assembler_.addi(out_reg, src_reg1, imm);
+						assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
+						assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
 						break;
 					}
 
-					assembler.sltu(CF, outReg, srcReg1); // CF FIXME Assumes outReg!=srcReg1
-					assembler.slt(OF, outReg, srcReg1); // OF FIXME Assumes outReg!=srcReg1
+					assembler_.sltu(CF, out_reg, src_reg1); // CF FIXME Assumes out_reg!=src_reg1
+					assembler_.slt(OF, out_reg, src_reg1); // OF FIXME Assumes out_reg!=src_reg1
 					if (imm < 0) {
-						assembler.xori(OF, OF, 1); // Invert on negative
+						assembler_.xori(OF, OF, 1); // Invert on negative
 					}
 
 					break;
 				// Binary operations preserve sign extension
 				case binary_arith_op::band:
-					assembler.andi(outReg, srcReg1, imm);
+					assembler_.andi(out_reg, src_reg1, imm);
 					break;
 				case binary_arith_op::bor:
-					assembler.ori(outReg, srcReg1, imm);
+					assembler_.ori(out_reg, src_reg1, imm);
 					break;
 				case binary_arith_op::bxor:
-					assembler.xori(outReg, srcReg1, imm);
+					assembler_.xori(out_reg, src_reg1, imm);
 					break;
 				default:
 					// No-op Go to standard path
 					goto standardPath;
 				}
 
-				assembler.seqz(ZF, outReg); // ZF
-				assembler.sltz(SF, outReg); // SF
+				assembler_.seqz(ZF, out_reg); // ZF
+				assembler_.sltz(SF, out_reg); // SF
 
-				return outReg;
+				return out_reg;
 			}
 	}
 
 standardPath:
-	Register srcReg2 = materialise(n2->rhs().owner());
-	switch (n2->op()) {
+	Register src_reg2 = materialise(n.rhs().owner());
+	switch (n.op()) {
 
 	case binary_arith_op::add:
-		switch (n2->val().type().width()) {
+		switch (n.val().type().width()) {
 		case 64:
-			assembler.add(outReg, srcReg1, srcReg2);
+			assembler_.add(out_reg, src_reg1, src_reg2);
 			break;
 		case 32:
-			assembler.addw(outReg, srcReg1, srcReg2);
+			assembler_.addw(out_reg, src_reg1, src_reg2);
 			break;
 		case 8:
 		case 16:
-			assembler.add(outReg, srcReg1, srcReg2);
-			assembler.slli(outReg, outReg, 64 - n2->val().type().width());
-			assembler.srai(outReg, outReg, 64 - n2->val().type().width());
+			assembler_.add(out_reg, src_reg1, src_reg2);
+			assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
+			assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
 			break;
 		}
 
-		assembler.sltz(CF, srcReg1);
-		assembler.slt(OF, outReg, srcReg2);
-		assembler.xor_(OF, OF, CF); // OF FIXME Assumes outReg!=srcReg1 && outReg!=srcReg2
+		assembler_.sltz(CF, src_reg1);
+		assembler_.slt(OF, out_reg, src_reg2);
+		assembler_.xor_(OF, OF, CF); // OF FIXME Assumes out_reg!=src_reg1 && out_reg!=src_reg2
 
-		assembler.sltu(CF, outReg, srcReg2); // CF (Allows typical x86 case of regSrc1==outReg) FIXME Assumes outReg!=srcReg2
+		assembler_.sltu(CF, out_reg, src_reg2); // CF (Allows typical x86 case of regSrc1==out_reg) FIXME Assumes out_reg!=src_reg2
 		break;
 
 	case binary_arith_op::sub:
-		switch (n2->val().type().width()) {
+		switch (n.val().type().width()) {
 		case 64:
-			assembler.sub(outReg, srcReg1, srcReg2);
+			assembler_.sub(out_reg, src_reg1, src_reg2);
 			break;
 		case 32:
-			assembler.subw(outReg, srcReg1, srcReg2);
+			assembler_.subw(out_reg, src_reg1, src_reg2);
 			break;
 		case 8:
 		case 16:
-			assembler.sub(outReg, srcReg1, srcReg2);
-			assembler.slli(outReg, outReg, 64 - n2->val().type().width());
-			assembler.srai(outReg, outReg, 64 - n2->val().type().width());
+			assembler_.sub(out_reg, src_reg1, src_reg2);
+			assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
+			assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
 			break;
 		}
-		assembler.sub(outReg, srcReg1, srcReg2);
+		assembler_.sub(out_reg, src_reg1, src_reg2);
 
-		assembler.sgtz(CF, srcReg2);
-		assembler.slt(OF, outReg, srcReg1);
-		assembler.xor_(OF, OF, CF); // OF FIXME Assumes outReg!=srcReg1 && outReg!=srcReg2
+		assembler_.sgtz(CF, src_reg2);
+		assembler_.slt(OF, out_reg, src_reg1);
+		assembler_.xor_(OF, OF, CF); // OF FIXME Assumes out_reg!=src_reg1 && out_reg!=src_reg2
 
-		assembler.sltu(CF, srcReg1, outReg); // CF FIXME Assumes outReg!=srcReg1
+		assembler_.sltu(CF, src_reg1, out_reg); // CF FIXME Assumes out_reg!=src_reg1
 		break;
 
 	// Binary operations preserve sign extension
 	case binary_arith_op::band:
-		assembler.and_(outReg, srcReg1, srcReg2);
+		assembler_.and_(out_reg, src_reg1, src_reg2);
 		break;
 	case binary_arith_op::bor:
-		assembler.or_(outReg, srcReg1, srcReg2);
+		assembler_.or_(out_reg, src_reg1, src_reg2);
 		break;
 	case binary_arith_op::bxor:
-		assembler.xor_(outReg, srcReg1, srcReg2);
+		assembler_.xor_(out_reg, src_reg1, src_reg2);
 		break;
 
 	case binary_arith_op::mul:
-		switch (n2->val().type().width()) {
+		switch (n.val().type().width()) {
 		case 128:
 			// Split calculation
-			assembler.mul(outReg, srcReg1, srcReg2);
-			switch (n2->val().type().element_type().type_class()) {
+			assembler_.mul(out_reg, src_reg1, src_reg2);
+			switch (n.val().type().element_type().type_class()) {
 
 			case value_type_class::signed_integer:
-				assembler.mulh(outReg2, srcReg1, srcReg2);
-				assembler.srai(CF, outReg, 64);
-				assembler.xor_(CF, CF, outReg2);
-				assembler.snez(CF, CF);
+				assembler_.mulh(out_reg2, src_reg1, src_reg2);
+				assembler_.srai(CF, out_reg, 64);
+				assembler_.xor_(CF, CF, out_reg2);
+				assembler_.snez(CF, CF);
 				break;
 			case value_type_class::unsigned_integer:
-				assembler.mulhu(outReg2, srcReg1, srcReg2);
-				assembler.snez(CF, outReg2);
+				assembler_.mulhu(out_reg2, src_reg1, src_reg2);
+				assembler_.snez(CF, out_reg2);
 				break;
 			default:
 				throw std::runtime_error("Unsupported value type for multiply");
 			}
-			assembler.mv(OF, CF);
+			assembler_.mv(OF, CF);
 			break;
 
 		case 64:
 		case 32:
 		case 16:
-			assembler.mul(outReg, srcReg1, srcReg2); // Assumes proper signed/unsigned extension from 32/16/8 bits
+			assembler_.mul(out_reg, src_reg1, src_reg2); // Assumes proper signed/unsigned extension from 32/16/8 bits
 
-			switch (n2->val().type().element_type().type_class()) {
+			switch (n.val().type().element_type().type_class()) {
 
 			case value_type_class::signed_integer:
-				if (n2->val().type().width() == 64) {
-					assembler.sextw(CF, outReg);
+				if (n.val().type().width() == 64) {
+					assembler_.sextw(CF, out_reg);
 				} else {
-					assembler.slli(CF, outReg, 64 - (n2->val().type().width()) / 2);
-					assembler.srai(CF, outReg, 64 - (n2->val().type().width()) / 2);
+					assembler_.slli(CF, out_reg, 64 - (n.val().type().width()) / 2);
+					assembler_.srai(CF, out_reg, 64 - (n.val().type().width()) / 2);
 				}
-				assembler.xor_(CF, CF, outReg);
-				assembler.snez(CF, CF);
+				assembler_.xor_(CF, CF, out_reg);
+				assembler_.snez(CF, CF);
 				break;
 			case value_type_class::unsigned_integer:
-				assembler.srli(CF, outReg, n2->val().type().width() / 2);
-				assembler.snez(CF, outReg2);
+				assembler_.srli(CF, out_reg, n.val().type().width() / 2);
+				assembler_.snez(CF, out_reg2);
 				break;
 			default:
 				throw std::runtime_error("Unsupported value type for multiply");
 			}
-			assembler.mv(OF, CF);
+			assembler_.mv(OF, CF);
 			break;
 		}
 	case binary_arith_op::div:
-		switch (n2->val().type().width()) {
+		switch (n.val().type().width()) {
 		case 128: // Fixme 128 bits not natively supported on RISCV, assuming just extended 64 bit value
 		case 64:
-			switch (n2->val().type().element_type().type_class()) {
+			switch (n.val().type().element_type().type_class()) {
 
 			case value_type_class::signed_integer:
-				assembler.div(outReg, srcReg1, srcReg2);
+				assembler_.div(out_reg, src_reg1, src_reg2);
 				break;
 			case value_type_class::unsigned_integer:
-				assembler.divu(outReg, srcReg1, srcReg2);
+				assembler_.divu(out_reg, src_reg1, src_reg2);
 				break;
 			default:
 				throw std::runtime_error("Unsupported value type for divide");
 			}
 			break;
 		case 32:
-			switch (n2->val().type().element_type().type_class()) {
+			switch (n.val().type().element_type().type_class()) {
 
 			case value_type_class::signed_integer:
-				assembler.divw(outReg, srcReg1, srcReg2);
+				assembler_.divw(out_reg, src_reg1, src_reg2);
 				break;
 			case value_type_class::unsigned_integer:
-				assembler.divuw(outReg, srcReg1, srcReg2);
+				assembler_.divuw(out_reg, src_reg1, src_reg2);
 				break;
 			default:
 				throw std::runtime_error("Unsupported value type for divide");
 			}
 			break;
 		case 16:
-			switch (n2->val().type().element_type().type_class()) {
+			switch (n.val().type().element_type().type_class()) {
 
 			case value_type_class::signed_integer:
-				assembler.divw(outReg, srcReg1, srcReg2);
-				assembler.slli(outReg, outReg, 48);
-				assembler.srai(outReg, outReg, 48);
+				assembler_.divw(out_reg, src_reg1, src_reg2);
+				assembler_.slli(out_reg, out_reg, 48);
+				assembler_.srai(out_reg, out_reg, 48);
 				break;
 			case value_type_class::unsigned_integer:
-				assembler.divuw(outReg, srcReg1, srcReg2);
-				assembler.slli(outReg, outReg, 48);
-				assembler.srli(outReg, outReg, 48);
+				assembler_.divuw(out_reg, src_reg1, src_reg2);
+				assembler_.slli(out_reg, out_reg, 48);
+				assembler_.srli(out_reg, out_reg, 48);
 				break;
 			default:
 				throw std::runtime_error("Unsupported value type for divide");
@@ -573,46 +569,46 @@ standardPath:
 		}
 
 	case binary_arith_op::mod:
-		switch (n2->val().type().width()) {
+		switch (n.val().type().width()) {
 		case 128: // Fixme 128 bits not natively supported on RISCV, assuming just extended 64 bit value
 		case 64:
-			switch (n2->val().type().element_type().type_class()) {
+			switch (n.val().type().element_type().type_class()) {
 
 			case value_type_class::signed_integer:
-				assembler.rem(outReg, srcReg1, srcReg2);
+				assembler_.rem(out_reg, src_reg1, src_reg2);
 				break;
 			case value_type_class::unsigned_integer:
-				assembler.remu(outReg, srcReg1, srcReg2);
+				assembler_.remu(out_reg, src_reg1, src_reg2);
 				break;
 			default:
 				throw std::runtime_error("Unsupported value type for divide");
 			}
 			break;
 		case 32:
-			switch (n2->val().type().element_type().type_class()) {
+			switch (n.val().type().element_type().type_class()) {
 
 			case value_type_class::signed_integer:
-				assembler.remw(outReg, srcReg1, srcReg2);
+				assembler_.remw(out_reg, src_reg1, src_reg2);
 				break;
 			case value_type_class::unsigned_integer:
-				assembler.remuw(outReg, srcReg1, srcReg2);
+				assembler_.remuw(out_reg, src_reg1, src_reg2);
 				break;
 			default:
 				throw std::runtime_error("Unsupported value type for divide");
 			}
 			break;
 		case 16:
-			switch (n2->val().type().element_type().type_class()) {
+			switch (n.val().type().element_type().type_class()) {
 
 			case value_type_class::signed_integer:
-				assembler.remw(outReg, srcReg1, srcReg2);
-				assembler.slli(outReg, outReg, 48);
-				assembler.srai(outReg, outReg, 48);
+				assembler_.remw(out_reg, src_reg1, src_reg2);
+				assembler_.slli(out_reg, out_reg, 48);
+				assembler_.srai(out_reg, out_reg, 48);
 				break;
 			case value_type_class::unsigned_integer:
-				assembler.remuw(outReg, srcReg1, srcReg2);
-				assembler.slli(outReg, outReg, 48);
-				assembler.srli(outReg, outReg, 48);
+				assembler_.remuw(out_reg, src_reg1, src_reg2);
+				assembler_.slli(out_reg, out_reg, 48);
+				assembler_.srli(out_reg, out_reg, 48);
 				break;
 			default:
 				throw std::runtime_error("Unsupported value type for divide");
@@ -621,20 +617,20 @@ standardPath:
 		}
 
 	case binary_arith_op::cmpeq:
-		assembler.xor_(outReg, srcReg1, srcReg2);
-		assembler.seqz(outReg, outReg);
+		assembler_.xor_(out_reg, src_reg1, src_reg2);
+		assembler_.seqz(out_reg, out_reg);
 	case binary_arith_op::cmpne:
-		assembler.xor_(outReg, srcReg1, srcReg2);
-		assembler.snez(outReg, outReg);
+		assembler_.xor_(out_reg, src_reg1, src_reg2);
+		assembler_.snez(out_reg, out_reg);
 	case binary_arith_op::cmpgt:
 		throw std::runtime_error("unsupported binary arithmetic operation");
 	}
 
 	// TODO those should only be set on add, sub, xor, or, and
-	assembler.seqz(ZF, outReg); // ZF
-	assembler.sltz(SF, outReg); // SF
+	assembler_.seqz(ZF, out_reg); // ZF
+	assembler_.sltz(SF, out_reg); // SF
 
-	return outReg;
+	return out_reg;
 }
 Register riscv64_translation_context::materialise_constant(int64_t imm)
 {
@@ -643,19 +639,19 @@ Register riscv64_translation_context::materialise_constant(int64_t imm)
 	if (imm == 0) {
 		return ZERO;
 	}
-	Register outReg = A0;
+	Register out_reg = A0;
 	auto immLo32 = (int32_t)imm;
 	auto immHi32 = imm >> 32 << 32;
 	auto immLo12 = immLo32 << (32 - 12) >> (32 - 12); // sign extend lower 12 bit
 	if (immHi32 == 0) {
 		int32_t imm32Hi20 = (immLo32 - immLo12);
 		if (imm32Hi20 != 0) {
-			assembler.lui(outReg, imm32Hi20);
+			assembler_.lui(out_reg, imm32Hi20);
 			if (immLo12) {
-				assembler.addiw(outReg, outReg, immLo12);
+				assembler_.addiw(out_reg, out_reg, immLo12);
 			}
 		} else {
-			assembler.li(outReg, imm);
+			assembler_.li(out_reg, imm);
 		}
 
 	} else {
@@ -674,13 +670,13 @@ Register riscv64_translation_context::materialise_constant(int64_t imm)
 		materialise_constant(val);
 
 		if (shiftAmnt) {
-			assembler.slli(outReg, outReg, shiftAmnt);
+			assembler_.slli(out_reg, out_reg, shiftAmnt);
 		}
 
 		if (immLo12) {
-			assembler.addi(outReg, outReg, immLo12);
+			assembler_.addi(out_reg, out_reg, immLo12);
 		}
 	}
-	return outReg;
+	return out_reg;
 }
 
