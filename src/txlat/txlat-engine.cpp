@@ -178,9 +178,12 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		s << ".size __GPH,.-__GPH" << std::endl;
 	}
 
+    std::string arancini_runtime_lib_path = cmdline.at("runtime-lib-path").as<std::string>();
+
 	// Generate the final output binary by compiling everything together.
 	run_or_fail(
-		"g++ -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + " " + phobjsrc->name() + " -L out -larancini-runtime");
+        "g++ -o " + cmdline.at("output").as<std::string>() + " -no-pie " +
+        intermediate_file->name() + " " + phobjsrc->name() + " " + arancini_runtime_lib_path);
 }
 
 /*
