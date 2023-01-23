@@ -14,6 +14,9 @@ option(BUILD_TESTS "Enable build of tests" OFF)
 message(STATUS "Detected local architecture ${ARCH}")
 message(STATUS "Building DBT for architecture ${DBT_ARCH}")
 
+# Define architecture flag
+add_compile_definitions(ARCH_${DBT_ARCH})
+
 # Specify binary output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/out/${CMAKE_BUILD_TYPE})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/out/${CMAKE_BUILD_TYPE})
@@ -49,6 +52,13 @@ endif ()
 
 # Note: build after architecture-specific DBT build
 add_subdirectory(src/runtime)
+
+# Specify absolute path of generated libarancini-runtime for txlat
+#
+# NOTE: txlat requires the path because it invokes the compiler internally and must
+# specify for linkage.
+add_compile_definitions(ARANCINI_LIBPATH="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:arancini-runtime>")
+
 add_subdirectory(src/txlat)
 
 # Build tests
