@@ -3,6 +3,7 @@
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
 #include <cstdlib>
 #include <memory>
+#include <map>
 
 extern "C" {
 #include <xed/xed-interface.h>
@@ -67,10 +68,17 @@ protected:
 #undef DEFREG
 	};
 
+	std::map<unsigned long, unsigned long> off_to_idx {
+#define DEFREG(index, ctype, ltype, name) {X86_OFFSET_OF(name), index},
+#include <arancini/input/x86/reg.def>
+#undef DEFREG
+	};
+
 	action_node *write_reg(reg_offsets reg, port &value);
 	value_node *read_reg(const value_type &vt, reg_offsets reg);
 
 	reg_offsets reg_to_offset(xed_reg_enum_t reg);
+	unsigned long offset_to_idx(reg_offsets reg);
 
 	enum flag_op { ignore, set0, set1, update };
 	/// @brief Write flag register with a flag_op (ignore, set0, set1, update)
