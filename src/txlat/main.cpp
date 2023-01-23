@@ -20,15 +20,15 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 		("no-static", "Do not do any static translation") //
 		("debug", "Enable debugging output");
 
-	po::variables_map vm;
-	po::store(po::parse_command_line(argc, argv, desc), vm);
-
-	if (vm.count("help")) {
-		std::cout << desc << std::endl;
-		return std::nullopt;
-	}
-
+    po::variables_map vm;
 	try {
+        po::store(po::parse_command_line(argc, argv, desc), vm);
+
+        if (vm.count("help")) {
+            std::cout << desc << std::endl;
+            return std::nullopt;
+        }
+
 		po::notify(vm);
 	} catch (std::exception &e) {
 		std::cerr << "Error: " << e.what() << std::endl << std::endl;
