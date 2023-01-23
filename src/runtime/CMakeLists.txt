@@ -13,17 +13,17 @@ add_library(arancini-runtime
             dbt/translation-engine.cpp)
 
 if (TARGET arancini-output-x86)
-    target_sources(arancini-runtime PUBLIC dbt/trampoline.x86_64.S)
+    add_library(arancini-trampoline OBJECT dbt/trampoline.x86_64.S)
     target_link_libraries(arancini-runtime
                           PRIVATE
                           arancini-output-x86)
 elseif (TARGET arancini-output-arm64)
-    target_sources(arancini-runtime PUBLIC dbt/trampoline.arm64.S)
+    add_library(arancini-trampoline OBJECT dbt/trampoline.arm64.S)
     target_link_libraries(arancini-runtime
                           PRIVATE
                           arancini-output-arm64)
 elseif (TARGET arancini-output-riscv64)
-    target_sources(arancini-runtime PUBLIC dbt/trampoline.riscv64.S)
+    add_library(arancini-trampoline OBJECT dbt/trampoline.riscv64.S)
     target_link_libraries(arancini-runtime
                           PRIVATE
                           arancini-output-riscv64)
@@ -35,5 +35,6 @@ target_link_libraries(arancini-runtime
                       PRIVATE
                       xed
                       arancini-ir
-                      arancini-input-x86)
+                      arancini-input-x86
+                      arancini-trampoline)
 
