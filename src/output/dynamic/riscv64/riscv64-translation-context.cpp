@@ -32,6 +32,8 @@ Register riscv64_translation_context::materialise(const node *n)
 	switch (n->kind()) {
 	case node_kinds::bit_shift:
 		return materialise_bit_shift(*reinterpret_cast<const bit_shift_node *>(n));
+	case node_kinds::read_reg:
+        return materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));
 	case node_kinds::write_reg:
         return materialise_write_reg(*reinterpret_cast<const write_reg_node*>(n));
 	case node_kinds::constant:
@@ -47,6 +49,20 @@ Register riscv64_translation_context::materialise(const node *n)
 	}
 }
 
+Register riscv64_translation_context::materialise_read_reg(const read_reg_node &n) {
+    const port &value = n.val();
+    if (is_flag(value)) { // Flags
+        // TODO
+    } else if (is_gpr(value)) { // GPR
+        Register out_reg = materialise(value.owner());
+        assembler_.ld(out_reg, { FP, static_cast<intptr_t>(n.regoff()) });
+
+        return out_reg;
+    }
+
+    throw std::runtime_error("Unsupported width on register read");
+}
+
 Register riscv64_translation_context::materialise_write_reg(const write_reg_node &n) {
     const port &value = n.val();
     if (is_flag(value)) { // Flags
@@ -54,6 +70,8 @@ Register riscv64_translation_context::materialise_write_reg(const write_reg_node
     } else if (is_gpr(value)) { // GPR
         Register reg = materialise(value.owner());
         assembler_.sd(reg, { FP, static_cast<intptr_t>(n.regoff()) });
+
+        return reg;
     }
 
     throw std::runtime_error("Unsupported width on register write");
@@ -65,8 +83,9 @@ Register riscv64_translation_context::materialise_unary_arith(const unary_arith_
 		Register src_reg = materialise(n.lhs().owner());
 		if (n.op() == unary_arith_op::bnot)
 			assembler_.not_(out_reg, src_reg);
-        else
-			throw std::runtime_error("unsupported unary arithmetic operation");
+            return out_reg;
+
+        throw std::runtime_error("unsupported unary arithmetic operation");
 }
 
 Register riscv64_translation_context::materialise_ternary_arith(const ternary_arith_node &n)
