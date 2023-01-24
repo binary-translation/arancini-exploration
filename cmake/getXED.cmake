@@ -70,7 +70,7 @@ function (get_xed)
     FetchContent_MakeAvailable(XED)
 
     if (CMAKE_FIND_ROOT_PATH)
-        set(MBUILD_EXTRA --toolchain ${CMAKE_FIND_ROOT_PATH})
+        set(MBUILD_EXTRA --toolchain "${TOOLCHAIN_PREFIX}-")
     endif ()
 
     # Build target
