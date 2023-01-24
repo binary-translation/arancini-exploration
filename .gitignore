@@ -6,3 +6,4 @@ out/
 build/
 .vscode/
 generated.S
+cmake-build-*
