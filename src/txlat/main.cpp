@@ -19,6 +19,7 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 		("graph", po::value<std::string>(), "Creates a DOT graph file representing the input ELF translation") //
 		("no-static", "Do not do any static translation") //
         ("runtime-lib-path", po::value<std::string>()->default_value(ARANCINI_LIBPATH), "Path to arancini libraries (defaults specified by build system)") //
+        ("debug-gen", "Include debugging information in the generated output binary") //
 		("debug", "Enable debugging output");
 
     po::variables_map vm;
