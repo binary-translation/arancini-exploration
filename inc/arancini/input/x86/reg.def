@@ -1,3 +1,7 @@
+#ifndef DEFREG
+#error DEFREG must be defined when include x86 reg.def
+#endif
+
 // Program Counter
 DEFREG(uint64_t, i64, PC)
 
