@@ -60,7 +60,8 @@ Register riscv64_translation_context::materialise_read_reg(const read_reg_node &
         return out_reg;
     }
 
-    throw std::runtime_error("Unsupported width on register read");
+    throw std::runtime_error("Unsupported width on register read: " +
+                             std::to_string(value.type().width()));
 }
 
 Register riscv64_translation_context::materialise_write_reg(const write_reg_node &n) {
@@ -74,7 +75,8 @@ Register riscv64_translation_context::materialise_write_reg(const write_reg_node
         return reg;
     }
 
-    throw std::runtime_error("Unsupported width on register write");
+    throw std::runtime_error("Unsupported width on register write: " +
+                             std::to_string(value.type().width()));
 }
 
 Register riscv64_translation_context::materialise_unary_arith(const unary_arith_node& n) {
