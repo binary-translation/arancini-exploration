@@ -88,9 +88,44 @@ riscv64_translation_context::materialise(const node *n) {
 		return materialise_bit_extract(*reinterpret_cast<const bit_extract_node *>(n));
 	case node_kinds::bit_insert:
 		return materialise_bit_insert(*reinterpret_cast<const bit_insert_node *>(n));
+	case node_kinds::cast:
+		return materialise_cast(*reinterpret_cast<const cast_node *>(n));
 	default:
 		throw std::runtime_error("unsupported node");
 	}
+}
+Register riscv64_translation_context::materialise_cast(const cast_node &n)
+{
+	Register src_reg = std::get<Register>(materialise(n.source_value().owner()));
+	Register out_reg = T6;
+	switch (n.op()) {
+
+	case cast_op::bitcast:
+	case cast_op::sx:
+		// No-op
+		return src_reg;
+
+	case cast_op::zx:
+		if (n.source_value().type().width() == 8) {
+			assembler_.andi(out_reg, src_reg, 0xff);
+		} else {
+			assembler_.slli(out_reg, src_reg, 64 - n.source_value().type().width());
+			assembler_.srli(out_reg, src_reg, 64 - n.source_value().type().width());
+		}
+		break;
+	case cast_op::trunc:
+		// Sign extend to preserve convention
+		if (n.source_value().type().width() == 32) {
+			assembler_.sextw(out_reg, src_reg);
+		} else {
+			assembler_.slli(out_reg, src_reg, 64 - n.source_value().type().width());
+			assembler_.srai(out_reg, src_reg, 64 - n.source_value().type().width());
+		}
+		break;
+	default:
+		throw std::runtime_error("unsupported cast op");
+	}
+	return out_reg;
 }
 
 Register riscv64_translation_context::materialise_bit_extract(const bit_extract_node &n)
