@@ -84,9 +84,63 @@ riscv64_translation_context::materialise(const node *n) {
         return materialise_unary_arith(*reinterpret_cast<const unary_arith_node*>(n));
 	case node_kinds::ternary_arith:
 		return materialise_ternary_arith(*reinterpret_cast<const ternary_arith_node *>(n));
+	case node_kinds::bit_extract:
+		return materialise_bit_extract(*reinterpret_cast<const bit_extract_node *>(n));
+	case node_kinds::bit_insert:
+		return materialise_bit_insert(*reinterpret_cast<const bit_insert_node *>(n));
 	default:
 		throw std::runtime_error("unsupported node");
 	}
+}
+
+Register riscv64_translation_context::materialise_bit_extract(const bit_extract_node &n)
+{
+	Register out_reg = T4;
+	int from = n.from();
+	int length = n.length();
+
+	Register src = std::get<Register>(materialise(n.source_value().owner()));
+
+	// TODO Handle upper 64 from 128 for split Register multiply case
+
+	if (length + from < 64) {
+		assembler_.slli(out_reg, src, 64 - (from + length));
+	}
+	assembler_.srai(out_reg, out_reg, 64 - length); // Use arithmetic shift to keep sign extension up
+
+	return out_reg;
+}
+
+Register riscv64_translation_context::materialise_bit_insert(const bit_insert_node &n)
+{
+	Register out_reg = T5;
+	Register temp_reg = T6;
+	int to = n.to();
+	int length = n.length();
+
+	// TODO Handle inserts for div with 128bits
+
+	Register src = std::get<Register>(materialise(n.source_value().owner()));
+	Register bits = std::get<Register>(materialise(n.bits().owner()));
+
+	int64_t mask = ~(((1ll << length) - 1) << to);
+
+	if (to == 0 && IsITypeImm(mask)) {
+		// Since to==0 no shift necessary and just masking both is enough
+		// `~mask` also fits IType since `mask` has all but lower bits set
+		assembler_.andi(temp_reg, bits, ~mask);
+		assembler_.andi(out_reg, src, mask);
+	} else {
+		// Fixme might override input
+		Register mask_reg = materialise_constant(~mask);
+		assembler_.and_(out_reg, src, mask_reg);
+		assembler_.slli(temp_reg, bits, 64 - length);
+		assembler_.srli(temp_reg, temp_reg, 64 - (length + to));
+	}
+
+	assembler_.or_(out_reg, out_reg, temp_reg);
+
+	return out_reg;
 }
 
 Register riscv64_translation_context::materialise_read_reg(const read_reg_node &n) {
