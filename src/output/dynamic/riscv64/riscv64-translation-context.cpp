@@ -44,6 +44,10 @@ Register riscv64_translation_context::materialise(const node *n)
         return materialise_read_pc(*reinterpret_cast<const read_pc_node*>(n));
 	case node_kinds::write_pc:
         return materialise_write_pc(*reinterpret_cast<const write_pc_node*>(n));
+    case node_kinds::br:
+        return materialise_br(*reinterpret_cast<const br_node*>(n));
+    case node_kinds::cond_br:
+        return materialise_cond_br(*reinterpret_cast<const cond_br_node*>(n));
 	case node_kinds::constant:
 		return materialise_constant((int64_t)((constant_node *)n)->const_val_i());
 	case node_kinds::binary_arith:
@@ -128,6 +132,26 @@ Register riscv64_translation_context::materialise_write_pc(const write_pc_node &
 
     // TODO: incorrect return
     return src_reg;
+}
+
+Register riscv64_translation_context::materialise_br(const br_node &n) {
+    Register target_reg = materialise(n.target());
+
+    Address pc_addr { FP, 0x1234u };
+    assembler_.sd(target_reg, pc_addr);
+
+    return target_reg;
+}
+
+Register riscv64_translation_context::materialise_cond_br(const cond_br_node &n) {
+    Register cond = materialise(n.cond().owner());
+
+    Register target_reg = materialise(n.target());
+
+    Address pc_addr { FP, 0x1234u };
+    assembler_.sd(target_reg, pc_addr);
+
+    return target_reg;
 }
 
 Register riscv64_translation_context::materialise_unary_arith(const unary_arith_node& n) {
