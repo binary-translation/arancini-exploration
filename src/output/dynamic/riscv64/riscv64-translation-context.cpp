@@ -36,6 +36,10 @@ Register riscv64_translation_context::materialise(const node *n)
         return materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));
 	case node_kinds::write_reg:
         return materialise_write_reg(*reinterpret_cast<const write_reg_node*>(n));
+	case node_kinds::read_mem:
+        return materialise_read_mem(*reinterpret_cast<const read_mem_node*>(n));
+	case node_kinds::write_mem:
+        return materialise_write_mem(*reinterpret_cast<const write_mem_node*>(n));
 	case node_kinds::constant:
 		return materialise_constant((int64_t)((constant_node *)n)->const_val_i());
 	case node_kinds::binary_arith:
@@ -77,6 +81,28 @@ Register riscv64_translation_context::materialise_write_reg(const write_reg_node
 
     throw std::runtime_error("Unsupported width on register write: " +
                              std::to_string(value.type().width()));
+}
+
+Register riscv64_translation_context::materialise_read_mem(const read_mem_node &n) {
+    Register out_reg  = materialise(n.val().owner());
+    Register addr_reg = materialise(n.address().owner());
+
+    // TODO: handle different sizes
+    Address addr { addr_reg };
+    assembler_.ld(out_reg, addr);
+
+    return out_reg;
+}
+
+Register riscv64_translation_context::materialise_write_mem(const write_mem_node &n) {
+    Register src_reg  = materialise(n.val().owner());
+    Register addr_reg = materialise(n.address().owner());
+
+    // TODO: handle different sizes
+    Address addr { addr_reg };
+    assembler_.sd(src_reg, addr);
+
+    return addr_reg;
 }
 
 Register riscv64_translation_context::materialise_unary_arith(const unary_arith_node& n) {
