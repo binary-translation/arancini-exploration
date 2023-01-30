@@ -2,6 +2,9 @@
 #include <arancini/output/dynamic/riscv64/encoder/riscv64-constants.h>
 #include <arancini/output/dynamic/riscv64/riscv64-translation-context.h>
 
+#include <functional>
+#include <unordered_map>
+
 using namespace arancini::output::dynamic::riscv64;
 using namespace arancini::ir;
 
@@ -23,6 +26,24 @@ void riscv64_translation_context::lower(ir::node *n) { materialise(n); }
 
 static inline bool is_flag(const port& value) { return value.type().width() == 1; }
 static inline bool is_gpr(const port& value) { return value.type().width() == 64; }
+
+using load_store_func_t = decltype(&Assembler::ld);
+
+static std::unordered_map<std::size_t, load_store_func_t>
+load_instructions {
+    {8, &Assembler::lb},
+    {16, &Assembler::lh},
+    {32, &Assembler::lw},
+    {64, &Assembler::ld},
+};
+
+static std::unordered_map<std::size_t, load_store_func_t>
+store_instructions {
+    {8, &Assembler::sb},
+    {16, &Assembler::sh},
+    {32, &Assembler::sw},
+    {64, &Assembler::sd},
+};
 
 Register riscv64_translation_context::materialise(const node *n)
 {
@@ -95,9 +116,9 @@ Register riscv64_translation_context::materialise_read_mem(const read_mem_node &
     Register out_reg  = materialise(n.val().owner());
     Register addr_reg = materialise(n.address().owner());
 
-    // TODO: handle different sizes
     Address addr { addr_reg };
-    assembler_.ld(out_reg, addr);
+    auto load_instr = load_instructions.at(n.val().type().width());
+    (assembler_.*load_instr)(out_reg, addr);
 
     return out_reg;
 }
@@ -108,7 +129,8 @@ Register riscv64_translation_context::materialise_write_mem(const write_mem_node
 
     // TODO: handle different sizes
     Address addr { addr_reg };
-    assembler_.sd(src_reg, addr);
+    auto store_instr = store_instructions.at(n.val().type().width());
+    (assembler_.*store_instr)(src_reg, addr);
 
     return addr_reg;
 }
