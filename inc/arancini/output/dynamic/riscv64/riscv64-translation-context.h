@@ -28,6 +28,8 @@ private:
 	Register materialise_write_mem(const ir::write_mem_node& n);
     Register materialise_read_pc(const ir::read_pc_node& n);
     Register materialise_write_pc(const ir::write_pc_node& n);
+    Register materialise_br(const ir::br_node& n);
+    Register materialise_cond_br(const ir::cond_br_node& n);
 	Register materialise_constant(int64_t imm);
 	Register materialise_unary_arith(const ir::unary_arith_node &n);
 	Register materialise_binary_arith(const ir::binary_arith_node &n);
