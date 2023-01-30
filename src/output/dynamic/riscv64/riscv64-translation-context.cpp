@@ -40,6 +40,10 @@ Register riscv64_translation_context::materialise(const node *n)
         return materialise_read_mem(*reinterpret_cast<const read_mem_node*>(n));
 	case node_kinds::write_mem:
         return materialise_write_mem(*reinterpret_cast<const write_mem_node*>(n));
+	case node_kinds::read_pc:
+        return materialise_read_pc(*reinterpret_cast<const read_pc_node*>(n));
+	case node_kinds::write_pc:
+        return materialise_write_pc(*reinterpret_cast<const write_pc_node*>(n));
 	case node_kinds::constant:
 		return materialise_constant((int64_t)((constant_node *)n)->const_val_i());
 	case node_kinds::binary_arith:
@@ -103,6 +107,27 @@ Register riscv64_translation_context::materialise_write_mem(const write_mem_node
     assembler_.sd(src_reg, addr);
 
     return addr_reg;
+}
+
+Register riscv64_translation_context::materialise_read_pc(const read_pc_node &n) {
+    Register out_reg  = materialise(n.val().owner());
+
+    // TODO: map to register
+    Address pc_addr { FP, 0x1234u };
+    assembler_.ld(out_reg, pc_addr);
+
+    return out_reg;
+}
+
+Register riscv64_translation_context::materialise_write_pc(const write_pc_node &n) {
+    Register src_reg  = materialise(n.val().owner());
+
+    // TODO: handle different sizes
+    Address pc_addr { FP, 0x1234u };
+    assembler_.sd(src_reg, pc_addr);
+
+    // TODO: incorrect return
+    return src_reg;
 }
 
 Register riscv64_translation_context::materialise_unary_arith(const unary_arith_node& n) {
