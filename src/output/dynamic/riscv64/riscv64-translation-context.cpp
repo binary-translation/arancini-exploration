@@ -90,10 +90,196 @@ riscv64_translation_context::materialise(const node *n) {
 		return materialise_bit_insert(*reinterpret_cast<const bit_insert_node *>(n));
 	case node_kinds::cast:
 		return materialise_cast(*reinterpret_cast<const cast_node *>(n));
+	case node_kinds::binary_atomic:
+		return materialise_binary_atomic(*reinterpret_cast<const binary_atomic_node *>(n));
 	default:
 		throw std::runtime_error("unsupported node");
 	}
 }
+std::variant<Register, std::unique_ptr<Label>,std::monostate> riscv64_translation_context::materialise_binary_atomic(const binary_atomic_node &n)
+{
+	Register dstAddr = std::get<Register>(materialise(n.lhs().owner()));
+	Register src = std::get<Register>(materialise(n.rhs().owner()));
+	Register out_reg = T0;
+	// FIXME Correct memory ordering?
+	switch (n.op()) {
+	case binary_atomic_op::xadd:
+		switch (n.rhs().type().width()) {
+		case 64:
+			assembler_.amoaddd(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.add(SF, out_reg, src); // Actual sum for flag generation
+			break;
+		case 32:
+			assembler_.amoaddw(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.addw(SF, out_reg, src); // Actual sum for flag generation
+			break;
+		default:
+			throw std::runtime_error("unsupported xadd width");
+		}
+
+		assembler_.sltz(CF, src);
+		assembler_.slt(OF, SF, out_reg);
+		assembler_.xor_(OF, OF, CF); // OF
+
+		assembler_.sltu(CF, SF, out_reg); // CF
+
+		assembler_.seqz(ZF, SF); // ZF
+		assembler_.sltz(SF, SF); // SF
+
+		switch (n.rhs().type().width()) {
+		case 64:
+			assembler_.sd(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
+			break;
+		case 32:
+			assembler_.slli(out_reg, out_reg, 32);
+			assembler_.srli(out_reg, out_reg, 32);
+			assembler_.sd(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
+			break;
+		default:
+			throw std::runtime_error("unsupported xadd width");
+		}
+		return out_reg;
+	case binary_atomic_op::add:
+		switch (n.rhs().type().width()) {
+		case 64:
+			assembler_.amoaddd(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+
+			assembler_.add(SF, out_reg, src); // Actual sum for flag generation
+			break;
+		case 32:
+			assembler_.amoaddw(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+
+			assembler_.addw(SF, out_reg, src); // Actual sum for flag generation
+			break;
+		default:
+			throw std::runtime_error("unsupported lock add width");
+		}
+
+		assembler_.sltz(CF, src);
+		assembler_.slt(OF, SF, out_reg);
+		assembler_.xor_(OF, OF, CF); // OF
+
+		assembler_.sltu(CF, SF, out_reg); // CF
+
+		assembler_.seqz(ZF, SF); // ZF
+		assembler_.sltz(SF, SF); // SF
+		return std::monostate{};
+	case binary_atomic_op::sub:
+		assembler_.neg(out_reg, src);
+		switch (n.rhs().type().width()) {
+		case 64:
+			assembler_.amoaddd(out_reg, out_reg, Address { dstAddr }, std::memory_order_seq_cst);
+
+			assembler_.sub(SF, out_reg, src); // Actual difference for flag generation
+			break;
+		case 32:
+			assembler_.amoaddw(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+
+			assembler_.subw(SF, out_reg, src); // Actual difference for flag generation
+			break;
+		default:
+			throw std::runtime_error("unsupported lock sub width");
+		}
+
+		assembler_.sgtz(CF, src);
+		assembler_.slt(OF, SF, out_reg);
+		assembler_.xor_(OF, OF, CF); // OF
+
+		assembler_.sltu(CF, out_reg, SF); // CF
+
+		assembler_.seqz(ZF, SF); // ZF
+		assembler_.sltz(SF, SF); // SF
+		return std::monostate{};
+	case binary_atomic_op::band:
+		switch (n.rhs().type().width()) {
+		case 64:
+			assembler_.amoandd(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+
+			assembler_.and_(SF, out_reg, src); // Actual and for flag generation
+			break;
+		case 32:
+			assembler_.amoandw(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+
+			assembler_.and_(SF, out_reg, src); // Actual and for flag generation
+			assembler_.slli(SF, SF, 32); // Get rid of higher 32 bits
+			break;
+		default:
+			throw std::runtime_error("unsupported lock and width");
+		}
+
+		assembler_.seqz(ZF, SF); // ZF
+		assembler_.sltz(SF, SF); // SF
+		return std::monostate{};
+	case binary_atomic_op::bor:
+		switch (n.rhs().type().width()) {
+		case 64:
+			assembler_.amoord(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+
+			assembler_.or_(SF, out_reg, src); // Actual or for flag generation
+			break;
+		case 32:
+			assembler_.amoorw(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+
+			assembler_.or_(SF, out_reg, src); // Actual or for flag generation
+			assembler_.slli(SF, SF, 32); // Get rid of higher 32 bits
+			break;
+		default:
+			throw std::runtime_error("unsupported lock or width");
+		}
+
+		assembler_.seqz(ZF, SF); // ZF
+		assembler_.sltz(SF, SF); // SF
+		return std::monostate{};
+	case binary_atomic_op::bxor:
+		switch (n.rhs().type().width()) {
+		case 64:
+			assembler_.amoxord(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+
+			assembler_.xor_(SF, out_reg, src); // Actual xor for flag generation
+			break;
+		case 32:
+			assembler_.amoxorw(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+
+			assembler_.xor_(SF, out_reg, src); // Actual xor for flag generation
+			assembler_.slli(SF, SF, 32); // Get rid of higher 32 bits
+			break;
+		default:
+			throw std::runtime_error("unsupported lock xor width");
+		}
+
+		assembler_.seqz(ZF, SF); // ZF
+		assembler_.sltz(SF, SF); // SF
+		return std::monostate{};
+	case binary_atomic_op::xchg:
+		switch (n.rhs().type().width()) {
+		case 64:
+			assembler_.amoswapd(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			break;
+		case 32:
+			assembler_.amoswapw(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			break;
+		default:
+			throw std::runtime_error("unsupported xchg width");
+		}
+
+		switch (n.rhs().type().width()) {
+		case 64:
+			assembler_.sd(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
+			break;
+		case 32:
+			assembler_.slli(out_reg, out_reg, 32);
+			assembler_.srli(out_reg, out_reg, 32);
+			assembler_.sd(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
+			break;
+		default:
+			throw std::runtime_error("unsupported xchg width");
+		}
+		return out_reg;
+	default:
+		throw std::runtime_error("unsupported binary atomic operation");
+	}
+}
+
 Register riscv64_translation_context::materialise_cast(const cast_node &n)
 {
 	Register src_reg = std::get<Register>(materialise(n.source_value().owner()));
