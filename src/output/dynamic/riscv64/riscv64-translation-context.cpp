@@ -352,8 +352,10 @@ Register riscv64_translation_context::materialise_ternary_arith(const ternary_ar
 		switch (n.val().type().width()) {
 		case 64:
 			assembler_.sub(out_reg, src_reg1, ZF);
+			break;
 		case 32:
 			assembler_.subw(out_reg, src_reg1, ZF);
+			break;
 		case 16:
 			assembler_.sub(out_reg, src_reg1, ZF);
 			assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
@@ -371,7 +373,7 @@ Register riscv64_translation_context::materialise_ternary_arith(const ternary_ar
 
 		break;
 	default:
-		throw std::runtime_error("unsupported binary arithmetic operation");
+		throw std::runtime_error("unsupported ternary arithmetic operation");
 	}
 
 	assembler_.seqz(ZF, out_reg); // ZF
