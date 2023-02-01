@@ -291,7 +291,7 @@ public:
 
 protected:
 	virtual void insert_action(action_node *a) = 0;
-	virtual void process_node(node *a) {};
+	virtual void process_node(node *) {};
 
 private:
 	template <class T, typename... Args> T *create_and_insert(Args &&...args) { return insert(new T(std::forward<Args>(args)...)); }
