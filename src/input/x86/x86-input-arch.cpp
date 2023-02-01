@@ -189,7 +189,10 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_XADD_LOCK:
 		return std::make_unique<atomic_translator>(builder);
 
-	default:
+  case XED_ICLASS_FNSTCW:
+    return std::make_unique<fpu_translator>(builder);
+
+  default:
 		return nullptr;
 	}
 }
