@@ -20,11 +20,22 @@ call_native:
     sd s10, 8(sp)
     sd s11, 0(sp)
 
+    addi sp, sp, -200
+    addi fp, sp, 0
+
+    // Write x86 PC to FP + 0x1234
+    sd a1, 0x100(fp)
+
     // Call function
     jalr ra, a0, 0
 
+    // Return PC from FP + 0x1234
+    // Needed for branches
+    ld a0, 0x100(fp)
+
     // Restore callee-saved registers from stack
     // TODO: handle float regs
+    addi sp, sp, 200
     ld fp, 88(sp)
     ld s1, 80(sp)
     ld s2, 72(sp)
