@@ -45,7 +45,13 @@ store_instructions {
     {64, &Assembler::sd},
 };
 
-Register riscv64_translation_context::materialise(const node *n)
+template <typename T>
+T get_or_fail(std::optional<T> val) {
+    if (val.has_value()) return val.value();
+    throw std::runtime_error("materialise() did not produce expected value");
+}
+
+std::optional<Register> riscv64_translation_context::materialise(const node *n)
 {
     if (!n)
         throw std::runtime_error("RISC-V DBT received NULL pointer to node");
@@ -56,19 +62,24 @@ Register riscv64_translation_context::materialise(const node *n)
 	case node_kinds::read_reg:
         return materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));
 	case node_kinds::write_reg:
-        return materialise_write_reg(*reinterpret_cast<const write_reg_node*>(n));
+        materialise_write_reg(*reinterpret_cast<const write_reg_node*>(n));
+        return std::nullopt;
 	case node_kinds::read_mem:
         return materialise_read_mem(*reinterpret_cast<const read_mem_node*>(n));
 	case node_kinds::write_mem:
-        return materialise_write_mem(*reinterpret_cast<const write_mem_node*>(n));
+        materialise_write_mem(*reinterpret_cast<const write_mem_node*>(n));
+        return std::nullopt;
 	case node_kinds::read_pc:
         return materialise_read_pc(*reinterpret_cast<const read_pc_node*>(n));
 	case node_kinds::write_pc:
-        return materialise_write_pc(*reinterpret_cast<const write_pc_node*>(n));
+        materialise_write_pc(*reinterpret_cast<const write_pc_node*>(n));
+        return std::nullopt;
     case node_kinds::br:
-        return materialise_br(*reinterpret_cast<const br_node*>(n));
+        materialise_br(*reinterpret_cast<const br_node*>(n));
+        return std::nullopt;
     case node_kinds::cond_br:
-        return materialise_cond_br(*reinterpret_cast<const cond_br_node*>(n));
+        materialise_cond_br(*reinterpret_cast<const cond_br_node*>(n));
+        return std::nullopt;
 	case node_kinds::constant:
 		return materialise_constant((int64_t)((constant_node *)n)->const_val_i());
 	case node_kinds::binary_arith:
@@ -87,7 +98,7 @@ Register riscv64_translation_context::materialise_read_reg(const read_reg_node &
     if (is_flag(value)) { // Flags
         // TODO
     } else if (is_gpr(value)) { // GPR
-        Register out_reg = materialise(value.owner());
+        Register out_reg = get_or_fail(materialise(value.owner()));
         assembler_.ld(out_reg, { FP, static_cast<intptr_t>(n.regoff()) });
 
         return out_reg;
@@ -97,15 +108,14 @@ Register riscv64_translation_context::materialise_read_reg(const read_reg_node &
                              std::to_string(value.type().width()));
 }
 
-Register riscv64_translation_context::materialise_write_reg(const write_reg_node &n) {
+void riscv64_translation_context::materialise_write_reg(const write_reg_node &n) {
     const port &value = n.val();
     if (is_flag(value)) { // Flags
         // TODO
     } else if (is_gpr(value)) { // GPR
-        Register reg = materialise(value.owner());
+        Register reg = get_or_fail(materialise(value.owner()));
         assembler_.sd(reg, { FP, static_cast<intptr_t>(n.regoff()) });
-
-        return reg;
+        return;
     }
 
     throw std::runtime_error("Unsupported width on register write: " +
@@ -113,8 +123,8 @@ Register riscv64_translation_context::materialise_write_reg(const write_reg_node
 }
 
 Register riscv64_translation_context::materialise_read_mem(const read_mem_node &n) {
-    Register out_reg  = materialise(n.val().owner());
-    Register addr_reg = materialise(n.address().owner());
+    Register out_reg  = get_or_fail(materialise(n.val().owner()));
+    Register addr_reg = get_or_fail(materialise(n.address().owner()));
 
     Address addr { addr_reg };
     auto load_instr = load_instructions.at(n.val().type().width());
@@ -123,20 +133,18 @@ Register riscv64_translation_context::materialise_read_mem(const read_mem_node &
     return out_reg;
 }
 
-Register riscv64_translation_context::materialise_write_mem(const write_mem_node &n) {
-    Register src_reg  = materialise(n.val().owner());
-    Register addr_reg = materialise(n.address().owner());
+void riscv64_translation_context::materialise_write_mem(const write_mem_node &n) {
+    Register src_reg  = get_or_fail(materialise(n.val().owner()));
+    Register addr_reg = get_or_fail(materialise(n.address().owner()));
 
     // TODO: handle different sizes
     Address addr { addr_reg };
     auto store_instr = store_instructions.at(n.val().type().width());
     (assembler_.*store_instr)(src_reg, addr);
-
-    return addr_reg;
 }
 
 Register riscv64_translation_context::materialise_read_pc(const read_pc_node &n) {
-    Register out_reg  = materialise(n.val().owner());
+    Register out_reg  = get_or_fail(materialise(n.val().owner()));
 
     // TODO: map to register
     Address pc_addr { FP, 0x100 };
@@ -145,41 +153,34 @@ Register riscv64_translation_context::materialise_read_pc(const read_pc_node &n)
     return out_reg;
 }
 
-Register riscv64_translation_context::materialise_write_pc(const write_pc_node &n) {
-    Register src_reg  = materialise(n.val().owner());
+void riscv64_translation_context::materialise_write_pc(const write_pc_node &n) {
+    Register src_reg  = get_or_fail(materialise(n.val().owner()));
 
     // TODO: handle different sizes
     Address pc_addr { FP, 0x100 };
     assembler_.sd(src_reg, pc_addr);
-
-    // TODO: incorrect return
-    return src_reg;
 }
 
-Register riscv64_translation_context::materialise_br(const br_node &n) {
-    Register target_reg = materialise(n.target());
+void riscv64_translation_context::materialise_br(const br_node &n) {
+    Register target_reg = get_or_fail(materialise(n.target()));
 
     Address pc_addr { FP, 0x100 };
     assembler_.sd(target_reg, pc_addr);
-
-    return target_reg;
 }
 
-Register riscv64_translation_context::materialise_cond_br(const cond_br_node &n) {
-    Register cond = materialise(n.cond().owner());
+void riscv64_translation_context::materialise_cond_br(const cond_br_node &n) {
+    Register cond = get_or_fail(materialise(n.cond().owner()));
 
-    Register target_reg = materialise(n.target());
+    Register target_reg = get_or_fail(materialise(n.target()));
 
     Address pc_addr { FP, 0x100 };
     assembler_.sd(target_reg, pc_addr);
-
-    return target_reg;
 }
 
 Register riscv64_translation_context::materialise_unary_arith(const unary_arith_node& n) {
 		Register out_reg = T0;
 
-		Register src_reg = materialise(n.lhs().owner());
+		Register src_reg = get_or_fail(materialise(n.lhs().owner()));
 		if (n.op() == unary_arith_op::bnot)
 			assembler_.not_(out_reg, src_reg);
             return out_reg;
@@ -191,9 +192,9 @@ Register riscv64_translation_context::materialise_ternary_arith(const ternary_ar
 {
 	Register out_reg = T0;
 
-	Register src_reg1 = materialise(n.lhs().owner());
-	Register src_reg2 = materialise(n.rhs().owner());
-	Register src_reg3 = materialise(n.top().owner());
+	Register src_reg1 = get_or_fail(materialise(n.lhs().owner()));
+	Register src_reg2 = get_or_fail(materialise(n.rhs().owner()));
+	Register src_reg3 = get_or_fail(materialise(n.top().owner()));
 	switch (n.op()) {
 		// TODO Immediate handling
 
@@ -297,7 +298,7 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 {
 	Register out_reg = T4;
 
-	Register src_reg = materialise(n.input().owner());
+	Register src_reg = get_or_fail(materialise(n.input().owner()));
 
 	if (n.amount().kind() == port_kinds::constant) {
 		auto amt = (intptr_t)((constant_node *)n.amount().owner())->const_val_i() & 0x3f;
@@ -369,7 +370,7 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 		return out_reg;
 	}
 
-	auto amount = materialise(n.amount().owner());
+	auto amount = get_or_fail(materialise(n.amount().owner()));
 	assembler_.subi(OF, amount, 1);
 
 	switch (n.op()) {
@@ -444,7 +445,7 @@ Register riscv64_translation_context::materialise_binary_arith(const binary_arit
 	Register out_reg = T0;
 	Register out_reg2 = T1;
 
-	Register src_reg1 = materialise(n.lhs().owner());
+	Register src_reg1 = get_or_fail(materialise(n.lhs().owner()));
 
 	if (n.rhs().owner()->kind() == node_kinds::constant) {
 		// Could also work for LHS except sub
@@ -527,7 +528,7 @@ Register riscv64_translation_context::materialise_binary_arith(const binary_arit
 	}
 
 standardPath:
-	Register src_reg2 = materialise(n.rhs().owner());
+	Register src_reg2 = get_or_fail(materialise(n.rhs().owner()));
 	switch (n.op()) {
 
 	case binary_arith_op::add:
