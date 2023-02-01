@@ -27,6 +27,11 @@ public:
 	/// @return A constant node.
 	value_node *insert_constant_f(const value_type &vt, double cv) { return create_and_insert<constant_node>(vt, cv); }
 
+	/// @brief Returns a node representing an 1-bit unsigned integer constant.
+	/// @param cv The value of the constant.
+	/// @return A constant node.
+	value_node *insert_constant_u1(unsigned char cv) { return create_and_insert<constant_node>(value_type::u1(), (unsigned long)cv); }
+
 	/// @brief Returns a node representing an 8-bit unsigned integer constant.
 	/// @param cv The value of the constant.
 	/// @return A constant node.
@@ -56,6 +61,11 @@ public:
 	/// @param cv The value of the constant.
 	/// @return A constant node.
 	value_node *insert_constant_s64(unsigned long cv) { return create_and_insert<constant_node>(value_type::s64(), (unsigned long)cv); }
+
+	/// @brief Returns a node representing an 128-bit unsigned integer constant.
+	/// @param cv The value of the constant.
+	/// @return A constant node.
+	value_node *insert_constant_u128(unsigned long cv) { return create_and_insert<constant_node>(value_type::u128(), (unsigned long)cv); }
 
 	/// @brief Returns a node representing an 32-bit floating point constant.
 	/// @param cv The value of the constant.
@@ -196,7 +206,40 @@ public:
 	/// @return a cmpgt node: lhs > rhs
 	value_node *insert_cmpgt(port &lhs, port &rhs) { return create_and_insert<binary_arith_node>(binary_arith_op::cmpgt, lhs, rhs); }
 
+  /// @brief generic atomic binary node creator
+  /// @param op: type of binary atomic operation
+  /// @param lhs
+  /// @param rhs
+  /// @return an atomic binary operation node that applies: lhs := lhs op rhs
+  action_node *insert_atomic_binop(binary_atomic_op op, port &lhs, port &rhs) { return create_and_insert<binary_atomic_node>(op, lhs, rhs); }
+
+  /// @brief exchange and add
+  /// @param lhs
+  /// @param rhs
+  /// @return an atomic xadd node:
+  ///         tmp := lhs + rhs
+  ///         rhs := lhs
+  ///         lhs := tmp
 	action_node *insert_atomic_xadd(port &lhs, port &rhs) { return create_and_insert<binary_atomic_node>(binary_atomic_op::xadd, lhs, rhs); }
+
+  /// @brief atomic exchange
+  /// @param lhs
+  /// @param rhs
+  /// @return an atomic xchg node: lhs := rhs, rhs := lhs
+	action_node *insert_atomic_xchg(port &lhs, port &rhs) { return create_and_insert<binary_atomic_node>(binary_atomic_op::xchg, lhs, rhs); }
+
+	/// @brief atomic compare-exchange
+	/// @param lhs: destination
+	/// @param rhs: accumulator
+	/// @param top: source
+	/// @return an atomic cmpxchg node with the following behavior:
+	///         if source == destination
+	///            destination := source
+	///         else
+	///            accumulator := destination
+	action_node *insert_atomic_cmpxchg(port &lhs, port &rhs, port &top)
+	{
+		return create_and_insert<ternary_atomic_node>(ternary_atomic_op::cmpxchg, lhs, rhs, top); }
 
 	/// @brief zero extend a value to a larger width (does not preserve the sign)
 	/// @param target_type new type
