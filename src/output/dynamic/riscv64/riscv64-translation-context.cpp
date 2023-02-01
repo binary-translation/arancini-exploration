@@ -139,7 +139,7 @@ Register riscv64_translation_context::materialise_read_pc(const read_pc_node &n)
     Register out_reg  = materialise(n.val().owner());
 
     // TODO: map to register
-    Address pc_addr { FP, 0x1234u };
+    Address pc_addr { FP, 0x100 };
     assembler_.ld(out_reg, pc_addr);
 
     return out_reg;
@@ -149,7 +149,7 @@ Register riscv64_translation_context::materialise_write_pc(const write_pc_node &
     Register src_reg  = materialise(n.val().owner());
 
     // TODO: handle different sizes
-    Address pc_addr { FP, 0x1234u };
+    Address pc_addr { FP, 0x100 };
     assembler_.sd(src_reg, pc_addr);
 
     // TODO: incorrect return
@@ -159,7 +159,7 @@ Register riscv64_translation_context::materialise_write_pc(const write_pc_node &
 Register riscv64_translation_context::materialise_br(const br_node &n) {
     Register target_reg = materialise(n.target());
 
-    Address pc_addr { FP, 0x1234u };
+    Address pc_addr { FP, 0x100 };
     assembler_.sd(target_reg, pc_addr);
 
     return target_reg;
@@ -170,7 +170,7 @@ Register riscv64_translation_context::materialise_cond_br(const cond_br_node &n)
 
     Register target_reg = materialise(n.target());
 
-    Address pc_addr { FP, 0x1234u };
+    Address pc_addr { FP, 0x100 };
     assembler_.sd(target_reg, pc_addr);
 
     return target_reg;
