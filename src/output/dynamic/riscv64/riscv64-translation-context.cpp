@@ -148,7 +148,8 @@ Register riscv64_translation_context::materialise_read_pc(const read_pc_node &n)
 
     // TODO: map to register
     Address pc_addr { FP, 0x100 };
-    assembler_.ld(out_reg, pc_addr);
+    auto load_instr = load_instructions.at(n.val().type().width());
+    (assembler_.*load_instr)(out_reg, pc_addr);
 
     return out_reg;
 }
@@ -158,14 +159,19 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n) {
 
     // TODO: handle different sizes
     Address pc_addr { FP, 0x100 };
-    assembler_.sd(src_reg, pc_addr);
+    auto store_instr = store_instructions.at(n.val().type().width());
+    (assembler_.*store_instr)(src_reg, pc_addr);
 }
 
 void riscv64_translation_context::materialise_br(const br_node &n) {
     Register target_reg = get_or_fail(materialise(n.target()));
 
     Address pc_addr { FP, 0x100 };
-    assembler_.sd(target_reg, pc_addr);
+    auto store_instr = store_instructions.at(n.val().type().width());
+    (assembler_.*store_instr)(target_reg, pc_addr);
+
+    // NOTE: need to handle jumps to static code
+    // This can be done via a symbol table, accessed via a label node
 }
 
 void riscv64_translation_context::materialise_cond_br(const cond_br_node &n) {
