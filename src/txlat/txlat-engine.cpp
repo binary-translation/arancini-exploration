@@ -177,15 +177,19 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		s << ".size __GPH,.-__GPH" << std::endl;
 	}
 
-	std::string arancini_runtime_lib_path = cmdline.at("runtime-lib-path").as<std::string>();
-	auto dir_start = arancini_runtime_lib_path.rfind("/");
-	std::string arancini_runtime_lib_dir = arancini_runtime_lib_path.substr(0, dir_start);
+    std::string cxx_compiler = cmdline.at("cxx-compiler-path").as<std::string>();
+
+    std::string arancini_runtime_lib_path = cmdline.at("runtime-lib-path").as<std::string>();
+    auto dir_start = arancini_runtime_lib_path.rfind("/");
+    std::string arancini_runtime_lib_dir = arancini_runtime_lib_path.substr(0, dir_start);
 
 	std::string debug_info = cmdline.count("debug-gen") ? " -g" : "";
 
 	// Generate the final output binary by compiling everything together.
-	run_or_fail("g++ -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + " " + phobjsrc->name() + " "
-		+ arancini_runtime_lib_path + " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info);
+	run_or_fail(
+        cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie " +
+        intermediate_file->name() + " " + phobjsrc->name() + " " + arancini_runtime_lib_path
+        + " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info);
 }
 
 /*
