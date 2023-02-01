@@ -11,6 +11,7 @@ add_library(arancini-input-x86
             translators/binop.cpp
             translators/branch.cpp
             translators/cmov.cpp
+            translators/fpu.cpp
             translators/fpvec.cpp
             translators/jcc.cpp
             translators/mov.cpp
