@@ -5,6 +5,7 @@
 #include <arancini/ir/port.h>
 
 #include <csignal>
+#include <iostream>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
@@ -30,6 +31,23 @@ translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_
 	}
 }
 
+void translator::dump_xed_encoding(void)
+{
+  xed_decoded_inst_t *xed_ins = xed_inst();
+	const xed_inst_t *insn = xed_decoded_inst_inst(xed_ins);
+  auto nops = xed_decoded_inst_noperands(xed_ins);
+  char buf[64];
+
+  xed_format_context(XED_SYNTAX_INTEL, xed_ins, buf, sizeof(buf) - 1, 0, nullptr, 0);
+  std::cerr << "decoding: " << buf << std::endl;
+  std::cerr << "xed encoding: ";
+	for (unsigned int opnum = 0; opnum < nops; opnum++) {
+    auto operand = xed_inst_operand(insn, opnum);
+    xed_operand_print(operand, buf, sizeof(buf) - 1);
+    std::cerr << buf << " ";
+	}
+  std::cerr << std::endl;
+}
 
 translator::reg_offsets translator::xedreg_to_offset(xed_reg_enum_t reg)
 {
