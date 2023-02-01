@@ -25,28 +25,28 @@ public:
 	}
 
 	// Nodes
-	virtual void visit_node(node &n) override { }
+	virtual void visit_node(node &) override { }
 
-	virtual void visit_action_node(action_node &n) override { }
+	virtual void visit_action_node(action_node &) override { }
 
-	virtual void visit_label_node(label_node &n) override { }
+	virtual void visit_label_node(label_node &) override { }
 
-	virtual void visit_value_node(value_node &n) override { }
+	virtual void visit_value_node(value_node &) override { }
 
-	virtual void visit_br_node(br_node &n) override { }
+	virtual void visit_br_node(br_node &) override { }
 
 	virtual void visit_cond_br_node(cond_br_node &n) override
 	{
 		n.cond().accept(*this);
 	}
 
-	virtual void visit_read_pc_node(read_pc_node &n) override { }
+	virtual void visit_read_pc_node(read_pc_node &) override { }
 
 	virtual void visit_write_pc_node(write_pc_node &n) override { n.value().accept(*this); }
 
-	virtual void visit_constant_node(constant_node &n) override { }
+	virtual void visit_constant_node(constant_node &) override { }
 
-	virtual void visit_read_reg_node(read_reg_node &n) override { }
+	virtual void visit_read_reg_node(read_reg_node &) override { }
 
 	virtual void visit_read_mem_node(read_mem_node &n) override { n.address().accept(*this); }
 
@@ -58,7 +58,7 @@ public:
 		n.value().accept(*this);
 	}
 
-	virtual void visit_arith_node(arith_node &n) override { }
+	virtual void visit_arith_node(arith_node &) override { }
 
 	virtual void visit_unary_arith_node(unary_arith_node &n) override { n.lhs().accept(*this); }
 
@@ -75,7 +75,7 @@ public:
 		n.top().accept(*this);
 	}
 
-	virtual void visit_atomic_node(atomic_node &n) override { }
+	virtual void visit_atomic_node(atomic_node &) override { }
 
 	virtual void visit_unary_atomic_node(unary_atomic_node &n) override { n.lhs().accept(*this); }
 
@@ -115,9 +115,9 @@ public:
 		n.bits().accept(*this);
 	}
 
-	virtual void visit_vector_node(vector_node &n) override { }
+	virtual void visit_vector_node(vector_node &) override { }
 
-	virtual void visit_vector_element_node(vector_element_node &n) override { }
+	virtual void visit_vector_element_node(vector_element_node &) override { }
 
 	virtual void visit_vector_extract_node(vector_extract_node &n) override { n.source_vector().accept(*this); }
 
