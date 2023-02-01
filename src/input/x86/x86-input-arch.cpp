@@ -209,6 +209,7 @@ static translation_result translate_instruction(ir_builder &builder, size_t addr
 	if (t) {
 		return t->translate(address, xedd, disasm);
 	} else {
+    std::cerr << "Could not find a translator for: " << disasm << std::endl;
 		return translation_result::fail;
 	}
 }
@@ -252,7 +253,7 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 		auto r = translate_instruction(builder, base_address, &xedd, debug(), da_);
 
 		if (r == translation_result::fail) {
-			throw std::runtime_error("instruction translation failure");
+			throw std::runtime_error("instruction translation failure: " + std::to_string(xed_error));
 		} else if (r == translation_result::end_of_block && basic_block) {
 			break;
 		}
