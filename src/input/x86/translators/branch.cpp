@@ -11,10 +11,10 @@ void branch_translator::do_translate()
 	case XED_ICLASS_CALL_FAR:
 	case XED_ICLASS_CALL_NEAR: {
 		// push next insn to stack, write target to pc
-		auto rsp = read_reg(value_type::u64(), reg_to_offset(XED_REG_RSP));
+		auto rsp = read_reg(value_type::u64(), reg_offsets::RSP);
 		auto new_rsp = builder().insert_sub(rsp->val(), builder().insert_constant_u64(8)->val());
 
-		write_reg(reg_to_offset(XED_REG_RSP), new_rsp->val());
+		write_reg(reg_offsets::RSP, new_rsp->val());
 
 		xed_uint_t instruction_length = xed_decoded_inst_get_length(xed_inst());
 		auto next_target_node = builder().insert_add(builder().insert_read_pc()->val(), builder().insert_constant_u64(instruction_length)->val());
@@ -33,11 +33,11 @@ void branch_translator::do_translate()
 	case XED_ICLASS_RET_NEAR: {
 		// pop stack, write to pc
 
-		auto rsp = read_reg(value_type::u64(), reg_to_offset(XED_REG_RSP));
+		auto rsp = read_reg(value_type::u64(), reg_offsets::RSP);
 		auto retaddr = builder().insert_read_mem(value_type::u64(), rsp->val());
 
 		auto new_rsp = builder().insert_add(rsp->val(), builder().insert_constant_u64(8)->val());
-		write_reg(reg_to_offset(XED_REG_RSP), new_rsp->val());
+		write_reg(reg_offsets::RSP, new_rsp->val());
 
 		builder().insert_write_pc(retaddr->val());
 

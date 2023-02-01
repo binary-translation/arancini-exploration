@@ -30,6 +30,30 @@ translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_
 	}
 }
 
+
+translator::reg_offsets translator::xedreg_to_offset(xed_reg_enum_t reg)
+{
+  auto regclass = xed_reg_class(reg);
+
+  switch (regclass) {
+  case XED_REG_CLASS_GPR: {
+    auto largest_reg = xed_get_largest_enclosing_register(reg);
+    return (translator::reg_offsets)((int)((largest_reg - XED_REG_RAX) * 8) + (int)reg_offsets::RAX);
+  }
+  case XED_REG_CLASS_XMM: {
+    return (translator::reg_offsets)((int)((reg - XED_REG_XMM0) * 16) + (int)reg_offsets::XMM0);
+  }
+  // case XED_REG_CLASS_YMM: {
+  //   return (translator::reg_offsets)((int)((reg - XED_REG_YMM0) * 32) + (int)reg_offsets::YMM0);
+  // }
+  // case XED_REG_CLASS_ZMM: {
+  //   return (translator::reg_offsets)((int)((reg - XED_REG_ZMM0) * 64) + (int)reg_offsets::ZMM0);
+  // }
+  default:
+    throw std::runtime_error("unsupported register class when computing offset from xed");
+  }
+}
+
 action_node *translator::write_operand(int opnum, port &value)
 {
 	const xed_inst_t *insn = xed_decoded_inst_inst(xed_inst());
@@ -51,29 +75,29 @@ action_node *translator::write_operand(int opnum, port &value)
 			case 64: // e.g. RAX
 				// value is bitcast to u64 and written
 				if (value.type().type_class() == value_type_class::signed_integer) {
-					return write_reg(reg_to_offset(reg), builder_.insert_bitcast(value_type::u64(), value)->val());
+					return write_reg(xedreg_to_offset(reg), builder_.insert_bitcast(value_type::u64(), value)->val());
 				} else {
-					return write_reg(reg_to_offset(reg), value);
+					return write_reg(xedreg_to_offset(reg), value);
 				}
 			case 32: // e.g. EAX
 				// x86_64 requires that the high 32bit are zeroed when writing to 32bit version of registers
-				return write_reg(reg_to_offset(reg), builder_.insert_zx(value_type::u64(), value)->val());
+				return write_reg(xedreg_to_offset(reg), builder_.insert_zx(value_type::u64(), value)->val());
 			case 16: { // e.g. AX
 				// x86_64 requires that the upper bits [63..16] are untouched
-				auto orig = read_reg(value_type::u64(), reg_to_offset(reg));
+				auto orig = read_reg(value_type::u64(), xedreg_to_offset(reg));
 				auto res = builder_.insert_bit_insert(orig->val(), value, 0, 16);
-				return write_reg(reg_to_offset(reg), res->val());
+				return write_reg(xedreg_to_offset(reg), res->val());
 			}
 			case 8: { // e.g. AL/AH
 				// x86_64 requires that the upper bits [63..16/8] are untouched
-				auto orig = read_reg(value_type::u64(), reg_to_offset(reg));
+				auto orig = read_reg(value_type::u64(), xedreg_to_offset(reg));
 				value_node *res;
 				if (reg >= XED_REG_AL && reg <= XED_REG_DIL) { // lower 8 bits
 					res = builder_.insert_bit_insert(orig->val(), value, 0, 8);
 				} else { // bits [15..8]
 					res = builder_.insert_bit_insert(orig->val(), value, 8, 8);
 				}
-				return write_reg(reg_to_offset(reg), res->val());
+				return write_reg(xedreg_to_offset(reg), res->val());
 			}
 			default:
 				throw std::runtime_error("" + std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": unsupported general purpose register size: " + std::to_string(width));
@@ -81,7 +105,7 @@ action_node *translator::write_operand(int opnum, port &value)
 		}
 
 		case XED_REG_CLASS_XMM:
-			return write_reg(reg_to_offset(reg), builder_.insert_zx(value_type::u128(), value)->val());
+			return write_reg(xedreg_to_offset(reg), builder_.insert_zx(value_type::u128(), value)->val());
 
 		default:
 			throw std::runtime_error("" + std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": unsupported register class: " + std::to_string(regclass));
@@ -115,22 +139,20 @@ value_node *translator::read_operand(int opnum)
 		case XED_REG_CLASS_GPR:
 			switch (xed_get_register_width_bits(reg)) {
 			case 8:
-				return read_reg(value_type::u8(), reg_to_offset(reg));
+				return read_reg(value_type::u8(), xedreg_to_offset(reg));
 			case 16:
-				return read_reg(value_type::u16(), reg_to_offset(reg));
+				return read_reg(value_type::u16(), xedreg_to_offset(reg));
 			case 32:
-				return read_reg(value_type::u32(), reg_to_offset(reg));
+				return read_reg(value_type::u32(), xedreg_to_offset(reg));
 			case 64:
-				return read_reg(value_type::u64(), reg_to_offset(reg));
+				return read_reg(value_type::u64(), xedreg_to_offset(reg));
 			default:
 				throw std::runtime_error("unsupported register size");
 			}
 
 		case XED_REG_CLASS_XMM:
-			return read_reg(value_type::u128(), reg_to_offset(reg));
+			return read_reg(value_type::u128(), xedreg_to_offset(reg));
 
-		case XED_REG_CLASS_FLAGS:
-			return read_reg(value_type::u64(), reg_to_offset(reg));
 
 		default:
 			throw std::runtime_error(std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": unsupported register class: " + std::to_string(regclass));
@@ -176,7 +198,7 @@ value_node *translator::read_operand(int opnum)
 		}
 	}
 
-	default:
+  default:
 		throw std::logic_error("unsupported read operand type: " + std::to_string((int)opname));
 	}
 }
@@ -235,11 +257,11 @@ value_node *translator::compute_address(int mem_idx)
 	} else if (base_reg == XED_REG_RIP) {
 		address_base = builder_.insert_read_pc();
 	} else {
-		address_base = read_reg(value_type::u64(), reg_to_offset(base_reg));
+		address_base = read_reg(value_type::u64(), xedreg_to_offset(base_reg));
 	}
 
 	if (index != XED_REG_INVALID) {
-		auto scaled_index = builder_.insert_mul(read_reg(value_type::u64(), reg_to_offset(index))->val(), builder_.insert_constant_u64(scale)->val());
+		auto scaled_index = builder_.insert_mul(read_reg(value_type::u64(), xedreg_to_offset(index))->val(), builder_.insert_constant_u64(scale)->val());
 
 		address_base = builder_.insert_add(address_base->val(), scaled_index->val());
 	}
@@ -257,27 +279,13 @@ value_node *translator::compute_address(int mem_idx)
 	return address_base;
 }
 
-translator::reg_offsets translator::reg_to_offset(xed_reg_enum_t reg)
-{
-	switch (xed_reg_class(reg)) {
-	case XED_REG_CLASS_GPR:
-		return (reg_offsets)((((xed_get_largest_enclosing_register(reg) - XED_REG_RAX) + (int)reg_offsets::RAX)) * 8);
+unsigned long translator::offset_to_idx(reg_offsets reg) { return off_to_idx[(unsigned long)reg]; }
 
-	case XED_REG_CLASS_XMM:
-		return (reg_offsets)(((reg - XED_REG_XMM0) + (int)reg_offsets::XMM0) * 16);
+const char *translator::offset_to_name(reg_offsets reg) { return off_to_name[(unsigned long)reg]; }
 
-	default:
-		throw std::runtime_error("unsupported register class when computing offset");
-	}
-}
+action_node *translator::write_reg(reg_offsets reg, port &value) { return builder_.insert_write_reg((unsigned long)reg, offset_to_idx(reg), offset_to_name(reg), value); }
 
-unsigned long translator::offset_to_idx(reg_offsets reg) {
-	return off_to_idx[(unsigned long)reg];
-};
-
-action_node *translator::write_reg(reg_offsets reg, port &value) { return builder_.insert_write_reg((unsigned long)reg, offset_to_idx(reg), value); }
-
-value_node *translator::read_reg(const value_type &vt, reg_offsets reg) { return builder_.insert_read_reg(vt, (unsigned long)reg, offset_to_idx(reg)); }
+value_node *translator::read_reg(const value_type &vt, reg_offsets reg) { return builder_.insert_read_reg(vt, (unsigned long)reg, offset_to_idx(reg), offset_to_name(reg)); }
 
 void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of, flag_op sf, flag_op pf, flag_op af)
 {

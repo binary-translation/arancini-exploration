@@ -24,11 +24,11 @@ void mov_translator::do_translate()
 	}
 
 	case XED_ICLASS_CWD: {
-		auto ax = read_reg(value_type::s16(), reg_to_offset(XED_REG_AX));
+		auto ax = read_reg(value_type::s16(), xedreg_to_offset(XED_REG_AX));
 		auto sx = builder().insert_sx(value_type::s32(), ax->val());
 		auto hi = builder().insert_bit_extract(sx->val(), 16, 16);
 
-		write_reg(reg_to_offset(XED_REG_DX), hi->val());
+		write_reg(xedreg_to_offset(XED_REG_DX), hi->val());
 		break;
 	}
 
@@ -42,17 +42,17 @@ void mov_translator::do_translate()
 	}
 
 	case XED_ICLASS_CDQ: {
-		auto eax = read_reg(value_type::s32(), reg_to_offset(XED_REG_EAX));
+		auto eax = read_reg(value_type::s32(), xedreg_to_offset(XED_REG_EAX));
 		auto sx = builder().insert_sx(value_type::s64(), eax->val());
 		auto hi = builder().insert_bit_extract(sx->val(), 32, 32);
 
-		write_reg(reg_to_offset(XED_REG_EDX), hi->val());
+		write_reg(xedreg_to_offset(XED_REG_EDX), hi->val());
 		break;
 	}
 
 	case XED_ICLASS_CDQE: {
 		/* Only for 64-bit, other sizes are with CBW/CWDE instructions */
-		auto eax = read_reg(value_type::s32(), reg_to_offset(XED_REG_EAX));
+		auto eax = read_reg(value_type::s32(), xedreg_to_offset(XED_REG_EAX));
 		auto rax = builder().insert_sx(value_type::s64(), eax->val());
 		write_reg(reg_offsets::RAX, rax->val());
 		break;

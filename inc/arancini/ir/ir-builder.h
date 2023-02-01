@@ -96,13 +96,19 @@ public:
 	/// @param vt value type
 	/// @param regoff register offset (use reg_offsets enum values)
 	/// @return a read register node: (vt) regoff
-	value_node *insert_read_reg(const value_type &vt, unsigned long regoff, unsigned long regidx) { return create_and_insert<read_reg_node>(vt, regoff, regidx); }
+	value_node *insert_read_reg(const value_type &vt, unsigned long regoff, unsigned long regidx, const char *regname)
+	{
+		return create_and_insert<read_reg_node>(vt, regoff, regidx, regname);
+	}
 
 	/// @brief write register
 	/// @param regoff register offset (use reg_offsets enum values)
 	/// @param value value to write
 	/// @return a write register node: regoff := value
-	action_node *insert_write_reg(unsigned long regoff, unsigned long regidx, port &value) { return create_and_insert<write_reg_node>(regoff, regidx, value); }
+	action_node *insert_write_reg(unsigned long regoff, unsigned long regidx, const char *regname, port &value)
+	{
+		return create_and_insert<write_reg_node>(regoff, regidx, regname, value);
+	}
 
 	/// @brief read memory location
 	/// @param vt value type

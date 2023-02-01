@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 3.22)
 project(arancini LANGUAGES C CXX)
 
+# Compile flags
+set(CMAKE_CXX_FLAGS "-Wall -Wextra")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+
+# Generate the compile commands for development
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Get host architecture
 include(cmake/utils.cmake)
 get_arch(ARCH)

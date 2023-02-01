@@ -9,20 +9,20 @@ void stack_translator::do_translate()
 {
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
 	case XED_ICLASS_PUSH: {
-		auto rsp = read_reg(value_type::u64(), reg_to_offset(XED_REG_RSP));
+		auto rsp = read_reg(value_type::u64(), reg_offsets::RSP);
 		auto new_rsp = builder().insert_sub(rsp->val(), builder().insert_constant_u64(8)->val());
 
-		write_reg(reg_to_offset(XED_REG_RSP), new_rsp->val());
+		write_reg(reg_offsets::RSP, new_rsp->val());
 		builder().insert_write_mem(new_rsp->val(), read_operand(0)->val());
 		break;
 	}
 
 	case XED_ICLASS_POP: {
-		auto rsp = read_reg(value_type::u64(), reg_to_offset(XED_REG_RSP));
+		auto rsp = read_reg(value_type::u64(), reg_offsets::RSP);
 		write_operand(0, builder().insert_read_mem(value_type::u64(), rsp->val())->val());
 
 		auto new_rsp = builder().insert_add(rsp->val(), builder().insert_constant_u64(8)->val());
-		write_reg(reg_to_offset(XED_REG_RSP), new_rsp->val());
+		write_reg(reg_offsets::RSP, new_rsp->val());
 		break;
 	}
 
@@ -33,14 +33,14 @@ void stack_translator::do_translate()
 		* 	RSP := RBP
 		* 	RBP := Pop()
 		*/
-		auto rbp = read_reg(value_type::u64(), reg_to_offset(XED_REG_RBP));
-		write_reg(reg_to_offset(XED_REG_RSP), rbp->val());
+		auto rbp = read_reg(value_type::u64(), reg_offsets::RBP);
+		write_reg(reg_offsets::RSP, rbp->val());
 
-		auto rsp = read_reg(value_type::u64(), reg_to_offset(XED_REG_RSP));
-		write_reg(reg_to_offset(XED_REG_RBP), builder().insert_read_mem(value_type::u64(), rsp->val())->val());
+		auto rsp = read_reg(value_type::u64(), reg_offsets::RSP);
+		write_reg(reg_offsets::RBP, builder().insert_read_mem(value_type::u64(), rsp->val())->val());
 
 		auto new_rsp = builder().insert_add(rsp->val(), builder().insert_constant_u64(8)->val());
-		write_reg(reg_to_offset(XED_REG_RSP), new_rsp->val());
+		write_reg(reg_offsets::RSP, new_rsp->val());
 		break;
 	}
 

@@ -3,6 +3,7 @@
 #include <arancini/ir/node.h>
 #include <arancini/ir/packet.h>
 #include <arancini/ir/port.h>
+#include <arancini/input/x86/translators/translators.h>
 
 using namespace arancini::ir;
 
@@ -89,7 +90,7 @@ void debug_visitor::visit_read_reg_node(read_reg_node &n)
 
 	apply_indent();
 	os_ << get_node_name(&n) << ": ";
-	os_ << "read-reg #" << std::dec << n.regoff() << std::endl;
+	os_ << "read-reg " << n.regname() << std::endl;
 }
 
 void debug_visitor::visit_read_mem_node(read_mem_node &n)
@@ -107,7 +108,7 @@ void debug_visitor::visit_write_reg_node(write_reg_node &n)
 
 	apply_indent();
 	os_ << get_node_name(&n) << ": ";
-	os_ << "write-reg #" << std::dec << n.regoff() << ", " << get_port_name(n.value()) << std::endl;
+	os_ << "write-reg " << n.regname() << ", " << get_port_name(n.value()) << std::endl;
 }
 
 void debug_visitor::visit_write_mem_node(write_mem_node &n)

@@ -1,5 +1,3 @@
-#include <iostream>
-
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/ir/ir-builder.h>
 #include <arancini/ir/node.h>
@@ -25,7 +23,7 @@ void muldiv_translator::do_translate()
 		auto castop = builder().insert_zx(ax->val().type(), op[0]->val());
 		auto rslt = builder().insert_mul(ax->val(), castop->val());
 		if (op[0]->val().type().width() == 8) {
-			write_reg(reg_to_offset(XED_REG_AX), rslt->val());
+			write_reg(xedreg_to_offset(XED_REG_AX), rslt->val());
 		} else {
 			auto low = builder().insert_bit_extract(rslt->val(), 0, op[0]->val().type().width());
 			auto high = builder().insert_bit_extract(rslt->val(), op[0]->val().type().width() - 1, op[0]->val().type().width());
@@ -69,7 +67,7 @@ void muldiv_translator::do_translate()
 				castop = builder().insert_sx(ax->val().type(), castop->val());
 				rslt = builder().insert_mul(ax->val(), castop->val());
 				if (op[0]->val().type().width() == 8) {
-					write_reg(reg_to_offset(XED_REG_AX), rslt->val());
+					write_reg(xedreg_to_offset(XED_REG_AX), rslt->val());
 				} else {
 					auto low = builder().insert_bit_extract(rslt->val(), 0, op[0]->val().type().width());
 					auto high = builder().insert_bit_extract(rslt->val(), op[0]->val().type().width() - 1, op[0]->val().type().width());
