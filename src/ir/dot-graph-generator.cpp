@@ -100,7 +100,7 @@ void dot_graph_generator::visit_constant_node(constant_node &n)
 void dot_graph_generator::visit_read_reg_node(read_reg_node &n)
 {
 	std::stringstream s;
-	s << "read-reg #" << std::dec << n.regoff();
+	s << "read-reg " << n.regname();
 
 	add_node(&n, s.str());
 	default_visitor::visit_read_reg_node(n);
@@ -116,7 +116,7 @@ void dot_graph_generator::visit_read_mem_node(read_mem_node &n)
 void dot_graph_generator::visit_write_reg_node(write_reg_node &n)
 {
 	std::stringstream s;
-	s << "write-reg #" << std::dec << n.regoff();
+	s << "write-reg " << n.regname();
 
 	add_node(&n, s.str());
 	add_port_edge(&n.value(), &n);

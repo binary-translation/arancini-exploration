@@ -15,8 +15,8 @@ void rep_translator::do_translate()
 
 		auto loop_start = builder().insert_label();
 
-		auto deref_rsi = builder().insert_read_mem(value_type::u8(), read_reg(value_type::u64(), reg_to_offset(XED_REG_RSI))->val());
-		auto deref_rdi = builder().insert_read_mem(value_type::u8(), read_reg(value_type::u64(), reg_to_offset(XED_REG_RDI))->val());
+		auto deref_rsi = builder().insert_read_mem(value_type::u8(), read_reg(value_type::u64(), reg_offsets::RSI)->val());
+		auto deref_rdi = builder().insert_read_mem(value_type::u8(), read_reg(value_type::u64(), reg_offsets::RDI)->val());
 
 		auto rslt = builder().insert_sub(deref_rsi->val(), deref_rdi->val());
 
@@ -25,8 +25,8 @@ void rep_translator::do_translate()
 		// increment RSI+RDI
 
 		// decrement ecx
-		auto new_ecx = builder().insert_sub(read_reg(value_type::u32(), reg_to_offset(XED_REG_RCX))->val(), builder().insert_constant_u32(8)->val());
-		write_reg(reg_to_offset(XED_REG_RCX), builder().insert_zx(value_type::u64(), new_ecx->val())->val());
+		auto new_ecx = builder().insert_sub(read_reg(value_type::u32(), reg_offsets::RCX)->val(), builder().insert_constant_u32(8)->val());
+		write_reg(reg_offsets::RCX, builder().insert_zx(value_type::u64(), new_ecx->val())->val());
 
 		auto ecx_eq_0 = builder().insert_cmpeq(new_ecx->val(), builder().insert_constant_u32(0)->val());
 
@@ -63,7 +63,7 @@ void rep_translator::do_translate()
 
 		write_reg(reg_offsets::RDI, builder().insert_add(rdi->val(), cst_8->val())->val());
 		br_node *br_then = (br_node *)builder().insert_br(nullptr);
-		
+
 		auto else_label = builder().insert_label("else");
 		br_df->add_br_target(else_label);
 

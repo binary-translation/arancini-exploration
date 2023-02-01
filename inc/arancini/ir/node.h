@@ -279,15 +279,17 @@ private:
 
 class read_reg_node : public value_node {
 public:
-	read_reg_node(const value_type &vt, unsigned long regoff, unsigned long regidx)
+	read_reg_node(const value_type &vt, unsigned long regoff, unsigned long regidx, const char *regname)
 		: value_node(node_kinds::read_reg, vt)
 		, regoff_(regoff)
 		, regidx_(regidx)
+    , regname_(regname)
 	{
 	}
 
 	unsigned long regoff() const { return regoff_; }
 	unsigned long regidx() const { return regidx_; }
+  const char *regname() const { return regname_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -298,6 +300,7 @@ public:
 private:
 	unsigned long regoff_;
 	unsigned long regidx_;
+  const char *regname_;
 };
 
 class read_mem_node : public value_node {
@@ -323,10 +326,11 @@ private:
 
 class write_reg_node : public action_node {
 public:
-	write_reg_node(unsigned long regoff, unsigned long regidx, port &val)
+	write_reg_node(unsigned long regoff, unsigned long regidx, const char *regname, port &val)
 		: action_node(node_kinds::write_reg)
 		, regoff_(regoff)
 		, regidx_(regidx)
+    , regname_(regname)
 		, val_(val)
 	{
 		val.add_target(this);
@@ -334,6 +338,7 @@ public:
 
 	unsigned long regoff() const { return regoff_; }
 	unsigned long regidx() const { return regidx_; }
+	const char *regname() const { return regname_; }
 	port &value() const { return val_; }
 
 	virtual void accept(visitor &v) override
@@ -345,6 +350,7 @@ public:
 private:
 	unsigned long regoff_;
 	unsigned long regidx_;
+	const char *regname_;
 	port &val_;
 };
 

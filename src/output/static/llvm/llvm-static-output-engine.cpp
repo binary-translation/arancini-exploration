@@ -71,7 +71,7 @@ void llvm_static_output_engine_impl::initialise_types()
 	types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, // 30: XMM8--15
 	types.i64, types.i64 // 38: FS, GS*/
 
-#define DEFREG(idx, ctype, ltype, name) types.ltype,
+#define DEFREG(ctype, ltype, name) types.ltype,
 #include <arancini/input/x86/reg.def>
 #undef DEFREG
 	});
@@ -184,7 +184,7 @@ void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlo
 }
 
 static const char *regnames[] = {
-#define DEFREG(idx, ctype, ltype, name) "" #name,
+#define DEFREG(ctype, ltype, name) "" #name,
 #include <arancini/input/x86/reg.def>
 #undef DEFREG
 };
