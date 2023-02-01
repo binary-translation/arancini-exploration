@@ -42,19 +42,21 @@ void mov_translator::do_translate()
 	}
 
 	case XED_ICLASS_CDQ: {
-		auto eax = read_reg(value_type::s32(), xedreg_to_offset(XED_REG_EAX));
+    // xed encoding: cdq edx eax
+		auto eax = builder().insert_bitcast(value_type::s32(), read_operand(1)->val());
 		auto sx = builder().insert_sx(value_type::s64(), eax->val());
 		auto hi = builder().insert_bit_extract(sx->val(), 32, 32);
 
-		write_reg(xedreg_to_offset(XED_REG_EDX), hi->val());
+    write_operand(0, hi->val());
 		break;
 	}
 
 	case XED_ICLASS_CDQE: {
+    // xed encoding: cdqe rax eax
 		/* Only for 64-bit, other sizes are with CBW/CWDE instructions */
-		auto eax = read_reg(value_type::s32(), xedreg_to_offset(XED_REG_EAX));
+		auto eax = builder().insert_bitcast(value_type::s32(), read_operand(1)->val());
 		auto rax = builder().insert_sx(value_type::s64(), eax->val());
-		write_reg(reg_offsets::RAX, rax->val());
+		write_operand(0, rax->val());
 		break;
 	}
 
