@@ -149,7 +149,8 @@ value_node *translator::read_operand(int opnum)
 	switch (opname) {
 	case XED_OPERAND_REG0:
 	case XED_OPERAND_REG1:
-	case XED_OPERAND_REG2: {
+	case XED_OPERAND_REG2:
+  case XED_OPERAND_REG3: {
 		auto reg = xed_decoded_inst_get_reg(xed_inst(), opname);
 		auto regclass = xed_reg_class(reg);
 
@@ -171,6 +172,20 @@ value_node *translator::read_operand(int opnum)
 		case XED_REG_CLASS_XMM:
 			return read_reg(value_type::u128(), xedreg_to_offset(reg));
 
+      // case XED_REG_CLASS_FLAGS:
+      // 	return read_reg(value_type::u64(), xedreg_to_offset(reg));
+
+    case XED_REG_CLASS_PSEUDOX87: {
+      switch (reg) {
+      case XED_REG_X87CONTROL:
+				return read_reg(value_type::u16(), reg_offsets::X87CTRL);
+      case XED_REG_X87STATUS:
+				return read_reg(value_type::u16(), reg_offsets::X87STS);
+      default:
+				throw std::runtime_error("unsupported pseudoX87 register type");
+      }
+      break;
+    }
 
 		default:
 			throw std::runtime_error(std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": unsupported register class: " + std::to_string(regclass));
@@ -196,11 +211,18 @@ value_node *translator::read_operand(int opnum)
 		}
 	}
 
-	case XED_OPERAND_MEM0: {
-		auto addr = compute_address(0);
+	case XED_OPERAND_MEM0:
+  case XED_OPERAND_MEM1: {
+    int mem_idx;
+    if (opname == XED_OPERAND_MEM0) {
+      mem_idx = 0;
+    } else {
+      mem_idx = 1;
+    }
+    auto addr = compute_address(mem_idx);
 
-		switch (xed_decoded_inst_get_memory_operand_length(xed_inst(), 0)) {
-		case 1:
+    switch (xed_decoded_inst_get_memory_operand_length(xed_inst(), mem_idx)) {
+    case 1:
 			return builder_.insert_read_mem(value_type::u8(), addr->val());
 		case 2:
 			return builder_.insert_read_mem(value_type::u16(), addr->val());
