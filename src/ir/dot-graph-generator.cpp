@@ -91,7 +91,7 @@ void dot_graph_generator::visit_write_pc_node(write_pc_node &n)
 void dot_graph_generator::visit_constant_node(constant_node &n)
 {
 	std::stringstream s;
-	s << "constant #" << std::dec << n.const_val_i();
+	s << "constant 0x" << std::hex << n.const_val_i();
 
 	add_node(&n, s.str());
 	default_visitor::visit_constant_node(n);
