@@ -97,6 +97,10 @@ namespace arancini::input::x86::translators {
 
 		value_type type_of_operand(int opnum);
 
+    /// @brief Dump the xed operand encoding of the instruction currently being translated
+    ///        Use this function when discovering which operands to use when adding support for instructions
+    void dump_xed_encoding(void);
+
 	private:
 		ir_builder &builder_;
 		xed_decoded_inst_t *xed_inst_;
