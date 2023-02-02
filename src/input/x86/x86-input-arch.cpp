@@ -207,6 +207,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 		return std::make_unique<fpvec_translator>(builder);
 
 	case XED_ICLASS_PSHUFD:
+  case XED_ICLASS_SHUFPD:
 		return std::make_unique<shuffle_translator>(builder);
 
 	case XED_ICLASS_XADD_LOCK:
