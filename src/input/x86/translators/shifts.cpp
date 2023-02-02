@@ -23,6 +23,27 @@ void shifts_translator::do_translate()
 		write_operand(0, builder().insert_lsl(src->val(), amt->val())->val());
 		break;
 
+	case XED_ICLASS_PSLLDQ: {
+    auto amt_val = ((constant_node *)amt)->const_val_i();
+
+    if (amt_val > 15) {
+      write_operand(0, builder().insert_constant_u128(0)->val());
+    } else {
+      write_operand(0, builder().insert_lsl(src->val(), builder().insert_constant_u32(amt_val * 8)->val())->val());
+    }
+    break;
+	}
+
+  case XED_ICLASS_PSRLDQ: {
+    auto amt_val = ((constant_node *)amt)->const_val_i();
+
+    if (amt_val > 15) {
+      write_operand(0, builder().insert_constant_u128(0)->val());
+    } else {
+      write_operand(0, builder().insert_lsr(src->val(), builder().insert_constant_u32(amt_val * 8)->val())->val());
+    }
+    break;
+  }
 
   case XED_ICLASS_ROR: {
     // xed encoding: ror reg, imm
