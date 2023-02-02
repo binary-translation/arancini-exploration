@@ -31,6 +31,20 @@ void binop_translator::do_translate()
 	case XED_ICLASS_ADD:
 		rslt = builder().insert_add(op0->val(), op1->val());
 		break;
+  case XED_ICLASS_ADDSD: {
+    auto dst = builder().insert_bitcast(value_type::vector(value_type::u64(), 2), op0->val());
+    auto src = read_operand(1);
+
+    if (src->val().type().width() == 64) { // addsd xmm1, m64
+      rslt = builder().insert_add(builder().insert_vector_extract(dst->val(), 0)->val(), src->val());
+    } else { // addsd xmm1, xmm2
+      src = builder().insert_bitcast(value_type::vector(value_type::u64(), 2), src->val());
+      rslt = builder().insert_add(builder().insert_vector_extract(dst->val(), 0)->val(), builder().insert_vector_extract(src->val(), 0)->val());
+    }
+    dst = builder().insert_vector_insert(dst->val(), 0, rslt->val());
+    write_operand(0, dst->val());
+    break;
+  }
 	case XED_ICLASS_ADC:
 		rslt = builder().insert_adc(op0->val(), op1->val(), auto_cast(op0->val().type(), read_reg(value_type::u1(), reg_offsets::CF))->val());
 		break;
@@ -216,6 +230,7 @@ void binop_translator::do_translate()
 	case XED_ICLASS_BTR:
 	case XED_ICLASS_COMISS:
 	case XED_ICLASS_XADD:
+	case XED_ICLASS_ADDSD:
 		break;
 
 	default:
