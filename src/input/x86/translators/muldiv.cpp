@@ -147,6 +147,18 @@ void muldiv_translator::do_translate()
 		break;
 	}
 
+  case XED_ICLASS_MULSD: {
+    auto dst = read_operand(0);
+    auto src = read_operand(1);
+
+    auto src_low = builder().insert_bit_extract(src->val(), 0, 64);
+    auto dst_low = builder().insert_bit_extract(dst->val(), 0, 64);
+    auto mul = builder().insert_mul(src_low->val(), dst_low->val());
+    dst = builder().insert_bit_insert(dst->val(), mul->val(), 0, 64);
+    write_operand(0, dst->val());
+    break;
+  }
+
 	default:
 		throw std::runtime_error("unsupported mul/div operation");
 	}
