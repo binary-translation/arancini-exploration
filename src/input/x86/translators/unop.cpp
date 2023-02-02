@@ -42,6 +42,25 @@ void unop_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_PMOVMSKB: {
+    auto src = read_operand(1);
+    auto nr_bytes = src->val().type().width() == 64 ? 8 : 16;
+
+    if (nr_bytes == 8) {
+      rslt = builder().insert_constant_i(value_type::u8(), 0);
+    } else {
+      rslt = builder().insert_constant_i(value_type::u16(), 0);
+    }
+
+    for (int i = 0; i < nr_bytes; i++) {
+      auto top_bit = builder().insert_bit_extract(src->val(), (i + 1) * 8 - 1, 1);
+      rslt = builder().insert_bit_insert(rslt->val(), top_bit->val(), i, 1);
+    }
+
+    rslt = builder().insert_zx(value_type(value_type_class::unsigned_integer, get_operand_width(0)), rslt->val());
+    break;
+  }
+
 	default:
 		throw std::runtime_error("unsupported unop");
 	}
