@@ -371,6 +371,9 @@ void dot_graph_generator::visit_binary_atomic_node(binary_atomic_node &n)
 	case binary_atomic_op::bts:
 		s << "atomic bts";
 		break;
+  case binary_atomic_op::xchg:
+    s << "atomic xchg";
+    break;
 	default:
 		s << "unknown-atomic-binary";
 		break;
