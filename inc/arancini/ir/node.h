@@ -772,6 +772,9 @@ public:
 
 	port &source_value() const { return source_value_; }
 
+  int from() const { return from_; }
+  int length() const { return length_; }
+
 	virtual void accept(visitor &v) override
 	{
 		value_node::accept(v);
@@ -807,6 +810,9 @@ public:
 	port &source_value() const { return source_value_; }
 
 	port &bits() const { return bits_; }
+
+  int to() const { return to_; }
+  int length() const { return length_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -847,6 +853,8 @@ public:
 		, index_(index)
 	{
 	}
+
+  int index() const { return index_; }
 
 	virtual void accept(visitor &v) override
 	{

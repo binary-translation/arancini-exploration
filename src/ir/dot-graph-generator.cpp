@@ -3,6 +3,9 @@
 #include <arancini/ir/node.h>
 #include <arancini/ir/packet.h>
 #include <arancini/ir/port.h>
+#include <cstdio>
+#include <sstream>
+#include <string>
 
 using namespace arancini::ir;
 
@@ -415,7 +418,11 @@ void dot_graph_generator::visit_ternary_atomic_node(ternary_atomic_node &n)
 
 void dot_graph_generator::visit_bit_extract_node(bit_extract_node &n)
 {
-	add_node(&n, "bit-extract");
+  std::stringstream s;
+
+  s << "bit-extract [" << n.from() + n.length() - 1 << ":" << n.from() << "]";
+
+	add_node(&n, s.str());
 	add_port_edge(&n.source_value(), &n);
 
 	default_visitor::visit_bit_extract_node(n);
@@ -423,16 +430,25 @@ void dot_graph_generator::visit_bit_extract_node(bit_extract_node &n)
 
 void dot_graph_generator::visit_bit_insert_node(bit_insert_node &n)
 {
-	add_node(&n, "bit-insert");
-	add_port_edge(&n.source_value(), &n);
-	add_port_edge(&n.bits(), &n);
+  std::stringstream s;
+
+  s << "{{<dst>DST|<bits>BITS}|";
+  s << "bit-insert [" << n.to() + n.length() - 1 << ":" << n.to() << "]}";
+
+	add_node(&n, s.str());
+	add_port_edge(&n.source_value(), &n, "dst");
+	add_port_edge(&n.bits(), &n, "bits");
 
 	default_visitor::visit_bit_insert_node(n);
 }
 
 void dot_graph_generator::visit_vector_extract_node(vector_extract_node &n)
 {
-	add_node(&n, "vector-extract");
+  std::stringstream s;
+
+  s << "vector-extract [" << n.index() << "]";
+
+	add_node(&n, s.str());
 	add_port_edge(&n.source_vector(), &n);
 
 	default_visitor::visit_vector_extract_node(n);
@@ -440,9 +456,14 @@ void dot_graph_generator::visit_vector_extract_node(vector_extract_node &n)
 
 void dot_graph_generator::visit_vector_insert_node(vector_insert_node &n)
 {
-	add_node(&n, "vector-insert");
-	add_port_edge(&n.source_vector(), &n);
-	add_port_edge(&n.insert_value(), &n);
+  std::stringstream s;
+
+  s << "{{<dst>DST|<elt>ELT}|";
+  s << "vector-insert [" << n.index() << "]}";
+
+	add_node(&n, s.str());
+	add_port_edge(&n.source_vector(), &n, "dst");
+	add_port_edge(&n.insert_value(), &n, "elt");
 
 	default_visitor::visit_vector_insert_node(n);
 }
