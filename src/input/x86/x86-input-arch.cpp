@@ -219,6 +219,13 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_DEC_LOCK:
 		return std::make_unique<atomic_translator>(builder);
 
+  case XED_ICLASS_XGETBV:
+  case XED_ICLASS_STD:
+  case XED_ICLASS_CLD:
+  case XED_ICLASS_STC:
+  case XED_ICLASS_CLC:
+		return std::make_unique<control_translator>(builder);
+
   case XED_ICLASS_FNSTCW:
     return std::make_unique<fpu_translator>(builder);
 
