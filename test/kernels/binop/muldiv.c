@@ -32,6 +32,20 @@ int8_t imul_8_1(void)
     return op;
 }
 
+uint64_t mul_8(void)
+{
+  uint8_t op = 6, al_val = 7, ax_val = 0;
+  register uint8_t *al asm("al") = &al_val;
+  register uint8_t *ax asm("ax") = &ax_val;
+  register uint8_t *dl asm("dl") = &op;
+
+  asm volatile ("mul %0"
+                :
+                : "r"(dl));
+
+  return ax_val;
+}
+
 uint64_t mul_64(void)
 {
     uint64_t op = 42, rax_val = 55;
