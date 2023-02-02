@@ -7,3 +7,6 @@ build/
 .vscode/
 generated.S
 cmake-build-*
+
+**.dot
+**.dot.*
