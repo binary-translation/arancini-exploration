@@ -23,7 +23,7 @@ void fpvec_translator::do_translate()
 	case XED_ICLASS_VMULSS: {
 		dest = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), dest->val());
 		src1 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), src1->val());
-        src2 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), src2->val());
+    src2 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), src2->val());
 		break;
 	}
 	case XED_ICLASS_VADDSD:
@@ -32,7 +32,7 @@ void fpvec_translator::do_translate()
 	case XED_ICLASS_VMULSD: {
 		dest = builder().insert_bitcast(value_type::vector(value_type::f64(), 2), dest->val());
 		src1 = builder().insert_bitcast(value_type::vector(value_type::f64(), 2), src1->val());
-        src2 = builder().insert_bitcast(value_type::vector(value_type::f64(), 2), src2->val());
+    src2 = builder().insert_bitcast(value_type::vector(value_type::f64(), 2), src2->val());
 		break;
 	}
 	case XED_ICLASS_CVTSD2SS: {

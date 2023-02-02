@@ -209,7 +209,7 @@ void binop_translator::do_translate()
 		cond_br_node *eq_br = (cond_br_node *)builder().insert_cond_br(cmpeq->val(), nullptr);
 		auto cmpgt = builder().insert_cmpgt(op0->val(), op1->val());
 		cond_br_node *gt_br = (cond_br_node *)builder().insert_cond_br(cmpgt->val(), nullptr);
-		
+
 		// op0 < op1
 		write_flags(nullptr, flag_op::set0, flag_op::set1, flag_op::set0, flag_op::set0, flag_op::set0, flag_op::set0);
 		br_node *endlt_br = (br_node *)builder().insert_br(nullptr);
