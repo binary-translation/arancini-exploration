@@ -104,6 +104,24 @@ void binop_translator::do_translate()
 		rslt = builder().insert_sub(lhs->val(), rhs->val());
 		break;
 	}
+	case XED_ICLASS_PCMPEQB: {
+    auto lhs = read_operand(0);
+    auto rhs = read_operand(1);
+    auto nr_bytes = lhs->val().type().width() == 64 ? 8 : 16;
+    lhs = builder().insert_bitcast(value_type::vector(value_type::u8(), nr_bytes), lhs->val());
+    rhs = builder().insert_bitcast(value_type::vector(value_type::u8(), nr_bytes), rhs->val());
+
+    auto cst_0 = builder().insert_constant_u8(0x00);
+    auto cst_1 = builder().insert_constant_u8(0xFF);
+
+    for (int i = 0; i < nr_bytes; i++) {
+      auto equal = builder().insert_cmpeq(builder().insert_vector_extract(lhs->val(), i)->val(), builder().insert_vector_extract(rhs->val(), i)->val());
+      auto res = builder().insert_csel(equal->val(), cst_1->val(), cst_0->val());
+      lhs = builder().insert_vector_insert(lhs->val(), i, res->val());
+    }
+    rslt = lhs;
+    break;
+  }
 	case XED_ICLASS_XADD: {
     auto dst = read_operand(0);
     auto src = read_operand(1);

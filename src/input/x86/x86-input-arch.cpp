@@ -151,6 +151,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_PSUBD:
   case XED_ICLASS_PSUBW:
   case XED_ICLASS_PSUBB:
+  case XED_ICLASS_PCMPEQB:
 		return std::make_unique<binop_translator>(builder);
 
 	case XED_ICLASS_PUSH:
