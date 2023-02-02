@@ -4,9 +4,11 @@
 **.d
 out/
 build/
+.cache/
 .vscode/
 generated.S
 cmake-build-*
+compile_commands.json
 
 **.dot
 **.dot.*
