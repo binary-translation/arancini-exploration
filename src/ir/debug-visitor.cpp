@@ -260,6 +260,9 @@ void debug_visitor::visit_binary_atomic_node(binary_atomic_node &n)
 	case binary_atomic_op::bts:
 		os_ << "atomic bts ";
 		break;
+  case binary_atomic_op::xchg:
+    os_ << "atomic xchg ";
+    break;
 	}
 
 	os_ << get_port_name(n.lhs()) << ", " << get_port_name(n.rhs()) << std::endl;

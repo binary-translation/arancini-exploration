@@ -193,6 +193,12 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 		return std::make_unique<shuffle_translator>(builder);
 
 	case XED_ICLASS_XADD_LOCK:
+	case XED_ICLASS_XCHG:
+  case XED_ICLASS_CMPXCHG_LOCK:
+  case XED_ICLASS_ADD_LOCK:
+  case XED_ICLASS_AND_LOCK:
+  case XED_ICLASS_OR_LOCK:
+  case XED_ICLASS_DEC_LOCK:
 		return std::make_unique<atomic_translator>(builder);
 
   case XED_ICLASS_FNSTCW:

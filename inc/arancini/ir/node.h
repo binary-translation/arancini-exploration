@@ -684,7 +684,7 @@ private:
 	port &lhs_;
 };
 
-enum class binary_atomic_op { add, sub, band, bor, xadd, bxor, btc, btr, bts };
+enum class binary_atomic_op { add, sub, band, bor, xadd, bxor, btc, btr, bts, xchg };
 
 class binary_atomic_node : public atomic_node {
 public:
