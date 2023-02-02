@@ -159,6 +159,22 @@ void muldiv_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_DIVSS: {
+    // divss xmm1, xmm2/m32
+    auto dst = read_operand(0);
+    auto src = read_operand(1);
+
+    auto dst_low = builder().insert_bit_extract(dst->val(), 0, 32);
+    if (src->val().type().width() == 128) { // if src is xmm
+			src = builder().insert_bit_extract(src->val(), 0, 32);
+    }
+
+    auto div = builder().insert_div(dst_low->val(), src->val());
+    dst = builder().insert_bit_insert(dst->val(), div->val(), 0, 32);
+    write_operand(0, dst->val());
+    break;
+  }
+
 	default:
 		throw std::runtime_error("unsupported mul/div operation");
 	}
