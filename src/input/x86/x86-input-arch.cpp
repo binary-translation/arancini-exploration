@@ -174,6 +174,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 
 	case XED_ICLASS_NOT:
 	case XED_ICLASS_NEG:
+  case XED_ICLASS_BSWAP:
 		return std::make_unique<unop_translator>(builder);
 
 	case XED_ICLASS_MUL:
