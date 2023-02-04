@@ -7,3 +7,8 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
 void arm64_translation_context::end_instruction() { }
 void arm64_translation_context::end_block() { }
 void arm64_translation_context::lower(const std::shared_ptr<ir::action_node> &n) { }
+
+void arm64_translation_context::materialise(const ir::node* n) {
+
+}
+
