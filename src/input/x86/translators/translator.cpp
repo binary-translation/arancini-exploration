@@ -30,7 +30,7 @@ translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_
 	}
 }
 
-action_node *translator::write_operand(int opnum, port &value)
+action_node *translator::write_operand(int opnum, port &value, bool zero_upper)
 {
 	const xed_inst_t *insn = xed_decoded_inst_inst(xed_inst());
 	auto operand = xed_inst_operand(insn, opnum);
@@ -81,8 +81,49 @@ action_node *translator::write_operand(int opnum, port &value)
 		}
 
 		case XED_REG_CLASS_XMM:
-			return write_reg(reg_to_offset(reg), builder_.insert_zx(value_type::u128(), value)->val());
+		case XED_REG_CLASS_YMM:
+		case XED_REG_CLASS_ZMM: {
+			// Get old register values (always the largest vector size)
+			auto orig = read_operand(opnum);
+			int value_width;
+			int i = 0;
 
+			if (value.type().width() < 32) {
+				throw std::runtime_error("operand too small for vector registers");
+			}
+			if (!value.type().is_vector()) {
+				// no need for a vector cast
+				value_width = value.type().width();
+				orig = builder_.insert_bitcast(value_type::vector(value.type(), orig->val().type().width()/value_width), orig->val());
+				orig = builder_.insert_vector_insert(orig->val(), 0, value);
+				i = 1;
+			} else {
+				value_width = value.type().element_width();
+				orig = builder_.insert_bitcast(value_type::vector(value.type().element_type(), orig->val().type().width()/value_width), orig->val());
+				for ( ; i < value.type().nr_elements(); i++)
+					orig = builder_.insert_vector_insert(orig->val(), i, builder_.insert_vector_extract(value, i)->val());
+			}
+			
+			if(zero_upper) {
+				// This loop will be optimized into 1 instr
+				for ( ; i < orig->val().type().nr_elements(); i++) {
+					value_node *z;
+					switch (value_width) {
+					case 32:
+						z = builder_.insert_constant_f32(0);
+						break;
+					case 64:
+						z = builder_.insert_constant_f64(0);
+						break;
+					default:
+						throw std::runtime_error("invalid operand size for vector registers");
+					}
+					orig = builder_.insert_vector_insert(orig->val(), i, z->val());
+				}
+			}
+
+			return write_reg(reg_to_offset(reg), orig->val());
+		}
 		default:
 			throw std::runtime_error("" + std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": unsupported register class: " + std::to_string(regclass));
 		}
@@ -127,7 +168,11 @@ value_node *translator::read_operand(int opnum)
 			}
 
 		case XED_REG_CLASS_XMM:
-			return read_reg(value_type::u128(), reg_to_offset(reg));
+		case XED_REG_CLASS_YMM:
+		case XED_REG_CLASS_ZMM: {
+			auto enc_num_f32 = xed_get_register_width_bits(xed_get_largest_enclosing_register(reg))/32;
+			return read_reg(value_type::vector(value_type::f32(), enc_num_f32), reg_to_offset(reg));
+		}
 
 		case XED_REG_CLASS_FLAGS:
 			return read_reg(value_type::u64(), reg_to_offset(reg));
@@ -261,10 +306,12 @@ translator::reg_offsets translator::reg_to_offset(xed_reg_enum_t reg)
 {
 	switch (xed_reg_class(reg)) {
 	case XED_REG_CLASS_GPR:
-		return (reg_offsets)((((xed_get_largest_enclosing_register(reg) - XED_REG_RAX) + (int)reg_offsets::RAX)) * 8);
+		return (reg_offsets)(((xed_get_largest_enclosing_register(reg) - XED_REG_RAX)) * 8 + (int)reg_offsets::RAX);
 
 	case XED_REG_CLASS_XMM:
-		return (reg_offsets)(((reg - XED_REG_XMM0) + (int)reg_offsets::XMM0) * 16);
+	case XED_REG_CLASS_YMM:
+	case XED_REG_CLASS_ZMM:
+		return (reg_offsets)((xed_get_largest_enclosing_register(reg) - XED_REG_ZMM0)* 64 + (int)reg_offsets::ZMM0);
 
 	default:
 		throw std::runtime_error("unsupported register class when computing offset");

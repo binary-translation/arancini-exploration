@@ -25,6 +25,6 @@ endif ()
 
 # Build kernels
 if (BUILD_KERNELS)
-add_subdirectory(kernels)
+    add_subdirectory(kernels)
 endif ()
 

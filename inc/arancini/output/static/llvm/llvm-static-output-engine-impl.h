@@ -60,12 +60,18 @@ private:
 		::llvm::IntegerType *i32;
 		::llvm::IntegerType *i64;
 		::llvm::IntegerType *i128;
+		::llvm::VectorType *ymm32;
+		::llvm::VectorType *zmm32;
+		::llvm::VectorType *ymm64;
+		::llvm::VectorType *zmm64;
 		::llvm::StructType *cpu_state;
 		::llvm::PointerType *cpu_state_ptr;
 		::llvm::FunctionType *main_fn;
 		::llvm::FunctionType *loop_fn;
 		::llvm::FunctionType *init_dbt;
 		::llvm::FunctionType *dbt_invoke;
+		::llvm::Type *f32;
+		::llvm::Type *f64;
 
 		::llvm::IntegerType *integer(unsigned width) {
 			switch(width) {

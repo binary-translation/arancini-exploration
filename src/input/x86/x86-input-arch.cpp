@@ -189,8 +189,10 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_XADD_LOCK:
 		return std::make_unique<atomic_translator>(builder);
 
-	default:
+	default: {
+		std::cerr << "Instr class not implemented: " << xed_iclass_enum_t2str(ic) << std::endl;
 		return nullptr;
+		}
 	}
 }
 

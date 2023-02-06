@@ -842,6 +842,8 @@ public:
 	{
 	}
 
+	int index() const { return index_; };
+
 	virtual void accept(visitor &v) override
 	{
 		vector_node::accept(v);

@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.22)
 project(arancini-test-kernels)
 
+add_compile_options(-mavx -march=knl)
+
 # Function to get files with a glob pattern and build objects
 function(glob_build PREFIX GLOB)
     file(GLOB SOURCES "${GLOB}")

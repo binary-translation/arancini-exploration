@@ -4,7 +4,19 @@
 
 namespace arancini::runtime::exec::x86 {
 struct uint128_t {
-	uint64_t low, high;
+	float _3, _2, _1, _0;
+};
+
+struct ymm_t {
+	float _7, _6, _5, _4;
+	float _3, _2, _1, _0;
+};
+
+struct zmm_t {
+	float _15, _14, _13, _12;
+	float _11, _10, _9, _8;
+	float _7, _6, _5, _4;
+	float _3, _2, _1, _0;
 };
 
 struct x86_cpu_state {

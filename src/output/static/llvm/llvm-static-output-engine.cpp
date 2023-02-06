@@ -53,24 +53,19 @@ void llvm_static_output_engine_impl::initialise_types()
 	types.i8 = Type::getInt8Ty(*llvm_context_);
 	types.i16 = Type::getInt16Ty(*llvm_context_);
 	types.i32 = Type::getInt32Ty(*llvm_context_);
+	types.f32 = Type::getFloatTy(*llvm_context_);
 	types.i64 = Type::getInt64Ty(*llvm_context_);
+	types.f64 = Type::getDoubleTy(*llvm_context_);
 	types.i128 = Type::getInt128Ty(*llvm_context_);
+	types.ymm32 = VectorType::get(types.f32, 8, false);
+	types.zmm32 = VectorType::get(types.f32, 16, false);
+	types.ymm64 = VectorType::get(types.f64, 4, false);
+	types.zmm64 = VectorType::get(types.f64, 8, false);
 
 	// CPU State
 
-	// 0 PC, RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI, R8, R9, R10, R11, R12, R13, R14, R15,
-	// 17 ZF, 18 CF, 19 OF, 20 SF, 21 PF
-	// 22 XMM0...
-	// 38 FS, 38 GS
 	auto state_elements = std::vector<Type *>({
-	/*types.i64, // 0: RIP
-	types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, // 1: AX, CX, DX, BX, SP, BP, SI, DI
-	types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64, // 9: R8, R9, R10, R11, R12, R13, R14, R15
-	types.i8, types.i8, types.i8, types.i8, types.i8, // 17: ZF, CF, OF, SF, PF
-	types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, // 22: XMM0--7
-	types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, types.i128, // 30: XMM8--15
-	types.i64, types.i64 // 38: FS, GS*/
-
+		
 #define DEFREG(idx, ctype, ltype, name) types.ltype,
 #include <arancini/input/x86/reg.def>
 #undef DEFREG
@@ -207,24 +202,38 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		auto cn = (constant_node *)n;
 		
 		::llvm::Type *ty;
-		switch (cn->val().type().width()) {
-		case 1:
-		case 8:
-			ty = types.i8;
-			break;
-		case 16:
-			ty = types.i16;
-			break;
-		case 32:
-			ty = types.i32;
-			break;
-		case 64:
-			ty = types.i64;
-			break;
-		default:
-			throw std::runtime_error("unsupported constant width");
+		if (cn->val().type().is_integer()) {
+			switch (cn->val().type().width()) {
+			case 1:
+			case 8:
+				ty = types.i8;
+				break;
+			case 16:
+				ty = types.i16;
+				break;
+			case 32:
+				ty = types.i32;
+				break;
+			case 64:
+				ty = types.i64;
+				break;
+			default:
+				throw std::runtime_error("unsupported constant width");
+			}
+			return ConstantInt::get(ty, cn->const_val_i());
+		} else {
+			switch (cn->val().type().width()) {
+			case 32:
+				ty = types.f32;
+				break;
+			case 64:
+				ty = types.f64;
+				break;
+			default:
+				throw std::runtime_error("unsupported constant width");
+			}
+			return ConstantFP::get(ty, cn->const_val_f());
 		}
-		return ConstantInt::get(ty, cn->const_val_i());
 	}
 
 	case node_kinds::read_mem: {
@@ -293,6 +302,12 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		case 128:
 			ty = types.i128;
 			break;
+		case 256:
+			ty = types.ymm32;
+			break;
+		case 512:
+			ty = types.zmm32;
+			break;
 		default:
 			throw std::runtime_error("unsupported register width " + std::to_string(rrn->val().type().width()) + " in load");
 		}
@@ -306,28 +321,46 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			auto lhs = lower_port(builder, state_arg, pkt, ban->lhs());
 			auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
 			
-			switch (ban->op()) {
-			case binary_arith_op::bxor:
-				return builder.CreateXor(lhs, rhs);
-			case binary_arith_op::band:
-				return builder.CreateAnd(lhs, rhs);
-			case binary_arith_op::bor:
-				return builder.CreateOr(lhs, rhs);
-			case binary_arith_op::add:
-				return builder.CreateAdd(lhs, rhs);
-			case binary_arith_op::sub:
-				return builder.CreateSub(lhs, rhs);
-			case binary_arith_op::mul:
-				return builder.CreateMul(lhs, rhs);
-			case binary_arith_op::div:
-				return builder.CreateUDiv(lhs, rhs);
-			case binary_arith_op::cmpeq:
-				return builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, lhs, rhs);
-			case binary_arith_op::cmpne:
-				return builder.CreateCmp(CmpInst::Predicate::ICMP_NE, lhs, rhs);
-
-			default:
-				throw std::runtime_error("unsupported binary operator " + std::to_string((int)ban->op()));
+			if (ban->val().type().is_integer()) {
+				switch (ban->op()) {
+				case binary_arith_op::bxor:
+					return builder.CreateXor(lhs, rhs);
+				case binary_arith_op::band:
+					return builder.CreateAnd(lhs, rhs);
+				case binary_arith_op::bor:
+					return builder.CreateOr(lhs, rhs);
+				case binary_arith_op::add:
+					return builder.CreateAdd(lhs, rhs);
+				case binary_arith_op::sub:
+					return builder.CreateSub(lhs, rhs);
+				case binary_arith_op::mul:
+					return builder.CreateMul(lhs, rhs);
+				case binary_arith_op::div:
+					return builder.CreateUDiv(lhs, rhs);
+				case binary_arith_op::cmpeq:
+					return builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, lhs, rhs);
+				case binary_arith_op::cmpne:
+					return builder.CreateCmp(CmpInst::Predicate::ICMP_NE, lhs, rhs);
+				default:
+					throw std::runtime_error("unsupported binary operator " + std::to_string((int)ban->op()));
+				}
+			} else {
+				switch (ban->op()) {
+				case binary_arith_op::bxor:
+					return builder.CreateFAdd(lhs, rhs);
+				case binary_arith_op::sub:
+					return builder.CreateFSub(lhs, rhs);
+				case binary_arith_op::mul:
+					return builder.CreateFMul(lhs, rhs);
+				case binary_arith_op::div:
+					return builder.CreateFDiv(lhs, rhs);
+				case binary_arith_op::cmpeq:
+					return builder.CreateFCmp(CmpInst::Predicate::ICMP_EQ, lhs, rhs);
+				case binary_arith_op::cmpne:
+					return builder.CreateFCmp(CmpInst::Predicate::ICMP_NE, lhs, rhs);
+				default:
+					throw std::runtime_error("unsupported binary operator " + std::to_string((int)ban->op()));
+				}
 			}
 		} else if (p.kind() == port_kinds::zero) {
 			auto value_port = lower_port(builder, state_arg, pkt, n->val());
@@ -432,11 +465,22 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 				case 16:
 					ty = types.i16;
 					break;
-				case 32:
-					ty = types.i32;
+				case 32: {
+					if (cn->target_type().is_floating_point())
+						ty = types.f32;
+					else
+						ty = types.i32;
 					break;
-				case 64:
-					ty = types.i64;
+				}
+				case 64: {
+					if (cn->target_type().is_floating_point())
+						ty = types.f64;
+					else
+						ty = types.i64;
+					break;
+				}
+				case 128:
+					ty = types.i128;
 					break;
 				default:
 					throw std::runtime_error("unsupported bitcast element width");
@@ -518,7 +562,17 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			// throw std::runtime_error("unsupported port kind");
 		}
 	}
-
+	case node_kinds::vector_extract: {
+		auto ext = (vector_extract_node *)n;
+		return builder.CreateExtractElement(lower_port(builder, state_arg, pkt, ext->source_vector()), (uint64_t)ext->index());
+	}
+	case node_kinds::vector_insert: {
+		auto ext = (vector_insert_node *)n;
+		return builder.CreateInsertElement( \
+			lower_port(builder, state_arg, pkt, ext->source_vector()), \
+			lower_port(builder, state_arg, pkt, ext->insert_value()), \
+			(uint64_t)ext->index());
+	}
 	default:
 		throw std::runtime_error("unsupported port node kind " + std::to_string((int)n->kind()));
 	}
@@ -555,8 +609,6 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto wrn = (write_reg_node *)a;
 		// gep register
 		// store value
-
-		// std::cerr << "wreg off=" << wrn->regoff() << std::endl;
 
 		auto dest_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, wrn->regidx()) },
 			reg_name(wrn->regidx()));
