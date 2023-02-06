@@ -861,8 +861,6 @@ public:
 		vector_node::accept(v);
 		v.visit_vector_element_node(*this);
 	}
-	
-	int index() const { return index_; }
 
 private:
 	int index_;
