@@ -172,6 +172,18 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_PUNPCKHWD:
 		return std::make_unique<punpck_translator>(builder);
 
+	case XED_ICLASS_ADDSS:
+	case XED_ICLASS_SUBSS:
+	case XED_ICLASS_DIVSS:
+	case XED_ICLASS_MULSS:
+	case XED_ICLASS_ADDSD:
+	case XED_ICLASS_SUBSD:
+	case XED_ICLASS_DIVSD:
+	case XED_ICLASS_MULSD:
+	case XED_ICLASS_ADDPD:
+	case XED_ICLASS_SUBPD:
+	case XED_ICLASS_DIVPD:
+	case XED_ICLASS_MULPD:
 	case XED_ICLASS_VADDSS:
 	case XED_ICLASS_VSUBSS:
 	case XED_ICLASS_VDIVSS:
@@ -180,6 +192,10 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_VSUBSD:
 	case XED_ICLASS_VDIVSD:
 	case XED_ICLASS_VMULSD:
+	case XED_ICLASS_VADDPD:
+	case XED_ICLASS_VSUBPD:
+	case XED_ICLASS_VDIVPD:
+	case XED_ICLASS_VMULPD:
 	case XED_ICLASS_CVTSD2SS:
 		return std::make_unique<fpvec_translator>(builder);
 
