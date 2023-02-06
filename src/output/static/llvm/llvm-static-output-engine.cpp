@@ -618,6 +618,27 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 		return br;
 	}
+			
+        case node_kinds::vector_insert: {
+                auto vin = (vector_insert_node *)a;
+
+                auto vec = lower_port(builder, state_arg, pkt, vin->source_vector());
+                auto val = lower_port(builder, state_arg, pkt, vin->insert_value());
+
+                auto insert = builder.CreateInsertElement(vec, val, vin->index(), "vector_insert");
+
+                return insert;
+        }
+
+        case node_kinds::vector_extract: {
+                auto ven = (vector_extract_node *)a;
+
+                auto vec = lower_port(builder, state_arg, pkt, ven->source_vector());
+
+                auto extract = builder.CreateExtractElement(vec, ven->index(), "vector_extract");
+
+                return extract;
+        }
 
 	default:
 		throw std::runtime_error("unsupported node kind " + std::to_string((int)a->kind()));
