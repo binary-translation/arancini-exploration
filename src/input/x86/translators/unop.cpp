@@ -12,6 +12,15 @@ void unop_translator::do_translate()
 	value_node *rslt;
 
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
+
+	case XED_ICLASS_INC:
+		rslt = builder().insert_add(op0->val(), builder().insert_constant_i(op0->val().type(), 1)->val());
+		break;
+
+	case XED_ICLASS_DEC:
+		rslt = builder().insert_sub(op0->val(), builder().insert_constant_i(op0->val().type(), 1)->val());
+		break;
+
 	case XED_ICLASS_NOT:
 		rslt = builder().insert_not(op0->val());
 		break;
@@ -71,7 +80,9 @@ void unop_translator::do_translate()
 	case XED_ICLASS_NOT:
 		write_flags(rslt, flag_op::update, flag_op::set0, flag_op::set0, flag_op::update, flag_op::update, flag_op::ignore);
 		break;
-	case XED_ICLASS_NEG:
+  case XED_ICLASS_INC:
+  case XED_ICLASS_DEC:
+  case XED_ICLASS_NEG:
 		write_flags(rslt, flag_op::update, flag_op::ignore, flag_op::update, flag_op::update, flag_op::update, flag_op::update);
 		break;
 
