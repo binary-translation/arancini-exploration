@@ -125,6 +125,27 @@ action_node *translator::write_operand(int opnum, port &value)
 		case XED_REG_CLASS_XMM:
 			return write_reg(xedreg_to_offset(reg), builder_.insert_zx(value_type::u128(), value)->val());
 
+		case XED_REG_CLASS_X87: {
+			switch (reg) {
+				// TODO put the convert logic here?
+			case XED_REG_ST0:
+			case XED_REG_ST1:
+			case XED_REG_ST2:
+			case XED_REG_ST3:
+			case XED_REG_ST4:
+			case XED_REG_ST5:
+			case XED_REG_ST6:
+			case XED_REG_ST7: {
+				auto st_idx = reg - XED_REG_ST0;
+				auto st_addr = compute_fpu_stack_addr(st_idx);
+				return builder_.insert_write_mem(st_addr->val(), value);
+			}
+			default:
+				throw std::runtime_error("unsupported x87 register type");
+			}
+			break;
+		}
+
 		default:
 			throw std::runtime_error("" + std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": unsupported register class: " + std::to_string(regclass));
 		}
@@ -175,12 +196,31 @@ value_node *translator::read_operand(int opnum)
       // case XED_REG_CLASS_FLAGS:
       // 	return read_reg(value_type::u64(), xedreg_to_offset(reg));
 
+    case XED_REG_CLASS_X87: {
+      switch (reg) {
+				// TODO put the convert logic here?
+      case XED_REG_ST0:
+      case XED_REG_ST1:
+      case XED_REG_ST2:
+      case XED_REG_ST3:
+      case XED_REG_ST4:
+      case XED_REG_ST5:
+      case XED_REG_ST6:
+      case XED_REG_ST7: {
+				auto st_idx = reg - XED_REG_ST0;
+				auto st_addr = compute_fpu_stack_addr(st_idx);
+				return builder_.insert_read_mem(value_type::f80(), st_addr->val());
+      }
+      default:
+        throw std::runtime_error("unsupported x87 register type");
+      }
+    }
     case XED_REG_CLASS_PSEUDOX87: {
       switch (reg) {
       case XED_REG_X87CONTROL:
-				return read_reg(value_type::u16(), reg_offsets::X87CTRL);
+				return read_reg(value_type::u16(), reg_offsets::X87_CTRL);
       case XED_REG_X87STATUS:
-				return read_reg(value_type::u16(), reg_offsets::X87STS);
+				return read_reg(value_type::u16(), reg_offsets::X87_STS);
       default:
 				throw std::runtime_error("unsupported pseudoX87 register type");
       }
@@ -312,6 +352,44 @@ value_node *translator::compute_address(int mem_idx)
 	}
 
 	return address_base;
+}
+
+value_node *translator::compute_fpu_stack_addr(int stack_idx)
+{
+  // TODO top and stack_idx need to be multiplied by the size of an FPU register (10 bytes)
+	auto x87_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
+	auto top = builder_.insert_zx(value_type::u64(), builder_.insert_bit_extract(x87_status->val(), 11, 3)->val());
+	auto x87_stack_base = read_reg(value_type::u64(), reg_offsets::X87_STACK_BASE);
+	return builder_.insert_add(builder_.insert_add(x87_stack_base->val(), top->val())->val(), builder_.insert_constant_u64(stack_idx)->val());
+}
+
+value_node *translator::fpu_stack_get(int stack_idx)
+{
+  auto st0_addr = compute_fpu_stack_addr(stack_idx);
+  return builder().insert_read_mem(value_type::f80(), st0_addr->val());
+}
+
+action_node *translator::fpu_stack_set(int stack_idx, port &val)
+{
+  auto st0_addr = compute_fpu_stack_addr(stack_idx);
+  return builder().insert_write_mem(st0_addr->val(), val);
+}
+
+action_node *translator::fpu_stack_top_move(int val)
+{
+	auto x87_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
+	auto top = builder_.insert_bit_extract(x87_status->val(), 11, 3);
+  value_node *new_top;
+  if (val > 0) {
+    new_top = builder_.insert_add(top->val(), builder_.insert_constant_i(top->val().type(), (unsigned int)val)->val());
+  } else if (val < 0) {
+    new_top = builder_.insert_sub(top->val(), builder_.insert_constant_i(top->val().type(), (unsigned int)(-val))->val());
+  } else {
+    new_top = top;
+  }
+
+  x87_status = builder_.insert_bit_insert(x87_status->val(), new_top->val(), 11, 3);
+  return write_reg(reg_offsets::X87_STS, x87_status->val());
 }
 
 unsigned long translator::offset_to_idx(reg_offsets reg) { return off_to_idx[(unsigned long)reg]; }
