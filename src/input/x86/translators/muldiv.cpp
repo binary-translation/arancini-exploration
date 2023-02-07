@@ -159,6 +159,22 @@ void muldiv_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_MULSS: {
+    auto dst = read_operand(0);
+    auto src = read_operand(1);
+
+    if (src->val().type().width() != 32) {
+      src = builder().insert_bit_extract(src->val(), 0, 32);
+    }
+    auto dst_low = builder().insert_bit_extract(dst->val(), 0, 32);
+
+    auto mul = builder().insert_mul(dst_low->val(), src->val());
+    dst = builder().insert_bit_insert(dst->val(), mul->val(), 0, 32);
+    write_operand(0, dst->val());
+
+    break;
+  }
+
   case XED_ICLASS_DIVSS: {
     // divss xmm1, xmm2/m32
     auto dst = read_operand(0);
