@@ -231,6 +231,21 @@ void fpu_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_FADD:
+  case XED_ICLASS_FADDP: {
+    dump_xed_encoding();
+    // xed encoding: fadd st(0) st(i)
+    auto dst = read_operand(0);
+    auto src = read_operand(1);
+    auto res = builder().insert_add(dst->val(), src->val());
+
+    write_operand(0, res->val());
+
+    // TODO FPU flags
+    break;
+  }
+
+
   case XED_ICLASS_FLDZ: {
     auto zero = builder().insert_constant_f(value_type(value_type_class::floating_point, 80), +0.0);
     fpu_stack_top_move(-1);
