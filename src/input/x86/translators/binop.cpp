@@ -141,6 +141,7 @@ void binop_translator::do_translate()
     auto pos = read_operand(1);
 
     pos = builder().insert_zx(src->val().type(), pos->val());
+    pos = builder().insert_bitcast(src->val().type(), pos->val());
     auto shift = builder().insert_lsl(builder().insert_constant_i(pos->val().type(), 1)->val(), pos->val());
     auto and_node = builder().insert_and(src->val(), shift->val());
     auto rslt = builder().insert_lsr(and_node->val(), pos->val());
