@@ -221,6 +221,15 @@ void fpu_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_FABS: {
+    auto st0 = read_operand(0);
+    st0 = builder().insert_bit_insert(st0->val(), builder().insert_constant_u1(1)->val(), 79, 1);
+    write_operand(0, st0->val());
+
+    // TODO set C1 flag to 0
+    break;
+  }
+
   case XED_ICLASS_FXCH: {
     // xed encoding: fxch st(i) st(j)
     // TODO fix with temp node
