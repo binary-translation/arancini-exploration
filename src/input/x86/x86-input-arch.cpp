@@ -117,8 +117,6 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_UD1: // TODO support
   case XED_ICLASS_UD2: // TODO support
   case XED_ICLASS_FLD: // TODO support
-  case XED_ICLASS_FST: // TODO support
-  case XED_ICLASS_FSTP: // TODO support
   case XED_ICLASS_FNSTENV: // TODO support
   case XED_ICLASS_FLDENV: // TODO support
   case XED_ICLASS_FWAIT: // TODO support
@@ -237,7 +235,9 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 		return std::make_unique<control_translator>(builder);
 
   case XED_ICLASS_FNSTCW:
-    return std::make_unique<fpu_translator>(builder);
+  case XED_ICLASS_FST:
+  case XED_ICLASS_FSTP:
+		return std::make_unique<fpu_translator>(builder);
 
   default:
 		return nullptr;
