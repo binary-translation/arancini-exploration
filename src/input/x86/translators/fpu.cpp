@@ -16,7 +16,7 @@ void fpu_translator::do_translate()
 		break;
   }
 
-  case XED_ICLASS_FLDCW: {
+#  case XED_ICLASS_FLDCW: {
     auto src = read_operand(0);
     write_reg(reg_offsets::X87_CTRL, src->val());
     break;
