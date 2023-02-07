@@ -117,6 +117,23 @@ void fpu_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_FSUBR:
+  case XED_ICLASS_FSUBRP: {
+    auto dst = read_operand(0);
+    auto src = read_operand(1);
+
+    if (src->val().type().width() != 80) {
+      src = builder().insert_convert(dst->val().type(), src->val());
+    }
+
+    auto res = builder().insert_sub(src->val(), dst->val());
+
+    write_operand(0, res->val());
+
+    // TODO FPU flags
+    break;
+  }
+
   case XED_ICLASS_FISUB: {
     // xed encoding: fisub st(0) memint
     auto st0 = read_operand(0);
@@ -243,6 +260,7 @@ void fpu_translator::do_translate()
   case XED_ICLASS_FISTP:
   case XED_ICLASS_FADDP:
   case XED_ICLASS_FSUBP:
+  case XED_ICLASS_FSUBRP:
   case XED_ICLASS_FMULP:
   case XED_ICLASS_FUCOMIP:
 	  fpu_stack_top_move(1);
