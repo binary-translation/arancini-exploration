@@ -239,6 +239,8 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_FILD:
   case XED_ICLASS_FST:
   case XED_ICLASS_FSTP:
+  case XED_ICLASS_FIST:
+  case XED_ICLASS_FISTP:
   case XED_ICLASS_FADD:
   case XED_ICLASS_FADDP:
   case XED_ICLASS_FSUB:
