@@ -159,6 +159,55 @@ void binop_translator::do_translate()
 
 		break;
   }
+  case XED_ICLASS_BSR:
+  case XED_ICLASS_BSF: {
+    auto src = read_operand(1);
+
+    // if src == 0
+    auto src_zero = builder().insert_cmpeq(src->val(), builder().insert_constant_i(src->val().type(), 0)->val());
+    cond_br_node *br = (cond_br_node *)builder().insert_cond_br(src_zero->val(), nullptr);
+
+    // then [src != 0]
+    write_reg(reg_offsets::ZF, builder().insert_constant_i(value_type::u1(), 0)->val());
+    auto mask = builder().insert_constant_i(src->val().type(), 1);
+    value_node *idx;
+    if (inst_class == XED_ICLASS_BSR) {
+      mask = builder().insert_lsl(mask->val(), builder().insert_constant_i(mask->val().type(), mask->val().type().width())->val());
+      idx = builder().insert_constant_u64(mask->val().type().width() - 1);
+    } else {
+      idx = builder().insert_constant_u64(0);
+    }
+    //   while mask & src == 0; do idx--; mask = mask >> 1; done
+    auto while_loop = builder().insert_label("while");
+
+    //       mask & src == 1  -> jump to endif
+    auto mask_and = builder().insert_and(mask->val(), src->val());
+    cond_br_node *fi_br = (cond_br_node *)builder().insert_cond_br(mask_and->val(), nullptr);
+    //       idx--/++; mask = mask >>/<< 1
+    if (inst_class == XED_ICLASS_BSR) {
+      idx = builder().insert_sub(idx->val(), builder().insert_constant_u64(1)->val());
+      mask = builder().insert_lsr(mask->val(), builder().insert_constant_i(mask->val().type(), 1)->val());
+    } else {
+      idx = builder().insert_add(idx->val(), builder().insert_constant_u64(1)->val());
+      mask = builder().insert_lsl(mask->val(), builder().insert_constant_i(mask->val().type(), 1)->val());
+    }
+    //       jump back to loop test
+    builder().insert_br(while_loop);
+
+    // else [src == 0]
+    auto else_label = builder().insert_label("else");
+    br->add_br_target(else_label);
+    write_reg(reg_offsets::ZF, builder().insert_constant_i(value_type::u1(), 1)->val());
+
+    // fi
+    auto fi_label = builder().insert_label("fi");
+    fi_br->add_br_target(fi_label);
+
+    // write result
+    write_operand(0, idx->val());
+
+    break;
+  }
 	case XED_ICLASS_COMISS: {
 		// comiss op0 op1: compares the lowest fp32 value of op0 and op1 and sets EFLAGS such as:
 		// op0 > op1: ZF = PF = CF = 0
@@ -247,6 +296,8 @@ void binop_translator::do_translate()
 	case XED_ICLASS_BT:
 	case XED_ICLASS_BTS:
 	case XED_ICLASS_BTR:
+	case XED_ICLASS_BSR:
+  case XED_ICLASS_BSF:
 	case XED_ICLASS_COMISS:
 	case XED_ICLASS_XADD:
 	case XED_ICLASS_ADDSD:
