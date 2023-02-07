@@ -19,6 +19,7 @@ translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_
 	case XED_ICLASS_CPUID:
 	case XED_ICLASS_SYSCALL:
 	case XED_ICLASS_PREFETCHNTA:
+  case XED_ICLASS_PAUSE:
 		return translation_result::noop;
 
 	default:
