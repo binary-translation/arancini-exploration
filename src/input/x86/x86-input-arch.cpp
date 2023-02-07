@@ -113,16 +113,14 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_CPUID:
 	case XED_ICLASS_SYSCALL: // TODO support
 	case XED_ICLASS_PREFETCHNTA:
-	case XED_ICLASS_UD0: // TODO support
-	case XED_ICLASS_UD1: // TODO support
-	case XED_ICLASS_UD2: // TODO support
-	case XED_ICLASS_FLD: // TODO support
-	case XED_ICLASS_FST: // TODO support
-	case XED_ICLASS_FSTP: // TODO support
-	case XED_ICLASS_FNSTENV: // TODO support
-	case XED_ICLASS_FLDENV: // TODO support
-	case XED_ICLASS_FWAIT: // TODO support
-		return std::make_unique<nop_translator>(builder);
+  case XED_ICLASS_UD0: // TODO support
+  case XED_ICLASS_UD1: // TODO support
+  case XED_ICLASS_UD2: // TODO support
+  case XED_ICLASS_FLD: // TODO support
+  case XED_ICLASS_FNSTENV: // TODO support
+  case XED_ICLASS_FLDENV: // TODO support
+  case XED_ICLASS_FWAIT: // TODO support
+	  return std::make_unique<nop_translator>(builder);
 
 	case XED_ICLASS_XOR:
 	case XED_ICLASS_PXOR:
@@ -236,7 +234,9 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_CLC:
 		return std::make_unique<control_translator>(builder);
 
-	case XED_ICLASS_FNSTCW:
+  case XED_ICLASS_FNSTCW:
+  case XED_ICLASS_FST:
+  case XED_ICLASS_FSTP:
 		return std::make_unique<fpu_translator>(builder);
 
 	case XED_ICLASS_INT:
