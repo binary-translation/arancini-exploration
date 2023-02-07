@@ -252,6 +252,8 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_FLD1:
   case XED_ICLASS_FCHS:
   case XED_ICLASS_FXCH:
+  case XED_ICLASS_FUCOMI:
+  case XED_ICLASS_FUCOMIP:
 		return std::make_unique<fpu_translator>(builder);
 
   default:

@@ -178,6 +178,53 @@ void fpu_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_FUCOMI:
+  case XED_ICLASS_FUCOMIP: {
+    // xed encoding: fucomi(p) st(0), st(i)
+    // TODO properly manage the unordered case (SNan, QNaN, etc)
+
+    // get stack top and operand
+    auto st0 = read_operand(0);
+    auto sti = read_operand(1);
+
+    // comparisons
+    auto cmpgt = builder().insert_cmpgt(st0->val(), sti->val());
+    cond_br_node *gt_br = (cond_br_node *)builder().insert_cond_br(cmpgt->val(), nullptr);
+    auto cmplt = builder().insert_cmpgt(sti->val(), st0->val());
+    cond_br_node *lt_br = (cond_br_node *)builder().insert_cond_br(cmplt->val(), nullptr);
+    auto cmpeq = builder().insert_cmpeq(st0->val(), sti->val());
+    cond_br_node *eq_br = (cond_br_node *)builder().insert_cond_br(cmpeq->val(), nullptr);
+
+    // unordered
+    write_flags(nullptr, flag_op::set1, flag_op::set1, flag_op::ignore, flag_op::ignore, flag_op::set1, flag_op::ignore);
+    br_node *end_un = (br_node *)builder().insert_br(nullptr);
+
+    // st(0) > st(i)
+    auto gt_branch = builder().insert_label("gt");
+    gt_br->add_br_target(gt_branch);
+    write_flags(nullptr, flag_op::set0, flag_op::set0, flag_op::ignore, flag_op::ignore, flag_op::set0, flag_op::ignore);
+    br_node *end_gt = (br_node *)builder().insert_br(nullptr);
+
+    // st(0) < st(i)
+    auto lt_branch = builder().insert_label("lt");
+    lt_br->add_br_target(lt_branch);
+    write_flags(nullptr, flag_op::set0, flag_op::set1, flag_op::ignore, flag_op::ignore, flag_op::set0, flag_op::ignore);
+    br_node *end_lt = (br_node *)builder().insert_br(nullptr);
+
+    // st(0) = st(i)
+    auto eq_branch = builder().insert_label("eq");
+    eq_br->add_br_target(eq_branch);
+    write_flags(nullptr, flag_op::set0, flag_op::set1, flag_op::ignore, flag_op::ignore, flag_op::set0, flag_op::ignore);
+
+    // end
+    auto end = builder().insert_label("end");
+    end_un->add_br_target(end);
+    end_gt->add_br_target(end);
+    end_lt->add_br_target(end);
+
+    break;
+  }
+
   default:
 	  throw std::runtime_error("unsupported fpu operation");
   }
