@@ -138,7 +138,8 @@ action_node *translator::write_operand(int opnum, port &value)
 			case XED_REG_ST6:
 			case XED_REG_ST7: {
 				auto st_idx = reg - XED_REG_ST0;
-        return fpu_stack_set(st_idx, value);
+				auto st_addr = compute_fpu_stack_addr(st_idx);
+				return builder_.insert_write_mem(st_addr->val(), value);
 			}
 			default:
 				throw std::runtime_error("unsupported x87 register type");
@@ -208,7 +209,8 @@ value_node *translator::read_operand(int opnum)
       case XED_REG_ST6:
       case XED_REG_ST7: {
 				auto st_idx = reg - XED_REG_ST0;
-        return fpu_stack_get(st_idx);
+				auto st_addr = compute_fpu_stack_addr(st_idx);
+				return builder_.insert_read_mem(value_type::f80(), st_addr->val());
       }
       default:
         throw std::runtime_error("unsupported x87 register type");
