@@ -204,10 +204,12 @@ void fpu_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_FCOMI:
+  case XED_ICLASS_FCOMIP:
   case XED_ICLASS_FUCOMI:
   case XED_ICLASS_FUCOMIP: {
     // xed encoding: fucomi(p) st(0), st(i)
-    // TODO properly manage the unordered case (SNan, QNaN, etc)
+    // TODO properly manage the unordered case (SNan, QNaN, etc), and diff with F* and FU*
 
     // get stack top and operand
     auto st0 = read_operand(0);
@@ -262,6 +264,7 @@ void fpu_translator::do_translate()
   case XED_ICLASS_FSUBP:
   case XED_ICLASS_FSUBRP:
   case XED_ICLASS_FMULP:
+  case XED_ICLASS_FCOMIP:
   case XED_ICLASS_FUCOMIP:
 	  fpu_stack_top_move(1);
     break;
