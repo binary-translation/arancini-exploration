@@ -41,6 +41,9 @@ void rep_translator::do_translate()
 		break;
 	}
 
+  case XED_ICLASS_REP_STOSB:
+  case XED_ICLASS_REP_STOSD:
+  case XED_ICLASS_REP_STOSW:
 	case XED_ICLASS_REP_STOSQ: {
 		// while rcx != 0; do stosq; rcx--; rdi++; done
 		// stosq - store the content of rax at [rdi]
@@ -48,7 +51,25 @@ void rep_translator::do_translate()
 
 		auto cst_0 = builder().insert_constant_u64(0);
 		auto cst_1 = builder().insert_constant_u64(1);
-		auto cst_8 = builder().insert_constant_u64(8);
+    int addr_align;
+
+    switch (inst_class) {
+    case XED_ICLASS_REP_STOSQ:
+      addr_align = 8;
+      break;
+    case XED_ICLASS_REP_STOSD:
+      addr_align = 4;
+      break;
+    case XED_ICLASS_REP_STOSW:
+      addr_align = 2;
+      break;
+    case XED_ICLASS_REP_STOSB:
+      addr_align = 1;
+      break;
+    default:
+      throw std::runtime_error("unsupported rep stos size");
+    }
+		auto cst_align = builder().insert_constant_u64(addr_align);
 
 		auto loop_start = builder().insert_label("while");
 		auto rcx = read_reg(value_type::u64(), reg_offsets::RCX);
@@ -63,13 +84,13 @@ void rep_translator::do_translate()
 		auto df_test = builder().insert_cmpne(df->val(), builder().insert_constant_i(value_type::u1(), 0)->val());
 		cond_br_node *br_df = (cond_br_node *)builder().insert_cond_br(df_test->val(), nullptr);
 
-		write_reg(reg_offsets::RDI, builder().insert_add(rdi->val(), cst_8->val())->val());
+		write_reg(reg_offsets::RDI, builder().insert_add(rdi->val(), cst_align->val())->val());
 		br_node *br_then = (br_node *)builder().insert_br(nullptr);
 
 		auto else_label = builder().insert_label("else");
 		br_df->add_br_target(else_label);
 
-		write_reg(reg_offsets::RDI, builder().insert_sub(rdi->val(), cst_8->val())->val());
+		write_reg(reg_offsets::RDI, builder().insert_sub(rdi->val(), cst_align->val())->val());
 
 		auto endif_label = builder().insert_label("endif");
 		br_then->add_br_target(endif_label);
