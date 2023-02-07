@@ -69,9 +69,17 @@ void atomic_translator::do_translate()
     break;
 	}
 
+  case XED_ICLASS_INC_LOCK: {
+    auto src = read_operand(0);
+    auto res = builder().insert_atomic_binop(binary_atomic_op::add, src->val(), builder().insert_constant_i(src->val().type(), 1)->val());
+    write_flags(res, flag_op::update, flag_op::ignore, flag_op::update, flag_op::update, flag_op::update, flag_op::update);
+    break;
+  }
+
   case XED_ICLASS_DEC_LOCK: {
     auto src = read_operand(0);
-    builder().insert_atomic_binop(binary_atomic_op::sub, src->val(), builder().insert_constant_i(src->val().type(), 1)->val());
+    auto res = builder().insert_atomic_binop(binary_atomic_op::sub, src->val(), builder().insert_constant_i(src->val().type(), 1)->val());
+    write_flags(res, flag_op::update, flag_op::ignore, flag_op::update, flag_op::update, flag_op::update, flag_op::update);
     break;
   }
 
