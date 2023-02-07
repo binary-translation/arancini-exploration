@@ -122,34 +122,36 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   // case XED_ICLASS_FWAIT: // TODO support
 	  return std::make_unique<nop_translator>(builder);
 
-	case XED_ICLASS_XOR:
-	case XED_ICLASS_PXOR:
-	case XED_ICLASS_AND:
-	case XED_ICLASS_PAND:
-	case XED_ICLASS_OR:
-	case XED_ICLASS_POR:
-	case XED_ICLASS_ADD:
-	case XED_ICLASS_ADDSD:
-	case XED_ICLASS_ADC:
-	case XED_ICLASS_SUB:
-	case XED_ICLASS_SBB:
-	case XED_ICLASS_CMP:
-	case XED_ICLASS_TEST:
-	case XED_ICLASS_XADD:
-	case XED_ICLASS_BT:
-	case XED_ICLASS_BTS:
-	case XED_ICLASS_BTR:
-	case XED_ICLASS_COMISS:
-	// SSE2 binary operations
-	case XED_ICLASS_PADDQ:
-	case XED_ICLASS_PADDD:
-	case XED_ICLASS_PADDW:
-	case XED_ICLASS_PADDB:
-	case XED_ICLASS_PSUBQ:
-	case XED_ICLASS_PSUBD:
-	case XED_ICLASS_PSUBW:
-	case XED_ICLASS_PSUBB:
-	case XED_ICLASS_PCMPEQB:
+  case XED_ICLASS_XOR:
+  case XED_ICLASS_PXOR:
+  case XED_ICLASS_AND:
+  case XED_ICLASS_PAND:
+  case XED_ICLASS_OR:
+  case XED_ICLASS_POR:
+  case XED_ICLASS_ADD:
+  case XED_ICLASS_ADDSD:
+  case XED_ICLASS_ADC:
+  case XED_ICLASS_SUB:
+  case XED_ICLASS_SBB:
+  case XED_ICLASS_CMP:
+  case XED_ICLASS_TEST:
+  case XED_ICLASS_XADD:
+  case XED_ICLASS_BT:
+  case XED_ICLASS_BTS:
+  case XED_ICLASS_BTR:
+  case XED_ICLASS_BSR:
+  case XED_ICLASS_BSF:
+  case XED_ICLASS_COMISS:
+  // SSE2 binary operations
+  case XED_ICLASS_PADDQ:
+  case XED_ICLASS_PADDD:
+  case XED_ICLASS_PADDW:
+  case XED_ICLASS_PADDB:
+  case XED_ICLASS_PSUBQ:
+  case XED_ICLASS_PSUBD:
+  case XED_ICLASS_PSUBW:
+  case XED_ICLASS_PSUBB:
+  case XED_ICLASS_PCMPEQB:
 		return std::make_unique<binop_translator>(builder);
 
 	case XED_ICLASS_PUSH:
