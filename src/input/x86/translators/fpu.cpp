@@ -22,6 +22,12 @@ void fpu_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_FNSTSW: {
+    auto fpu_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
+    write_operand(0, fpu_status->val());
+    break;
+  }
+
   case XED_ICLASS_FLD: {
     auto val = read_operand(0);
 
