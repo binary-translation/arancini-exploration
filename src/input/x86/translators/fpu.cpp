@@ -90,6 +90,30 @@ void fpu_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_FCHS: {
+    dump_xed_encoding();
+    // xed encoding: fchs st(0)
+    auto st0 = read_operand(0);
+    write_operand(0, builder().insert_not(st0->val())->val());
+
+    // TODO flag management
+    break;
+  }
+
+  case XED_ICLASS_FXCH: {
+    dump_xed_encoding();
+    // xed encoding: fxch st(i) st(j)
+    // TODO fix with temp node
+    auto sti = read_operand(0);
+    auto stj = read_operand(1);
+
+    write_operand(0, stj->val());
+    write_operand(1, sti->val());
+
+    // TODO set C1 flag to 0
+    break;
+  }
+
   default:
 	  throw std::runtime_error("unsupported fpu operation");
   }
