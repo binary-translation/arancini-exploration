@@ -71,6 +71,15 @@ void fpu_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_FIST:
+  case XED_ICLASS_FISTP: {
+    auto st0 = fpu_stack_get(0);
+    auto val = builder().insert_convert(value_type(value_type_class::signed_integer, get_operand_width(0)), st0->val());
+    write_operand(0, val->val());
+
+    // TODO FPU flags
+    break;
+  }
 
   case XED_ICLASS_FADD:
   case XED_ICLASS_FADDP: {
@@ -132,7 +141,6 @@ void fpu_translator::do_translate()
   }
 
   case XED_ICLASS_FCHS: {
-    dump_xed_encoding();
     // xed encoding: fchs st(0)
     auto st0 = read_operand(0);
     write_operand(0, builder().insert_not(st0->val())->val());
@@ -142,7 +150,6 @@ void fpu_translator::do_translate()
   }
 
   case XED_ICLASS_FXCH: {
-    dump_xed_encoding();
     // xed encoding: fxch st(i) st(j)
     // TODO fix with temp node
     auto sti = read_operand(0);
@@ -161,6 +168,7 @@ void fpu_translator::do_translate()
 
   switch (inst_class) {
   case XED_ICLASS_FSTP:
+  case XED_ICLASS_FISTP:
   case XED_ICLASS_FADDP:
   case XED_ICLASS_FSUBP:
   case XED_ICLASS_FUCOMIP:
