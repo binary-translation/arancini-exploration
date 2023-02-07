@@ -7,12 +7,13 @@ using namespace arancini::input::x86::translators;
 
 void fpu_translator::do_translate()
 {
-	switch (xed_decoded_inst_get_iclass(xed_inst())) {
+	auto inst_class = xed_decoded_inst_get_iclass(xed_inst());
 
-  case XED_ICLASS_FNSTCW: {
-    auto fpu_ctrl = read_reg(value_type::u16(), reg_offsets::X87CTRL);
-    write_operand(0, fpu_ctrl->val());
-    break;
+  switch (inst_class) {
+	case XED_ICLASS_FNSTCW: {
+		auto fpu_ctrl = read_reg(value_type::u16(), reg_offsets::X87_CTRL);
+		write_operand(0, fpu_ctrl->val());
+		break;
   }
 
   default:
