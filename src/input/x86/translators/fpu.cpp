@@ -250,6 +250,10 @@ void fpu_translator::do_translate()
     auto dst = read_operand(0);
     auto src = read_operand(1);
 
+    if (src->val().type().width() != 80) {
+      src = builder().insert_convert(dst->val().type(), src->val());
+    }
+
     auto res = builder().insert_sub(dst->val(), src->val());
 
     write_operand(0, res->val());
