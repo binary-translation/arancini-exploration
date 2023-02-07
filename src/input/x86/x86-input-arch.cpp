@@ -234,6 +234,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 		return std::make_unique<control_translator>(builder);
 
   case XED_ICLASS_FNSTCW:
+  case XED_ICLASS_FLDCW:
   case XED_ICLASS_FLD:
   case XED_ICLASS_FILD:
   case XED_ICLASS_FST:
