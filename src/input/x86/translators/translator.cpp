@@ -213,12 +213,7 @@ value_node *translator::read_operand(int opnum)
 
 	case XED_OPERAND_MEM0:
   case XED_OPERAND_MEM1: {
-    int mem_idx;
-    if (opname == XED_OPERAND_MEM0) {
-      mem_idx = 0;
-    } else {
-      mem_idx = 1;
-    }
+    auto mem_idx = opname - XED_OPERAND_MEM0;
     auto addr = compute_address(mem_idx);
 
     switch (xed_decoded_inst_get_memory_operand_length(xed_inst(), mem_idx)) {
@@ -260,7 +255,7 @@ ssize_t translator::get_operand_width(int opnum)
 		return xed_decoded_inst_get_immediate_width_bits(xed_inst());
 	}
 	case XED_OPERAND_MEM0: {
-		return xed_decoded_inst_get_memory_operand_length(xed_inst(), 0);
+		return 8 * xed_decoded_inst_get_memory_operand_length(xed_inst(), 0);
 	}
 	default:
 		throw std::runtime_error("unsupported operand width query");
