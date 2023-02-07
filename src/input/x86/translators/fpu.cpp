@@ -164,6 +164,36 @@ void fpu_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_FDIV:
+  case XED_ICLASS_FDIVP: {
+    // xed encoding: fdiv st(i) st(j)
+    auto dst = read_operand(0);
+    auto src = read_operand(1);
+
+    if (src->val().type().width() != 80) {
+      src = builder().insert_convert(dst->val().type(), src->val());
+    }
+
+    auto res = builder().insert_div(dst->val(), src->val());
+    write_operand(0, res->val());
+
+    // TODO FPU flags
+    break;
+  }
+
+  case XED_ICLASS_FPREM: {
+    // xed encoding: fprem st(0) st(1)
+    auto st0 = read_operand(0);
+    auto st1 = read_operand(1);
+
+    auto res = builder().insert_mod(st0->val(), st1->val());
+
+    write_operand(0, res->val());
+
+    // TODO FPU flags
+    break;
+  }
+
   case XED_ICLASS_FLDZ: {
     auto zero = builder().insert_constant_f(value_type(value_type_class::floating_point, 80), +0.0);
     fpu_stack_top_move(-1);
@@ -264,6 +294,7 @@ void fpu_translator::do_translate()
   case XED_ICLASS_FSUBP:
   case XED_ICLASS_FSUBRP:
   case XED_ICLASS_FMULP:
+  case XED_ICLASS_FDIVP:
   case XED_ICLASS_FCOMIP:
   case XED_ICLASS_FUCOMIP:
 	  fpu_stack_top_move(1);
