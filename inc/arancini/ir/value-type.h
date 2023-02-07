@@ -23,6 +23,7 @@ public:
 	static value_type s128() { return value_type(value_type_class::signed_integer, 128); }
 	static value_type f32() { return value_type(value_type_class::floating_point, 32); }
 	static value_type f64() { return value_type(value_type_class::floating_point, 64); }
+  static value_type f80() { return value_type(value_type_class::floating_point, 80); } // x87 double extended-precision
 
 	static value_type vector(const value_type &underlying_type, int nr_elements)
 	{
