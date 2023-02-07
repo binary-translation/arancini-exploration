@@ -59,6 +59,37 @@ void fpu_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_FLD: {
+    auto val = read_operand(0);
+
+    if (val->val().type().width() != 80) {
+      val = builder().insert_convert(value_type::f80(), val->val());
+    }
+
+    // push on the stack
+    fpu_stack_top_move(-1);
+    fpu_stack_set(0, val->val());
+
+    // TODO flag management
+
+    break;
+  }
+
+  case XED_ICLASS_FILD: {
+    // xed encoding: fild st0 memint
+    auto val = read_operand(1);
+
+    if (val->val().type().width() != 80) {
+      val = builder().insert_convert(value_type::f80(), val->val());
+    }
+
+    fpu_stack_top_move(-1);
+    fpu_stack_set(0, val->val());
+
+    // TODO FPU flags
+    break;
+  }
+
   case XED_ICLASS_FST:
   case XED_ICLASS_FSTP: {
     auto target_width = get_operand_width(0);
