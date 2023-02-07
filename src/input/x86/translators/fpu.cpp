@@ -74,11 +74,37 @@ void fpu_translator::do_translate()
 
   case XED_ICLASS_FADD:
   case XED_ICLASS_FADDP: {
-    dump_xed_encoding();
     // xed encoding: fadd st(0) st(i)
     auto dst = read_operand(0);
     auto src = read_operand(1);
     auto res = builder().insert_add(dst->val(), src->val());
+
+    write_operand(0, res->val());
+
+    // TODO FPU flags
+    break;
+  }
+
+  case XED_ICLASS_FSUB:
+  case XED_ICLASS_FSUBP: {
+    // xed encoding: fsub st(0) st(i)
+    auto dst = read_operand(0);
+    auto src = read_operand(1);
+
+    auto res = builder().insert_sub(dst->val(), src->val());
+
+    write_operand(0, res->val());
+
+    // TODO FPU flags
+    break;
+  }
+
+  case XED_ICLASS_FISUB: {
+    // xed encoding: fisub st(0) memint
+    auto st0 = read_operand(0);
+    auto op = read_operand(1);
+    auto conv = builder().insert_convert(st0->val().type(), op->val());
+    auto res = builder().insert_sub(st0->val(), conv->val());
 
     write_operand(0, res->val());
 
@@ -136,6 +162,7 @@ void fpu_translator::do_translate()
   switch (inst_class) {
   case XED_ICLASS_FSTP:
   case XED_ICLASS_FADDP:
+  case XED_ICLASS_FSUBP:
   case XED_ICLASS_FUCOMIP:
 	  fpu_stack_top_move(1);
     break;
