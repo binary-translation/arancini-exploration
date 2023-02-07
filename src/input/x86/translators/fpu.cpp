@@ -271,6 +271,22 @@ void fpu_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_FMUL:
+  case XED_ICLASS_FMULP: {
+    // xed encoding: fmul st(i) st(j)
+    auto dst = read_operand(0);
+    auto src = read_operand(1);
+
+    if (src->val().type().width() != 80) {
+      src = builder().insert_convert(dst->val().type(), src->val());
+    }
+
+    auto res = builder().insert_mul(dst->val(), src->val());
+    write_operand(0, res->val());
+
+    // TODO FPU flags
+    break;
+  }
 
   case XED_ICLASS_FLDZ: {
     auto zero = builder().insert_constant_f(value_type(value_type_class::floating_point, 80), +0.0);
