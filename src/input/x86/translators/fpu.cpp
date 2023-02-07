@@ -17,9 +17,39 @@ void fpu_translator::do_translate()
   }
 
 
+  case XED_ICLASS_FLD: {
+    auto val = read_operand(0);
+
+    if (val->val().type().width() != 80) {
+      val = builder().insert_convert(value_type::f80(), val->val());
+    }
+
+    // push on the stack
+    fpu_stack_top_move(-1);
+    fpu_stack_set(0, val->val());
+
+    // TODO flag management
+
+    break;
+  }
+
+  case XED_ICLASS_FILD: {
+    // xed encoding: fild st0 memint
+    auto val = read_operand(1);
+
+    if (val->val().type().width() != 80) {
+      val = builder().insert_convert(value_type::f80(), val->val());
+    }
+
+    fpu_stack_top_move(-1);
+    fpu_stack_set(0, val->val());
+
+    // TODO FPU flags
+    break;
+  }
+
   case XED_ICLASS_FST:
   case XED_ICLASS_FSTP: {
-    dump_xed_encoding();
     auto target_width = get_operand_width(0);
 
     // get stack top
@@ -33,6 +63,25 @@ void fpu_translator::do_translate()
 
     // TODO flag management
 
+    break;
+  }
+
+
+  case XED_ICLASS_FLDZ: {
+    auto zero = builder().insert_constant_f(value_type(value_type_class::floating_point, 80), +0.0);
+    fpu_stack_top_move(-1);
+    fpu_stack_set(0, zero->val());
+
+    // TODO FPU flags
+    break;
+  }
+
+  case XED_ICLASS_FLD1: {
+    auto one = builder().insert_constant_f(value_type(value_type_class::floating_point, 80), +1.0);
+    fpu_stack_top_move(-1);
+    fpu_stack_set(0, one->val());
+
+    // TODO FPU flags
     break;
   }
 
