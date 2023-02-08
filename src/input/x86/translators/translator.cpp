@@ -355,13 +355,27 @@ value_node *translator::compute_address(int mem_idx)
 	return address_base;
 }
 
+/// @brief Compute the address of the ST(stack_idx) element on the x87 FPU register stack.
 value_node *translator::compute_fpu_stack_addr(int stack_idx)
 {
-  // TODO top and stack_idx need to be multiplied by the size of an FPU register (10 bytes)
-	auto x87_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
-	auto top = builder_.insert_zx(value_type::u64(), builder_.insert_bit_extract(x87_status->val(), 11, 3)->val());
+	auto cst_10 = builder_.insert_constant_u64(10);
 	auto x87_stack_base = read_reg(value_type::u64(), reg_offsets::X87_STACK_BASE);
-	return builder_.insert_add(builder_.insert_add(x87_stack_base->val(), top->val())->val(), builder_.insert_constant_u64(stack_idx)->val());
+	auto x87_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
+
+  // Get the TOP of the stack and multiply by 10 to get the proper offset (an FPU stack register is 10-bytes wide)
+	auto top = builder_.insert_zx(value_type::u64(), builder_.insert_bit_extract(x87_status->val(), 11, 3)->val());
+	top = builder_.insert_mul(top->val(), cst_10->val());
+
+  // Add the TOP offset to the base address of the stack
+  auto addr = builder_.insert_add(x87_stack_base->val(), top->val());
+
+  // If accessing ST(i) with i > 0, add the offset of the index to the address
+	if (stack_idx) {
+		auto idx_offset = builder_.insert_constant_u64(stack_idx * 10);
+    addr = builder_.insert_add(addr->val(), idx_offset->val());
+  }
+
+  return addr;
 }
 
 value_node *translator::fpu_stack_get(int stack_idx)
