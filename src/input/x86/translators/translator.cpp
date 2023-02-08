@@ -355,6 +355,7 @@ value_node *translator::compute_address(int mem_idx)
 	return address_base;
 }
 
+/// @brief Compute the address of the ST(stack_idx) element on the x87 FPU register stack.
 value_node *translator::compute_fpu_stack_addr(int stack_idx)
 {
 	auto cst_10 = builder_.insert_constant_u64(10);
