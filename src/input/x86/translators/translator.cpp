@@ -138,8 +138,7 @@ action_node *translator::write_operand(int opnum, port &value)
 			case XED_REG_ST6:
 			case XED_REG_ST7: {
 				auto st_idx = reg - XED_REG_ST0;
-				auto st_addr = compute_fpu_stack_addr(st_idx);
-				return builder_.insert_write_mem(st_addr->val(), value);
+        return fpu_stack_set(st_idx, value);
 			}
 			default:
 				throw std::runtime_error("unsupported x87 register type");
@@ -209,8 +208,7 @@ value_node *translator::read_operand(int opnum)
       case XED_REG_ST6:
       case XED_REG_ST7: {
 				auto st_idx = reg - XED_REG_ST0;
-				auto st_addr = compute_fpu_stack_addr(st_idx);
-				return builder_.insert_read_mem(value_type::f80(), st_addr->val());
+        return fpu_stack_get(st_idx);
       }
       default:
         throw std::runtime_error("unsupported x87 register type");
@@ -355,7 +353,6 @@ value_node *translator::compute_address(int mem_idx)
 	return address_base;
 }
 
-/// @brief Compute the address of the ST(stack_idx) element on the x87 FPU register stack.
 value_node *translator::compute_fpu_stack_addr(int stack_idx)
 {
 	auto cst_10 = builder_.insert_constant_u64(10);
