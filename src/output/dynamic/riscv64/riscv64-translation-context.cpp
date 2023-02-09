@@ -843,7 +843,6 @@ standardPath:
 			assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
 			break;
 		}
-		assembler_.sub(out_reg, src_reg1, src_reg2);
 
 		assembler_.sgtz(CF, src_reg2);
 		assembler_.slt(OF, out_reg, src_reg1);
@@ -913,6 +912,7 @@ standardPath:
 			assembler_.mv(OF, CF);
 			break;
 		}
+		break;
 	case binary_arith_op::div:
 		switch (n.val().type().width()) {
 		case 128: // Fixme 128 bits not natively supported on RISCV, assuming just extended 64 bit value
@@ -960,7 +960,7 @@ standardPath:
 			}
 			break;
 		}
-
+		break;
 	case binary_arith_op::mod:
 		switch (n.val().type().width()) {
 		case 128: // Fixme 128 bits not natively supported on RISCV, assuming just extended 64 bit value
@@ -1008,13 +1008,16 @@ standardPath:
 			}
 			break;
 		}
+		break;
 
 	case binary_arith_op::cmpeq:
 		assembler_.xor_(out_reg, src_reg1, src_reg2);
 		assembler_.seqz(out_reg, out_reg);
+		break;
 	case binary_arith_op::cmpne:
 		assembler_.xor_(out_reg, src_reg1, src_reg2);
 		assembler_.snez(out_reg, out_reg);
+		break;
 	case binary_arith_op::cmpgt:
 		throw std::runtime_error("unsupported binary arithmetic operation");
 	}
