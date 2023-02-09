@@ -218,14 +218,14 @@ namespace arancini::ir {
     /// @param reg: register used as a source operand
     /// @return an atomic xadd node:
     ///         tmp := [mem] + reg
-    ///         reg := [lhs]
-    ///         [lhs] := tmp
+    ///         reg := [mem]
+    ///         [mem] := tmp
     action_node *insert_atomic_xadd(port &mem, port &reg) { return create_and_insert<binary_atomic_node>(binary_atomic_op::xadd, mem, reg); }
 
     /// @brief atomic exchange
     /// @param mem: the memory address used in the instruction
     /// @param reg: the register used in the instruction
-    /// @return an atomic xchg node: lhs := rhs, rhs := lhs
+    /// @return an atomic xchg node: [mem] := reg, reg := [mem]
     action_node *insert_atomic_xchg(port &mem, port &reg) { return create_and_insert<binary_atomic_node>(binary_atomic_op::xchg, mem, reg); }
 
     /// @brief atomic compare-exchange
