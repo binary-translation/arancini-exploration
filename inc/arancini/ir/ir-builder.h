@@ -208,38 +208,36 @@ namespace arancini::ir {
 
     /// @brief generic atomic binary node creator
     /// @param op: type of binary atomic operation
-    /// @param lhs
-    /// @param rhs
-    /// @return an atomic binary operation node that applies: lhs := lhs op rhs
-    action_node *insert_atomic_binop(binary_atomic_op op, port &lhs, port &rhs) { return create_and_insert<binary_atomic_node>(op, lhs, rhs); }
+    /// @param mem: a memory address for the destination operand
+    /// @param reg: a register for a source operand
+    /// @return an atomic binary operation node that applies: [mem] := [mem] op reg
+    action_node *insert_atomic_binop(binary_atomic_op op, port &mem, port &reg) { return create_and_insert<binary_atomic_node>(op, mem, reg); }
 
     /// @brief exchange and add
-    /// @param lhs
-    /// @param rhs
+    /// @param mem: memory address of the destination operand
+    /// @param reg: register used as a source operand
     /// @return an atomic xadd node:
-    ///         tmp := lhs + rhs
-    ///         rhs := lhs
-    ///         lhs := tmp
-    action_node *insert_atomic_xadd(port &lhs, port &rhs) { return create_and_insert<binary_atomic_node>(binary_atomic_op::xadd, lhs, rhs); }
+    ///         tmp := [mem] + reg
+    ///         reg := [lhs]
+    ///         [lhs] := tmp
+    action_node *insert_atomic_xadd(port &mem, port &reg) { return create_and_insert<binary_atomic_node>(binary_atomic_op::xadd, mem, reg); }
 
     /// @brief atomic exchange
-    /// @param lhs
-    /// @param rhs
+    /// @param mem: the memory address used in the instruction
+    /// @param reg: the register used in the instruction
     /// @return an atomic xchg node: lhs := rhs, rhs := lhs
-    action_node *insert_atomic_xchg(port &lhs, port &rhs) { return create_and_insert<binary_atomic_node>(binary_atomic_op::xchg, lhs, rhs); }
+    action_node *insert_atomic_xchg(port &mem, port &reg) { return create_and_insert<binary_atomic_node>(binary_atomic_op::xchg, mem, reg); }
 
     /// @brief atomic compare-exchange
-    /// @param lhs: destination
-    /// @param rhs: accumulator
-    /// @param top: source
+    /// @param dst: destination operand, needs to be a memory address
+    /// @param acc: accumulator, needs to be a register
+    /// @param src: source operand, needs to be a register
     /// @return an atomic cmpxchg node with the following behavior:
-    ///         if source == destination
-    ///            destination := source
+    ///         if acc == [dst]
+    ///            [dst] := src
     ///         else
-    ///            accumulator := destination
-    action_node *insert_atomic_cmpxchg(port &lhs, port &rhs, port &top)
-    {
-      return create_and_insert<ternary_atomic_node>(ternary_atomic_op::cmpxchg, lhs, rhs, top); }
+    ///            acc := [dst]
+    action_node *insert_atomic_cmpxchg(port &dst, port &acc, port &src) { return create_and_insert<ternary_atomic_node>(ternary_atomic_op::cmpxchg, dst, acc, src); }
 
     /// @brief zero extend a value to a larger width (does not preserve the sign)
     /// @param target_type new type
