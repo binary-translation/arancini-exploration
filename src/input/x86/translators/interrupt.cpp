@@ -21,6 +21,11 @@ void interrupt_translator::do_translate()
 		break;
 	}
 
+  case XED_ICLASS_SYSCALL: {
+    builder().insert_internal_call(builder().ifr().resolve("handle_syscall"), { });
+    break;
+  }
+
 	default:
 		throw std::runtime_error("unsupported interrupt operation");
 	}
