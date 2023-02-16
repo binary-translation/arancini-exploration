@@ -59,37 +59,6 @@ void fpu_translator::do_translate()
     break;
   }
 
-  case XED_ICLASS_FLD: {
-    auto val = read_operand(0);
-
-    if (val->val().type().width() != 80) {
-      val = builder().insert_convert(value_type::f80(), val->val());
-    }
-
-    // push on the stack
-    fpu_stack_top_move(-1);
-    fpu_stack_set(0, val->val());
-
-    // TODO flag management
-
-    break;
-  }
-
-  case XED_ICLASS_FILD: {
-    // xed encoding: fild st0 memint
-    auto val = read_operand(1);
-
-    if (val->val().type().width() != 80) {
-      val = builder().insert_convert(value_type::f80(), val->val());
-    }
-
-    fpu_stack_top_move(-1);
-    fpu_stack_set(0, val->val());
-
-    // TODO FPU flags
-    break;
-  }
-
   case XED_ICLASS_FST:
   case XED_ICLASS_FSTP: {
     auto target_width = get_operand_width(0);
@@ -225,67 +194,6 @@ void fpu_translator::do_translate()
 
     auto res = builder().insert_mod(st0->val(), st1->val());
 
-    write_operand(0, res->val());
-
-    // TODO FPU flags
-    break;
-  }
-
-  case XED_ICLASS_FADD:
-  case XED_ICLASS_FADDP: {
-    // xed encoding: fadd st(0) st(i)
-    auto dst = read_operand(0);
-    auto src = read_operand(1);
-    auto res = builder().insert_add(dst->val(), src->val());
-
-    write_operand(0, res->val());
-
-    // TODO FPU flags
-    break;
-  }
-
-  case XED_ICLASS_FSUB:
-  case XED_ICLASS_FSUBP: {
-    // xed encoding: fsub st(0) st(i)
-    auto dst = read_operand(0);
-    auto src = read_operand(1);
-
-    if (src->val().type().width() != 80) {
-      src = builder().insert_convert(dst->val().type(), src->val());
-    }
-
-    auto res = builder().insert_sub(dst->val(), src->val());
-
-    write_operand(0, res->val());
-
-    // TODO FPU flags
-    break;
-  }
-
-  case XED_ICLASS_FISUB: {
-    // xed encoding: fisub st(0) memint
-    auto st0 = read_operand(0);
-    auto op = read_operand(1);
-    auto conv = builder().insert_convert(st0->val().type(), op->val());
-    auto res = builder().insert_sub(st0->val(), conv->val());
-
-    write_operand(0, res->val());
-
-    // TODO FPU flags
-    break;
-  }
-
-  case XED_ICLASS_FMUL:
-  case XED_ICLASS_FMULP: {
-    // xed encoding: fmul st(i) st(j)
-    auto dst = read_operand(0);
-    auto src = read_operand(1);
-
-    if (src->val().type().width() != 80) {
-      src = builder().insert_convert(dst->val().type(), src->val());
-    }
-
-    auto res = builder().insert_mul(dst->val(), src->val());
     write_operand(0, res->val());
 
     // TODO FPU flags
