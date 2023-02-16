@@ -923,6 +923,14 @@ public:
 	{
 	}
 
+	const local_var &local() const { return lvar_; }
+
+	virtual void accept(visitor &v) override
+	{
+		value_node::accept(v);
+		v.visit_read_local_node(*this);
+	}
+
 private:
 	const local_var &lvar_;
 };
@@ -934,6 +942,16 @@ public:
 		, lvar_(local)
 		, val_(val)
 	{
+	}
+
+	const local_var &local() const { return lvar_; }
+
+	port &write_value() const { return val_; }
+
+	virtual void accept(visitor &v) override
+	{
+		action_node::accept(v);
+		v.visit_write_local_node(*this);
 	}
 
 private:
