@@ -146,10 +146,8 @@ void riscv64_translation_context::materialise_write_mem(const write_mem_node &n)
 Register riscv64_translation_context::materialise_read_pc(const read_pc_node &n) {
     Register out_reg  = get_or_fail(materialise(n.val().owner()));
 
-    // TODO: map to register
-    Address pc_addr { FP, 0x100 };
     auto load_instr = load_instructions.at(n.val().type().width());
-    (assembler_.*load_instr)(out_reg, pc_addr);
+    assembler_.addi(out_reg, A1, 0);
 
     return out_reg;
 }
@@ -157,30 +155,16 @@ Register riscv64_translation_context::materialise_read_pc(const read_pc_node &n)
 void riscv64_translation_context::materialise_write_pc(const write_pc_node &n) {
     Register src_reg  = get_or_fail(materialise(n.val().owner()));
 
-    // TODO: handle different sizes
-    Address pc_addr { FP, 0x100 };
     auto store_instr = store_instructions.at(n.val().type().width());
-    (assembler_.*store_instr)(src_reg, pc_addr);
+    assembler_.addi(A1, src_reg, 0);
 }
 
 void riscv64_translation_context::materialise_br(const br_node &n) {
-    Register target_reg = get_or_fail(materialise(n.target()));
-
-    Address pc_addr { FP, 0x100 };
-    auto store_instr = store_instructions.at(n.val().type().width());
-    (assembler_.*store_instr)(target_reg, pc_addr);
-
-    // NOTE: need to handle jumps to static code
-    // This can be done via a symbol table, accessed via a label node
+    throw std::runtime_error("branch not implemented");
 }
 
 void riscv64_translation_context::materialise_cond_br(const cond_br_node &n) {
-    Register cond = get_or_fail(materialise(n.cond().owner()));
-
-    Register target_reg = get_or_fail(materialise(n.target()));
-
-    Address pc_addr { FP, 0x100 };
-    assembler_.sd(target_reg, pc_addr);
+    throw std::runtime_error("conditional branch not implemented");
 }
 
 Register riscv64_translation_context::materialise_unary_arith(const unary_arith_node& n) {
