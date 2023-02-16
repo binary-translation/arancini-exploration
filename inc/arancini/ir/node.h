@@ -33,7 +33,9 @@ enum class node_kinds {
 	bit_extract,
 	bit_insert,
 	vector_extract,
-	vector_insert
+	vector_insert,
+	read_local,
+	write_local
 };
 
 class node {
@@ -283,13 +285,13 @@ public:
 		: value_node(node_kinds::read_reg, vt)
 		, regoff_(regoff)
 		, regidx_(regidx)
-    , regname_(regname)
+		, regname_(regname)
 	{
 	}
 
 	unsigned long regoff() const { return regoff_; }
 	unsigned long regidx() const { return regidx_; }
-  const char *regname() const { return regname_; }
+	const char *regname() const { return regname_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -300,7 +302,7 @@ public:
 private:
 	unsigned long regoff_;
 	unsigned long regidx_;
-  const char *regname_;
+	const char *regname_;
 };
 
 class read_mem_node : public value_node {
@@ -330,7 +332,7 @@ public:
 		: action_node(node_kinds::write_reg)
 		, regoff_(regoff)
 		, regidx_(regidx)
-    , regname_(regname)
+		, regname_(regname)
 		, val_(val)
 	{
 		val.add_target(this);
@@ -463,7 +465,7 @@ public:
 						+ ", source=" + source_value.type().to_string());
 				}
 			}
-		} else  if (op != cast_op::zx) {
+		} else if (op != cast_op::zx) {
 			if (target_type.type_class() != source_value.type().type_class()) {
 				throw std::logic_error("cannot cast between type classes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
 			}
@@ -483,9 +485,9 @@ public:
 	}
 
 	cast_op op() const { return op_; }
-        
+
 	port &source_value() const { return source_value_; }
-        value_type &target_type() { return target_type_; }
+	value_type &target_type() { return target_type_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -772,8 +774,8 @@ public:
 
 	port &source_value() const { return source_value_; }
 
-  int from() const { return from_; }
-  int length() const { return length_; }
+	int from() const { return from_; }
+	int length() const { return length_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -811,8 +813,8 @@ public:
 
 	port &bits() const { return bits_; }
 
-  int to() const { return to_; }
-  int length() const { return length_; }
+	int to() const { return to_; }
+	int length() const { return length_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -854,7 +856,7 @@ public:
 	{
 	}
 
-  int index() const { return index_; }
+	int index() const { return index_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -897,6 +899,45 @@ public:
 	port &insert_value() const { return val_; }
 
 private:
+	port &val_;
+};
+
+class local_var {
+public:
+	local_var(const value_type &type)
+		: type_(type)
+	{
+	}
+
+	const value_type &type() const { return type_; }
+
+private:
+	value_type type_;
+};
+
+class read_local_node : public value_node {
+public:
+	read_local_node(const local_var &local)
+		: value_node(node_kinds::read_local, local.type())
+		, lvar_(local)
+	{
+	}
+
+private:
+	const local_var &lvar_;
+};
+
+class write_local_node : public action_node {
+public:
+	write_local_node(const local_var &local, port &val)
+		: action_node(node_kinds::write_local)
+		, lvar_(local)
+		, val_(val)
+	{
+	}
+
+private:
+	const local_var &lvar_;
 	port &val_;
 };
 } // namespace arancini::ir
