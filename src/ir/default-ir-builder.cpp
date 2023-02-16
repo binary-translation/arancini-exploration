@@ -1,5 +1,6 @@
 #include <arancini/ir/chunk.h>
 #include <arancini/ir/default-ir-builder.h>
+#include <arancini/ir/internal-function-resolver.h>
 #include <arancini/ir/packet.h>
 
 using namespace arancini::ir;
