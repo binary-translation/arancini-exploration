@@ -44,8 +44,23 @@ void fpvec_translator::do_translate()
 		}
 		break;
 	}
+
+  case XED_ICLASS_CVTSI2SS: {
+    src1 = builder().insert_convert(value_type::f32(), src1->val(), fp_convert_type::round);
+    dest = builder().insert_bit_insert(dest->val(), src1->val(), 0, 32);
+    write_operand(0, dest->val());
+    break;
+  }
+
+  case XED_ICLASS_CVTSI2SD: {
+    src1 = builder().insert_convert(value_type::f64(), src1->val(), fp_convert_type::round);
+    dest = builder().insert_bit_insert(dest->val(), src1->val(), 0, 64);
+    write_operand(0, dest->val());
+    break;
+  }
+
 	default:
-		throw std::runtime_error("Unknown fpvec operand size");
+		throw std::runtime_error("Unknown fpvec instruction");
 	}
 
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
@@ -89,6 +104,6 @@ void fpvec_translator::do_translate()
 		break;
 	}
 	default:
-		throw std::runtime_error("unsupported fpvec instruction");
+    break;
 	}
 }

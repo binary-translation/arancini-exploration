@@ -44,6 +44,10 @@ namespace arancini::input::x86::translators {
     ssize_t get_operand_width(int opnum);
     bool is_memory_operand(int opnum);
     value_node *compute_address(int mem_idx);
+    /// @brief Generates nodes to compute the address of an element on the FPU stack
+    /// @param stack_idx: the index for which the address is queried, starting from top of stack
+    /// @return a tree computing: x87_stack_base + (x87_stack_top_index * 10) + (stack_idx * 10)
+    value_node *compute_fpu_stack_addr(int stack_idx);
 
     enum class reg_offsets {
 #define DEFREG(ctype, ltype, name) name = X86_OFFSET_OF(name),
@@ -89,6 +93,25 @@ namespace arancini::input::x86::translators {
 		/// @param pf parity flag (PF)
 		/// @param af adjust flag (AF)
 		void write_flags(value_node * op, flag_op zf, flag_op cf, flag_op of, flag_op sf, flag_op pf, flag_op af);
+
+
+    // x87 FPU stack manipulation
+
+    /// @brief Get a value from the x87 FPU stack
+    /// @param stack_idx index in the stack to get, starting from top of stack
+    /// @return The value located at this index in the FPU stack
+    value_node *fpu_stack_get(int stack_idx);
+
+    /// @brief Set a value in the x87 FPU stack
+    /// @param stack_idx index in the stack to set, starting from top of stack
+    /// @param val value top write in the stack
+    /// @return An action node representing the write to the stack
+    action_node *fpu_stack_set(int stack_idx, port &val);
+
+    /// @brief Move the x87 FPU stack index, updating the x87 tag register on the way.
+    /// @param val the value added to the current top index (1 to pop, -1 to push, fail otherwise)
+    /// @return the action node writng the new top index to the x87 status register
+    action_node *fpu_stack_top_move(int val);
 
 		enum class cond_type { nbe, nb, b, be, z, nle, nl, l, le, nz, no, np, ns, o, p, s };
 		value_node *compute_cond(cond_type ct);

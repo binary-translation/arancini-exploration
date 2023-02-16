@@ -19,6 +19,7 @@ translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_
 	case XED_ICLASS_CPUID:
 	case XED_ICLASS_SYSCALL:
 	case XED_ICLASS_PREFETCHNTA:
+  case XED_ICLASS_PAUSE:
 		return translation_result::noop;
 
 	default:
@@ -125,6 +126,26 @@ action_node *translator::write_operand(int opnum, port &value)
 		case XED_REG_CLASS_XMM:
 			return write_reg(xedreg_to_offset(reg), builder_.insert_zx(value_type::u128(), value)->val());
 
+		case XED_REG_CLASS_X87: {
+			switch (reg) {
+				// TODO put the convert logic here?
+			case XED_REG_ST0:
+			case XED_REG_ST1:
+			case XED_REG_ST2:
+			case XED_REG_ST3:
+			case XED_REG_ST4:
+			case XED_REG_ST5:
+			case XED_REG_ST6:
+			case XED_REG_ST7: {
+				auto st_idx = reg - XED_REG_ST0;
+        return fpu_stack_set(st_idx, value);
+			}
+			default:
+				throw std::runtime_error("unsupported x87 register type");
+			}
+			break;
+		}
+
 		default:
 			throw std::runtime_error("" + std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": unsupported register class: " + std::to_string(regclass));
 		}
@@ -175,12 +196,30 @@ value_node *translator::read_operand(int opnum)
       // case XED_REG_CLASS_FLAGS:
       // 	return read_reg(value_type::u64(), xedreg_to_offset(reg));
 
+    case XED_REG_CLASS_X87: {
+      switch (reg) {
+				// TODO put the convert logic here?
+      case XED_REG_ST0:
+      case XED_REG_ST1:
+      case XED_REG_ST2:
+      case XED_REG_ST3:
+      case XED_REG_ST4:
+      case XED_REG_ST5:
+      case XED_REG_ST6:
+      case XED_REG_ST7: {
+				auto st_idx = reg - XED_REG_ST0;
+        return fpu_stack_get(st_idx);
+      }
+      default:
+        throw std::runtime_error("unsupported x87 register type");
+      }
+    }
     case XED_REG_CLASS_PSEUDOX87: {
       switch (reg) {
       case XED_REG_X87CONTROL:
-				return read_reg(value_type::u16(), reg_offsets::X87CTRL);
+				return read_reg(value_type::u16(), reg_offsets::X87_CTRL);
       case XED_REG_X87STATUS:
-				return read_reg(value_type::u16(), reg_offsets::X87STS);
+				return read_reg(value_type::u16(), reg_offsets::X87_STS);
       default:
 				throw std::runtime_error("unsupported pseudoX87 register type");
       }
@@ -213,12 +252,7 @@ value_node *translator::read_operand(int opnum)
 
 	case XED_OPERAND_MEM0:
   case XED_OPERAND_MEM1: {
-    int mem_idx;
-    if (opname == XED_OPERAND_MEM0) {
-      mem_idx = 0;
-    } else {
-      mem_idx = 1;
-    }
+    auto mem_idx = opname - XED_OPERAND_MEM0;
     auto addr = compute_address(mem_idx);
 
     switch (xed_decoded_inst_get_memory_operand_length(xed_inst(), mem_idx)) {
@@ -260,7 +294,7 @@ ssize_t translator::get_operand_width(int opnum)
 		return xed_decoded_inst_get_immediate_width_bits(xed_inst());
 	}
 	case XED_OPERAND_MEM0: {
-		return xed_decoded_inst_get_memory_operand_length(xed_inst(), 0);
+		return 8 * xed_decoded_inst_get_memory_operand_length(xed_inst(), 0);
 	}
 	default:
 		throw std::runtime_error("unsupported operand width query");
@@ -317,6 +351,81 @@ value_node *translator::compute_address(int mem_idx)
 	}
 
 	return address_base;
+}
+
+value_node *translator::compute_fpu_stack_addr(int stack_idx)
+{
+	auto cst_10 = builder_.insert_constant_u64(10);
+	auto x87_stack_base = read_reg(value_type::u64(), reg_offsets::X87_STACK_BASE);
+	auto x87_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
+
+  // Get the TOP of the stack and multiply by 10 to get the proper offset (an FPU stack register is 10-bytes wide)
+	auto top = builder_.insert_zx(value_type::u64(), builder_.insert_bit_extract(x87_status->val(), 11, 3)->val());
+	top = builder_.insert_mul(top->val(), cst_10->val());
+
+  // Add the TOP offset to the base address of the stack
+  auto addr = builder_.insert_add(x87_stack_base->val(), top->val());
+
+  // If accessing ST(i) with i > 0, add the offset of the index to the address
+	if (stack_idx) {
+		auto idx_offset = builder_.insert_constant_u64(stack_idx * 10);
+    addr = builder_.insert_add(addr->val(), idx_offset->val());
+  }
+
+  return addr;
+}
+
+value_node *translator::fpu_stack_get(int stack_idx)
+{
+  auto st0_addr = compute_fpu_stack_addr(stack_idx);
+  return builder().insert_read_mem(value_type::f80(), st0_addr->val());
+}
+
+action_node *translator::fpu_stack_set(int stack_idx, port &val)
+{
+  // Update the tag register with a valid value
+  // TODO: Support for zero and special tags?
+  auto x87_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
+	auto top = builder_.insert_bit_extract(x87_status->val(), 11, 3);
+  auto x87_flag = read_reg(value_type::u16(), reg_offsets::X87_TAG);
+
+  auto valid_tag = builder_.insert_constant_u16(0x3); // valid = 0b00 = 0x0 = ~0x3
+  // we shift 0x3 by 2 * top to match with the tag register, then NOT to get the proper mask to AND with tag register
+  valid_tag = builder_.insert_lsl(valid_tag->val(), builder_.insert_lsl(builder_.insert_zx(value_type::u16(), top->val())->val(), builder_.insert_constant_u1(1)->val())->val());
+  valid_tag = builder_.insert_not(valid_tag->val());
+  x87_flag = builder_.insert_and(x87_flag->val(), valid_tag->val());
+  write_reg(reg_offsets::X87_TAG, x87_flag->val());
+
+  // Write the value to ST(stack_idx)
+  auto st0_addr = compute_fpu_stack_addr(stack_idx);
+  return builder().insert_write_mem(st0_addr->val(), val);
+}
+
+action_node *translator::fpu_stack_top_move(int val)
+{
+	auto x87_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
+	auto top = builder_.insert_bit_extract(x87_status->val(), 11, 3);
+  auto x87_flag = read_reg(value_type::u16(), reg_offsets::X87_TAG);
+
+  value_node *new_top;
+  if (val == 1) { // pop
+    // mark the old tag as empty
+    auto empty_tag = builder_.insert_constant_u16(0x3); // empty = 0b11 = 0x3
+    // we shift the empty tag by 2 * top to match with the tag register, then OR them
+    empty_tag = builder_.insert_lsl(empty_tag->val(), builder_.insert_lsl(builder_.insert_zx(value_type::u16(), top->val())->val(), builder_.insert_constant_u1(1)->val())->val());
+    x87_flag = builder_.insert_or(x87_flag->val(), empty_tag->val());
+    write_reg(reg_offsets::X87_TAG, x87_flag->val());
+
+    // compute the new top index
+    new_top = builder_.insert_add(top->val(), builder_.insert_constant_i(top->val().type(), (unsigned int)val)->val());
+  } else if (val == -1) { // push
+    new_top = builder_.insert_sub(top->val(), builder_.insert_constant_i(top->val().type(), (unsigned int)(-val))->val());
+  } else {
+    throw std::logic_error("Cannot move the FPU stack by " + std::to_string(val) + ". Must be 1 or -1.");
+  }
+
+  x87_status = builder_.insert_bit_insert(x87_status->val(), new_top->val(), 11, 3);
+  return write_reg(reg_offsets::X87_STS, x87_status->val());
 }
 
 unsigned long translator::offset_to_idx(reg_offsets reg) { return off_to_idx[(unsigned long)reg]; }
