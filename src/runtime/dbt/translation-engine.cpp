@@ -36,8 +36,9 @@ translation *translation_engine::get_translation(unsigned long pc)
 
 class dbt_ir_builder : public ir_builder {
 public:
-	dbt_ir_builder(std::shared_ptr<translation_context> tctx)
-		: tctx_(tctx)
+	dbt_ir_builder(internal_function_resolver &ifr, std::shared_ptr<translation_context> tctx)
+		: ir_builder(ifr)
+		, tctx_(tctx)
 		, is_eob_(false)
 	{
 	}
@@ -98,7 +99,7 @@ translation *translation_engine::translate(unsigned long pc)
 	machine_code_writer writer;
 	auto ctx = oe_.create_translation_context(writer);
 
-	dbt_ir_builder builder(ctx);
+	dbt_ir_builder builder(ia_.get_internal_function_resolver(), ctx);
 	ia_.translate_chunk(builder, pc, code, 0x1000, true);
 
 	return builder.create_translation();

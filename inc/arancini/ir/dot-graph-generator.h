@@ -44,6 +44,7 @@ public:
 	virtual void visit_vector_insert_node(vector_insert_node &n) override;
 	virtual void visit_read_local_node(read_local_node &n) override;
 	virtual void visit_write_local_node(write_local_node &n) override;
+	virtual void visit_internal_call_node(internal_call_node &n) override;
 
 private:
 	std::ostream &os_;

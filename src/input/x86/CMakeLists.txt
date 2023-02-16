@@ -7,6 +7,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_library(arancini-input-x86
             SHARED
             x86-input-arch.cpp
+            x86-internal-functions.cpp
             translators/atomic.cpp
             translators/binop.cpp
             translators/branch.cpp
@@ -14,6 +15,7 @@ add_library(arancini-input-x86
             translators/control.cpp
             translators/fpu.cpp
             translators/fpvec.cpp
+            translators/interrupt.cpp
             translators/jcc.cpp
             translators/mov.cpp
             translators/muldiv.cpp
@@ -32,4 +34,3 @@ target_include_directories(arancini-input-x86 PUBLIC ${INCLUDE_PATH})
 
 # Link to XED
 target_link_libraries(arancini-input-x86 PRIVATE xed)
-

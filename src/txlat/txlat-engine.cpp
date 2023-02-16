@@ -105,7 +105,6 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		}
 	}
 
-
 	// If the main output command-line option was not specified, then don't go any further.
 	if (!cmdline.count("output")) {
 		return;
@@ -178,17 +177,15 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		s << ".size __GPH,.-__GPH" << std::endl;
 	}
 
-    std::string arancini_runtime_lib_path = cmdline.at("runtime-lib-path").as<std::string>();
-    auto dir_start = arancini_runtime_lib_path.rfind("/");
-    std::string arancini_runtime_lib_dir = arancini_runtime_lib_path.substr(0, dir_start);
+	std::string arancini_runtime_lib_path = cmdline.at("runtime-lib-path").as<std::string>();
+	auto dir_start = arancini_runtime_lib_path.rfind("/");
+	std::string arancini_runtime_lib_dir = arancini_runtime_lib_path.substr(0, dir_start);
 
-    std::string debug_info = cmdline.count("debug-gen") ? " -g" : "";
+	std::string debug_info = cmdline.count("debug-gen") ? " -g" : "";
 
 	// Generate the final output binary by compiling everything together.
-	run_or_fail(
-        "g++ -o " + cmdline.at("output").as<std::string>() + " -no-pie " +
-        intermediate_file->name() + " " + phobjsrc->name() + " " + arancini_runtime_lib_path
-        + " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info);
+	run_or_fail("g++ -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + " " + phobjsrc->name() + " "
+		+ arancini_runtime_lib_path + " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info);
 }
 
 /*
@@ -197,7 +194,8 @@ x86 symbol sections to the Arancini IR.
 */
 std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arch &ia, elf_reader &reader, const symbol &sym)
 {
-	std::cerr << "translating symbol " << sym.name() << ", value=" << std::hex << sym.value() << ", size=" << sym.size() << ", section=" << sym.section_index() << std::endl;
+	std::cerr << "translating symbol " << sym.name() << ", value=" << std::hex << sym.value() << ", size=" << sym.size() << ", section=" << sym.section_index()
+			  << std::endl;
 
 	auto section = reader.get_section(sym.section_index());
 	if (!section) {
@@ -208,7 +206,7 @@ std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arc
 
 	const void *symbol_data = (const void *)((uintptr_t)section->data() + symbol_offset_in_section);
 
-	default_ir_builder irb(true);
+	default_ir_builder irb(ia.get_internal_function_resolver(), true);
 
 	auto start = std::chrono::high_resolution_clock::now();
 	ia.translate_chunk(irb, sym.value(), symbol_data, sym.size(), false);

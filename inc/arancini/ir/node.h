@@ -35,7 +35,8 @@ enum class node_kinds {
 	vector_extract,
 	vector_insert,
 	read_local,
-	write_local
+	write_local,
+	internal_call
 };
 
 class node {
@@ -957,5 +958,45 @@ public:
 private:
 	const local_var &lvar_;
 	port &val_;
+};
+
+class internal_function {
+public:
+	internal_function(const std::string &name, const function_type &signature)
+		: name_(name)
+		, sig_(signature)
+	{
+	}
+
+	const std::string &name() const { return name_; }
+
+	const function_type &signature() const { return sig_; }
+
+private:
+	std::string name_;
+	function_type sig_;
+};
+
+class internal_call_node : public action_node {
+public:
+	internal_call_node(const internal_function &fn, const std::vector<port *> &args)
+		: action_node(node_kinds::internal_call)
+		, fn_(fn)
+		, args_(args)
+	{
+	}
+
+	const internal_function &fn() const { return fn_; }
+	const std::vector<port *> &args() const { return args_; }
+
+	virtual void accept(visitor &v) override
+	{
+		action_node::accept(v);
+		v.visit_internal_call_node(*this);
+	}
+
+private:
+	const internal_function &fn_;
+	std::vector<port *> args_;
 };
 } // namespace arancini::ir

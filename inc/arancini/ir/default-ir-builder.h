@@ -7,11 +7,13 @@
 namespace arancini::ir {
 class chunk;
 class packet;
+class internal_function_resolver;
 
 class default_ir_builder : public ir_builder {
 public:
-	default_ir_builder(bool debug = false)
-		: chunk_complete_(false)
+	default_ir_builder(internal_function_resolver &ifr, bool debug = false)
+		: ir_builder(ifr)
+		, chunk_complete_(false)
 		, debug_(debug)
 	{
 	}

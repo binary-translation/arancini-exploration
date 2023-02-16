@@ -5,8 +5,17 @@
 namespace arancini::ir {
 enum packet_type { normal, end_of_block };
 
+class internal_function_resolver;
+
 class ir_builder {
 public:
+	ir_builder(internal_function_resolver &ifr)
+		: ifr_(ifr)
+	{
+	}
+
+	internal_function_resolver &ifr() const { return ifr_; }
+
 	virtual void begin_chunk() = 0;
 	virtual void end_chunk() = 0;
 
@@ -341,11 +350,15 @@ public:
 
 	virtual const local_var &alloc_local(const value_type &type) = 0;
 
+	action_node *insert_internal_call(const internal_function &fn, const std::vector<port *> &args) { return create_and_insert<internal_call_node>(fn, args); }
+
 protected:
 	virtual void insert_action(action_node *a) = 0;
 	virtual void process_node(node *) {};
 
 private:
+	internal_function_resolver &ifr_;
+
 	template <class T, typename... Args> T *create_and_insert(Args &&...args) { return insert(new T(std::forward<Args>(args)...)); }
 
 	template <class T> T *insert(T *n)

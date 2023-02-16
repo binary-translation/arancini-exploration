@@ -35,19 +35,19 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_MOVD:
 	case XED_ICLASS_MOVSX:
 	case XED_ICLASS_MOVSXD:
-  case XED_ICLASS_MOVSD:
-  case XED_ICLASS_MOVSD_XMM:
-  case XED_ICLASS_MOVSQ:
-  case XED_ICLASS_MOVZX:
-  case XED_ICLASS_MOVHPS:
-  case XED_ICLASS_MOVUPS:
-  case XED_ICLASS_MOVAPS:
-  case XED_ICLASS_MOVDQA:
-  case XED_ICLASS_MOVAPD:
-  case XED_ICLASS_MOVLPD:
-  case XED_ICLASS_MOVHPD:
-  case XED_ICLASS_MOVSS:
-  case XED_ICLASS_MOVDQU:
+	case XED_ICLASS_MOVSD:
+	case XED_ICLASS_MOVSD_XMM:
+	case XED_ICLASS_MOVSQ:
+	case XED_ICLASS_MOVZX:
+	case XED_ICLASS_MOVHPS:
+	case XED_ICLASS_MOVUPS:
+	case XED_ICLASS_MOVAPS:
+	case XED_ICLASS_MOVDQA:
+	case XED_ICLASS_MOVAPD:
+	case XED_ICLASS_MOVLPD:
+	case XED_ICLASS_MOVHPD:
+	case XED_ICLASS_MOVSS:
+	case XED_ICLASS_MOVDQU:
 	case XED_ICLASS_CQO:
 	case XED_ICLASS_CWD:
 	case XED_ICLASS_CDQ:
@@ -113,45 +113,45 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_CPUID:
 	case XED_ICLASS_SYSCALL: // TODO support
 	case XED_ICLASS_PREFETCHNTA:
-  case XED_ICLASS_UD0: // TODO support
-  case XED_ICLASS_UD1: // TODO support
-  case XED_ICLASS_UD2: // TODO support
-  case XED_ICLASS_FLD: // TODO support
-  case XED_ICLASS_FST: // TODO support
-  case XED_ICLASS_FSTP: // TODO support
-  case XED_ICLASS_FNSTENV: // TODO support
-  case XED_ICLASS_FLDENV: // TODO support
-  case XED_ICLASS_FWAIT: // TODO support
-	  return std::make_unique<nop_translator>(builder);
+	case XED_ICLASS_UD0: // TODO support
+	case XED_ICLASS_UD1: // TODO support
+	case XED_ICLASS_UD2: // TODO support
+	case XED_ICLASS_FLD: // TODO support
+	case XED_ICLASS_FST: // TODO support
+	case XED_ICLASS_FSTP: // TODO support
+	case XED_ICLASS_FNSTENV: // TODO support
+	case XED_ICLASS_FLDENV: // TODO support
+	case XED_ICLASS_FWAIT: // TODO support
+		return std::make_unique<nop_translator>(builder);
 
-  case XED_ICLASS_XOR:
-  case XED_ICLASS_PXOR:
-  case XED_ICLASS_AND:
-  case XED_ICLASS_PAND:
-  case XED_ICLASS_OR:
-  case XED_ICLASS_POR:
-  case XED_ICLASS_ADD:
-  case XED_ICLASS_ADDSD:
-  case XED_ICLASS_ADC:
-  case XED_ICLASS_SUB:
-  case XED_ICLASS_SBB:
-  case XED_ICLASS_CMP:
-  case XED_ICLASS_TEST:
-  case XED_ICLASS_XADD:
-  case XED_ICLASS_BT:
-  case XED_ICLASS_BTS:
-  case XED_ICLASS_BTR:
-  case XED_ICLASS_COMISS:
-  // SSE2 binary operations
-  case XED_ICLASS_PADDQ:
-  case XED_ICLASS_PADDD:
-  case XED_ICLASS_PADDW:
-  case XED_ICLASS_PADDB:
-  case XED_ICLASS_PSUBQ:
-  case XED_ICLASS_PSUBD:
-  case XED_ICLASS_PSUBW:
-  case XED_ICLASS_PSUBB:
-  case XED_ICLASS_PCMPEQB:
+	case XED_ICLASS_XOR:
+	case XED_ICLASS_PXOR:
+	case XED_ICLASS_AND:
+	case XED_ICLASS_PAND:
+	case XED_ICLASS_OR:
+	case XED_ICLASS_POR:
+	case XED_ICLASS_ADD:
+	case XED_ICLASS_ADDSD:
+	case XED_ICLASS_ADC:
+	case XED_ICLASS_SUB:
+	case XED_ICLASS_SBB:
+	case XED_ICLASS_CMP:
+	case XED_ICLASS_TEST:
+	case XED_ICLASS_XADD:
+	case XED_ICLASS_BT:
+	case XED_ICLASS_BTS:
+	case XED_ICLASS_BTR:
+	case XED_ICLASS_COMISS:
+	// SSE2 binary operations
+	case XED_ICLASS_PADDQ:
+	case XED_ICLASS_PADDD:
+	case XED_ICLASS_PADDW:
+	case XED_ICLASS_PADDB:
+	case XED_ICLASS_PSUBQ:
+	case XED_ICLASS_PSUBD:
+	case XED_ICLASS_PSUBW:
+	case XED_ICLASS_PSUBB:
+	case XED_ICLASS_PCMPEQB:
 		return std::make_unique<binop_translator>(builder);
 
 	case XED_ICLASS_PUSH:
@@ -177,8 +177,8 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 
 	case XED_ICLASS_NOT:
 	case XED_ICLASS_NEG:
-  case XED_ICLASS_BSWAP:
-  case XED_ICLASS_PMOVMSKB:
+	case XED_ICLASS_BSWAP:
+	case XED_ICLASS_PMOVMSKB:
 		return std::make_unique<unop_translator>(builder);
 
 	case XED_ICLASS_MUL:
@@ -186,7 +186,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_DIV:
 	case XED_ICLASS_IDIV:
 	case XED_ICLASS_MULSD:
-  case XED_ICLASS_DIVSS:
+	case XED_ICLASS_DIVSS:
 		return std::make_unique<muldiv_translator>(builder);
 
 	case XED_ICLASS_REPE_CMPSB:
@@ -215,29 +215,33 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 		return std::make_unique<fpvec_translator>(builder);
 
 	case XED_ICLASS_PSHUFD:
-  case XED_ICLASS_SHUFPD:
+	case XED_ICLASS_SHUFPD:
 		return std::make_unique<shuffle_translator>(builder);
 
 	case XED_ICLASS_XADD_LOCK:
 	case XED_ICLASS_XCHG:
-  case XED_ICLASS_CMPXCHG_LOCK:
-  case XED_ICLASS_ADD_LOCK:
-  case XED_ICLASS_AND_LOCK:
-  case XED_ICLASS_OR_LOCK:
-  case XED_ICLASS_DEC_LOCK:
+	case XED_ICLASS_CMPXCHG_LOCK:
+	case XED_ICLASS_ADD_LOCK:
+	case XED_ICLASS_AND_LOCK:
+	case XED_ICLASS_OR_LOCK:
+	case XED_ICLASS_DEC_LOCK:
 		return std::make_unique<atomic_translator>(builder);
 
-  case XED_ICLASS_XGETBV:
-  case XED_ICLASS_STD:
-  case XED_ICLASS_CLD:
-  case XED_ICLASS_STC:
-  case XED_ICLASS_CLC:
+	case XED_ICLASS_XGETBV:
+	case XED_ICLASS_STD:
+	case XED_ICLASS_CLD:
+	case XED_ICLASS_STC:
+	case XED_ICLASS_CLC:
 		return std::make_unique<control_translator>(builder);
 
-  case XED_ICLASS_FNSTCW:
-    return std::make_unique<fpu_translator>(builder);
+	case XED_ICLASS_FNSTCW:
+		return std::make_unique<fpu_translator>(builder);
 
-  default:
+	case XED_ICLASS_INT:
+	case XED_ICLASS_INT3:
+		return std::make_unique<interrupt_translator>(builder);
+
+	default:
 		return nullptr;
 	}
 }
@@ -257,7 +261,7 @@ static translation_result translate_instruction(ir_builder &builder, size_t addr
 	if (t) {
 		return t->translate(address, xedd, disasm);
 	} else {
-    std::cerr << "Could not find a translator for: " << disasm << std::endl;
+		std::cerr << "Could not find a translator for: " << disasm << std::endl;
 		return translation_result::fail;
 	}
 }

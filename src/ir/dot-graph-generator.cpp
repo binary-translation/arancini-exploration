@@ -493,3 +493,18 @@ void dot_graph_generator::visit_write_local_node(write_local_node &n)
 
 	default_visitor::visit_write_local_node(n);
 }
+
+void dot_graph_generator::visit_internal_call_node(internal_call_node &n)
+{
+	std::stringstream s;
+
+	s << "i-call " << n.fn().name();
+
+	add_node(&n, s.str());
+
+	for (const auto *p : n.args()) {
+		add_port_edge(p, &n);
+	}
+
+	default_visitor::visit_internal_call_node(n);
+}

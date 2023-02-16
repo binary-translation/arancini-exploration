@@ -127,6 +127,13 @@ public:
 	virtual void visit_read_local_node(read_local_node &) override { }
 	virtual void visit_write_local_node(write_local_node &n) override { n.write_value().accept(*this); }
 
+	virtual void visit_internal_call_node(internal_call_node &n) override
+	{
+		for (auto *p : n.args()) {
+			p->accept(*this);
+		}
+	}
+
 	virtual void visit_port(port &p) override
 	{
 		if (seen_.count(p.owner())) {

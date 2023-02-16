@@ -48,7 +48,8 @@ public:
 
 	bool equivalent_to(const value_type &o) const { return element_width_ == o.element_width_ && tc_ == o.tc_ && nr_elements_ == o.nr_elements_; }
 
-	value_type get_opposite_signedness() const {
+	value_type get_opposite_signedness() const
+	{
 		value_type_class dst_class;
 
 		if (tc_ == value_type_class::signed_integer)
@@ -56,21 +57,23 @@ public:
 		else if (tc_ == value_type_class::unsigned_integer)
 			dst_class = value_type_class::signed_integer;
 		else
-			throw std::logic_error(__FILE__":" + std::to_string(__LINE__) + ": Initial type must be an integer");
+			throw std::logic_error(__FILE__ ":" + std::to_string(__LINE__) + ": Initial type must be an integer");
 
 		return value_type(dst_class, element_width_, nr_elements_);
 	}
 
-	value_type get_signed_type() const {
+	value_type get_signed_type() const
+	{
 		if (tc_ == value_type_class::signed_integer || tc_ == value_type_class::unsigned_integer)
 			return value_type(value_type_class::signed_integer, element_width_, nr_elements_);
-		throw std::logic_error(__FILE__":" + std::to_string(__LINE__) + ": Initial type must be an integer");
+		throw std::logic_error(__FILE__ ":" + std::to_string(__LINE__) + ": Initial type must be an integer");
 	}
 
-	value_type get_unsigned_type() const {
+	value_type get_unsigned_type() const
+	{
 		if (tc_ == value_type_class::signed_integer || tc_ == value_type_class::unsigned_integer)
 			return value_type(value_type_class::unsigned_integer, element_width_, nr_elements_);
-		throw std::logic_error(__FILE__":" + std::to_string(__LINE__) + ": Initial type must be an integer");
+		throw std::logic_error(__FILE__ ":" + std::to_string(__LINE__) + ": Initial type must be an integer");
 	}
 
 	std::string to_string() const
@@ -109,5 +112,21 @@ private:
 	value_type_class tc_;
 	int element_width_;
 	int nr_elements_;
+};
+
+class function_type {
+public:
+	function_type(const value_type &return_type, const std::vector<value_type> &parameter_types)
+		: return_type_(return_type)
+		, param_types_(parameter_types)
+	{
+	}
+
+	const value_type &return_type() const { return return_type_; }
+	const std::vector<value_type> &parameter_types() const { return param_types_; }
+
+private:
+	value_type return_type_;
+	std::vector<value_type> param_types_;
 };
 } // namespace arancini::ir

@@ -136,4 +136,5 @@ namespace arancini::input::x86::translators {
   DEFINE_TRANSLATOR(atomic)
   DEFINE_TRANSLATOR(fpu)
   DEFINE_TRANSLATOR(control)
+  DEFINE_TRANSLATOR(interrupt)
 } // namespace arancini::input::x86::translators
