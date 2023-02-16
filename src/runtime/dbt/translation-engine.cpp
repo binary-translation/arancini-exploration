@@ -64,6 +64,14 @@ public:
 		return new translation(writer_.ptr(), writer_.size());
 	}
 
+	virtual local_var &alloc_local(const value_type &type) override
+	{
+		auto lcl = new local_var(type);
+		locals_.push_back(lcl);
+
+		return *lcl;
+	}
+
 protected:
 	virtual void insert_action(action_node *a) override
 	{
@@ -78,6 +86,7 @@ private:
 	std::shared_ptr<translation_context> tctx_;
 	machine_code_writer writer_;
 	bool is_eob_;
+	std::vector<local_var *> locals_;
 };
 
 translation *translation_engine::translate(unsigned long pc)

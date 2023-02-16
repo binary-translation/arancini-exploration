@@ -19,6 +19,14 @@ public:
 	{
 	}
 
+	local_var &alloc_local(const value_type &type)
+	{
+		auto lcl = new local_var(type);
+		locals_.push_back(lcl);
+
+		return *lcl;
+	}
+
 	void append_action(action_node *node) { actions_.push_back(node); }
 
 	const std::vector<action_node *> &actions() const { return actions_; }
@@ -43,6 +51,7 @@ public:
 private:
 	off_t address_;
 	std::string disasm_;
+	std::vector<local_var *> locals_;
 	std::vector<action_node *> actions_;
 };
 } // namespace arancini::ir

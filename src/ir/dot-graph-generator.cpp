@@ -371,9 +371,9 @@ void dot_graph_generator::visit_binary_atomic_node(binary_atomic_node &n)
 	case binary_atomic_op::bts:
 		s << "atomic bts";
 		break;
-  case binary_atomic_op::xchg:
-    s << "atomic xchg";
-    break;
+	case binary_atomic_op::xchg:
+		s << "atomic xchg";
+		break;
 	default:
 		s << "unknown-atomic-binary";
 		break;
@@ -421,9 +421,9 @@ void dot_graph_generator::visit_ternary_atomic_node(ternary_atomic_node &n)
 
 void dot_graph_generator::visit_bit_extract_node(bit_extract_node &n)
 {
-  std::stringstream s;
+	std::stringstream s;
 
-  s << "bit-extract [" << n.from() + n.length() - 1 << ":" << n.from() << "]";
+	s << "bit-extract [" << n.from() + n.length() - 1 << ":" << n.from() << "]";
 
 	add_node(&n, s.str());
 	add_port_edge(&n.source_value(), &n);
@@ -433,10 +433,10 @@ void dot_graph_generator::visit_bit_extract_node(bit_extract_node &n)
 
 void dot_graph_generator::visit_bit_insert_node(bit_insert_node &n)
 {
-  std::stringstream s;
+	std::stringstream s;
 
-  s << "{{<dst>DST|<bits>BITS}|";
-  s << "bit-insert [" << n.to() + n.length() - 1 << ":" << n.to() << "]}";
+	s << "{{<dst>DST|<bits>BITS}|";
+	s << "bit-insert [" << n.to() + n.length() - 1 << ":" << n.to() << "]}";
 
 	add_node(&n, s.str());
 	add_port_edge(&n.source_value(), &n, "dst");
@@ -447,9 +447,9 @@ void dot_graph_generator::visit_bit_insert_node(bit_insert_node &n)
 
 void dot_graph_generator::visit_vector_extract_node(vector_extract_node &n)
 {
-  std::stringstream s;
+	std::stringstream s;
 
-  s << "vector-extract [" << n.index() << "]";
+	s << "vector-extract [" << n.index() << "]";
 
 	add_node(&n, s.str());
 	add_port_edge(&n.source_vector(), &n);
@@ -459,14 +459,37 @@ void dot_graph_generator::visit_vector_extract_node(vector_extract_node &n)
 
 void dot_graph_generator::visit_vector_insert_node(vector_insert_node &n)
 {
-  std::stringstream s;
+	std::stringstream s;
 
-  s << "{{<dst>DST|<elt>ELT}|";
-  s << "vector-insert [" << n.index() << "]}";
+	s << "{{<dst>DST|<elt>ELT}|";
+	s << "vector-insert [" << n.index() << "]}";
 
 	add_node(&n, s.str());
 	add_port_edge(&n.source_vector(), &n, "dst");
 	add_port_edge(&n.insert_value(), &n, "elt");
 
 	default_visitor::visit_vector_insert_node(n);
+}
+
+void dot_graph_generator::visit_read_local_node(read_local_node &n)
+{
+	std::stringstream s;
+
+	s << "read-local " << std::hex << (uintptr_t)&n.local();
+
+	add_node(&n, s.str());
+
+	default_visitor::visit_read_local_node(n);
+}
+
+void dot_graph_generator::visit_write_local_node(write_local_node &n)
+{
+	std::stringstream s;
+
+	s << "write-local " << std::hex << (uintptr_t)&n.local();
+
+	add_node(&n, s.str());
+	add_port_edge(&n.write_value(), &n);
+
+	default_visitor::visit_write_local_node(n);
 }

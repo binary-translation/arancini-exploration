@@ -26,9 +26,13 @@ void atomic_translator::do_translate()
     } else if (is_memory_operand(1)) {
       builder().insert_atomic_xchg(compute_address(1)->val(), read_operand(0)->val());
     } else {
-      // TODO fix with a temp register node
+      auto op0 = read_operand(0);
+
+      auto tmp = builder().alloc_local(op0->val().type());
+      builder().insert_write_local(tmp, op0->val());
+
       write_operand(0, read_operand(1)->val());
-      write_operand(1, read_operand(0)->val());
+      write_operand(1, builder().insert_read_local(tmp)->val());
     }
     break;
   }
