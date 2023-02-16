@@ -33,6 +33,8 @@ class vector_node;
 class vector_element_node;
 class vector_extract_node;
 class vector_insert_node;
+class read_local_node;
+class write_local_node;
 class port;
 
 class visitor {
@@ -71,6 +73,8 @@ public:
 	virtual void visit_vector_element_node(vector_element_node &n) = 0;
 	virtual void visit_vector_extract_node(vector_extract_node &n) = 0;
 	virtual void visit_vector_insert_node(vector_insert_node &n) = 0;
+	virtual void visit_read_local_node(read_local_node &n) = 0;
+	virtual void visit_write_local_node(write_local_node &n) = 0;
 
 	virtual void visit_port(port &p) = 0;
 

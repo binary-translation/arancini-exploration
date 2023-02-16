@@ -35,10 +35,7 @@ public:
 
 	virtual void visit_br_node(br_node &) override { }
 
-	virtual void visit_cond_br_node(cond_br_node &n) override
-	{
-		n.cond().accept(*this);
-	}
+	virtual void visit_cond_br_node(cond_br_node &n) override { n.cond().accept(*this); }
 
 	virtual void visit_read_pc_node(read_pc_node &) override { }
 
@@ -127,6 +124,9 @@ public:
 		n.insert_value().accept(*this);
 	}
 
+	virtual void visit_read_local_node(read_local_node &) override { }
+	virtual void visit_write_local_node(write_local_node &n) override { n.write_value().accept(*this); }
+
 	virtual void visit_port(port &p) override
 	{
 		if (seen_.count(p.owner())) {
@@ -137,10 +137,7 @@ public:
 		p.owner()->accept(*this);
 	}
 
-	virtual bool seen_node(node *n) override
-	{
-		return seen_.count(n) > 0;
-	}
+	virtual bool seen_node(node *n) override { return seen_.count(n) > 0; }
 
 private:
 	std::set<node *> seen_;
