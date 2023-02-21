@@ -238,12 +238,14 @@ void fpu_translator::do_translate()
 
   case XED_ICLASS_FXCH: {
     // xed encoding: fxch st(i) st(j)
-    // TODO fix with temp node
+    dump_xed_encoding();
     auto sti = read_operand(0);
     auto stj = read_operand(1);
+    auto tmp = builder().alloc_local(sti->val().type());
+    builder().insert_write_local(tmp, sti->val());
 
     write_operand(0, stj->val());
-    write_operand(1, sti->val());
+    write_operand(1, builder().insert_read_local(tmp)->val());
 
     // TODO set C1 flag to 0
     break;
