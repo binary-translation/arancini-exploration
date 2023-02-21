@@ -162,35 +162,43 @@ void binop_translator::do_translate()
   case XED_ICLASS_BSR:
   case XED_ICLASS_BSF: {
     auto src = read_operand(1);
+    auto type = src->val().type();
 
     // if src == 0
-    auto src_zero = builder().insert_cmpeq(src->val(), builder().insert_constant_i(src->val().type(), 0)->val());
+    auto src_zero = builder().insert_cmpeq(src->val(), builder().insert_constant_i(type, 0)->val());
     cond_br_node *br = (cond_br_node *)builder().insert_cond_br(src_zero->val(), nullptr);
 
     // then [src != 0]
     write_reg(reg_offsets::ZF, builder().insert_constant_i(value_type::u1(), 0)->val());
-    auto mask = builder().insert_constant_i(src->val().type(), 1);
-    value_node *idx;
+    auto mask = builder().alloc_local(type);
+    builder().insert_write_local(mask, builder().insert_constant_i(type, 1)->val()); // mask := 0x1
+    auto idx = builder().alloc_local(value_type::u64());
     if (inst_class == XED_ICLASS_BSR) {
-      mask = builder().insert_lsl(mask->val(), builder().insert_constant_i(mask->val().type(), mask->val().type().width())->val());
-      idx = builder().insert_constant_u64(mask->val().type().width() - 1);
+      auto mask_val = builder().insert_read_local(mask);
+      mask_val = builder().insert_lsl(mask_val->val(), builder().insert_constant_i(type, type.width() - 1)->val());
+      builder().insert_write_local(mask, mask_val->val()); // mask := mask << width - 1
+      builder().insert_write_local(idx, builder().insert_constant_u64(type.width() - 1)->val()); // idx = width - 1
     } else {
-      idx = builder().insert_constant_u64(0);
+      builder().insert_write_local(idx, builder().insert_constant_u64(0)->val()); // idx := 0
     }
     //   while mask & src == 0; do idx--; mask = mask >> 1; done
     auto while_loop = builder().insert_label("while");
 
     //       mask & src == 1  -> jump to endif
-    auto mask_and = builder().insert_and(mask->val(), src->val());
+    auto mask_val = builder().insert_read_local(mask);
+    auto mask_and = builder().insert_and(mask_val->val(), src->val());
     cond_br_node *fi_br = (cond_br_node *)builder().insert_cond_br(mask_and->val(), nullptr);
     //       idx--/++; mask = mask >>/<< 1
+    auto idx_val = builder().insert_read_local(idx);
     if (inst_class == XED_ICLASS_BSR) {
-      idx = builder().insert_sub(idx->val(), builder().insert_constant_u64(1)->val());
-      mask = builder().insert_lsr(mask->val(), builder().insert_constant_i(mask->val().type(), 1)->val());
+      idx_val = builder().insert_sub(idx_val->val(), builder().insert_constant_u64(1)->val());
+      mask_val = builder().insert_lsr(mask_val->val(), builder().insert_constant_i(type, 1)->val());
     } else {
-      idx = builder().insert_add(idx->val(), builder().insert_constant_u64(1)->val());
-      mask = builder().insert_lsl(mask->val(), builder().insert_constant_i(mask->val().type(), 1)->val());
+      idx_val = builder().insert_add(idx_val->val(), builder().insert_constant_u64(1)->val());
+      mask_val = builder().insert_lsl(mask_val->val(), builder().insert_constant_i(type, 1)->val());
     }
+    builder().insert_write_local(idx, idx_val->val());
+    builder().insert_write_local(mask, mask_val->val());
     //       jump back to loop test
     builder().insert_br(while_loop);
 
@@ -204,7 +212,7 @@ void binop_translator::do_translate()
     fi_br->add_br_target(fi_label);
 
     // write result
-    write_operand(0, idx->val());
+    write_operand(0, builder().insert_read_local(idx)->val());
 
     break;
   }
