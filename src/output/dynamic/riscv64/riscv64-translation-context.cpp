@@ -92,10 +92,106 @@ riscv64_translation_context::materialise(const node *n) {
 		return materialise_cast(*reinterpret_cast<const cast_node *>(n));
 	case node_kinds::binary_atomic:
 		return materialise_binary_atomic(*reinterpret_cast<const binary_atomic_node *>(n));
+	case node_kinds::ternary_atomic:
+		return materialise_ternary_atomic(*reinterpret_cast<const ternary_atomic_node *>(n));
 	default:
 		throw std::runtime_error("unsupported node");
 	}
 }
+Register riscv64_translation_context::materialise_ternary_atomic(const ternary_atomic_node &n)
+{
+
+	Register dstAddr = std::get<Register>(materialise(n.lhs().owner()));
+	Register acc = std::get<Register>(materialise(n.rhs().owner()));
+	Register src = std::get<Register>(materialise(n.top().owner()));
+	Register out_reg = T0;
+	Label fail;
+	Label retry;
+	Label end;
+	// FIXME Correct memory ordering?
+	switch (n.op()) {
+
+	case ternary_atomic_op::cmpxchg:
+		switch (n.rhs().type().width()) {
+		case 64:
+			assembler_.Bind(&retry);
+
+			assembler_.lrd(out_reg, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.bne(out_reg, acc, &fail, Assembler::kNearJump);
+			assembler_.scd(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.bnez(out_reg, &retry, Assembler::kNearJump);
+
+			// Flags from comparison matching (i.e subtraction of equal values)
+			assembler_.li(CF, 0);
+			assembler_.li(OF, 0);
+			assembler_.li(SF, 0);
+			assembler_.li(ZF, 1);
+
+			assembler_.j(&end, Assembler::kNearJump);
+
+			assembler_.Bind(&fail);
+
+			assembler_.sub(SF, acc, out_reg);
+
+			assembler_.sgtz(CF, out_reg);
+			assembler_.slt(OF, SF, acc);
+			assembler_.xor_(OF, OF, CF); // OF
+
+			assembler_.sltu(CF, acc, SF); // CF
+
+			assembler_.li(ZF, 0); // ZF
+
+			assembler_.sltz(SF, SF); // SF
+
+			//Write back updated acc value
+			assembler_.sd(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
+
+			assembler_.Bind(&end);
+			break;
+		case 32:
+			assembler_.Bind(&retry);
+
+			assembler_.lrw(out_reg, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.bne(out_reg, acc, &fail, Assembler::kNearJump);
+			assembler_.scw(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.bnez(out_reg, &retry, Assembler::kNearJump);
+
+			// Flags from comparison matching (i.e subtraction of equal values)
+			assembler_.li(CF, 0);
+			assembler_.li(OF, 0);
+			assembler_.li(SF, 0);
+			assembler_.li(ZF, 1);
+
+			assembler_.j(&end, Assembler::kNearJump);
+
+			assembler_.Bind(&fail);
+
+			assembler_.subw(SF, acc, out_reg);
+
+			assembler_.sgtz(CF, out_reg);
+			assembler_.slt(OF, SF, acc);
+			assembler_.xor_(OF, OF, CF); // OF
+
+			assembler_.sltu(CF, acc, SF); // CF
+
+			assembler_.li(ZF, 0); // ZF
+
+			assembler_.sltz(SF, SF); // SF
+
+			//Write back updated acc value
+			assembler_.sw(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
+
+			assembler_.Bind(&end);
+			break;
+		default:
+			throw std::runtime_error("unsupported cmpxchg width");
+		}
+		return out_reg;
+	default:
+		throw std::runtime_error("unsupported ternary atomic operation");
+	}
+}
+
 std::variant<Register, std::unique_ptr<Label>,std::monostate> riscv64_translation_context::materialise_binary_atomic(const binary_atomic_node &n)
 {
 	Register dstAddr = std::get<Register>(materialise(n.lhs().owner()));
