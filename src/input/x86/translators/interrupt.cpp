@@ -26,6 +26,14 @@ void interrupt_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_UD0:
+  case XED_ICLASS_UD1:
+  case XED_ICLASS_UD2: {
+    // Raises an 'Invalid Opcode' exception (exception number: 6)
+    builder().insert_internal_call(builder().ifr().resolve("handle_int"), { &builder().insert_constant_u32(6)->val() });
+    break;
+  }
+
 	default:
 		throw std::runtime_error("unsupported interrupt operation");
 	}

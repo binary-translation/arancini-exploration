@@ -113,9 +113,6 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_CPUID:
 	case XED_ICLASS_PREFETCHNTA:
   case XED_ICLASS_PAUSE:
-  case XED_ICLASS_UD0: // TODO support
-  case XED_ICLASS_UD1: // TODO support
-  case XED_ICLASS_UD2: // TODO support
   // case XED_ICLASS_FNSTENV: // TODO support
   // case XED_ICLASS_FLDENV: // TODO support
   // case XED_ICLASS_FWAIT: // TODO support
@@ -277,6 +274,9 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_INT:
 	case XED_ICLASS_INT3:
 	case XED_ICLASS_SYSCALL:
+  case XED_ICLASS_UD0:
+  case XED_ICLASS_UD1:
+  case XED_ICLASS_UD2:
 		return std::make_unique<interrupt_translator>(builder);
 
 	default:
