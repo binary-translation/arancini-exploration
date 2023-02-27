@@ -43,6 +43,7 @@ namespace arancini::input::x86::translators {
     value_node *read_operand(int opnum);
     ssize_t get_operand_width(int opnum);
     bool is_memory_operand(int opnum);
+    bool is_immediate_operand(int opnum);
     value_node *compute_address(int mem_idx);
     /// @brief Generates nodes to compute the address of an element on the FPU stack
     /// @param stack_idx: the index for which the address is queried, starting from top of stack
