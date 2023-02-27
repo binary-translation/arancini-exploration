@@ -238,7 +238,6 @@ void fpu_translator::do_translate()
 
   case XED_ICLASS_FXCH: {
     // xed encoding: fxch st(i) st(j)
-    dump_xed_encoding();
     auto sti = read_operand(0);
     auto stj = read_operand(1);
     auto tmp = builder().alloc_local(sti->val().type());
