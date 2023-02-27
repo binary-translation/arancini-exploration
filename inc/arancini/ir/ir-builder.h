@@ -46,10 +46,20 @@ public:
 	/// @return A constant node.
 	value_node *insert_constant_u8(unsigned char cv) { return create_and_insert<constant_node>(value_type::u8(), (unsigned long)cv); }
 
+	/// @brief Returns a node representing an 8-bit signed integer constant.
+	/// @param cv The value of the constant.
+	/// @return A constant node.
+	value_node *insert_constant_s8(signed int cv) { return create_and_insert<constant_node>(value_type::s8(), (unsigned long)cv); }
+
 	/// @brief Returns a node representing an 16-bit unsigned integer constant.
 	/// @param cv The value of the constant.
 	/// @return A constant node.
 	value_node *insert_constant_u16(unsigned short cv) { return create_and_insert<constant_node>(value_type::u16(), (unsigned long)cv); }
+
+	/// @brief Returns a node representing an 16-bit signed integer constant.
+	/// @param cv The value of the constant.
+	/// @return A constant node.
+	value_node *insert_constant_s16(signed int cv) { return create_and_insert<constant_node>(value_type::s16(), (unsigned long)cv); }
 
 	/// @brief Returns a node representing an 32-bit unsigned integer constant.
 	/// @param cv The value of the constant.

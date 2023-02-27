@@ -233,16 +233,16 @@ value_node *translator::read_operand(int opnum)
 	case XED_OPERAND_IMM0: {
 		switch (xed_decoded_inst_get_immediate_width_bits(xed_inst())) {
 		case 8:
-			return builder_.insert_constant_s32(xed_decoded_inst_get_signed_immediate(xed_inst()));
+			return builder_.insert_constant_s8(xed_decoded_inst_get_signed_immediate(xed_inst()));
 
 		case 16:
-			return builder_.insert_constant_s32(xed_decoded_inst_get_signed_immediate(xed_inst()));
+			return builder_.insert_constant_s16(xed_decoded_inst_get_signed_immediate(xed_inst()));
 
 		case 32:
 			return builder_.insert_constant_s32(xed_decoded_inst_get_signed_immediate(xed_inst()));
 
 		case 64:
-			return builder_.insert_constant_s32(xed_decoded_inst_get_signed_immediate(xed_inst()));
+			return builder_.insert_constant_s64(xed_decoded_inst_get_signed_immediate(xed_inst()));
 
 		default:
 			throw std::runtime_error("unsupported immediate width");
@@ -289,13 +289,16 @@ ssize_t translator::get_operand_width(int opnum)
 		auto reg = xed_decoded_inst_get_reg(xed_inst(), opname);
 		return xed_get_register_width_bits(reg);
 	}
-	case XED_OPERAND_IMM0: {
+
+	case XED_OPERAND_IMM0:
 		return xed_decoded_inst_get_immediate_width_bits(xed_inst());
-	}
-	case XED_OPERAND_MEM0: {
+
+	case XED_OPERAND_MEM0:
 		return 8 * xed_decoded_inst_get_memory_operand_length(xed_inst(), 0);
-	}
-	default:
+	case XED_OPERAND_MEM1:
+		return 8 * xed_decoded_inst_get_memory_operand_length(xed_inst(), 1);
+
+  default:
 		throw std::runtime_error("unsupported operand width query");
 	}
 }
@@ -306,7 +309,16 @@ bool translator::is_memory_operand(int opnum)
 	auto operand = xed_inst_operand(insn, opnum);
 	auto opname = xed_operand_name(operand);
 
-	return (opname == XED_OPERAND_MEM0);
+	return (opname == XED_OPERAND_MEM0 || opname == XED_OPERAND_MEM1 );
+}
+
+bool translator::is_immediate_operand(int opnum)
+{
+	const xed_inst_t *insn = xed_decoded_inst_inst(xed_inst());
+	auto operand = xed_inst_operand(insn, opnum);
+	auto opname = xed_operand_name(operand);
+
+	return (opname == XED_OPERAND_IMM0 || opname == XED_OPERAND_IMM1 );
 }
 
 value_node *translator::compute_address(int mem_idx)
