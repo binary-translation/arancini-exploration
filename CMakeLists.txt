@@ -41,6 +41,8 @@ if (NOT XED_FOUND)
     get_xed()
 endif ()
 
+include(cmake/fadec.cmake)
+
 # Build core
 add_subdirectory(src/core)
 add_subdirectory(src/ir)
@@ -73,4 +75,3 @@ add_subdirectory(src/txlat)
 if (BUILD_TESTS)
     add_subdirectory(test)
 endif ()
-
