@@ -27,6 +27,7 @@ private:
 	std::set<ir::node *> materialised_nodes_;
 	std::map<ir::port *, int> port_to_vreg_;
 	int next_vreg_;
+	off_t this_pc_;
 
 	void do_register_allocation();
 
@@ -41,7 +42,7 @@ private:
 
 	// operand operand_for_port(ir::port &p);
 	// operand vreg_operand_for_port(ir::port &p);
-	x86_register vreg_operand_for_port(ir::port &p);
+	x86_operand vreg_operand_for_port(ir::port &p);
 	int vreg_for_port(ir::port &p) const { return port_to_vreg_.at(&p); }
 
 	void materialise(ir::node *n);

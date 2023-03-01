@@ -2,6 +2,7 @@
 
 #include <arancini/output/dynamic/machine-code-allocator.h>
 #include <iostream>
+#include <cstring>
 
 namespace arancini::output::dynamic {
 class machine_code_writer {
@@ -14,7 +15,7 @@ public:
 	{
 	}
 
-	template <typename T> void emit(T v)
+	/*template <typename T> void emit(T v)
 	{
 		ensure_capacity(sizeof(T));
 		((T *)code_ptr_)[code_size_] = v;
@@ -24,7 +25,15 @@ public:
 	void emit8(unsigned char c) { emit<decltype(c)>(c); }
 	void emit16(unsigned short c) { emit<decltype(c)>(c); }
 	void emit32(unsigned int c) { emit<decltype(c)>(c); }
-	void emit64(unsigned long c) { emit<decltype(c)>(c); }
+	void emit64(unsigned long c) { emit<decltype(c)>(c); }*/
+
+	void copy_in(const unsigned char *buffer, size_t size)
+	{
+		ensure_capacity(size);
+		std::memcpy((unsigned char *)code_ptr_ + code_size_, buffer, size);
+
+		code_size_ += size;
+	}
 
 	void *ptr() const { return code_ptr_; }
 	size_t size() const { return code_size_; }

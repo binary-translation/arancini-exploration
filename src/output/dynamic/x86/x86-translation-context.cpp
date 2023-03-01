@@ -10,10 +10,15 @@ extern "C" {
 using namespace arancini::output::dynamic::x86;
 using namespace arancini::ir;
 
-void x86_translation_context::begin_block() { std::cerr << "INPUT ASSEMBLY:" << std::endl; }
+void x86_translation_context::begin_block()
+{
+	std::cerr << "INPUT ASSEMBLY:" << std::endl;
+	// builder_.int3();
+}
 
 void x86_translation_context::begin_instruction(off_t address, const std::string &disasm)
 {
+	this_pc_ = address;
 	std::cerr << "  " << std::hex << address << ": " << disasm << std::endl;
 }
 
@@ -21,7 +26,12 @@ void x86_translation_context::end_instruction() { }
 
 void x86_translation_context::end_block()
 {
+	// builder_.dump(std::cerr);
+
 	do_register_allocation();
+	builder_.xor_(
+		x86_operand(x86_physical_register_operand(x86_register_names::AX), 32), x86_operand(x86_physical_register_operand(x86_register_names::AX), 32));
+	builder_.ret();
 	builder_.emit(writer());
 
 	std::cerr << "OUTPUT ASSEMBLY:" << std::endl;
@@ -97,25 +107,42 @@ void x86_translation_context::materialise(node *n)
 	materialised_nodes_.insert(n);
 }
 
-static x86_memory guestreg_memory_operand(int width, int regoff) { return x86_memory(width, x86_register::preg(x86_register::rbp), regoff); }
+static x86_operand virtreg_operand(unsigned int index, int width) { return x86_operand(x86_virtual_register_operand(index), width == 1 ? 8 : width); }
 
-x86_register x86_translation_context::vreg_operand_for_port(port &p)
+static x86_operand imm_operand(unsigned long value, int width) { return x86_operand(x86_immediate_operand(value), width == 1 ? 8 : width); }
+
+static x86_operand guestreg_memory_operand(int width, int regoff)
 {
+	return x86_operand(x86_memory_operand(x86_register_names::BP, regoff), width == 1 ? 8 : width);
+}
+
+x86_operand x86_translation_context::vreg_operand_for_port(port &p)
+{
+	if (p.owner()->kind() == node_kinds::read_pc) {
+		return x86_operand(x86_immediate_operand(this_pc_), 64);
+	}
+
 	materialise(p.owner());
-	return x86_register::vreg(vreg_for_port(p), p.type().element_width());
+	return virtreg_operand(vreg_for_port(p), p.type().element_width());
 }
 
 void x86_translation_context::materialise_write_reg(write_reg_node *n)
 {
-	builder_.mov(guestreg_memory_operand(n->value().type().element_width(), n->regoff()), vreg_operand_for_port(n->value()));
+	if (n->value().owner()->kind() == node_kinds::constant) {
+		auto cv = (constant_node *)n->value().owner();
+		builder_.mov(
+			guestreg_memory_operand(n->value().type().element_width(), n->regoff()), imm_operand(cv->const_val_i(), n->value().type().element_width()));
+	} else {
+		builder_.mov(guestreg_memory_operand(n->value().type().element_width(), n->regoff()), vreg_operand_for_port(n->value()));
+	}
 }
 
 void x86_translation_context::materialise_read_reg(read_reg_node *n)
 {
 	int value_vreg = alloc_vreg_for_port(n->val());
-	int w = n->val().type().element_width();
+	int w = n->val().type().element_width() == 1 ? 8 : n->val().type().element_width();
 
-	builder_.mov(x86_register::vreg(value_vreg, w), guestreg_memory_operand(w, n->regoff()));
+	builder_.mov(virtreg_operand(value_vreg, w), guestreg_memory_operand(w, n->regoff()));
 }
 
 void x86_translation_context::materialise_binary_arith(binary_arith_node *n)
@@ -128,33 +155,33 @@ void x86_translation_context::materialise_binary_arith(binary_arith_node *n)
 
 	int w = n->val().type().element_width();
 
-	builder_.mov(x86_register::vreg(val_vreg, w), vreg_operand_for_port(n->rhs()));
+	builder_.mov(virtreg_operand(val_vreg, w), vreg_operand_for_port(n->lhs()));
 
 	switch (n->op()) {
 	case binary_arith_op::bxor:
-		builder_.xor_(x86_register::vreg(val_vreg, w), vreg_operand_for_port(n->lhs()));
+		builder_.xor_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n->rhs()));
 		break;
 
 	case binary_arith_op::band:
-		builder_.and_(x86_register::vreg(val_vreg, w), vreg_operand_for_port(n->lhs()));
+		builder_.and_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n->rhs()));
 		break;
 
 	case binary_arith_op::add:
-		builder_.add(x86_register::vreg(val_vreg, w), vreg_operand_for_port(n->lhs()));
+		builder_.add(virtreg_operand(val_vreg, w), vreg_operand_for_port(n->rhs()));
 		break;
 
 	case binary_arith_op::sub:
-		builder_.sub(x86_register::vreg(val_vreg, w), vreg_operand_for_port(n->lhs()));
+		builder_.sub(virtreg_operand(val_vreg, w), vreg_operand_for_port(n->rhs()));
 		break;
 
 	default:
 		throw std::runtime_error("unsupported binary arithmetic operation");
 	}
 
-	builder_.setz(x86_register::vreg(z_vreg, 1));
-	builder_.seto(x86_register::vreg(v_vreg, 1));
-	builder_.setc(x86_register::vreg(c_vreg, 1));
-	builder_.sets(x86_register::vreg(n_vreg, 1));
+	builder_.setz(virtreg_operand(z_vreg, 8));
+	builder_.seto(virtreg_operand(v_vreg, 8));
+	builder_.setc(virtreg_operand(c_vreg, 8));
+	builder_.sets(virtreg_operand(n_vreg, 8));
 }
 
 void x86_translation_context::materialise_cast(cast_node *n)
@@ -163,15 +190,15 @@ void x86_translation_context::materialise_cast(cast_node *n)
 
 	switch (n->op()) {
 	case cast_op::zx:
-		builder_.movz(x86_register::vreg(dst_vreg, n->val().type().element_width()), vreg_operand_for_port(n->source_value()));
+		builder_.movz(virtreg_operand(dst_vreg, n->val().type().element_width()), vreg_operand_for_port(n->source_value()));
 		break;
 
 	case cast_op::sx:
-		builder_.movs(x86_register::vreg(dst_vreg, n->val().type().element_width()), vreg_operand_for_port(n->source_value()));
+		builder_.movs(virtreg_operand(dst_vreg, n->val().type().element_width()), vreg_operand_for_port(n->source_value()));
 		break;
 
 	case cast_op::bitcast:
-		builder_.mov(x86_register::vreg(dst_vreg, n->val().type().element_width()), vreg_operand_for_port(n->source_value()));
+		builder_.mov(virtreg_operand(dst_vreg, n->val().type().element_width()), vreg_operand_for_port(n->source_value()));
 		break;
 
 	default:
@@ -182,19 +209,22 @@ void x86_translation_context::materialise_cast(cast_node *n)
 void x86_translation_context::materialise_constant(constant_node *n)
 {
 	int dst_vreg = alloc_vreg_for_port(n->val());
-	builder_.mov(x86_register::vreg(dst_vreg, n->val().type().element_width()), x86_immediate(n->val().type().element_width(), n->const_val_i()));
+	builder_.mov(virtreg_operand(dst_vreg, n->val().type().element_width()), imm_operand(n->const_val_i(), n->val().type().element_width()));
 }
 
 void x86_translation_context::materialise_read_pc(read_pc_node *n)
 {
 	int dst_vreg = alloc_vreg_for_port(n->val());
-	builder_.mov(x86_register::vreg(dst_vreg, n->val().type().element_width()), x86_immediate(n->val().type().element_width(), 0x1234));
+
+	/*builder_.mov(virtreg_operand(dst_vreg, n->val().type().element_width()),
+		x86_operand(x86_physical_register_operand(x86_register_names::R15), n->val().type().element_width()));*/
+
+	builder_.mov(virtreg_operand(dst_vreg, n->val().type().element_width()), x86_operand(x86_immediate_operand(this_pc_), 64));
 }
 
 void x86_translation_context::materialise_write_pc(write_pc_node *n)
 {
-	// int dst_vreg = alloc_vreg_for_port(n->val());
-	// builder_.add_mov(operand::imm(n->val().type().element_width(), 0x1234), operand::vreg(n->val().type().element_width(), dst_vreg));
+	builder_.mov(x86_operand(x86_physical_register_operand(x86_register_names::R15), n->value().type().element_width()), vreg_operand_for_port(n->value()));
 }
 
 void x86_translation_context::materialise_read_mem(read_mem_node *n)
@@ -205,8 +235,7 @@ void x86_translation_context::materialise_read_mem(read_mem_node *n)
 	materialise(n->address().owner());
 	int addr_vreg = vreg_for_port(n->address());
 
-	// builder_.add_mov(operand::mem(w, segreg::fs, regref::vreg(addr_vreg), 0), operand::vreg(w, value_vreg));
-	builder_.mov(x86_register::vreg(value_vreg, w), x86_memory(w, x86_register { x86_register::fs }, x86_register::vreg(addr_vreg, 64)));
+	builder_.mov(virtreg_operand(value_vreg, w), x86_operand(x86_memory_operand(addr_vreg, 0, x86_register_names::GS), w));
 }
 
 void x86_translation_context::materialise_write_mem(write_mem_node *n)
@@ -216,12 +245,7 @@ void x86_translation_context::materialise_write_mem(write_mem_node *n)
 	materialise(n->address().owner());
 	int addr_vreg = vreg_for_port(n->address());
 
-	//	builder_.add_mov(vreg_operand_for_port(n->value()), operand::mem(w, segreg::fs, regref::vreg(addr_vreg), 0));
-
-	builder_.mov(x86_memory(w, x86_register { x86_register::fs }, x86_register::vreg(addr_vreg, 64)), vreg_operand_for_port(n->value()));
+	builder_.mov(x86_operand(x86_memory_operand(addr_vreg, 0, x86_register_names::GS), w), vreg_operand_for_port(n->value()));
 }
 
-void x86_translation_context::do_register_allocation()
-{
-	//
-}
+void x86_translation_context::do_register_allocation() { builder_.allocate(); }

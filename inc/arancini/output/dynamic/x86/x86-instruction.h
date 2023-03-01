@@ -1,227 +1,509 @@
 #pragma once
 
 #include <arancini/output/dynamic/machine-code-writer.h>
+#include <fadec-enc.h>
+#include <iostream>
 #include <stdexcept>
 
 namespace arancini::output::dynamic::x86 {
 
-struct x86_register {
-	enum x86_regname {
-		al, ah, ax, eax, rax, //
-		bl, bh, bx, ebx, rbx, //
-		cl, ch, cx, ecx, rcx, //
-		dl, dh, dx, edx, rdx, //
-		dil, di, edi, rdi,//
-		sil, si, esi, rsi,//
-		spl, sp, esp, rsp,//
-		bpl, bp, ebp, rbp,//
-		rip,//
-		fs, gs,//
-		virt, none } regname;
+enum class x86_register_names {
+	NONE = FE_NOREG,
+	AX = FE_AX,
+	CX = FE_CX,
+	DX = FE_DX,
+	BX = FE_BX,
+	BP = FE_BP,
+	SP = FE_SP,
+	DI = FE_DI,
+	SI = FE_SI,
+	R8 = FE_R8,
+	R9 = FE_R9,
+	R10 = FE_R10,
+	R11 = FE_R11,
+	R12 = FE_R12,
+	R13 = FE_R13,
+	R14 = FE_R14,
+	R15 = FE_R15,
+	FS = FE_FS,
+	GS = FE_GS,
+};
+
+struct x86_physical_register_operand {
+	x86_register_names regname;
+
+	x86_physical_register_operand(x86_register_names r)
+		: regname(r)
+	{
+	}
+};
+
+struct x86_virtual_register_operand {
+	unsigned int index;
+
+	x86_virtual_register_operand(unsigned int i)
+		: index(i)
+	{
+	}
+};
+
+struct x86_memory_operand {
+	bool virt_base;
 
 	union {
-		struct {
-			int virt_index;
-			int virt_width;
-		};
+		x86_register_names pbase;
+		unsigned int vbase;
 	};
 
-	x86_register()
-		: regname(none)
-	{
-	}
-	x86_register(x86_regname r)
-		: regname(r)
-	{
-	}
-	x86_register(x86_regname r, int vi, int vw)
-		: regname(r)
-		, virt_index(vi)
-		, virt_width(vw)
+	x86_register_names index;
+	x86_register_names seg;
+	int scale;
+	int displacement;
+
+	x86_memory_operand(x86_register_names b)
+		: virt_base(false)
+		, pbase(b)
+		, index(x86_register_names::NONE)
+		, seg(x86_register_names::NONE)
+		, scale(0)
+		, displacement(0)
 	{
 	}
 
-	static x86_register preg(x86_regname r) { return x86_register(r); }
-	static x86_register vreg(int i, int w) { return x86_register(virt, i, w); }
+	x86_memory_operand(x86_register_names b, int d)
+		: virt_base(false)
+		, pbase(b)
+		, index(x86_register_names::NONE)
+		, seg(x86_register_names::NONE)
+		, scale(0)
+		, displacement(d)
+	{
+	}
+
+	x86_memory_operand(unsigned int virt_base_index, int d)
+		: virt_base(true)
+		, vbase(virt_base_index)
+		, index(x86_register_names::NONE)
+		, seg(x86_register_names::NONE)
+		, scale(0)
+		, displacement(d)
+	{
+	}
+
+	x86_memory_operand(unsigned int virt_base_index, int d, x86_register_names seg)
+		: virt_base(true)
+		, vbase(virt_base_index)
+		, index(x86_register_names::NONE)
+		, seg(seg)
+		, scale(0)
+		, displacement(d)
+	{
+	}
 };
 
-class x86_memory {
-public:
-	x86_memory(int access_width, const x86_register &base, int displacement = 0)
-		: access_width_(access_width)
-		, base_(base)
-		, seg_(x86_register { x86_register::none })
-		, index_(x86_register { x86_register::none })
-		, scale_(1)
-		, displacement_(displacement)
+struct x86_immediate_operand {
+	union {
+		unsigned char u8;
+		unsigned short u16;
+		unsigned int u32;
+		unsigned long int u64;
+		signed char s8;
+		signed short s16;
+		signed int s32;
+		signed long int s64;
+	};
+
+	x86_immediate_operand(unsigned long v)
+		: u64(v)
 	{
 	}
-
-	x86_memory(int access_width, const x86_register &seg, const x86_register &base, int displacement = 0)
-		: access_width_(access_width)
-		, base_(base)
-		, seg_(seg)
-		, index_(x86_register { x86_register::none })
-		, scale_(1)
-		, displacement_(displacement)
-	{
-	}
-
-	int access_width() const { return access_width_; }
-
-	const x86_register &base() const { return base_; }
-
-	int displacement() const { return displacement_; }
-
-private:
-	int access_width_;
-	x86_register base_;
-	x86_register seg_;
-	x86_register index_;
-	int scale_;
-	int displacement_;
 };
 
-class x86_immediate {
-public:
-	x86_immediate(int width, unsigned long value)
-		: width_(width)
-		, value_(value)
-	{
-	}
+enum class x86_operand_type { invalid, preg, vreg, mem, imm };
 
-	int width() const { return width_; }
-	unsigned long value() const { return value_; }
+struct x86_operand {
+	x86_operand_type type;
+	int width;
+	union {
+		x86_physical_register_operand pregop;
+		x86_virtual_register_operand vregop;
+		x86_memory_operand memop;
+		x86_immediate_operand immop;
+	};
 
-private:
-	int width_;
-	unsigned long value_;
-};
+	bool use, def;
 
-enum class opcodes { mov, movz, movs, xor_, and_, add, sub, setz, seto, setc, sets };
-
-enum operand_type { invalid, regop, memory, immediate };
-
-class x86_operand {
-public:
 	x86_operand()
-		: type(operand_type::invalid)
-		, read_(false)
-		, write_(false)
+		: type(x86_operand_type::invalid)
+		, width(0)
+		, use(false)
+		, def(false)
 	{
 	}
 
-	operand_type type;
-	bool read_, write_;
-	union {
-		x86_register reg;
-		x86_memory mem;
-		x86_immediate imm;
-	};
-
-	static x86_operand read(const x86_register &reg)
+	x86_operand(const x86_physical_register_operand &o, int w)
+		: type(x86_operand_type::preg)
+		, width(w)
+		, pregop(o)
+		, use(false)
+		, def(false)
 	{
-		x86_operand o;
-		o.type = operand_type::regop;
-		o.read_ = true;
-		o.write_ = false;
-		o.reg = reg;
-
-		return o;
 	}
 
-	static x86_operand readwrite(const x86_register &reg)
+	x86_operand(const x86_virtual_register_operand &o, int w)
+		: type(x86_operand_type::vreg)
+		, width(w)
+		, vregop(o)
+		, use(false)
+		, def(false)
 	{
-		x86_operand o;
-		o.type = operand_type::regop;
-		o.read_ = true;
-		o.write_ = true;
-		o.reg = reg;
-
-		return o;
 	}
 
-	static x86_operand write(const x86_register &reg)
+	x86_operand(const x86_memory_operand &o, int w)
+		: type(x86_operand_type::mem)
+		, width(w)
+		, memop(o)
+		, use(false)
+		, def(false)
 	{
-		x86_operand o;
-		o.type = operand_type::regop;
-		o.read_ = false;
-		o.write_ = true;
-		o.reg = reg;
-
-		return o;
 	}
 
-	static x86_operand read(const x86_memory &mem)
+	x86_operand(const x86_immediate_operand &o, int w)
+		: type(x86_operand_type::imm)
+		, width(w)
+		, immop(o)
+		, use(false)
+		, def(false)
 	{
-		x86_operand o;
-		o.type = operand_type::memory;
-		o.read_ = true;
-		o.write_ = false;
-		o.mem = mem;
-
-		return o;
 	}
 
-	static x86_operand readwrite(const x86_memory &mem)
-	{
-		x86_operand o;
-		o.type = operand_type::memory;
-		o.read_ = true;
-		o.write_ = true;
-		o.mem = mem;
+	bool is_preg() const { return type == x86_operand_type::preg; }
+	bool is_vreg() const { return type == x86_operand_type::vreg; }
+	bool is_mem() const { return type == x86_operand_type::mem; }
+	bool is_imm() const { return type == x86_operand_type::imm; }
 
-		return o;
+	bool is_use() const { return use; }
+	bool is_def() const { return def; }
+	bool is_usedef() const { return use && def; }
+
+	static x86_register_names assign(int index)
+	{
+		switch (index) {
+		case 0:
+			return x86_register_names::AX;
+		case 1:
+			return x86_register_names::CX;
+		case 2:
+			return x86_register_names::DX;
+		case 3:
+			return x86_register_names::BX;
+		case 4:
+			return x86_register_names::DI;
+		case 5:
+			return x86_register_names::SI;
+		default:
+			throw std::runtime_error("allocation assignment '" + std::to_string(index) + "' out-of-range");
+		}
 	}
 
-	static x86_operand write(const x86_memory &mem)
+	void allocate(int index)
 	{
-		x86_operand o;
-		o.type = operand_type::memory;
-		o.read_ = false;
-		o.write_ = true;
-		o.mem = mem;
+		if (type != x86_operand_type::vreg) {
+			throw std::runtime_error("trying to allocate non-vreg");
+		}
 
-		return o;
+		type = x86_operand_type::preg;
+		pregop.regname = assign(index);
 	}
 
-	static x86_operand read(const x86_immediate &imm)
+	void allocate_base(int index)
 	{
-		x86_operand o;
-		o.type = operand_type::immediate;
-		o.read_ = true;
-		o.write_ = false;
-		o.imm = imm;
+		if (type != x86_operand_type::mem) {
+			throw std::runtime_error("trying to allocate non-mem");
+		}
 
-		return o;
+		if (!memop.virt_base) {
+			throw std::runtime_error("trying to allocate non-virtual membase ");
+		}
+
+		memop.virt_base = false;
+		memop.pbase = assign(index);
 	}
+
+	void dump(std::ostream &os) const;
 };
 
-class x86_instruction {
-public:
-	x86_instruction(opcodes opcode)
-		: opcode_(opcode)
+#define OPFORM_BITS(T, W) (((T & 3) << 4) | ((W / 8) & 15))
+#define GET_OPFORM1(T1, W1) OPFORM_BITS(T1, W1)
+#define GET_OPFORM2(T1, W1, T2, W2) ((OPFORM_BITS(T2, W2) << 6) | OPFORM_BITS(T1, W1))
+
+#define R 1
+#define M 2
+#define I 3
+#define DEFINE_OPFORM1(T1, W1) OF_##T1##W1 = GET_OPFORM1(T1, W1)
+#define DEFINE_OPFORM2(T1, W1, T2, W2) OF_##T1##W1##_##T2##W2 = GET_OPFORM2(T1, W1, T2, W2)
+
+enum class x86_opform {
+	OF_NONE = 0,
+	DEFINE_OPFORM1(R, 8),
+	DEFINE_OPFORM1(M, 8),
+	DEFINE_OPFORM1(I, 8),
+	DEFINE_OPFORM1(R, 16),
+	DEFINE_OPFORM1(M, 16),
+	DEFINE_OPFORM1(I, 16),
+	DEFINE_OPFORM1(R, 32),
+	DEFINE_OPFORM1(M, 32),
+	DEFINE_OPFORM1(I, 32),
+	DEFINE_OPFORM1(R, 64),
+	DEFINE_OPFORM1(M, 64),
+	DEFINE_OPFORM1(I, 64),
+	DEFINE_OPFORM2(R, 8, R, 8),
+	DEFINE_OPFORM2(R, 16, R, 16),
+	DEFINE_OPFORM2(R, 32, R, 32),
+	DEFINE_OPFORM2(R, 64, R, 64),
+	DEFINE_OPFORM2(R, 8, M, 8),
+	DEFINE_OPFORM2(R, 16, M, 16),
+	DEFINE_OPFORM2(R, 32, M, 32),
+	DEFINE_OPFORM2(R, 64, M, 64),
+	DEFINE_OPFORM2(M, 8, R, 8),
+	DEFINE_OPFORM2(M, 16, R, 16),
+	DEFINE_OPFORM2(M, 32, R, 32),
+	DEFINE_OPFORM2(M, 64, R, 64),
+	DEFINE_OPFORM2(R, 8, I, 8),
+	DEFINE_OPFORM2(R, 16, I, 16),
+	DEFINE_OPFORM2(R, 32, I, 32),
+	DEFINE_OPFORM2(R, 64, I, 64),
+	DEFINE_OPFORM2(M, 8, I, 8),
+	DEFINE_OPFORM2(M, 16, I, 16),
+	DEFINE_OPFORM2(M, 32, I, 32),
+	DEFINE_OPFORM2(M, 64, I, 64),
+
+	DEFINE_OPFORM2(R, 16, R, 8),
+	DEFINE_OPFORM2(R, 32, R, 8),
+	DEFINE_OPFORM2(R, 64, R, 8),
+	DEFINE_OPFORM2(R, 32, R, 16),
+	DEFINE_OPFORM2(R, 64, R, 16),
+	DEFINE_OPFORM2(R, 64, R, 32),
+	DEFINE_OPFORM2(R, 16, M, 8),
+	DEFINE_OPFORM2(R, 32, M, 8),
+	DEFINE_OPFORM2(R, 64, M, 8),
+	DEFINE_OPFORM2(R, 32, M, 16),
+	DEFINE_OPFORM2(R, 64, M, 16),
+	DEFINE_OPFORM2(R, 64, M, 32),
+};
+
+#undef R
+#undef M
+#undef I
+
+struct x86_instruction {
+	static const int nr_operands = 4;
+
+	unsigned long raw_opcode;
+	x86_opform opform;
+	x86_operand operands[nr_operands];
+
+	x86_instruction(unsigned long opc)
+		: raw_opcode(opc)
+		, opform(x86_opform::OF_NONE)
 	{
 	}
 
-	x86_instruction(opcodes opcode, const x86_operand &o1)
-		: opcode_(opcode)
+	x86_instruction(unsigned long opc, const x86_operand &o1)
+		: raw_opcode(opc)
+		, opform(classify(o1))
 	{
 		operands[0] = o1;
 	}
 
-	x86_instruction(opcodes opcode, const x86_operand &o1, const x86_operand &o2)
-		: opcode_(opcode)
+	x86_instruction(unsigned long opc, const x86_operand &o1, const x86_operand &o2)
+		: raw_opcode(opc)
+		, opform(classify(o1, o2))
 	{
 		operands[0] = o1;
 		operands[1] = o2;
 	}
 
+	static int operand_type_to_form_type(x86_operand_type t)
+	{
+		switch (t) {
+		case x86_operand_type::preg:
+		case x86_operand_type::vreg:
+			return 1;
+		case x86_operand_type::mem:
+			return 2;
+		case x86_operand_type::imm:
+			return 3;
+
+		default:
+			return 0;
+		}
+	}
+
+	static x86_opform classify(const x86_operand &o1) { return (x86_opform)GET_OPFORM1(operand_type_to_form_type(o1.type), o1.width); }
+
+	static x86_opform classify(const x86_operand &o1, const x86_operand &o2)
+	{
+		return (x86_opform)GET_OPFORM2(operand_type_to_form_type(o1.type), o1.width, operand_type_to_form_type(o2.type), o2.width);
+	}
+
+	static x86_operand def(const x86_operand &o)
+	{
+		x86_operand r = o;
+		r.def = true;
+		return r;
+	}
+
+	static x86_operand use(const x86_operand &o)
+	{
+		x86_operand r = o;
+		r.use = true;
+		return r;
+	}
+
+	static x86_operand usedef(const x86_operand &o)
+	{
+		x86_operand r = o;
+		r.use = true;
+		r.def = true;
+		return r;
+	}
+
+#define DEFINE_STDOP_T(name, mnemonic, DST, SRC)                                                                                                               \
+	static x86_instruction name(const x86_operand &dst, const x86_operand &src)                                                                                \
+	{                                                                                                                                                          \
+		switch (classify(dst, src)) {                                                                                                                          \
+		case x86_opform::OF_R8_R8:                                                                                                                             \
+			return x86_instruction(FE_##mnemonic##8rr, DST(dst), SRC(src));                                                                                    \
+		case x86_opform::OF_R8_M8:                                                                                                                             \
+			return x86_instruction(FE_##mnemonic##8rm, DST(dst), SRC(src));                                                                                    \
+		case x86_opform::OF_M8_R8:                                                                                                                             \
+			return x86_instruction(FE_##mnemonic##8mr, DST(dst), SRC(src));                                                                                    \
+		case x86_opform::OF_R8_I8:                                                                                                                             \
+			return x86_instruction(FE_##mnemonic##8ri, DST(dst), SRC(src));                                                                                    \
+		case x86_opform::OF_M8_I8:                                                                                                                             \
+			return x86_instruction(FE_##mnemonic##8mi, DST(dst), SRC(src));                                                                                    \
+                                                                                                                                                               \
+		case x86_opform::OF_R16_R16:                                                                                                                           \
+			return x86_instruction(FE_##mnemonic##16rr, DST(dst), SRC(src));                                                                                   \
+		case x86_opform::OF_R16_M16:                                                                                                                           \
+			return x86_instruction(FE_##mnemonic##16rm, DST(dst), SRC(src));                                                                                   \
+		case x86_opform::OF_M16_R16:                                                                                                                           \
+			return x86_instruction(FE_##mnemonic##16mr, DST(dst), SRC(src));                                                                                   \
+		case x86_opform::OF_R16_I16:                                                                                                                           \
+			return x86_instruction(FE_##mnemonic##16ri, DST(dst), SRC(src));                                                                                   \
+		case x86_opform::OF_M16_I16:                                                                                                                           \
+			return x86_instruction(FE_##mnemonic##16mi, DST(dst), SRC(src));                                                                                   \
+                                                                                                                                                               \
+		case x86_opform::OF_R32_R32:                                                                                                                           \
+			return x86_instruction(FE_##mnemonic##32rr, DST(dst), SRC(src));                                                                                   \
+		case x86_opform::OF_R32_M32:                                                                                                                           \
+			return x86_instruction(FE_##mnemonic##32rm, DST(dst), SRC(src));                                                                                   \
+		case x86_opform::OF_M32_R32:                                                                                                                           \
+			return x86_instruction(FE_##mnemonic##32mr, DST(dst), SRC(src));                                                                                   \
+		case x86_opform::OF_R32_I32:                                                                                                                           \
+			return x86_instruction(FE_##mnemonic##32ri, DST(dst), SRC(src));                                                                                   \
+		case x86_opform::OF_M32_I32:                                                                                                                           \
+			return x86_instruction(FE_##mnemonic##32mi, DST(dst), SRC(src));                                                                                   \
+                                                                                                                                                               \
+		case x86_opform::OF_R64_R64:                                                                                                                           \
+			return x86_instruction(FE_##mnemonic##64rr, DST(dst), SRC(src));                                                                                   \
+		case x86_opform::OF_R64_M64:                                                                                                                           \
+			return x86_instruction(FE_##mnemonic##64rm, DST(dst), SRC(src));                                                                                   \
+		case x86_opform::OF_M64_R64:                                                                                                                           \
+			return x86_instruction(FE_##mnemonic##64mr, DST(dst), SRC(src));                                                                                   \
+		case x86_opform::OF_R64_I64:                                                                                                                           \
+			return x86_instruction(FE_##mnemonic##64ri, DST(dst), SRC(src));                                                                                   \
+		case x86_opform::OF_M64_I64:                                                                                                                           \
+			return x86_instruction(FE_##mnemonic##64mi, DST(dst), SRC(src));                                                                                   \
+                                                                                                                                                               \
+		default:                                                                                                                                               \
+			throw std::runtime_error("unsupported encoding for mov");                                                                                          \
+		}                                                                                                                                                      \
+	}
+
+#define DEFINE_STDOP(name, mnemonic) DEFINE_STDOP_T(name, mnemonic, usedef, use)
+
+	DEFINE_STDOP_T(mov, MOV, def, use)
+	DEFINE_STDOP(xor_, XOR)
+	DEFINE_STDOP(and_, AND)
+	DEFINE_STDOP(or_, OR)
+
+	DEFINE_STDOP(add, ADD)
+	DEFINE_STDOP(sub, SUB)
+
+	static x86_instruction movz(const x86_operand &dst, const x86_operand &src)
+	{
+		switch (classify(dst, src)) {
+		case x86_opform::OF_R16_R8:
+			return x86_instruction(FE_MOVZXr16r8, def(dst), use(src));
+		case x86_opform::OF_R16_M8:
+			return x86_instruction(FE_MOVZXr16m8, def(dst), use(src));
+		case x86_opform::OF_R32_R8:
+			return x86_instruction(FE_MOVZXr32r8, def(dst), use(src));
+		case x86_opform::OF_R32_M8:
+			return x86_instruction(FE_MOVZXr32m8, def(dst), use(src));
+		case x86_opform::OF_R64_R8:
+			return x86_instruction(FE_MOVZXr64r8, def(dst), use(src));
+		case x86_opform::OF_R64_M8:
+			return x86_instruction(FE_MOVZXr64m8, def(dst), use(src));
+
+		default:
+			throw std::runtime_error("unsupported encoding for movz");
+		}
+	}
+
+	static x86_instruction movs(const x86_operand &dst, const x86_operand &src)
+	{
+		switch (classify(dst, src)) {
+		case x86_opform::OF_R16_R8:
+			return x86_instruction(FE_MOVSXr16r8, def(dst), use(src));
+		case x86_opform::OF_R16_M8:
+			return x86_instruction(FE_MOVSXr16m8, def(dst), use(src));
+		case x86_opform::OF_R32_R8:
+			return x86_instruction(FE_MOVSXr32r8, def(dst), use(src));
+		case x86_opform::OF_R32_M8:
+			return x86_instruction(FE_MOVSXr32m8, def(dst), use(src));
+		case x86_opform::OF_R64_R8:
+			return x86_instruction(FE_MOVSXr64r8, def(dst), use(src));
+		case x86_opform::OF_R64_M8:
+			return x86_instruction(FE_MOVSXr64m8, def(dst), use(src));
+		case x86_opform::OF_R64_R32:
+			return x86_instruction(FE_MOVSXr64r32, def(dst), use(src));
+		case x86_opform::OF_R64_M32:
+			return x86_instruction(FE_MOVSXr64m32, def(dst), use(src));
+		default:
+			throw std::runtime_error("unsupported encoding '" + std::to_string((int)classify(dst, src)) + "' for movs");
+		}
+	}
+
+#define DEFINE_SETOP(name, mnemonic)                                                                                                                           \
+	static x86_instruction name(const x86_operand &dst)                                                                                                        \
+	{                                                                                                                                                          \
+		switch (classify(dst)) {                                                                                                                               \
+		case x86_opform::OF_M8:                                                                                                                                \
+			return x86_instruction(FE_##mnemonic##8m, def(dst));                                                                                               \
+		case x86_opform::OF_R8:                                                                                                                                \
+			return x86_instruction(FE_##mnemonic##8r, def(dst));                                                                                               \
+		default:                                                                                                                                               \
+			throw std::runtime_error("invalid opform");                                                                                                        \
+		}                                                                                                                                                      \
+	}
+
+	DEFINE_SETOP(setc, SETC)
+	DEFINE_SETOP(seto, SETO)
+	DEFINE_SETOP(setz, SETZ)
+	DEFINE_SETOP(sets, SETS)
+
+	static x86_instruction int3() { return x86_instruction(FE_INT3); }
+	static x86_instruction ret() { return x86_instruction(FE_RET); }
+
+	void dump(std::ostream &os) const;
 	void emit(machine_code_writer &writer) const;
+	void kill() { raw_opcode = 0; }
 
-private:
-	opcodes opcode_;
-	x86_operand operands[4];
+	bool is_dead() const { return raw_opcode == 0; }
+
+	x86_operand &get_operand(int index) { return operands[index]; }
 };
-
 } // namespace arancini::output::dynamic::x86
