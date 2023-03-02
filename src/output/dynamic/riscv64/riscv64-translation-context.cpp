@@ -1177,11 +1177,10 @@ Register riscv64_translation_context::materialise_constant(int64_t imm)
 	if (imm == 0) {
 		return ZERO;
 	}
-	Register out_reg = A0;
 	auto immLo32 = (int32_t)imm;
-	auto immHi32 = imm >> 32 << 32;
 	auto immLo12 = immLo32 << (32 - 12) >> (32 - 12); // sign extend lower 12 bit
-	if (immHi32 == 0) {
+	if (imm == immLo32) {
+		Register out_reg = allocate_register();
 		int32_t imm32Hi20 = (immLo32 - immLo12);
 		if (imm32Hi20 != 0) {
 			assembler_.lui(out_reg, imm32Hi20);
@@ -1191,6 +1190,7 @@ Register riscv64_translation_context::materialise_constant(int64_t imm)
 		} else {
 			assembler_.li(out_reg, imm);
 		}
+		return out_reg;
 
 	} else {
 		auto val = (int64_t)((uint64_t)imm - (uint64_t)(int64_t)immLo12); // Get lower 12 bits out of imm
@@ -1205,7 +1205,7 @@ Register riscv64_translation_context::materialise_constant(int64_t imm)
 			}
 		}
 
-		materialise_constant(val);
+		Register out_reg = materialise_constant(val);
 
 		if (shiftAmnt) {
 			assembler_.slli(out_reg, out_reg, shiftAmnt);
@@ -1214,7 +1214,6 @@ Register riscv64_translation_context::materialise_constant(int64_t imm)
 		if (immLo12) {
 			assembler_.addi(out_reg, out_reg, immLo12);
 		}
+		return out_reg;
 	}
-	return out_reg;
 }
-
