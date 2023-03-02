@@ -25,6 +25,10 @@ public:
 private:
 	Assembler assembler_;
 
+	size_t reg_allocator_index_ { 0 };
+
+	Register allocate_register();
+
     std::variant<Register, std::unique_ptr<Label>, std::monostate>
     materialise(const ir::node *n);
 

@@ -18,8 +18,20 @@ constexpr Register CF = S9;
 constexpr Register OF = S10;
 constexpr Register SF = S11;
 
+Register riscv64_translation_context::allocate_register()
+{
+	constexpr Register registers[] { S1, A0, A1, A2, A3, A4, A5, T0, T1, T2, A6, A7, S2, S3, S4, S5, S6, S7, T3, T4, T5, T6 };
+	// FIXME already materialised nodes
+
+	if (reg_allocator_index_ >= std::size(registers)) {
+		throw std::runtime_error("RISC-V DBT ran out of registers for packet");
+	}
+
+	return registers[reg_allocator_index_++];
+}
+
 void riscv64_translation_context::begin_block() { }
-void riscv64_translation_context::begin_instruction(off_t address, const std::string &disasm) { }
+void riscv64_translation_context::begin_instruction(off_t address, const std::string &disasm) { reg_allocator_index_ = 0; }
 void riscv64_translation_context::end_instruction() { }
 void riscv64_translation_context::end_block() { }
 void riscv64_translation_context::lower(ir::node *n) { materialise(n); }
@@ -103,7 +115,7 @@ Register riscv64_translation_context::materialise_ternary_atomic(const ternary_a
 	Register dstAddr = std::get<Register>(materialise(n.lhs().owner()));
 	Register acc = std::get<Register>(materialise(n.rhs().owner()));
 	Register src = std::get<Register>(materialise(n.top().owner()));
-	Register out_reg = T0;
+	Register out_reg = allocate_register();
 	Label fail;
 	Label retry;
 	Label end;
@@ -195,7 +207,7 @@ std::variant<Register, std::unique_ptr<Label>, std::monostate> riscv64_translati
 {
 	Register dstAddr = std::get<Register>(materialise(n.lhs().owner()));
 	Register src = std::get<Register>(materialise(n.rhs().owner()));
-	Register out_reg = T0;
+	Register out_reg = allocate_register();
 	// FIXME Correct memory ordering?
 	switch (n.op()) {
 	case binary_atomic_op::xadd:
@@ -378,7 +390,7 @@ std::variant<Register, std::unique_ptr<Label>, std::monostate> riscv64_translati
 Register riscv64_translation_context::materialise_cast(const cast_node &n)
 {
 	Register src_reg = std::get<Register>(materialise(n.source_value().owner()));
-	Register out_reg = T6;
+	Register out_reg = allocate_register();
 	switch (n.op()) {
 
 	case cast_op::bitcast:
@@ -411,7 +423,7 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 
 Register riscv64_translation_context::materialise_bit_extract(const bit_extract_node &n)
 {
-	Register out_reg = T4;
+	Register out_reg = allocate_register();
 	int from = n.from();
 	int length = n.length();
 
@@ -429,8 +441,8 @@ Register riscv64_translation_context::materialise_bit_extract(const bit_extract_
 
 Register riscv64_translation_context::materialise_bit_insert(const bit_insert_node &n)
 {
-	Register out_reg = T5;
-	Register temp_reg = T6;
+	Register out_reg = allocate_register();
+	Register temp_reg = allocate_register();
 	int to = n.to();
 	int length = n.length();
 
@@ -490,7 +502,7 @@ void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 
 Register riscv64_translation_context::materialise_read_mem(const read_mem_node &n)
 {
-	Register out_reg = std::get<Register>(materialise(n.val().owner()));
+	Register out_reg = allocate_register();
 	Register addr_reg = std::get<Register>(materialise(n.address().owner()));
 
 	Address addr { addr_reg };
@@ -512,9 +524,10 @@ void riscv64_translation_context::materialise_write_mem(const write_mem_node &n)
 
 Register riscv64_translation_context::materialise_read_pc(const read_pc_node &n)
 {
-	Register out_reg = std::get<Register>(materialise(n.val().owner()));
+	Register out_reg = allocate_register();
 
 	auto load_instr = load_instructions.at(n.val().type().width());
+	// FIXME in blocks bigger than a single instruction
 	assembler_.addi(out_reg, A1, 0);
 
 	return out_reg;
@@ -553,7 +566,7 @@ void riscv64_translation_context::materialise_cond_br(const cond_br_node &n)
 
 Register riscv64_translation_context::materialise_unary_arith(const unary_arith_node &n)
 {
-	Register out_reg = T0;
+	Register out_reg = allocate_register();
 
 	Register src_reg = std::get<Register>(materialise(n.lhs().owner()));
 	if (n.op() == unary_arith_op::bnot) {
@@ -566,7 +579,7 @@ Register riscv64_translation_context::materialise_unary_arith(const unary_arith_
 
 Register riscv64_translation_context::materialise_ternary_arith(const ternary_arith_node &n)
 {
-	Register out_reg = T0;
+	Register out_reg = allocate_register();
 
 	Register src_reg1 = std::get<Register>(materialise(n.lhs().owner()));
 	Register src_reg2 = std::get<Register>(materialise(n.rhs().owner()));
@@ -674,7 +687,7 @@ Register riscv64_translation_context::materialise_ternary_arith(const ternary_ar
 
 Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node &n)
 {
-	Register out_reg = T4;
+	Register out_reg = allocate_register();
 
 	Register src_reg = std::get<Register>(materialise(n.input().owner()));
 
@@ -820,8 +833,7 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 
 Register riscv64_translation_context::materialise_binary_arith(const binary_arith_node &n)
 {
-	Register out_reg = T0;
-	Register out_reg2 = T1;
+	Register out_reg = allocate_register();
 
 	Register src_reg1 = std::get<Register>(materialise(n.lhs().owner()));
 
@@ -967,7 +979,9 @@ standardPath:
 
 	case binary_arith_op::mul:
 		switch (n.val().type().width()) {
-		case 128:
+		case 128: {
+
+			Register out_reg2 = allocate_register();
 			// Split calculation
 			assembler_.mul(out_reg, src_reg1, src_reg2);
 			switch (n.val().type().element_type().type_class()) {
@@ -986,7 +1000,7 @@ standardPath:
 				throw std::runtime_error("Unsupported value type for multiply");
 			}
 			assembler_.mv(OF, CF);
-			break;
+		} break;
 
 		case 64:
 		case 32:
