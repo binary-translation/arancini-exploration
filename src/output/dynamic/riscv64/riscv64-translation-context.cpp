@@ -501,6 +501,11 @@ Register riscv64_translation_context::materialise_bit_extract(const bit_extract_
 
 	// TODO Handle upper 64 from 128 for split Register multiply case
 
+	if (from == 0 && length == 32) {
+		assembler_.sextw(out_reg, src);
+		return out_reg;
+	}
+
 	if (length + from < 64) {
 		assembler_.slli(out_reg, src, 64 - (from + length));
 	}
@@ -1224,14 +1229,22 @@ standardPath:
 		}
 		break;
 
-	case binary_arith_op::cmpeq:
-		assembler_.xor_(out_reg, src_reg1, src_reg2);
-		assembler_.seqz(out_reg, out_reg);
-		break;
-	case binary_arith_op::cmpne:
-		assembler_.xor_(out_reg, src_reg1, src_reg2);
-		assembler_.snez(out_reg, out_reg);
-		break;
+	case binary_arith_op::cmpeq: {
+		Register tmp = src_reg2 != ZERO ? out_reg : src_reg1;
+		if (src_reg2 != ZERO) {
+			assembler_.xor_(out_reg, src_reg1, src_reg2);
+		}
+		assembler_.seqz(out_reg, tmp);
+		return out_reg;
+	}
+	case binary_arith_op::cmpne: {
+		Register tmp = src_reg2 != ZERO ? out_reg : src_reg1;
+		if (src_reg2 != ZERO) {
+			assembler_.xor_(out_reg, src_reg1, src_reg2);
+		}
+		assembler_.snez(out_reg, tmp);
+		return out_reg;
+	}
 	case binary_arith_op::cmpgt:
 		throw std::runtime_error("unsupported binary arithmetic operation");
 	}
