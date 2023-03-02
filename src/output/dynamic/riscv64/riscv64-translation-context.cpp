@@ -507,7 +507,7 @@ Register riscv64_translation_context::materialise_read_reg(const read_reg_node &
 
 void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 {
-	const port &value = n.val();
+	const port &value = n.value();
 	if (is_flag(value) || is_gpr(value)) { // Flags or GPR
 		auto store_instr = store_instructions.at(value.type().width());
 		if (is_flag(value)) {
@@ -539,11 +539,11 @@ Register riscv64_translation_context::materialise_read_mem(const read_mem_node &
 
 void riscv64_translation_context::materialise_write_mem(const write_mem_node &n)
 {
-	Register src_reg = std::get<Register>(materialise(n.val().owner()));
+	Register src_reg = std::get<Register>(materialise(n.value().owner()));
 	Register addr_reg = std::get<Register>(materialise(n.address().owner()));
 
 	Address addr { addr_reg };
-	auto store_instr = store_instructions.at(n.val().type().width());
+	auto store_instr = store_instructions.at(n.value().type().width());
 	(assembler_.*store_instr)(src_reg, addr);
 }
 
@@ -560,9 +560,9 @@ Register riscv64_translation_context::materialise_read_pc(const read_pc_node &n)
 
 void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 {
-	Register src_reg = std::get<Register>(materialise(n.val().owner()));
+	Register src_reg = std::get<Register>(materialise(n.value().owner()));
 
-	auto store_instr = store_instructions.at(n.val().type().width());
+	auto store_instr = store_instructions.at(n.value().type().width());
 	assembler_.addi(A1, src_reg, 0);
 }
 
