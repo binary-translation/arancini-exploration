@@ -191,6 +191,30 @@ void muldiv_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_PMULUDQ: {
+    // pmuludq xmm1, xmm2/m128 or pmuludq mm1, mm2/m64
+    auto dst = read_operand(0);
+    auto src = read_operand(1);
+
+    if (dst->val().type().width() == 64) {
+      auto dst_low = builder().insert_zx(value_type::u64(), builder().insert_bit_extract(dst->val(), 0, 32)->val());
+      auto src_low = builder().insert_zx(value_type::u64(), builder().insert_bit_extract(src->val(), 0, 32)->val());
+      auto mul = builder().insert_mul(dst_low->val(), src_low->val());
+      write_operand(0, mul->val());
+    } else {
+      auto dst_vec = builder().insert_bitcast(value_type::vector(value_type::u32(), 4), dst->val());
+      auto src_vec = builder().insert_bitcast(value_type::vector(value_type::u32(), 4), src->val());
+      auto mul0 = builder().insert_mul(builder().insert_zx(value_type::u64(), builder().insert_vector_extract(dst_vec->val(), 0)->val())->val(),
+                                       builder().insert_zx(value_type::u64(), builder().insert_vector_extract(src_vec->val(), 0)->val())->val());
+      auto mul1 = builder().insert_mul(builder().insert_zx(value_type::u64(), builder().insert_vector_extract(dst_vec->val(), 2)->val())->val(),
+                                       builder().insert_zx(value_type::u64(), builder().insert_vector_extract(src_vec->val(), 2)->val())->val());
+      dst = builder().insert_bit_insert(dst->val(), mul0->val(), 0, 64);
+      dst = builder().insert_bit_insert(dst->val(), mul1->val(), 64, 64);
+      write_operand(0, dst->val());
+	}
+    break;
+  }
+
 	default:
 		throw std::runtime_error("unsupported mul/div operation");
 	}
