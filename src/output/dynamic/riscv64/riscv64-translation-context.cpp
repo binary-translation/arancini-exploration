@@ -1047,7 +1047,7 @@ standardPath:
 				break;
 			case value_type_class::unsigned_integer:
 				assembler_.srli(CF, out_reg, n.val().type().width() / 2);
-				assembler_.snez(CF, out_reg2);
+				assembler_.snez(CF, CF);
 				break;
 			default:
 				throw std::runtime_error("Unsupported value type for multiply");
