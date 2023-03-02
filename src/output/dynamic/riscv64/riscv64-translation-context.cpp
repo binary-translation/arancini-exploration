@@ -562,8 +562,9 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 {
 	Register src_reg = std::get<Register>(materialise(n.value().owner()));
 
+	Address addr { FP, static_cast<intptr_t>(reg_offsets::PC) };
 	auto store_instr = store_instructions.at(n.value().type().width());
-	assembler_.addi(A1, src_reg, 0);
+	(assembler_.*store_instr)(src_reg, addr);
 }
 
 std::unique_ptr<Label> riscv64_translation_context::materialise_label(const label_node &n)
