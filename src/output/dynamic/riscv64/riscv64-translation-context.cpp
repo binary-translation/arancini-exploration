@@ -1,6 +1,7 @@
 #include <arancini/ir/node.h>
 #include <arancini/output/dynamic/riscv64/encoder/riscv64-constants.h>
 #include <arancini/output/dynamic/riscv64/riscv64-translation-context.h>
+#include <arancini/runtime/exec/x86/x86-cpu-state.h>
 
 #include <functional>
 #include <unordered_map>
@@ -17,6 +18,20 @@ constexpr Register ZF = S8;
 constexpr Register CF = S9;
 constexpr Register OF = S10;
 constexpr Register SF = S11;
+
+#define X86_OFFSET_OF(reg) __builtin_offsetof(struct arancini::runtime::exec::x86::x86_cpu_state, reg)
+enum class reg_offsets {
+#define DEFREG(ctype, ltype, name) name = X86_OFFSET_OF(name),
+#include <arancini/input/x86/reg.def>
+#undef DEFREG
+};
+
+static std::unordered_map<unsigned long, Register> flag_map {
+	{ (unsigned long)reg_offsets::ZF, ZF },
+	{ (unsigned long)reg_offsets::CF, CF },
+	{ (unsigned long)reg_offsets::OF, OF },
+	{ (unsigned long)reg_offsets::SF, SF },
+};
 
 Register riscv64_translation_context::allocate_register()
 {
@@ -36,12 +51,17 @@ void riscv64_translation_context::end_instruction() { }
 void riscv64_translation_context::end_block() { }
 void riscv64_translation_context::lower(ir::node *n) { materialise(n); }
 
-static inline bool is_flag(const port& value) { return value.type().width() == 1; }
-static inline bool is_gpr(const port& value) { return value.type().width() == 64; }
+static inline bool is_flag(const port &value) { return value.type().width() == 1; }
+static inline bool is_gpr(const port &value)
+{
+	int width = value.type().width();
+	return width == 8 || width == 16 || width == 32 || width == 64;
+}
 
 using load_store_func_t = decltype(&Assembler::ld);
 
 static std::unordered_map<std::size_t, load_store_func_t> load_instructions {
+	{ 1, &Assembler::lb },
 	{ 8, &Assembler::lb },
 	{ 16, &Assembler::lh },
 	{ 32, &Assembler::lw },
@@ -49,6 +69,7 @@ static std::unordered_map<std::size_t, load_store_func_t> load_instructions {
 };
 
 static std::unordered_map<std::size_t, load_store_func_t> store_instructions {
+	{ 1, &Assembler::sb },
 	{ 8, &Assembler::sb },
 	{ 16, &Assembler::sh },
 	{ 32, &Assembler::sw },
@@ -474,12 +495,10 @@ Register riscv64_translation_context::materialise_bit_insert(const bit_insert_no
 Register riscv64_translation_context::materialise_read_reg(const read_reg_node &n)
 {
 	const port &value = n.val();
-	if (is_flag(value)) { // Flags
-		// TODO
-	} else if (is_gpr(value)) { // GPR
-		Register out_reg = std::get<Register>(materialise(value.owner()));
-		assembler_.ld(out_reg, { FP, static_cast<intptr_t>(n.regoff()) });
-
+	if (is_flag(value) || is_gpr(value)) { // Flags or GPR
+		Register out_reg = allocate_register();
+		auto load_instr = load_instructions.at(value.type().width());
+		(assembler_.*load_instr)(out_reg, { FP, static_cast<intptr_t>(n.regoff()) });
 		return out_reg;
 	}
 
@@ -489,11 +508,17 @@ Register riscv64_translation_context::materialise_read_reg(const read_reg_node &
 void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 {
 	const port &value = n.val();
-	if (is_flag(value)) { // Flags
-		// TODO
-	} else if (is_gpr(value)) { // GPR
-		Register reg = std::get<Register>(materialise(value.owner()));
-		assembler_.sd(reg, { FP, static_cast<intptr_t>(n.regoff()) });
+	if (is_flag(value) || is_gpr(value)) { // Flags or GPR
+		auto store_instr = store_instructions.at(value.type().width());
+		if (is_flag(value)) {
+			// FIXME breaks if flag generating node is ONLY used for flags (eg x86 test and cmp instructions)
+			Register reg = (value.owner()->kind() == node_kinds::constant) ? std::get<Register>(materialise(value.owner())) : flag_map.at(n.regoff());
+			(assembler_.*store_instr)(reg, { FP, static_cast<intptr_t>(n.regoff()) });
+		} else {
+			Register reg = std::get<Register>(materialise(value.owner()));
+
+			(assembler_.*store_instr)(reg, { FP, static_cast<intptr_t>(n.regoff()) });
+		}
 		return;
 	}
 
