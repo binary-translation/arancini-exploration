@@ -29,59 +29,58 @@ static inline bool is_gpr(const port& value) { return value.type().width() == 64
 
 using load_store_func_t = decltype(&Assembler::ld);
 
-static std::unordered_map<std::size_t, load_store_func_t>
-load_instructions {
-    {8, &Assembler::lb},
-    {16, &Assembler::lh},
-    {32, &Assembler::lw},
-    {64, &Assembler::ld},
+static std::unordered_map<std::size_t, load_store_func_t> load_instructions {
+	{ 8, &Assembler::lb },
+	{ 16, &Assembler::lh },
+	{ 32, &Assembler::lw },
+	{ 64, &Assembler::ld },
 };
 
-static std::unordered_map<std::size_t, load_store_func_t>
-store_instructions {
-    {8, &Assembler::sb},
-    {16, &Assembler::sh},
-    {32, &Assembler::sw},
-    {64, &Assembler::sd},
+static std::unordered_map<std::size_t, load_store_func_t> store_instructions {
+	{ 8, &Assembler::sb },
+	{ 16, &Assembler::sh },
+	{ 32, &Assembler::sw },
+	{ 64, &Assembler::sd },
 };
 
-std::variant<Register, std::unique_ptr<Label>, std::monostate>
-riscv64_translation_context::materialise(const node *n) {
-    if (!n)
-        throw std::runtime_error("RISC-V DBT received NULL pointer to node");
+std::variant<Register, std::unique_ptr<Label>, std::monostate> riscv64_translation_context::materialise(const node *n)
+{
+	if (!n) {
+		throw std::runtime_error("RISC-V DBT received NULL pointer to node");
+	}
 
 	switch (n->kind()) {
 	case node_kinds::bit_shift:
 		return materialise_bit_shift(*reinterpret_cast<const bit_shift_node *>(n));
 	case node_kinds::read_reg:
-        return materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));
+		return materialise_read_reg(*reinterpret_cast<const read_reg_node *>(n));
 	case node_kinds::write_reg:
-        materialise_write_reg(*reinterpret_cast<const write_reg_node*>(n));
-        return std::monostate{};
+		materialise_write_reg(*reinterpret_cast<const write_reg_node *>(n));
+		return std::monostate {};
 	case node_kinds::read_mem:
-        return materialise_read_mem(*reinterpret_cast<const read_mem_node*>(n));
+		return materialise_read_mem(*reinterpret_cast<const read_mem_node *>(n));
 	case node_kinds::write_mem:
-        materialise_write_mem(*reinterpret_cast<const write_mem_node*>(n));
-        return std::monostate{};
+		materialise_write_mem(*reinterpret_cast<const write_mem_node *>(n));
+		return std::monostate {};
 	case node_kinds::read_pc:
-        return materialise_read_pc(*reinterpret_cast<const read_pc_node*>(n));
+		return materialise_read_pc(*reinterpret_cast<const read_pc_node *>(n));
 	case node_kinds::write_pc:
-        materialise_write_pc(*reinterpret_cast<const write_pc_node*>(n));
-        return std::monostate{};
-    case node_kinds::label:
-        return materialise_label(*reinterpret_cast<const label_node*>(n));
-    case node_kinds::br:
-        materialise_br(*reinterpret_cast<const br_node*>(n));
-        return std::monostate{};
-    case node_kinds::cond_br:
-        materialise_cond_br(*reinterpret_cast<const cond_br_node*>(n));
-        return std::monostate{};
+		materialise_write_pc(*reinterpret_cast<const write_pc_node *>(n));
+		return std::monostate {};
+	case node_kinds::label:
+		return materialise_label(*reinterpret_cast<const label_node *>(n));
+	case node_kinds::br:
+		materialise_br(*reinterpret_cast<const br_node *>(n));
+		return std::monostate {};
+	case node_kinds::cond_br:
+		materialise_cond_br(*reinterpret_cast<const cond_br_node *>(n));
+		return std::monostate {};
 	case node_kinds::constant:
 		return materialise_constant((int64_t)((constant_node *)n)->const_val_i());
 	case node_kinds::binary_arith:
 		return materialise_binary_arith(*reinterpret_cast<const binary_arith_node *>(n));
 	case node_kinds::unary_arith:
-        return materialise_unary_arith(*reinterpret_cast<const unary_arith_node*>(n));
+		return materialise_unary_arith(*reinterpret_cast<const unary_arith_node *>(n));
 	case node_kinds::ternary_arith:
 		return materialise_ternary_arith(*reinterpret_cast<const ternary_arith_node *>(n));
 	case node_kinds::bit_extract:
@@ -122,10 +121,10 @@ Register riscv64_translation_context::materialise_ternary_atomic(const ternary_a
 			assembler_.bnez(out_reg, &retry, Assembler::kNearJump);
 
 			// Flags from comparison matching (i.e subtraction of equal values)
+			assembler_.li(ZF, 1);
 			assembler_.li(CF, 0);
 			assembler_.li(OF, 0);
 			assembler_.li(SF, 0);
-			assembler_.li(ZF, 1);
 
 			assembler_.j(&end, Assembler::kNearJump);
 
@@ -143,7 +142,7 @@ Register riscv64_translation_context::materialise_ternary_atomic(const ternary_a
 
 			assembler_.sltz(SF, SF); // SF
 
-			//Write back updated acc value
+			// Write back updated acc value
 			assembler_.sd(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
 
 			assembler_.Bind(&end);
@@ -178,7 +177,7 @@ Register riscv64_translation_context::materialise_ternary_atomic(const ternary_a
 
 			assembler_.sltz(SF, SF); // SF
 
-			//Write back updated acc value
+			// Write back updated acc value
 			assembler_.sw(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
 
 			assembler_.Bind(&end);
@@ -192,7 +191,7 @@ Register riscv64_translation_context::materialise_ternary_atomic(const ternary_a
 	}
 }
 
-std::variant<Register, std::unique_ptr<Label>,std::monostate> riscv64_translation_context::materialise_binary_atomic(const binary_atomic_node &n)
+std::variant<Register, std::unique_ptr<Label>, std::monostate> riscv64_translation_context::materialise_binary_atomic(const binary_atomic_node &n)
 {
 	Register dstAddr = std::get<Register>(materialise(n.lhs().owner()));
 	Register src = std::get<Register>(materialise(n.rhs().owner()));
@@ -259,7 +258,7 @@ std::variant<Register, std::unique_ptr<Label>,std::monostate> riscv64_translatio
 
 		assembler_.seqz(ZF, SF); // ZF
 		assembler_.sltz(SF, SF); // SF
-		return std::monostate{};
+		return std::monostate {};
 	case binary_atomic_op::sub:
 		assembler_.neg(out_reg, src);
 		switch (n.rhs().type().width()) {
@@ -285,7 +284,7 @@ std::variant<Register, std::unique_ptr<Label>,std::monostate> riscv64_translatio
 
 		assembler_.seqz(ZF, SF); // ZF
 		assembler_.sltz(SF, SF); // SF
-		return std::monostate{};
+		return std::monostate {};
 	case binary_atomic_op::band:
 		switch (n.rhs().type().width()) {
 		case 64:
@@ -305,7 +304,7 @@ std::variant<Register, std::unique_ptr<Label>,std::monostate> riscv64_translatio
 
 		assembler_.seqz(ZF, SF); // ZF
 		assembler_.sltz(SF, SF); // SF
-		return std::monostate{};
+		return std::monostate {};
 	case binary_atomic_op::bor:
 		switch (n.rhs().type().width()) {
 		case 64:
@@ -325,7 +324,7 @@ std::variant<Register, std::unique_ptr<Label>,std::monostate> riscv64_translatio
 
 		assembler_.seqz(ZF, SF); // ZF
 		assembler_.sltz(SF, SF); // SF
-		return std::monostate{};
+		return std::monostate {};
 	case binary_atomic_op::bxor:
 		switch (n.rhs().type().width()) {
 		case 64:
@@ -345,7 +344,7 @@ std::variant<Register, std::unique_ptr<Label>,std::monostate> riscv64_translatio
 
 		assembler_.seqz(ZF, SF); // ZF
 		assembler_.sltz(SF, SF); // SF
-		return std::monostate{};
+		return std::monostate {};
 	case binary_atomic_op::xchg:
 		switch (n.rhs().type().width()) {
 		case 64:
@@ -460,100 +459,109 @@ Register riscv64_translation_context::materialise_bit_insert(const bit_insert_no
 	return out_reg;
 }
 
-Register riscv64_translation_context::materialise_read_reg(const read_reg_node &n) {
-    const port &value = n.val();
-    if (is_flag(value)) { // Flags
-        // TODO
-    } else if (is_gpr(value)) { // GPR
-        Register out_reg = std::get<Register>(materialise(value.owner()));
-        assembler_.ld(out_reg, { FP, static_cast<intptr_t>(n.regoff()) });
+Register riscv64_translation_context::materialise_read_reg(const read_reg_node &n)
+{
+	const port &value = n.val();
+	if (is_flag(value)) { // Flags
+		// TODO
+	} else if (is_gpr(value)) { // GPR
+		Register out_reg = std::get<Register>(materialise(value.owner()));
+		assembler_.ld(out_reg, { FP, static_cast<intptr_t>(n.regoff()) });
 
-        return out_reg;
-    }
+		return out_reg;
+	}
 
-    throw std::runtime_error("Unsupported width on register read: " +
-                             std::to_string(value.type().width()));
+	throw std::runtime_error("Unsupported width on register read: " + std::to_string(value.type().width()));
 }
 
-void riscv64_translation_context::materialise_write_reg(const write_reg_node &n) {
-    const port &value = n.val();
-    if (is_flag(value)) { // Flags
-        // TODO
-    } else if (is_gpr(value)) { // GPR
-        Register reg = std::get<Register>(materialise(value.owner()));
-        assembler_.sd(reg, { FP, static_cast<intptr_t>(n.regoff()) });
-        return;
-    }
+void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
+{
+	const port &value = n.val();
+	if (is_flag(value)) { // Flags
+		// TODO
+	} else if (is_gpr(value)) { // GPR
+		Register reg = std::get<Register>(materialise(value.owner()));
+		assembler_.sd(reg, { FP, static_cast<intptr_t>(n.regoff()) });
+		return;
+	}
 
-    throw std::runtime_error("Unsupported width on register write: " +
-                             std::to_string(value.type().width()));
+	throw std::runtime_error("Unsupported width on register write: " + std::to_string(value.type().width()));
 }
 
-Register riscv64_translation_context::materialise_read_mem(const read_mem_node &n) {
-    Register out_reg  = std::get<Register>(materialise(n.val().owner()));
-    Register addr_reg = std::get<Register>(materialise(n.address().owner()));
+Register riscv64_translation_context::materialise_read_mem(const read_mem_node &n)
+{
+	Register out_reg = std::get<Register>(materialise(n.val().owner()));
+	Register addr_reg = std::get<Register>(materialise(n.address().owner()));
 
-    Address addr { addr_reg };
-    auto load_instr = load_instructions.at(n.val().type().width());
-    (assembler_.*load_instr)(out_reg, addr);
+	Address addr { addr_reg };
+	auto load_instr = load_instructions.at(n.val().type().width());
+	(assembler_.*load_instr)(out_reg, addr);
 
-    return out_reg;
+	return out_reg;
 }
 
-void riscv64_translation_context::materialise_write_mem(const write_mem_node &n) {
-    Register src_reg  = std::get<Register>(materialise(n.val().owner()));
-    Register addr_reg = std::get<Register>(materialise(n.address().owner()));
+void riscv64_translation_context::materialise_write_mem(const write_mem_node &n)
+{
+	Register src_reg = std::get<Register>(materialise(n.val().owner()));
+	Register addr_reg = std::get<Register>(materialise(n.address().owner()));
 
-    // TODO: handle different sizes
-    Address addr { addr_reg };
-    auto store_instr = store_instructions.at(n.val().type().width());
-    (assembler_.*store_instr)(src_reg, addr);
+	Address addr { addr_reg };
+	auto store_instr = store_instructions.at(n.val().type().width());
+	(assembler_.*store_instr)(src_reg, addr);
 }
 
-Register riscv64_translation_context::materialise_read_pc(const read_pc_node &n) {
-    Register out_reg  = std::get<Register>(materialise(n.val().owner()));
+Register riscv64_translation_context::materialise_read_pc(const read_pc_node &n)
+{
+	Register out_reg = std::get<Register>(materialise(n.val().owner()));
 
-    auto load_instr = load_instructions.at(n.val().type().width());
-    assembler_.addi(out_reg, A1, 0);
+	auto load_instr = load_instructions.at(n.val().type().width());
+	assembler_.addi(out_reg, A1, 0);
 
-    return out_reg;
+	return out_reg;
 }
 
-void riscv64_translation_context::materialise_write_pc(const write_pc_node &n) {
-    Register src_reg  = std::get<Register>(materialise(n.val().owner()));
+void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
+{
+	Register src_reg = std::get<Register>(materialise(n.val().owner()));
 
-    auto store_instr = store_instructions.at(n.val().type().width());
-    assembler_.addi(A1, src_reg, 0);
+	auto store_instr = store_instructions.at(n.val().type().width());
+	assembler_.addi(A1, src_reg, 0);
 }
 
-std::unique_ptr<Label>
-riscv64_translation_context::materialise_label(const label_node &n) {
-    auto label = std::make_unique<Label>();
-    assembler_.Bind(label.get());
-    return label;
+std::unique_ptr<Label> riscv64_translation_context::materialise_label(const label_node &n)
+{
+	auto label = std::make_unique<Label>();
+	assembler_.Bind(label.get());
+	return label;
 }
 
-void riscv64_translation_context::materialise_br(const br_node &n) {
-    auto label = std::move(std::get<std::unique_ptr<Label>>(materialise(n.target())));
-    assembler_.j(label.get());
+void riscv64_translation_context::materialise_br(const br_node &n)
+{
+	// FIXME label materialising
+	auto label = std::move(std::get<std::unique_ptr<Label>>(materialise(n.target())));
+	assembler_.j(label.get());
 }
 
-void riscv64_translation_context::materialise_cond_br(const cond_br_node &n) {
-    Register cond = std::get<Register>(materialise(n.cond().owner()));
+void riscv64_translation_context::materialise_cond_br(const cond_br_node &n)
+{
+	Register cond = std::get<Register>(materialise(n.cond().owner()));
 
-    auto label = std::move(std::get<std::unique_ptr<Label>>(materialise(n.target())));
-    assembler_.beq(cond, ZERO, label.get());
+	// FIXME label materialising
+	auto label = std::move(std::get<std::unique_ptr<Label>>(materialise(n.target())));
+	assembler_.beq(cond, ZERO, label.get());
 }
 
-Register riscv64_translation_context::materialise_unary_arith(const unary_arith_node& n) {
-		Register out_reg = T0;
+Register riscv64_translation_context::materialise_unary_arith(const unary_arith_node &n)
+{
+	Register out_reg = T0;
 
-		Register src_reg = std::get<Register>(materialise(n.lhs().owner()));
-		if (n.op() == unary_arith_op::bnot)
-			assembler_.not_(out_reg, src_reg);
-            return out_reg;
+	Register src_reg = std::get<Register>(materialise(n.lhs().owner()));
+	if (n.op() == unary_arith_op::bnot) {
+		assembler_.not_(out_reg, src_reg);
+		return out_reg;
+	}
 
-        throw std::runtime_error("unsupported unary arithmetic operation");
+	throw std::runtime_error("unsupported unary arithmetic operation");
 }
 
 Register riscv64_translation_context::materialise_ternary_arith(const ternary_arith_node &n)
@@ -821,80 +829,79 @@ Register riscv64_translation_context::materialise_binary_arith(const binary_arit
 		// Could also work for LHS except sub
 		// TODO Probably incorrect to just cast to signed 64bit
 		auto imm = (intptr_t)((constant_node *)(n.rhs().owner()))->const_val_i();
-		if (imm)
+		//imm==0 more efficient as x0. Only IType works
+		if (imm && IsITypeImm(imm)) {
+			switch (n.op()) {
 
-			if (IsITypeImm(imm)) {
-				switch (n.op()) {
-
-				case binary_arith_op::sub:
-					if (imm == -2048) { // Can happen with inversion
-						goto standardPath;
-					}
-					switch (n.val().type().width()) {
-					case 64:
-						assembler_.addi(out_reg, src_reg1, -imm);
-						break;
-					case 32:
-						assembler_.addiw(out_reg, src_reg1, -imm);
-						break;
-					case 8:
-					case 16:
-						assembler_.addi(out_reg, src_reg1, -imm);
-						assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
-						assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
-						break;
-					}
-					assembler_.sltu(CF, src_reg1, out_reg); // CF FIXME Assumes out_reg!=src_reg1
-					assembler_.slt(OF, out_reg, src_reg1); // OF FIXME Assumes out_reg!=src_reg1
-					if (imm > 0) {
-						assembler_.xori(OF, OF, 1); // Invert on positive
-					}
-					break;
-
-				case binary_arith_op::add:
-
-					switch (n.val().type().width()) {
-					case 64:
-						assembler_.addi(out_reg, src_reg1, imm);
-						break;
-					case 32:
-						assembler_.addiw(out_reg, src_reg1, -imm);
-						break;
-					case 8:
-					case 16:
-						assembler_.addi(out_reg, src_reg1, imm);
-						assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
-						assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
-						break;
-					}
-
-					assembler_.sltu(CF, out_reg, src_reg1); // CF FIXME Assumes out_reg!=src_reg1
-					assembler_.slt(OF, out_reg, src_reg1); // OF FIXME Assumes out_reg!=src_reg1
-					if (imm < 0) {
-						assembler_.xori(OF, OF, 1); // Invert on negative
-					}
-
-					break;
-				// Binary operations preserve sign extension
-				case binary_arith_op::band:
-					assembler_.andi(out_reg, src_reg1, imm);
-					break;
-				case binary_arith_op::bor:
-					assembler_.ori(out_reg, src_reg1, imm);
-					break;
-				case binary_arith_op::bxor:
-					assembler_.xori(out_reg, src_reg1, imm);
-					break;
-				default:
-					// No-op Go to standard path
+			case binary_arith_op::sub:
+				if (imm == -2048) { // Can happen with inversion
 					goto standardPath;
 				}
+				switch (n.val().type().width()) {
+				case 64:
+					assembler_.addi(out_reg, src_reg1, -imm);
+					break;
+				case 32:
+					assembler_.addiw(out_reg, src_reg1, -imm);
+					break;
+				case 8:
+				case 16:
+					assembler_.addi(out_reg, src_reg1, -imm);
+					assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
+					assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
+					break;
+				}
+				assembler_.sltu(CF, src_reg1, out_reg); // CF FIXME Assumes out_reg!=src_reg1
+				assembler_.slt(OF, out_reg, src_reg1); // OF FIXME Assumes out_reg!=src_reg1
+				if (imm > 0) {
+					assembler_.xori(OF, OF, 1); // Invert on positive
+				}
+				break;
 
-				assembler_.seqz(ZF, out_reg); // ZF
-				assembler_.sltz(SF, out_reg); // SF
+			case binary_arith_op::add:
 
-				return out_reg;
+				switch (n.val().type().width()) {
+				case 64:
+					assembler_.addi(out_reg, src_reg1, imm);
+					break;
+				case 32:
+					assembler_.addiw(out_reg, src_reg1, -imm);
+					break;
+				case 8:
+				case 16:
+					assembler_.addi(out_reg, src_reg1, imm);
+					assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
+					assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
+					break;
+				}
+
+				assembler_.sltu(CF, out_reg, src_reg1); // CF FIXME Assumes out_reg!=src_reg1
+				assembler_.slt(OF, out_reg, src_reg1); // OF FIXME Assumes out_reg!=src_reg1
+				if (imm < 0) {
+					assembler_.xori(OF, OF, 1); // Invert on negative
+				}
+
+				break;
+			// Binary operations preserve sign extension
+			case binary_arith_op::band:
+				assembler_.andi(out_reg, src_reg1, imm);
+				break;
+			case binary_arith_op::bor:
+				assembler_.ori(out_reg, src_reg1, imm);
+				break;
+			case binary_arith_op::bxor:
+				assembler_.xori(out_reg, src_reg1, imm);
+				break;
+			default:
+				// No-op Go to standard path
+				goto standardPath;
 			}
+
+			assembler_.seqz(ZF, out_reg); // ZF
+			assembler_.sltz(SF, out_reg); // SF
+
+			return out_reg;
+		}
 	}
 
 standardPath:
