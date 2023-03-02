@@ -107,6 +107,30 @@ void shifts_translator::do_translate()
 		break;
   }
 
+  case XED_ICLASS_PSRLW:
+  case XED_ICLASS_PSRLD:
+  case XED_ICLASS_PSRLQ: {
+    auto nr_splits = 0;
+    auto typ = (inst == XED_ICLASS_PSRLW) ? value_type::u16() : (inst == XED_ICLASS_PSRLD) ? value_type::u32() : value_type::u64();
+
+    if (src->val().type().width() == 64) {
+      nr_splits = (inst == XED_ICLASS_PSRLW) ? 4 : (inst == XED_ICLASS_PSRLD) ? 2 : 1;
+    } else { // 128-bit xmm register
+      nr_splits = (inst == XED_ICLASS_PSRLW) ? 8 : (inst == XED_ICLASS_PSRLD) ? 4 : 2;
+    }
+
+    auto src_vec = builder().insert_bitcast(value_type::vector(typ, nr_splits), src->val());
+
+    for (int i = 0; i < nr_splits; i++) {
+      auto v = builder().insert_vector_extract(src_vec->val(), i);
+      auto shift = builder().insert_lsr(v->val(), amt->val());
+      src_vec = builder().insert_vector_insert(src_vec->val(), i, shift->val());
+    }
+
+    write_operand(0, src_vec->val());
+    break;
+  }
+
 	case XED_ICLASS_PSLLDQ: {
     auto amt_val = ((constant_node *)amt)->const_val_i();
 
