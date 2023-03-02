@@ -51,6 +51,8 @@ private:
 	Register materialise_cast(const ir::cast_node &n);
 	std::variant<Register, std::unique_ptr<Label>, std::monostate> materialise_binary_atomic(const ir::binary_atomic_node &n);
 	Register materialise_ternary_atomic(const ir::ternary_atomic_node &n);
+
+	void add_marker(int payload);
 };
 } // namespace arancini::output::dynamic::riscv64
 

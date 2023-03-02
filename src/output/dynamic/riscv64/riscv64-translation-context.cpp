@@ -45,10 +45,35 @@ Register riscv64_translation_context::allocate_register()
 	return registers[reg_allocator_index_++];
 }
 
-void riscv64_translation_context::begin_block() { }
-void riscv64_translation_context::begin_instruction(off_t address, const std::string &disasm) { reg_allocator_index_ = 0; }
-void riscv64_translation_context::end_instruction() { }
-void riscv64_translation_context::end_block() { }
+/**
+ * Adds a NOP with a non standard encoding to the generated instructions as a marker.
+ * @param payload The immediate to use in the immediate field of the NOP
+ */
+void riscv64_translation_context::add_marker(int payload)
+{
+	assembler_.li(ZERO, payload);
+}
+
+void riscv64_translation_context::begin_block()
+{
+	assembler_.ebreak();
+
+	add_marker(1);
+}
+
+void riscv64_translation_context::begin_instruction(off_t address, const std::string &disasm)
+{
+	add_marker(2);
+	reg_allocator_index_ = 0;
+	// TODO remember address to materialise in case of read-pc
+}
+void riscv64_translation_context::end_instruction() { add_marker(-2); }
+
+void riscv64_translation_context::end_block()
+{
+	assembler_.ebreak();
+	// TODO return
+}
 void riscv64_translation_context::lower(ir::node *n) { materialise(n); }
 
 static inline bool is_flag(const port &value) { return value.type().width() == 1; }
