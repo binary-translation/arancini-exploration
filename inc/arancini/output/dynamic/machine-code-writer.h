@@ -18,14 +18,15 @@ public:
 	/*template <typename T> void emit(T v)
 	{
 		ensure_capacity(sizeof(T));
-		((T *)code_ptr_)[code_size_] = v;
+
+		*((T *)(&((char*)(code_ptr_))[code_size_])) = v;
 		code_size_ += sizeof(T);
 	}
 
-	void emit8(unsigned char c) { emit<decltype(c)>(c); }
-	void emit16(unsigned short c) { emit<decltype(c)>(c); }
-	void emit32(unsigned int c) { emit<decltype(c)>(c); }
-	void emit64(unsigned long c) { emit<decltype(c)>(c); }*/
+	void emit8(unsigned char c) { emit<decltype(c)>(c); }*/
+	void emit16(unsigned short c) { copy_in(reinterpret_cast<const unsigned char *>(&c), sizeof(c)); }
+	void emit32(unsigned int c) { copy_in(reinterpret_cast<const unsigned char *>(&c), sizeof(c)); }
+	/*void emit64(unsigned long c) { emit<decltype(c)>(c); }*/
 
 	void copy_in(const unsigned char *buffer, size_t size)
 	{
