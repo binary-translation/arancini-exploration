@@ -9,9 +9,9 @@
 
 namespace arancini::output::dynamic::riscv64 {
 
-Assembler::Assembler(ExtensionSet extensions)
+Assembler::Assembler(arancini::output::dynamic::machine_code_writer *writer, ExtensionSet extensions)
 	: extensions_(extensions)
-	, writer {}
+	, writer {writer}
 {
 }
 
@@ -20,7 +20,7 @@ Assembler::~Assembler() = default;
 void Assembler::Bind(Label *label)
 {
 	ASSERT(!label->IsBound());
-	intptr_t target_position = writer.size();
+	intptr_t target_position = writer->size();
 
 	while (label->IsLinked()) {
 		int32_t branch_position = label->Position();

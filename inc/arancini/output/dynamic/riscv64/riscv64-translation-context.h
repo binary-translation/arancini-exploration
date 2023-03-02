@@ -12,6 +12,7 @@ class riscv64_translation_context : public translation_context {
 public:
 	riscv64_translation_context(machine_code_writer &writer)
 		: translation_context(writer)
+		, assembler_(&writer, RV_GC)
 	{
 	}
 
@@ -22,7 +23,7 @@ public:
 	virtual void lower(ir::node *n) override;
 
 private:
-	Assembler assembler_{RV_GC};
+	Assembler assembler_;
 
     std::variant<Register, std::unique_ptr<Label>, std::monostate>
     materialise(const ir::node *n);
