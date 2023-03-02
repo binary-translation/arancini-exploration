@@ -18,6 +18,9 @@ call_native:
     sd s8, 72(sp)
     sd s9, 80(sp)
 
+    // Get state pointer into right register
+    mv a1, fp
+
     // Call function
     jalr ra, a0, 0
 
