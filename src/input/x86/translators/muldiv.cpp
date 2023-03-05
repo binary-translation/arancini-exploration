@@ -26,7 +26,7 @@ void muldiv_translator::do_translate()
 			write_reg(xedreg_to_offset(XED_REG_AX), rslt->val());
 		} else {
 			auto low = builder().insert_bit_extract(rslt->val(), 0, op[0]->val().type().width());
-			auto high = builder().insert_bit_extract(rslt->val(), op[0]->val().type().width() - 1, op[0]->val().type().width());
+			auto high = builder().insert_bit_extract(rslt->val(), op[0]->val().type().width(), op[0]->val().type().width());
 
 			write_operand(1, low->val());
 			write_operand(2, high->val());
@@ -70,7 +70,7 @@ void muldiv_translator::do_translate()
 					write_reg(xedreg_to_offset(XED_REG_AX), rslt->val());
 				} else {
 					auto low = builder().insert_bit_extract(rslt->val(), 0, op[0]->val().type().width());
-					auto high = builder().insert_bit_extract(rslt->val(), op[0]->val().type().width() - 1, op[0]->val().type().width());
+					auto high = builder().insert_bit_extract(rslt->val(), op[0]->val().type().width(), op[0]->val().type().width());
 
 					write_operand(1, low->val());
 					write_operand(2, high->val());

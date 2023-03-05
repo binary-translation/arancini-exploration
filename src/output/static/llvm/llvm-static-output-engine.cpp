@@ -519,6 +519,26 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		}
 	}
 
+	case node_kinds::bit_extract: {
+		auto uncle = (bit_extract_node *)n;
+		auto val = lower_port(builder, state_arg, pkt, uncle->source_value());
+
+		auto val_bit = builder.CreateBitCast(val, VectorType::get(types.i1, val->getType()->getIntegerBitWidth(), false));
+
+		auto result = builder.CreateExtractVector(VectorType::get(types.i1, uncle->length(), false), val_bit, ConstantInt::get( types.i64, uncle->from()));
+		return builder.CreateBitCast(result, Type::getIntNTy(*llvm_context_, uncle->length()));
+	}
+	case node_kinds::bit_insert: {
+		auto bin = (bit_insert_node *)n;
+		auto dst = lower_port(builder, state_arg, pkt, bin->source_value());
+		auto val = lower_port(builder, state_arg, pkt, bin->bits());
+
+		auto dst_bit = builder.CreateBitCast(dst, VectorType::get(types.i1, dst->getType()->getIntegerBitWidth(), false));
+		auto val_bit = builder.CreateBitCast(val, VectorType::get(types.i1, val->getType()->getIntegerBitWidth(), false));
+
+		auto result = builder.CreateInsertVector(dst_bit->getType(), dst_bit, val_bit, ConstantInt::get( types.i64, bin->to()));
+		return builder.CreateBitCast(result, dst->getType());
+	}
 	default:
 		throw std::runtime_error("unsupported port node kind " + std::to_string((int)n->kind()));
 	}
