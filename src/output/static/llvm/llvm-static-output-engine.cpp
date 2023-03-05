@@ -325,7 +325,15 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 				return builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, lhs, rhs);
 			case binary_arith_op::cmpne:
 				return builder.CreateCmp(CmpInst::Predicate::ICMP_NE, lhs, rhs);
-
+			case binary_arith_op::mod: {
+				auto ltype = lhs->getType();
+				auto rtype = rhs->getType();
+				if (ltype->isFloatingPointTy() && rtype->isFloatingPointTy())
+					return builder.CreateFRem(lhs, rhs);
+				if (((IntegerType *)ltype)->getSignBit() && ((IntegerType *)ltype)->getSignBit())
+					return builder.CreateSRem(lhs, rhs);
+				return builder.CreateURem(lhs, rhs);
+			}
 			default:
 				throw std::runtime_error("unsupported binary operator " + std::to_string((int)ban->op()));
 			}
@@ -576,7 +584,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		// gep register
 		// store value
 
-		// std::cerr << "wreg off=" << wrn->regoff() << std::endl;
+		// std::cerr << "wreg name=" << wrn->regname() << std::endl;
 
 		auto dest_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, wrn->regidx()) },
 			reg_name(wrn->regidx()));
