@@ -211,7 +211,25 @@ void muldiv_translator::do_translate()
       dst = builder().insert_bit_insert(dst->val(), mul0->val(), 0, 64);
       dst = builder().insert_bit_insert(dst->val(), mul1->val(), 64, 64);
       write_operand(0, dst->val());
-	}
+    }
+    break;
+  }
+
+  case XED_ICLASS_PMULLW: {
+    auto dst = read_operand(0);
+    auto src = read_operand(1);
+    auto nr_elt = dst->val().type().width() / 16;
+
+    dst = builder().insert_bitcast(value_type::vector(value_type::s16(), nr_elt), dst->val());
+    src = builder().insert_bitcast(value_type::vector(value_type::s16(), nr_elt), src->val());
+    for (int i = 0; i < nr_elt; i++) {
+      auto dst_elt = builder().insert_sx(value_type::s32(), builder().insert_vector_extract(dst->val(), i)->val());
+      auto src_elt = builder().insert_sx(value_type::s32(), builder().insert_vector_extract(src->val(), i)->val());
+      auto mul = builder().insert_mul(dst_elt->val(), src_elt->val());
+      auto res_elt = builder().insert_bit_extract(mul->val(), 0, 16);
+      dst = builder().insert_vector_insert(dst->val(), i, res_elt->val());
+    }
+    write_operand(0, dst->val());
     break;
   }
 
