@@ -207,6 +207,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_PUNPCKLDQ:
 	case XED_ICLASS_PUNPCKLWD:
 	case XED_ICLASS_PUNPCKHWD:
+  case XED_ICLASS_PACKUSWB:
 		return std::make_unique<punpck_translator>(builder);
 
 	case XED_ICLASS_VADDSS:
