@@ -122,6 +122,33 @@ void binop_translator::do_translate()
     rslt = lhs;
     break;
   }
+
+  case XED_ICLASS_PCMPGTB:
+  case XED_ICLASS_PCMPGTW:
+  case XED_ICLASS_PCMPGTD: {
+    auto lhs = read_operand(0);
+    auto rhs = read_operand(1);
+    auto nr_splits = (inst_class == XED_ICLASS_PCMPGTB) ? 8 : (inst_class == XED_ICLASS_PCMPGTW) ? 4 : 2;
+    if (lhs->val().type().width() == 128) {
+      nr_splits *= 2;
+    }
+    auto typ = (inst_class == XED_ICLASS_PCMPGTB) ? value_type::u8() : (inst_class == XED_ICLASS_PCMPGTW) ? value_type::u16() : value_type::u32();
+    lhs = builder().insert_bitcast(value_type::vector(typ, nr_splits), lhs->val());
+    rhs = builder().insert_bitcast(value_type::vector(typ, nr_splits), rhs->val());
+
+    auto cst_0 = builder().insert_constant_i(value_type(value_type_class::unsigned_integer, lhs->val().type().width() / nr_splits), 0);
+    auto cst_1 = (inst_class == XED_ICLASS_PCMPGTB) ? builder().insert_constant_u8(0xFF) : (inst_class == XED_ICLASS_PCMPGTW) ? builder().insert_constant_u16(0xFFFF) : builder().insert_constant_u32(0xFFFFFFFF);
+
+    for (int i = 0; i < nr_splits; i++) {
+      auto gt = builder().insert_cmpgt(builder().insert_vector_extract(lhs->val(), i)->val(), builder().insert_vector_extract(rhs->val(), i)->val());
+      auto res = builder().insert_csel(gt->val(), cst_1->val(), cst_0->val());
+      lhs = builder().insert_vector_insert(lhs->val(), i, res->val());
+    }
+    rslt = lhs;
+
+    break;
+  }
+
 	case XED_ICLASS_XADD: {
     auto dst = read_operand(0);
     auto src = read_operand(1);

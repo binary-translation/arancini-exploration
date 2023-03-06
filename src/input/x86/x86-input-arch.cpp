@@ -148,25 +148,28 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_PSUBW:
   case XED_ICLASS_PSUBB:
   case XED_ICLASS_PCMPEQB:
-		return std::make_unique<binop_translator>(builder);
+  case XED_ICLASS_PCMPGTB:
+  case XED_ICLASS_PCMPGTW:
+  case XED_ICLASS_PCMPGTD:
+	  return std::make_unique<binop_translator>(builder);
 
-	case XED_ICLASS_PUSH:
-	case XED_ICLASS_POP:
-	case XED_ICLASS_LEAVE:
-		return std::make_unique<stack_translator>(builder);
+  case XED_ICLASS_PUSH:
+  case XED_ICLASS_POP:
+  case XED_ICLASS_LEAVE:
+	  return std::make_unique<stack_translator>(builder);
 
-	case XED_ICLASS_CALL_FAR:
-	case XED_ICLASS_CALL_NEAR:
-	case XED_ICLASS_RET_FAR:
-	case XED_ICLASS_RET_NEAR:
-	case XED_ICLASS_JMP:
-		return std::make_unique<branch_translator>(builder);
+  case XED_ICLASS_CALL_FAR:
+  case XED_ICLASS_CALL_NEAR:
+  case XED_ICLASS_RET_FAR:
+  case XED_ICLASS_RET_NEAR:
+  case XED_ICLASS_JMP:
+	  return std::make_unique<branch_translator>(builder);
 
-	case XED_ICLASS_SAR:
-	case XED_ICLASS_SHR:
-	case XED_ICLASS_SHL:
-	case XED_ICLASS_ROR:
-	case XED_ICLASS_ROL:
+  case XED_ICLASS_SAR:
+  case XED_ICLASS_SHR:
+  case XED_ICLASS_SHL:
+  case XED_ICLASS_ROR:
+  case XED_ICLASS_ROL:
   case XED_ICLASS_PSRLW:
   case XED_ICLASS_PSRLD:
   case XED_ICLASS_PSRLQ:
