@@ -89,6 +89,56 @@ void punpck_translator::do_translate()
 		write_operand(0, dst->val());
 		break;
 	}
+
+  case XED_ICLASS_PACKUSWB: {
+		/*
+		 * DEST[7:0] := SaturateSignedWordToUnsignedByte DEST[15:0];
+     * DEST[15:8] := SaturateSignedWordToUnsignedByte DEST[31:16];
+     * DEST[23:16] := SaturateSignedWordToUnsignedByte DEST[47:32];
+     * DEST[31:24] := SaturateSignedWordToUnsignedByte DEST[63:48];
+     * DEST[39:32] := SaturateSignedWordToUnsignedByte SRC[15:0];
+     * DEST[47:40] := SaturateSignedWordToUnsignedByte SRC[31:16];
+     * DEST[55:48] := SaturateSignedWordToUnsignedByte SRC[47:32];
+     * DEST[63:56] := SaturateSignedWordToUnsignedByte SRC[63:48];
+     * (until 128 bits for xmm inputs)
+     * Saturate: if signed word > unsigned byte, make it 0xFF, if negative, make it 0x00
+     */
+    auto nr_splits = (op0->val().type().width() == 64) ? 4 : 8;
+    auto dst = builder().insert_bitcast(value_type::vector(value_type::s16(), nr_splits), op0->val());
+    auto src = builder().insert_bitcast(value_type::vector(value_type::s16(), nr_splits), op1->val());
+    auto dst_bytes = builder().insert_bitcast(value_type::vector(value_type::s8(), nr_splits * 2), op0->val());
+
+    for (int i = 0; i < nr_splits * 2; i++) {
+      auto word = (i < nr_splits) ? builder().insert_vector_extract(dst->val(), i) : builder().insert_vector_extract(src->val(), i - nr_splits);
+      auto neg_test = builder().insert_cmpgt(builder().insert_constant_s16(0)->val(), word->val());
+      cond_br_node *br_neg = (cond_br_node *)builder().insert_cond_br(neg_test->val(), nullptr);
+      auto overflow_test = builder().insert_and(word->val(), builder().insert_constant_s16(0xFF00)->val());
+      cond_br_node *br_of = (cond_br_node *)builder().insert_cond_br(overflow_test->val(), nullptr);
+
+      // word fits in u8, set dst to truncated word
+      auto unsign = builder().insert_bitcast(value_type::u16(), word->val());
+      dst_bytes = builder().insert_vector_insert(dst_bytes->val(), i, builder().insert_trunc(value_type::u8(), unsign->val())->val());
+      br_node *br_end = (br_node *)builder().insert_br(nullptr);
+
+      // word is negative, set dst to 0x00
+      auto neg_label = builder().insert_label("negative");
+      br_neg->add_br_target(neg_label);
+      dst_bytes = builder().insert_vector_insert(dst_bytes->val(), i, builder().insert_constant_u8(0)->val());
+      br_node *br_end2 = (br_node *)builder().insert_br(nullptr);
+
+      // word overflows for 8-bit unsigned, set dst to 0xFF
+      auto of_label = builder().insert_label("overflow");
+      br_of->add_br_target(of_label);
+      dst_bytes = builder().insert_vector_insert(dst_bytes->val(), i, builder().insert_constant_u8(0xFF)->val());
+
+      auto end_label = builder().insert_label("end");
+      br_end->add_br_target(end_label);
+      br_end2->add_br_target(end_label);
+    }
+    write_operand(0, dst_bytes->val());
+    break;
+  }
+
 	default:
 		throw std::runtime_error("unsupported punpck operation");
 	}
