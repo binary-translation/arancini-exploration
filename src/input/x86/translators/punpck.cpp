@@ -57,38 +57,50 @@ void punpck_translator::do_translate()
 		 */
 		auto v0 = builder().insert_bitcast(value_type::vector(value_type::u16(), 8), op0->val());
 		auto v1 = builder().insert_bitcast(value_type::vector(value_type::u16(), 8), op1->val());
-		auto dst = v0;
-		for (int i = 0; i < 4; i++) {
-			if (i)
-				dst = builder().insert_vector_insert(dst->val(), 2 * i, builder().insert_vector_extract(v0->val(), i)->val());
-			dst = builder().insert_vector_insert(dst->val(), 2 * i + 1, builder().insert_vector_extract(v1->val(), i)->val());
-		}
+	// case XED_ICLASS_PUNPCKHWD: {
+	// 	/*
+	// 	 * Destination[0..15] = Destination[64..79];
+	// 	 * Destination[16..31] = Source[64..79];
+	// 	 * Destination[32..47] = Destination[80..95];
+	// 	 * Destination[48..63] = Source[80..95];
+	// 	 * Destination[64..79] = Destination[96..111];
+	// 	 * Destination[80..95] = Source[96..111];
+	// 	 * Destination[96..111] = Destination[112..127];
+	// 	 * Destination[112..127] = Source[112..127];
+	// 	 */
+	// 	auto v0 = builder().insert_bitcast(value_type::vector(value_type::u16(), 8), op0->val());
+	// 	auto v1 = builder().insert_bitcast(value_type::vector(value_type::u16(), 8), op1->val());
+	// 	auto dst = v0;
+	// 	for (int i = 0; i < 4; i++) {
+	// 		dst = builder().insert_vector_insert(dst->val(), 2 * i, builder().insert_vector_extract(v0->val(), i + 4)->val());
+	// 		dst = builder().insert_vector_insert(dst->val(), 2 * i + 1, builder().insert_vector_extract(v1->val(), i + 4)->val());
+	// 	}
 
-		write_operand(0, dst->val());
-		break;
-	}
-	case XED_ICLASS_PUNPCKHWD: {
-		/*
-		 * Destination[0..15] = Destination[64..79];
-		 * Destination[16..31] = Source[64..79];
-		 * Destination[32..47] = Destination[80..95];
-		 * Destination[48..63] = Source[80..95];
-		 * Destination[64..79] = Destination[96..111];
-		 * Destination[80..95] = Source[96..111];
-		 * Destination[96..111] = Destination[112..127];
-		 * Destination[112..127] = Source[112..127];
-		 */
-		auto v0 = builder().insert_bitcast(value_type::vector(value_type::u16(), 8), op0->val());
-		auto v1 = builder().insert_bitcast(value_type::vector(value_type::u16(), 8), op1->val());
-		auto dst = v0;
-		for (int i = 0; i < 4; i++) {
-			dst = builder().insert_vector_insert(dst->val(), 2 * i, builder().insert_vector_extract(v0->val(), i + 4)->val());
-			dst = builder().insert_vector_insert(dst->val(), 2 * i + 1, builder().insert_vector_extract(v1->val(), i + 4)->val());
-		}
+	// 	write_operand(0, dst->val());
+	// 	break;
+	// }
 
-		write_operand(0, dst->val());
-		break;
-	}
+  case XED_ICLASS_PUNPCKHBW:
+	case XED_ICLASS_PUNPCKHWD:
+  case XED_ICLASS_PUNPCKHDQ:
+  case XED_ICLASS_PUNPCKHQDQ: {
+    auto input_size = op0->val().type().width();
+    auto elt_size = (inst == XED_ICLASS_PUNPCKHBW) ? 8 : (inst == XED_ICLASS_PUNPCKHWD) ? 16 : (inst == XED_ICLASS_PUNPCKHDQ) ? 32 : 64;
+    auto elt_type = value_type(value_type_class::unsigned_integer, elt_size);
+		auto v0 = builder().insert_bitcast(value_type::vector(elt_type, input_size / elt_size), op0->val());
+		auto v1 = builder().insert_bitcast(value_type::vector(elt_type, input_size / elt_size), op1->val());
+		auto dst = v0;
+
+    for (int i = 0; i < input_size / elt_size / 2; i++) {
+      dst = builder().insert_vector_insert(dst->val(), 2 * i,
+                                           builder().insert_vector_extract(v0->val(), i + v0->val().type().nr_elements() / 2)->val());
+      dst = builder().insert_vector_insert(dst->val(), 2 * i + 1,
+                                           builder().insert_vector_extract(v1->val(), i + v1->val().type().nr_elements() / 2)->val());
+    }
+
+    write_operand(0, dst->val());
+    break;
+  }
 
   case XED_ICLASS_PACKUSWB: {
 		/*
