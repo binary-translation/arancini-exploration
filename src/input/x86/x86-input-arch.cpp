@@ -206,9 +206,10 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_REP_MOVSQ:
 		return std::make_unique<rep_translator>(builder);
 
-	case XED_ICLASS_PUNPCKLQDQ:
-	case XED_ICLASS_PUNPCKLDQ:
+	case XED_ICLASS_PUNPCKLBW:
 	case XED_ICLASS_PUNPCKLWD:
+	case XED_ICLASS_PUNPCKLDQ:
+	case XED_ICLASS_PUNPCKLQDQ:
 	case XED_ICLASS_PUNPCKHBW:
 	case XED_ICLASS_PUNPCKHWD:
 	case XED_ICLASS_PUNPCKHDQ:
