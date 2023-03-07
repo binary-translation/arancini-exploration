@@ -55,6 +55,22 @@ void binop_translator::do_translate()
 	case XED_ICLASS_SBB:
 		rslt = builder().insert_sbb(op0->val(), op1->val(), auto_cast(op0->val().type(), read_reg(value_type::u1(), reg_offsets::CF))->val());
 		break;
+
+  case XED_ICLASS_SUBSS:
+	case XED_ICLASS_SUBSD: {
+    auto size = (inst_class == XED_ICLASS_SUBSS) ? 32 : 64;
+
+    auto op0_low = builder().insert_bitcast(value_type(value_type_class::floating_point, size),
+                                            builder().insert_bit_extract(op0->val(), 0, size)->val());
+    if (op1->val().type().width() == 128) {
+      op1 = builder().insert_bit_extract(op1->val(), 0, size);
+    }
+    op1 = builder().insert_bitcast(value_type(value_type_class::floating_point, size), op1->val());
+
+    auto sub = builder().insert_sub(op0_low->val(), op1->val());
+    rslt = builder().insert_bit_insert(op0->val(), sub->val(), 0, size);
+    break;
+  }
 	// only the SSE2 version of the instruction with xmm registers is supported, not the "normal" one with GPRs
 	case XED_ICLASS_PADDQ: {
 		auto lhs = builder().insert_bitcast(value_type::vector(value_type::u64(), 2), op0->val());

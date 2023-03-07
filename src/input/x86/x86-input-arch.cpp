@@ -129,6 +129,8 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_ADC:
   case XED_ICLASS_SUB:
   case XED_ICLASS_SBB:
+  case XED_ICLASS_SUBSS:
+  case XED_ICLASS_SUBSD:
   case XED_ICLASS_CMP:
   case XED_ICLASS_TEST:
   case XED_ICLASS_XADD:
