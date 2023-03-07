@@ -1,8 +1,10 @@
+#include "arancini/ir/visitor.h"
 #include "llvm/Support/raw_ostream.h"
 #include <arancini/ir/chunk.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine-impl.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
 #include <iostream>
+#include <llvm/IR/DerivedTypes.h>
 #include <map>
 #include <sstream>
 #include <string>
@@ -55,6 +57,8 @@ void llvm_static_output_engine_impl::initialise_types()
 	types.i32 = Type::getInt32Ty(*llvm_context_);
 	types.i64 = Type::getInt64Ty(*llvm_context_);
 	types.i128 = Type::getInt128Ty(*llvm_context_);
+	types.i256 = IntegerType::get(*llvm_context_, 256);
+	types.i512 = IntegerType::get(*llvm_context_, 512);
 
 	// CPU State
 

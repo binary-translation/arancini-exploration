@@ -39,7 +39,7 @@ namespace arancini::input::x86::translators {
 
     xed_decoded_inst_t *xed_inst() const { return xed_inst_; }
 
-    action_node *write_operand(int opnum, port &value);
+    action_node *write_operand(int opnum, port &value, bool keep_enc = false);
     value_node *read_operand(int opnum);
     ssize_t get_operand_width(int opnum);
     bool is_memory_operand(int opnum);

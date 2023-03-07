@@ -329,7 +329,7 @@ private:
 
 class write_reg_node : public action_node {
 public:
-	write_reg_node(unsigned long regoff, unsigned long regidx, const char *regname, port &val)
+	write_reg_node(unsigned long regoff, unsigned long regidx, const char *regname, port &val) 
 		: action_node(node_kinds::write_reg)
 		, regoff_(regoff)
 		, regidx_(regidx)
@@ -802,6 +802,9 @@ public:
 			throw std::runtime_error("width of type of incoming bits cannot be greater than type of value");
 		}
 
+		if (length > source_value_.type().width()) {
+			throw std::logic_error("width of type of incoming bits cannot be smaller than requested length");
+		}
 		if (to + length - 1 > source_value_.type().width() - 1) {
 			throw std::logic_error("bit insert range [" + std::to_string(to + length - 1) + ":" + std::to_string(to) + "] is out of bounds in target value ["
 				+ std::to_string(source_value_.type().width()) + ":0]");
