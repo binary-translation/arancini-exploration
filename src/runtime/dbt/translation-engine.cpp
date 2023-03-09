@@ -97,8 +97,7 @@ translation *translation_engine::translate(unsigned long pc)
 
 	std::cerr << "translating pc=" << std::hex << pc << std::endl;
 
-	arena_machine_code_allocator a(code_arena_);
-	machine_code_writer writer(a);
+	machine_code_writer writer(alloc_);
 	auto ctx = oe_.create_translation_context(writer);
 
 	dbt_ir_builder builder(ia_.get_internal_function_resolver(), ctx);
