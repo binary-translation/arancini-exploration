@@ -853,7 +853,7 @@ inline intx_t DecodeCBImm(uint32_t encoding) {
 }
 
 inline bool IsCIImm(intptr_t imm) {
-  return Utils::IsInt(6, imm) && Utils::IsAligned(imm, 1);
+  return Utils::IsInt(6, imm);
 }
 inline uint32_t EncodeCIImm(intptr_t imm) {
   ASSERT(IsCIImm(imm));

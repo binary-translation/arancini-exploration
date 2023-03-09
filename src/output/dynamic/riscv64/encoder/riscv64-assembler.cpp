@@ -1828,6 +1828,8 @@ void Assembler::c_slli(Register rd, Register rs1, intptr_t imm)
 	ASSERT(Supports(RV_C));
 	ASSERT(rd == rs1);
 	ASSERT(imm != 0);
+	//TODO Temp fix
+	imm=SignExtend(6, imm);
 	Emit16(C_SLLI | EncodeCRd(rd) | EncodeCIImm(imm));
 }
 
@@ -1836,6 +1838,7 @@ void Assembler::c_srli(Register rd, Register rs1, intptr_t imm)
 	ASSERT(Supports(RV_C));
 	ASSERT(rd == rs1);
 	ASSERT(imm != 0);
+	imm = SignExtend(6, imm);
 	Emit16(C_SRLI | EncodeCRs1p(rd) | EncodeCIImm(imm));
 }
 
@@ -1844,6 +1847,7 @@ void Assembler::c_srai(Register rd, Register rs1, intptr_t imm)
 	ASSERT(Supports(RV_C));
 	ASSERT(rd == rs1);
 	ASSERT(imm != 0);
+	imm = SignExtend(6, imm);
 	Emit16(C_SRAI | EncodeCRs1p(rd) | EncodeCIImm(imm));
 }
 
