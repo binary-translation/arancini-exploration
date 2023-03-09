@@ -26,6 +26,8 @@ public:
 private:
 	Assembler assembler_;
 
+	off_t current_address_;
+
 	std::unordered_map<const ir::label_node *, std::unique_ptr<Label>> labels_;
 
 	size_t reg_allocator_index_ { 0 };

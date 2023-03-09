@@ -19,10 +19,10 @@ call_native:
     sd s9, 80(sp)
 
     // Get state pointer into right register
-    mv a1, fp
+    mv fp, a1
 
     // Call function
-    jalr ra, a0, 0
+    jalr a0
 
     // Restore callee-saved registers from stack
     // TODO: handle float regs
@@ -41,7 +41,7 @@ call_native:
     addi sp, sp, 80   // Deallocate the stack space
 
     # Set return value to 0 (the error code)
-    addi a0, x0, 0
+    li a0, 0
 
     ret
 .size call_native,.-call_native

@@ -76,7 +76,7 @@ void riscv64_translation_context::begin_instruction(off_t address, const std::st
 	reg_allocator_index_ = 0;
 	reg_for_port_.clear();
 	labels_.clear();
-	// TODO remember address to materialise in case of read-pc
+	current_address_ = address;
 }
 void riscv64_translation_context::end_instruction() { add_marker(-2); }
 
@@ -604,16 +604,7 @@ void riscv64_translation_context::materialise_write_mem(const write_mem_node &n)
 	(assembler_.*store_instr)(src_reg, addr);
 }
 
-Register riscv64_translation_context::materialise_read_pc(const read_pc_node &n)
-{
-	Register out_reg = allocate_register();
-
-	auto load_instr = load_instructions.at(n.val().type().width());
-	// FIXME in blocks bigger than a single instruction
-	assembler_.addi(out_reg, A1, 0);
-
-	return out_reg;
-}
+Register riscv64_translation_context::materialise_read_pc(const read_pc_node &n) { return materialise_constant(current_address_); }
 
 void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 {
