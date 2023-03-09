@@ -639,6 +639,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto intermediate_block = BasicBlock::Create(*llvm_context_, "IB", current_block->getParent());
 
 		auto cond = lower_port(builder, state_arg, pkt, cbn->cond());
+		lower_node(builder, state_arg, pkt, cbn->target());
 
 		auto br = builder.CreateCondBr(cond, label_nodes_to_llvm_blocks_[cbn->target()], intermediate_block);
 
