@@ -75,6 +75,7 @@ void riscv64_translation_context::begin_instruction(off_t address, const std::st
 	add_marker(2);
 	reg_allocator_index_ = 0;
 	reg_for_port_.clear();
+	labels_.clear();
 	// TODO remember address to materialise in case of read-pc
 }
 void riscv64_translation_context::end_instruction() { add_marker(-2); }
@@ -111,7 +112,7 @@ static std::unordered_map<std::size_t, load_store_func_t> store_instructions {
 	{ 64, &Assembler::sd },
 };
 
-std::variant<Register, std::unique_ptr<Label>, std::monostate> riscv64_translation_context::materialise(const node *n)
+std::variant<Register, std::monostate> riscv64_translation_context::materialise(const node *n)
 {
 	if (!n) {
 		throw std::runtime_error("RISC-V DBT received NULL pointer to node");
@@ -136,7 +137,8 @@ std::variant<Register, std::unique_ptr<Label>, std::monostate> riscv64_translati
 		materialise_write_pc(*reinterpret_cast<const write_pc_node *>(n));
 		return std::monostate {};
 	case node_kinds::label:
-		return materialise_label(*reinterpret_cast<const label_node *>(n));
+		materialise_label(*reinterpret_cast<const label_node *>(n));
+		return std::monostate {};
 	case node_kinds::br:
 		materialise_br(*reinterpret_cast<const br_node *>(n));
 		return std::monostate {};
@@ -262,7 +264,7 @@ Register riscv64_translation_context::materialise_ternary_atomic(const ternary_a
 	}
 }
 
-std::variant<Register, std::unique_ptr<Label>, std::monostate> riscv64_translation_context::materialise_binary_atomic(const binary_atomic_node &n)
+std::variant<Register, std::monostate> riscv64_translation_context::materialise_binary_atomic(const binary_atomic_node &n)
 {
 	Register dstAddr = std::get<Register>(materialise(n.lhs().owner()));
 	Register src = std::get<Register>(materialise(n.rhs().owner()));
@@ -622,27 +624,36 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 	(assembler_.*store_instr)(src_reg, addr);
 }
 
-std::unique_ptr<Label> riscv64_translation_context::materialise_label(const label_node &n)
+void riscv64_translation_context::materialise_label(const label_node &n)
 {
-	auto label = std::make_unique<Label>();
-	assembler_.Bind(label.get());
-	return label;
+	auto [it, not_exist] = labels_.try_emplace(&n, nullptr);
+
+	if (not_exist) {
+		it->second = std::make_unique<Label>();
+	}
+	assembler_.Bind(it->second.get());
 }
 
 void riscv64_translation_context::materialise_br(const br_node &n)
 {
-	// FIXME label materialising
-	auto label = std::move(std::get<std::unique_ptr<Label>>(materialise(n.target())));
-	assembler_.j(label.get());
+	auto [it, not_exist] = labels_.try_emplace(n.target(), nullptr);
+
+	if (not_exist) {
+		it->second = std::make_unique<Label>();
+	}
+	assembler_.j(it->second.get());
 }
 
 void riscv64_translation_context::materialise_cond_br(const cond_br_node &n)
 {
 	Register cond = std::get<Register>(materialise(n.cond().owner()));
 
-	// FIXME label materialising
-	auto label = std::move(std::get<std::unique_ptr<Label>>(materialise(n.target())));
-	assembler_.beq(cond, ZERO, label.get());
+	auto [it, not_exist] = labels_.try_emplace(n.target(), nullptr);
+
+	if (not_exist) {
+		it->second = std::make_unique<Label>();
+	}
+	assembler_.bnez(cond, it->second.get());
 }
 
 Register riscv64_translation_context::materialise_unary_arith(const unary_arith_node &n)
