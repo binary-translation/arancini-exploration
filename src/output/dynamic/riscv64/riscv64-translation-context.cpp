@@ -33,8 +33,11 @@ static std::unordered_map<unsigned long, Register> flag_map {
 	{ (unsigned long)reg_offsets::SF, SF },
 };
 
-Register riscv64_translation_context::allocate_register()
+std::pair<Register, bool> riscv64_translation_context::allocate_register(const port *p)
 {
+	if (p && reg_for_port_.count(p)) {
+		return { Register { reg_for_port_[p] }, false };
+	}
 	constexpr Register registers[] { S1, A0, A1, A2, A3, A4, A5, T0, T1, T2, A6, A7, S2, S3, S4, S5, S6, S7, T3, T4, T5, T6 };
 	// FIXME already materialised nodes
 
@@ -42,7 +45,13 @@ Register riscv64_translation_context::allocate_register()
 		throw std::runtime_error("RISC-V DBT ran out of registers for packet");
 	}
 
-	return registers[reg_allocator_index_++];
+	Register reg = registers[reg_allocator_index_++];
+
+	if (p) {
+		reg_for_port_[p] = reg.encoding();
+	}
+
+	return { reg, true };
 }
 
 /**
@@ -65,6 +74,7 @@ void riscv64_translation_context::begin_instruction(off_t address, const std::st
 {
 	add_marker(2);
 	reg_allocator_index_ = 0;
+	reg_for_port_.clear();
 	// TODO remember address to materialise in case of read-pc
 }
 void riscv64_translation_context::end_instruction() { add_marker(-2); }
@@ -161,7 +171,10 @@ Register riscv64_translation_context::materialise_ternary_atomic(const ternary_a
 	Register dstAddr = std::get<Register>(materialise(n.lhs().owner()));
 	Register acc = std::get<Register>(materialise(n.rhs().owner()));
 	Register src = std::get<Register>(materialise(n.top().owner()));
-	Register out_reg = allocate_register();
+	auto [out_reg, valid] = allocate_register(&n.val());
+	if (!valid) {
+		return out_reg;
+	}
 	Label fail;
 	Label retry;
 	Label end;
@@ -253,7 +266,10 @@ std::variant<Register, std::unique_ptr<Label>, std::monostate> riscv64_translati
 {
 	Register dstAddr = std::get<Register>(materialise(n.lhs().owner()));
 	Register src = std::get<Register>(materialise(n.rhs().owner()));
-	Register out_reg = allocate_register();
+	auto [out_reg, valid] = allocate_register(&n.val());
+	if (!valid) {
+		return out_reg;
+	}
 	// FIXME Correct memory ordering?
 	switch (n.op()) {
 	case binary_atomic_op::xadd:
@@ -436,7 +452,10 @@ std::variant<Register, std::unique_ptr<Label>, std::monostate> riscv64_translati
 Register riscv64_translation_context::materialise_cast(const cast_node &n)
 {
 	Register src_reg = std::get<Register>(materialise(n.source_value().owner()));
-	Register out_reg = allocate_register();
+	auto [out_reg, valid] = allocate_register(&n.val());
+	if (!valid) {
+		return out_reg;
+	}
 	switch (n.op()) {
 
 	case cast_op::bitcast:
@@ -469,7 +488,10 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 
 Register riscv64_translation_context::materialise_bit_extract(const bit_extract_node &n)
 {
-	Register out_reg = allocate_register();
+	auto [out_reg, valid] = allocate_register(&n.val());
+	if (!valid) {
+		return out_reg;
+	}
 	int from = n.from();
 	int length = n.length();
 
@@ -487,8 +509,11 @@ Register riscv64_translation_context::materialise_bit_extract(const bit_extract_
 
 Register riscv64_translation_context::materialise_bit_insert(const bit_insert_node &n)
 {
-	Register out_reg = allocate_register();
-	Register temp_reg = allocate_register();
+	auto [out_reg, valid] = allocate_register(&n.val());
+	if (!valid) {
+		return out_reg;
+	}
+	Register temp_reg = allocate_register(nullptr).first;
 	int to = n.to();
 	int length = n.length();
 
@@ -505,7 +530,6 @@ Register riscv64_translation_context::materialise_bit_insert(const bit_insert_no
 		assembler_.andi(temp_reg, bits, ~mask);
 		assembler_.andi(out_reg, src, mask);
 	} else {
-		// Fixme might override input
 		Register mask_reg = materialise_constant(~mask);
 		assembler_.and_(out_reg, src, mask_reg);
 		assembler_.slli(temp_reg, bits, 64 - length);
@@ -521,7 +545,10 @@ Register riscv64_translation_context::materialise_read_reg(const read_reg_node &
 {
 	const port &value = n.val();
 	if (is_flag(value) || is_gpr(value)) { // Flags or GPR
-		Register out_reg = allocate_register();
+		auto [out_reg, valid] = allocate_register(&n.val());
+		if (!valid) {
+			return out_reg;
+		}
 		auto load_instr = load_instructions.at(value.type().width());
 		(assembler_.*load_instr)(out_reg, { FP, static_cast<intptr_t>(n.regoff()) });
 		return out_reg;
@@ -552,7 +579,10 @@ void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 
 Register riscv64_translation_context::materialise_read_mem(const read_mem_node &n)
 {
-	Register out_reg = allocate_register();
+	auto [out_reg, valid] = allocate_register(&n.val());
+	if (!valid) {
+		return out_reg;
+	}
 	Register addr_reg = std::get<Register>(materialise(n.address().owner()));
 
 	Address addr { addr_reg };
@@ -617,7 +647,10 @@ void riscv64_translation_context::materialise_cond_br(const cond_br_node &n)
 
 Register riscv64_translation_context::materialise_unary_arith(const unary_arith_node &n)
 {
-	Register out_reg = allocate_register();
+	auto [out_reg, valid] = allocate_register(&n.val());
+	if (!valid) {
+		return out_reg;
+	}
 
 	Register src_reg = std::get<Register>(materialise(n.lhs().owner()));
 	if (n.op() == unary_arith_op::bnot) {
@@ -630,7 +663,10 @@ Register riscv64_translation_context::materialise_unary_arith(const unary_arith_
 
 Register riscv64_translation_context::materialise_ternary_arith(const ternary_arith_node &n)
 {
-	Register out_reg = allocate_register();
+	auto [out_reg, valid] = allocate_register(&n.val());
+	if (!valid) {
+		return out_reg;
+	}
 
 	Register src_reg1 = std::get<Register>(materialise(n.lhs().owner()));
 	Register src_reg2 = std::get<Register>(materialise(n.rhs().owner()));
@@ -738,7 +774,10 @@ Register riscv64_translation_context::materialise_ternary_arith(const ternary_ar
 
 Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node &n)
 {
-	Register out_reg = allocate_register();
+	auto [out_reg, valid] = allocate_register(&n.val());
+	if (!valid) {
+		return out_reg;
+	}
 
 	Register src_reg = std::get<Register>(materialise(n.input().owner()));
 
@@ -884,7 +923,10 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 
 Register riscv64_translation_context::materialise_binary_arith(const binary_arith_node &n)
 {
-	Register out_reg = allocate_register();
+	auto [out_reg, valid] = allocate_register(&n.val());
+	if (!valid) {
+		return out_reg;
+	}
 
 	Register src_reg1 = std::get<Register>(materialise(n.lhs().owner()));
 
@@ -892,7 +934,7 @@ Register riscv64_translation_context::materialise_binary_arith(const binary_arit
 		// Could also work for LHS except sub
 		// TODO Probably incorrect to just cast to signed 64bit
 		auto imm = (intptr_t)((constant_node *)(n.rhs().owner()))->const_val_i();
-		//imm==0 more efficient as x0. Only IType works
+		// imm==0 more efficient as x0. Only IType works
 		if (imm && IsITypeImm(imm)) {
 			switch (n.op()) {
 
@@ -1032,7 +1074,9 @@ standardPath:
 		switch (n.val().type().width()) {
 		case 128: {
 
-			Register out_reg2 = allocate_register();
+			// FIXME
+
+			Register out_reg2 = allocate_register(nullptr).first;
 			// Split calculation
 			assembler_.mul(out_reg, src_reg1, src_reg2);
 			switch (n.val().type().element_type().type_class()) {
@@ -1196,6 +1240,7 @@ standardPath:
 
 	return out_reg;
 }
+
 Register riscv64_translation_context::materialise_constant(int64_t imm)
 {
 	// Optimizations with left or right shift at the end not implemented (for constants with trailing or leading zeroes)
@@ -1206,7 +1251,7 @@ Register riscv64_translation_context::materialise_constant(int64_t imm)
 	auto immLo32 = (int32_t)imm;
 	auto immLo12 = immLo32 << (32 - 12) >> (32 - 12); // sign extend lower 12 bit
 	if (imm == immLo32) {
-		Register out_reg = allocate_register();
+		Register out_reg = allocate_register(nullptr).first;
 		int32_t imm32Hi20 = (immLo32 - immLo12);
 		if (imm32Hi20 != 0) {
 			assembler_.lui(out_reg, imm32Hi20);

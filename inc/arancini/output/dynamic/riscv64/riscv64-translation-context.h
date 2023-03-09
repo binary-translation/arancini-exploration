@@ -5,6 +5,7 @@
 #include <arancini/output/dynamic/translation-context.h>
 
 #include <memory>
+#include <unordered_map>
 #include <variant>
 
 namespace arancini::output::dynamic::riscv64 {
@@ -26,8 +27,9 @@ private:
 	Assembler assembler_;
 
 	size_t reg_allocator_index_ { 0 };
+	std::unordered_map<const ir::port *, uint32_t> reg_for_port_;
 
-	Register allocate_register();
+	std::pair<Register, bool> allocate_register(const ir::port *p = nullptr);
 
     std::variant<Register, std::unique_ptr<Label>, std::monostate>
     materialise(const ir::node *n);
