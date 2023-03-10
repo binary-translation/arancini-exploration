@@ -13,18 +13,22 @@ call_native:
 
     // Remember the stack pointer, so we can do what we want
     // with the stack elsewhere.
-    mov %rsp, %r15
+    mov %rsp, %r14
 
     // Move the CPU state pointer to RBP for convenience.
     mov %rsi, %rbp
 
+    mov (%rbp), %r15
+
     // At this point, the pointer to the native code block is
-    // in RDI, R15 holds the remembered stack pointer, and RBP
+    // in RDI, R14 holds the remembered stack pointer, and RBP
     // has the CPU state pointer.
     call *%rdi
 
+    mov %r15, (%rbp)
+
     // Restore the stack pointer, undoing anything we did further down the call chain.
-    mov %r15, %rsp
+    mov %r14, %rsp
 
     // Restore callee-saved register.
     pop %r15

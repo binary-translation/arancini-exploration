@@ -24,7 +24,6 @@ public:
 
 	virtual void lower(ir::node *n) = 0;
 
-protected:
 	machine_code_writer &writer() const { return writer_; }
 
 private:

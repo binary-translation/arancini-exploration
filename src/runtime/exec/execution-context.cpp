@@ -78,15 +78,15 @@ int execution_context::invoke(void *cpu_state)
 
 	auto x86_state = (x86::x86_cpu_state *)cpu_state;
 
-	std::cerr << "invoke PC=" << std::hex << x86_state->PC << std::endl;
+	std::cerr << "=================" << std::endl;
+	std::cerr << "INVOKE PC=" << std::hex << x86_state->PC << std::endl;
+	std::cerr << "=================" << std::endl;
 
 	auto txln = te_.get_translation(x86_state->PC);
 	if (txln == nullptr) {
 		std::cerr << "unable to translate" << std::endl;
 		return 1;
 	}
-
-	std::cerr << "txln " << txln << std::endl;
 
 	return txln->invoke(cpu_state);
 }

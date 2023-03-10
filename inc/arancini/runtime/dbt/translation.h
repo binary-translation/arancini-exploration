@@ -17,11 +17,7 @@ public:
 
 	~translation() { std::free(code_ptr_); }
 
-	int invoke(void *cpu_state)
-	{
-		std::cerr << "calling native " << code_ptr_ << std::endl;
-		return call_native(code_ptr_, cpu_state);
-	}
+	int invoke(void *cpu_state) { return call_native(code_ptr_, cpu_state); }
 
 private:
 	void *code_ptr_;

@@ -4,3 +4,6 @@
 [submodule "lib/intel-xed/mbuild"]
 	path = lib/intel-xed/mbuild
 	url = https://github.com/intelxed/mbuild.git
+[submodule "lib/fadec"]
+	path = lib/fadec
+	url = https://github.com/aengelke/fadec.git

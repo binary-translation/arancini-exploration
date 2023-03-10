@@ -3,7 +3,7 @@
 #include <arancini/ir/node.h>
 #include <arancini/ir/port.h>
 #include <arancini/output/dynamic/translation-context.h>
-#include <arancini/output/dynamic/x86/machine-code-builder.h>
+#include <arancini/output/dynamic/x86/x86-instruction-builder.h>
 #include <map>
 #include <set>
 
@@ -17,16 +17,20 @@ public:
 	}
 
 	virtual void begin_block() override;
-	virtual void begin_instruction(off_t address, const std::string& disasm) override;
+	virtual void begin_instruction(off_t address, const std::string &disasm) override;
 	virtual void end_instruction() override;
 	virtual void end_block() override;
 	virtual void lower(ir::node *n) override;
 
 private:
-	machine_code_builder builder_;
+	x86_instruction_builder builder_;
 	std::set<ir::node *> materialised_nodes_;
 	std::map<ir::port *, int> port_to_vreg_;
+	std::map<unsigned long, off_t> instruction_index_to_guest_;
 	int next_vreg_;
+	off_t this_pc_;
+
+	void do_register_allocation();
 
 	int alloc_vreg() { return next_vreg_++; }
 
@@ -37,8 +41,9 @@ private:
 		return v;
 	}
 
-	operand operand_for_port(ir::port &p);
-	operand vreg_operand_for_port(ir::port &p);
+	// operand operand_for_port(ir::port &p);
+	// operand vreg_operand_for_port(ir::port &p);
+	x86_operand vreg_operand_for_port(ir::port &p, bool constant_fold = true);
 	int vreg_for_port(ir::port &p) const { return port_to_vreg_.at(&p); }
 
 	void materialise(ir::node *n);

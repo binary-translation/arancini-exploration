@@ -61,8 +61,10 @@ public:
 
 	translation *create_translation()
 	{
-		writer_.finalise();
-		return new translation(writer_.ptr(), writer_.size());
+		auto &writer = tctx_->writer();
+
+		writer.finalise();
+		return new translation(writer.ptr(), writer.size());
 	}
 
 	virtual local_var &alloc_local(const value_type &type) override
@@ -85,7 +87,6 @@ protected:
 
 private:
 	std::shared_ptr<translation_context> tctx_;
-	machine_code_writer writer_;
 	bool is_eob_;
 	std::vector<local_var *> locals_;
 };
@@ -96,7 +97,8 @@ translation *translation_engine::translate(unsigned long pc)
 
 	std::cerr << "translating pc=" << std::hex << pc << std::endl;
 
-	machine_code_writer writer;
+	arena_machine_code_allocator a(code_arena_);
+	machine_code_writer writer(a);
 	auto ctx = oe_.create_translation_context(writer);
 
 	dbt_ir_builder builder(ia_.get_internal_function_resolver(), ctx);
