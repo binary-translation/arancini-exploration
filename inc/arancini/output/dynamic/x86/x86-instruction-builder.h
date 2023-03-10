@@ -14,8 +14,10 @@ public:
 	void movs(const x86_operand &dst, const x86_operand &src) { append(x86_instruction::movs(dst, src)); }
 	void xor_(const x86_operand &dst, const x86_operand &src) { append(x86_instruction::xor_(dst, src)); }
 	void and_(const x86_operand &dst, const x86_operand &src) { append(x86_instruction::and_(dst, src)); }
+	void or_(const x86_operand &dst, const x86_operand &src) { append(x86_instruction::or_(dst, src)); }
 	void add(const x86_operand &dst, const x86_operand &src) { append(x86_instruction::add(dst, src)); }
 	void sub(const x86_operand &dst, const x86_operand &src) { append(x86_instruction::sub(dst, src)); }
+	void mul(const x86_operand &dst, const x86_operand &src) { append(x86_instruction::mul(dst, src)); }
 	void setz(const x86_operand &dst) { append(x86_instruction::setz(dst)); }
 	void sets(const x86_operand &dst) { append(x86_instruction::sets(dst)); }
 	void setc(const x86_operand &dst) { append(x86_instruction::setc(dst)); }
@@ -35,6 +37,8 @@ public:
 	}
 
 	void dump(std::ostream &os) const;
+
+	size_t nr_instructions() const { return instructions_.size(); }
 
 private:
 	std::vector<x86_instruction> instructions_;

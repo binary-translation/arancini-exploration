@@ -175,12 +175,28 @@ void x86_instruction::emit(machine_code_writer &writer) const
 		rc = fe_enc64(&cur, raw_opcode, (FeReg)operands[0].pregop.regname, operands[1].immop.u64);
 		break;
 
+	case x86_opform::OF_R64_R64_I64:
+		if (!operands[0].is_preg()) {
+			throw std::runtime_error("expected preg operand 0");
+		}
+
+		if (!operands[1].is_preg()) {
+			throw std::runtime_error("expected preg operand 1");
+		}
+
+		if (!operands[2].is_imm()) {
+			throw std::runtime_error("expected imm operand 2");
+		}
+
+		rc = fe_enc64(&cur, raw_opcode, (FeReg)operands[0].pregop.regname, (FeReg)operands[1].pregop.regname, operands[2].immop.u64);
+		break;
+
 	default:
 		throw std::runtime_error("unsupported operand form");
 	}
 
 	if (rc) {
-		throw std::runtime_error("encoding failed");
+		throw std::runtime_error("encoding '" + std::to_string(raw_opcode) + "' failed");
 	}
 
 	writer.copy_in(buf, cur - buf);
@@ -214,6 +230,7 @@ static std::map<unsigned long, std::string> opcode_names = {
 	{ FE_ADD16rr, "addw" },
 	{ FE_ADD32rr, "addl" },
 	{ FE_ADD64rr, "addq" },
+	{ FE_ADD64ri, "addq" },
 	{ FE_XOR8rr, "xorb" },
 	{ FE_XOR16rr, "xorw" },
 	{ FE_XOR32rr, "xorl" },

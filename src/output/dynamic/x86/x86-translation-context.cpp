@@ -18,6 +18,8 @@ void x86_translation_context::begin_block()
 
 void x86_translation_context::begin_instruction(off_t address, const std::string &disasm)
 {
+	instruction_index_to_guest_[builder_.nr_instructions()] = address;
+
 	this_pc_ = address;
 	std::cerr << "  " << std::hex << address << ": " << disasm << std::endl;
 }
@@ -26,12 +28,13 @@ void x86_translation_context::end_instruction() { }
 
 void x86_translation_context::end_block()
 {
-	// builder_.dump(std::cerr);
-
 	do_register_allocation();
 	builder_.xor_(
 		x86_operand(x86_physical_register_operand(x86_register_names::AX), 32), x86_operand(x86_physical_register_operand(x86_register_names::AX), 32));
 	builder_.ret();
+
+	builder_.dump(std::cerr);
+
 	builder_.emit(writer());
 
 	std::cerr << "OUTPUT ASSEMBLY:" << std::endl;
@@ -116,10 +119,14 @@ static x86_operand guestreg_memory_operand(int width, int regoff)
 	return x86_operand(x86_memory_operand(x86_register_names::BP, regoff), width == 1 ? 8 : width);
 }
 
-x86_operand x86_translation_context::vreg_operand_for_port(port &p)
+x86_operand x86_translation_context::vreg_operand_for_port(port &p, bool constant_fold)
 {
-	if (p.owner()->kind() == node_kinds::read_pc) {
-		return x86_operand(x86_immediate_operand(this_pc_), 64);
+	if (0 && constant_fold) {
+		if (p.owner()->kind() == node_kinds::read_pc) {
+			return x86_operand(x86_immediate_operand(this_pc_), 64);
+		} else if (p.owner()->kind() == node_kinds::constant) {
+			return x86_operand(x86_immediate_operand(((constant_node *)p.owner())->const_val_i()), p.type().width());
+		}
 	}
 
 	materialise(p.owner());
@@ -128,6 +135,25 @@ x86_operand x86_translation_context::vreg_operand_for_port(port &p)
 
 void x86_translation_context::materialise_write_reg(write_reg_node *n)
 {
+	// Detect register decrement/increment : write X <= Read X (+/-) Constant
+	if (n->value().owner()->kind() == node_kinds::binary_arith) {
+		auto binop = (binary_arith_node *)n->value().owner();
+
+		if (binop->lhs().owner()->kind() == node_kinds::read_reg && binop->rhs().owner()->kind() == node_kinds::constant) {
+			auto lhs = (read_reg_node *)binop->lhs().owner();
+			auto rhs = (constant_node *)binop->rhs().owner();
+
+			if (lhs->regoff() == n->regoff()) {
+				switch (binop->op()) {
+				case binary_arith_op::sub:
+					builder_.sub(guestreg_memory_operand(n->value().type().element_width(), n->regoff()),
+						x86_operand(x86_immediate_operand(rhs->const_val_i()), n->value().type().element_width()));
+					return;
+				}
+			}
+		}
+	}
+
 	if (n->value().owner()->kind() == node_kinds::constant) {
 		auto cv = (constant_node *)n->value().owner();
 		builder_.mov(
@@ -166,6 +192,10 @@ void x86_translation_context::materialise_binary_arith(binary_arith_node *n)
 		builder_.and_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n->rhs()));
 		break;
 
+	case binary_arith_op::bor:
+		builder_.or_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n->rhs()));
+		break;
+
 	case binary_arith_op::add:
 		builder_.add(virtreg_operand(val_vreg, w), vreg_operand_for_port(n->rhs()));
 		break;
@@ -174,8 +204,12 @@ void x86_translation_context::materialise_binary_arith(binary_arith_node *n)
 		builder_.sub(virtreg_operand(val_vreg, w), vreg_operand_for_port(n->rhs()));
 		break;
 
+	case binary_arith_op::mul:
+		builder_.mul(virtreg_operand(val_vreg, w), vreg_operand_for_port(n->rhs(), false));
+		break;
+
 	default:
-		throw std::runtime_error("unsupported binary arithmetic operation");
+		throw std::runtime_error("unsupported binary arithmetic operation " + std::to_string((int)n->op()));
 	}
 
 	builder_.setz(virtreg_operand(z_vreg, 8));
@@ -194,7 +228,7 @@ void x86_translation_context::materialise_cast(cast_node *n)
 		break;
 
 	case cast_op::sx:
-		builder_.movs(virtreg_operand(dst_vreg, n->val().type().element_width()), vreg_operand_for_port(n->source_value()));
+		builder_.movs(virtreg_operand(dst_vreg, n->val().type().element_width()), vreg_operand_for_port(n->source_value(), false));
 		break;
 
 	case cast_op::bitcast:
@@ -224,6 +258,19 @@ void x86_translation_context::materialise_read_pc(read_pc_node *n)
 
 void x86_translation_context::materialise_write_pc(write_pc_node *n)
 {
+#if 0
+	if (n->value().owner()->kind() == node_kinds::binary_arith) {
+		auto binop = (binary_arith_node *)n->value().owner();
+		if (binop->op() == binary_arith_op::add && binop->lhs().owner()->kind() == node_kinds::read_pc
+			&& binop->rhs().owner()->kind() == node_kinds::constant) {
+			auto imm = (constant_node *)binop->rhs().owner();
+
+			builder_.mov(
+				x86_operand(x86_physical_register_operand(x86_register_names::R15), 64), x86_operand(x86_immediate_operand(this_pc_ + imm->const_val_i()), 64));
+			return;
+		}
+	}
+#endif
 	builder_.mov(x86_operand(x86_physical_register_operand(x86_register_names::R15), n->value().type().element_width()), vreg_operand_for_port(n->value()));
 }
 

@@ -3,6 +3,7 @@
 #include <arancini/output/dynamic/machine-code-writer.h>
 #include <fadec-enc.h>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 
 namespace arancini::output::dynamic::x86 {
@@ -236,12 +237,14 @@ struct x86_operand {
 #define OPFORM_BITS(T, W) (((T & 3) << 4) | ((W / 8) & 15))
 #define GET_OPFORM1(T1, W1) OPFORM_BITS(T1, W1)
 #define GET_OPFORM2(T1, W1, T2, W2) ((OPFORM_BITS(T2, W2) << 6) | OPFORM_BITS(T1, W1))
+#define GET_OPFORM3(T1, W1, T2, W2, T3, W3) ((OPFORM_BITS(T3, W3) << 12) | (OPFORM_BITS(T2, W2) << 6) | OPFORM_BITS(T1, W1))
 
 #define R 1
 #define M 2
 #define I 3
 #define DEFINE_OPFORM1(T1, W1) OF_##T1##W1 = GET_OPFORM1(T1, W1)
 #define DEFINE_OPFORM2(T1, W1, T2, W2) OF_##T1##W1##_##T2##W2 = GET_OPFORM2(T1, W1, T2, W2)
+#define DEFINE_OPFORM3(T1, W1, T2, W2, T3, W3) OF_##T1##W1##_##T2##W2##_##T3##W3 = GET_OPFORM3(T1, W1, T2, W2, T3, W3)
 
 enum class x86_opform {
 	OF_NONE = 0,
@@ -290,6 +293,8 @@ enum class x86_opform {
 	DEFINE_OPFORM2(R, 32, M, 16),
 	DEFINE_OPFORM2(R, 64, M, 16),
 	DEFINE_OPFORM2(R, 64, M, 32),
+
+	DEFINE_OPFORM3(R, 64, R, 64, I, 64)
 };
 
 #undef R
@@ -324,6 +329,15 @@ struct x86_instruction {
 		operands[1] = o2;
 	}
 
+	x86_instruction(unsigned long opc, const x86_operand &o1, const x86_operand &o2, const x86_operand &o3)
+		: raw_opcode(opc)
+		, opform(classify(o1, o2, o3))
+	{
+		operands[0] = o1;
+		operands[1] = o2;
+		operands[2] = o3;
+	}
+
 	static int operand_type_to_form_type(x86_operand_type t)
 	{
 		switch (t) {
@@ -345,6 +359,44 @@ struct x86_instruction {
 	static x86_opform classify(const x86_operand &o1, const x86_operand &o2)
 	{
 		return (x86_opform)GET_OPFORM2(operand_type_to_form_type(o1.type), o1.width, operand_type_to_form_type(o2.type), o2.width);
+	}
+
+	static x86_opform classify(const x86_operand &o1, const x86_operand &o2, const x86_operand &o3)
+	{
+		return (x86_opform)GET_OPFORM3(
+			operand_type_to_form_type(o1.type), o1.width, operand_type_to_form_type(o2.type), o2.width, operand_type_to_form_type(o3.type), o3.width);
+	}
+
+	static std::string opform_to_string(x86_opform of)
+	{
+		std::stringstream ss;
+
+		unsigned int raw_of = (unsigned int)of;
+
+		for (int i = 0; i < 4; i++) {
+			int off = i * 6;
+			int width = (raw_of >> off) & 0xf;
+			int type = (raw_of >> (off + 4)) & 0x3;
+
+			switch (type) {
+			case 0:
+				continue;
+
+			case 1:
+				ss << "R";
+				break;
+			case 2:
+				ss << "M";
+				break;
+			case 3:
+				ss << "I";
+				break;
+			}
+
+			ss << std::dec << (width * 8);
+		}
+
+		return ss.str();
 	}
 
 	static x86_operand def(const x86_operand &o)
@@ -432,6 +484,18 @@ struct x86_instruction {
 	DEFINE_STDOP(add, ADD)
 	DEFINE_STDOP(sub, SUB)
 
+	static x86_instruction mul(const x86_operand &dst, const x86_operand &src)
+	{
+		switch (classify(dst, src)) {
+		case x86_opform::OF_R64_R64:
+			return x86_instruction(FE_IMUL64rr, usedef(dst), use(src));
+		case x86_opform::OF_R64_I64:
+			return x86_instruction(FE_IMUL64rri, def(dst), use(dst), use(src));
+		default:
+			throw std::runtime_error("unsupported encoding '" + opform_to_string(classify(dst, src)) + "' for mul");
+		}
+	}
+
 	static x86_instruction movz(const x86_operand &dst, const x86_operand &src)
 	{
 		switch (classify(dst, src)) {
@@ -447,9 +511,11 @@ struct x86_instruction {
 			return x86_instruction(FE_MOVZXr64r8, def(dst), use(src));
 		case x86_opform::OF_R64_M8:
 			return x86_instruction(FE_MOVZXr64m8, def(dst), use(src));
+		case x86_opform::OF_R64_R32:
+			return x86_instruction(FE_MOV32rr, def(dst), use(src));
 
 		default:
-			throw std::runtime_error("unsupported encoding for movz");
+			throw std::runtime_error("unsupported encoding '" + opform_to_string(classify(dst, src)) + "' for movz");
 		}
 	}
 
@@ -473,7 +539,7 @@ struct x86_instruction {
 		case x86_opform::OF_R64_M32:
 			return x86_instruction(FE_MOVSXr64m32, def(dst), use(src));
 		default:
-			throw std::runtime_error("unsupported encoding '" + std::to_string((int)classify(dst, src)) + "' for movs");
+			throw std::runtime_error("unsupported encoding '" + opform_to_string(classify(dst, src)) + "' for movs");
 		}
 	}
 

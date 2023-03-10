@@ -12,8 +12,8 @@ void stack_translator::do_translate()
 		auto rsp = read_reg(value_type::u64(), reg_offsets::RSP);
 		auto new_rsp = builder().insert_sub(rsp->val(), builder().insert_constant_u64(8)->val());
 
-		write_reg(reg_offsets::RSP, new_rsp->val());
 		builder().insert_write_mem(new_rsp->val(), read_operand(0)->val());
+		write_reg(reg_offsets::RSP, new_rsp->val());
 		break;
 	}
 
