@@ -3,7 +3,6 @@
 #include <arancini/output/dynamic/riscv64/riscv64-translation-context.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
 
-#include <functional>
 #include <unordered_map>
 
 using namespace arancini::output::dynamic::riscv64;
@@ -83,7 +82,8 @@ void riscv64_translation_context::end_instruction() { add_marker(-2); }
 void riscv64_translation_context::end_block()
 {
 	assembler_.ebreak();
-	// TODO return
+	assembler_.ret();
+	// TODO return value?
 }
 void riscv64_translation_context::lower(ir::node *n) { materialise(n); }
 
