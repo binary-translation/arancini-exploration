@@ -65,7 +65,7 @@ void jcc_translator::do_translate()
 	xed_uint_t instruction_length = xed_decoded_inst_get_length(xed_inst());
 	auto fallthrough = builder().insert_add(builder().insert_read_pc()->val(), builder().insert_constant_u64(instruction_length)->val());
 
-	int32_t branch_displacement = xed_decoded_inst_get_branch_displacement(xed_inst());
+	int64_t branch_displacement = xed_decoded_inst_get_branch_displacement(xed_inst());
 	uint64_t branch_target = branch_displacement + instruction_length;
 
 	auto target = builder().insert_add(builder().insert_read_pc()->val(), builder().insert_constant_u64(branch_target)->val());
