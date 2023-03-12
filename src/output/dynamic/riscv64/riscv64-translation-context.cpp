@@ -695,7 +695,11 @@ Register riscv64_translation_context::materialise_unary_arith(const unary_arith_
 
 	Register src_reg = std::get<Register>(materialise(n.lhs().owner()));
 	if (n.op() == unary_arith_op::bnot) {
-		assembler_.not_(out_reg, src_reg);
+		if (is_flag(n.val())) {
+			assembler_.xori(out_reg, src_reg, 1);
+		} else {
+			assembler_.not_(out_reg, src_reg);
+		}
 		return out_reg;
 	}
 
