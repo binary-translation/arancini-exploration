@@ -75,9 +75,16 @@ void riscv64_translation_context::begin_instruction(off_t address, const std::st
 	reg_allocator_index_ = 0;
 	reg_for_port_.clear();
 	labels_.clear();
+	nodes_.clear();
 	current_address_ = address;
 }
-void riscv64_translation_context::end_instruction() { add_marker(-2); }
+void riscv64_translation_context::end_instruction()
+{
+	for (const auto &item : nodes_) {
+		materialise(item);
+	}
+	add_marker(-2);
+}
 
 void riscv64_translation_context::end_block()
 {
@@ -85,7 +92,11 @@ void riscv64_translation_context::end_block()
 	assembler_.ret();
 	// TODO return value?
 }
-void riscv64_translation_context::lower(ir::node *n) { materialise(n); }
+void riscv64_translation_context::lower(ir::node *n)
+{
+	// Defer until end of block (when generation is finished)
+	nodes_.push_back(n);
+}
 
 static inline bool is_flag(const port &value) { return value.type().width() == 1; }
 static inline bool is_gpr(const port &value)

@@ -27,6 +27,7 @@ private:
 	Assembler assembler_;
 
 	off_t current_address_;
+	std::vector<const ir::node *> nodes_;
 
 	std::unordered_map<const ir::label_node *, std::unique_ptr<Label>> labels_;
 
