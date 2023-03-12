@@ -494,12 +494,15 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 		}
 		break;
 	case cast_op::trunc:
-		// Sign extend to preserve convention
-		if (n.source_value().type().width() == 32) {
+		if (is_flag(n.val())) {
+			// Flags are always zero extended
+			assembler_.andi(out_reg, src_reg, 1);
+		} // Sign extend the truncated bits to preserve convention
+		else if (n.val().type().width() == 32) {
 			assembler_.sextw(out_reg, src_reg);
 		} else {
-			assembler_.slli(out_reg, src_reg, 64 - n.source_value().type().width());
-			assembler_.srai(out_reg, src_reg, 64 - n.source_value().type().width());
+			assembler_.slli(out_reg, src_reg, 64 - n.val().type().width());
+			assembler_.srai(out_reg, src_reg, 64 - n.val().type().width());
 		}
 		break;
 	default:
