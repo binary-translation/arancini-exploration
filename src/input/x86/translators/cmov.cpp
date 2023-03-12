@@ -62,6 +62,6 @@ void cmov_translator::do_translate()
 		throw std::runtime_error("unhandled cond mov instruction");
 	}
 
-	auto val = builder().insert_csel(cond->val(), read_operand(0)->val(), read_operand(1)->val());
+	auto val = builder().insert_csel(cond->val(), read_operand(1)->val(), read_operand(0)->val());
 	write_operand(0, val->val());
 }
