@@ -975,6 +975,8 @@ Register riscv64_translation_context::materialise_binary_arith(const binary_arit
 
 	Register src_reg1 = std::get<Register>(materialise(n.lhs().owner()));
 
+	bool flags_needed = !(n.zero().targets().empty() && n.overflow().targets().empty() && n.carry().targets().empty() && n.negative().targets().empty());
+
 	if (n.rhs().owner()->kind() == node_kinds::constant) {
 		// Could also work for LHS except sub
 		// TODO Probably incorrect to just cast to signed 64bit
@@ -1001,10 +1003,12 @@ Register riscv64_translation_context::materialise_binary_arith(const binary_arit
 					assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
 					break;
 				}
-				assembler_.sltu(CF, src_reg1, out_reg); // CF FIXME Assumes out_reg!=src_reg1
-				assembler_.slt(OF, out_reg, src_reg1); // OF FIXME Assumes out_reg!=src_reg1
-				if (imm > 0) {
-					assembler_.xori(OF, OF, 1); // Invert on positive
+				if (flags_needed) {
+					assembler_.sltu(CF, src_reg1, out_reg); // CF FIXME Assumes out_reg!=src_reg1
+					assembler_.slt(OF, out_reg, src_reg1); // OF FIXME Assumes out_reg!=src_reg1
+					if (imm > 0) {
+						assembler_.xori(OF, OF, 1); // Invert on positive
+					}
 				}
 				break;
 
@@ -1025,10 +1029,12 @@ Register riscv64_translation_context::materialise_binary_arith(const binary_arit
 					break;
 				}
 
-				assembler_.sltu(CF, out_reg, src_reg1); // CF FIXME Assumes out_reg!=src_reg1
-				assembler_.slt(OF, out_reg, src_reg1); // OF FIXME Assumes out_reg!=src_reg1
-				if (imm < 0) {
-					assembler_.xori(OF, OF, 1); // Invert on negative
+				if (flags_needed) {
+					assembler_.sltu(CF, out_reg, src_reg1); // CF FIXME Assumes out_reg!=src_reg1
+					assembler_.slt(OF, out_reg, src_reg1); // OF FIXME Assumes out_reg!=src_reg1
+					if (imm < 0) {
+						assembler_.xori(OF, OF, 1); // Invert on negative
+					}
 				}
 
 				break;
@@ -1047,8 +1053,10 @@ Register riscv64_translation_context::materialise_binary_arith(const binary_arit
 				goto standardPath;
 			}
 
-			assembler_.seqz(ZF, out_reg); // ZF
-			assembler_.sltz(SF, out_reg); // SF
+			if (flags_needed) {
+				assembler_.seqz(ZF, out_reg); // ZF
+				assembler_.sltz(SF, out_reg); // SF
+			}
 
 			return out_reg;
 		}
@@ -1074,11 +1082,13 @@ standardPath:
 			break;
 		}
 
-		assembler_.sltz(CF, src_reg1);
-		assembler_.slt(OF, out_reg, src_reg2);
-		assembler_.xor_(OF, OF, CF); // OF FIXME Assumes out_reg!=src_reg1 && out_reg!=src_reg2
+		if (flags_needed) {
+			assembler_.sltz(CF, src_reg1);
+			assembler_.slt(OF, out_reg, src_reg2);
+			assembler_.xor_(OF, OF, CF); // OF FIXME Assumes out_reg!=src_reg1 && out_reg!=src_reg2
 
-		assembler_.sltu(CF, out_reg, src_reg2); // CF (Allows typical x86 case of regSrc1==out_reg) FIXME Assumes out_reg!=src_reg2
+			assembler_.sltu(CF, out_reg, src_reg2); // CF (Allows typical x86 case of regSrc1==out_reg) FIXME Assumes out_reg!=src_reg2
+		}
 		break;
 
 	case binary_arith_op::sub:
@@ -1097,11 +1107,13 @@ standardPath:
 			break;
 		}
 
-		assembler_.sgtz(CF, src_reg2);
-		assembler_.slt(OF, out_reg, src_reg1);
-		assembler_.xor_(OF, OF, CF); // OF FIXME Assumes out_reg!=src_reg1 && out_reg!=src_reg2
+		if (flags_needed) {
+			assembler_.sgtz(CF, src_reg2);
+			assembler_.slt(OF, out_reg, src_reg1);
+			assembler_.xor_(OF, OF, CF); // OF FIXME Assumes out_reg!=src_reg1 && out_reg!=src_reg2
 
-		assembler_.sltu(CF, src_reg1, out_reg); // CF FIXME Assumes out_reg!=src_reg1
+			assembler_.sltu(CF, src_reg1, out_reg); // CF FIXME Assumes out_reg!=src_reg1
+		}
 		break;
 
 	// Binary operations preserve sign extension
@@ -1128,18 +1140,24 @@ standardPath:
 
 			case value_type_class::signed_integer:
 				assembler_.mulh(out_reg2, src_reg1, src_reg2);
-				assembler_.srai(CF, out_reg, 64);
-				assembler_.xor_(CF, CF, out_reg2);
-				assembler_.snez(CF, CF);
+				if (flags_needed) {
+					assembler_.srai(CF, out_reg, 64);
+					assembler_.xor_(CF, CF, out_reg2);
+					assembler_.snez(CF, CF);
+				}
 				break;
 			case value_type_class::unsigned_integer:
 				assembler_.mulhu(out_reg2, src_reg1, src_reg2);
-				assembler_.snez(CF, out_reg2);
+				if (flags_needed) {
+					assembler_.snez(CF, out_reg2);
+				}
 				break;
 			default:
 				throw std::runtime_error("Unsupported value type for multiply");
 			}
-			assembler_.mv(OF, CF);
+			if (flags_needed) {
+				assembler_.mv(OF, CF);
+			}
 		} break;
 
 		case 64:
@@ -1147,26 +1165,28 @@ standardPath:
 		case 16:
 			assembler_.mul(out_reg, src_reg1, src_reg2); // Assumes proper signed/unsigned extension from 32/16/8 bits
 
-			switch (n.val().type().element_type().type_class()) {
+			if (flags_needed) {
+				switch (n.val().type().element_type().type_class()) {
 
-			case value_type_class::signed_integer:
-				if (n.val().type().width() == 64) {
-					assembler_.sextw(CF, out_reg);
-				} else {
-					assembler_.slli(CF, out_reg, 64 - (n.val().type().width()) / 2);
-					assembler_.srai(CF, out_reg, 64 - (n.val().type().width()) / 2);
+				case value_type_class::signed_integer:
+					if (n.val().type().width() == 64) {
+						assembler_.sextw(CF, out_reg);
+					} else {
+						assembler_.slli(CF, out_reg, 64 - (n.val().type().width()) / 2);
+						assembler_.srai(CF, out_reg, 64 - (n.val().type().width()) / 2);
+					}
+					assembler_.xor_(CF, CF, out_reg);
+					assembler_.snez(CF, CF);
+					break;
+				case value_type_class::unsigned_integer:
+					assembler_.srli(CF, out_reg, n.val().type().width() / 2);
+					assembler_.snez(CF, CF);
+					break;
+				default:
+					throw std::runtime_error("Unsupported value type for multiply");
 				}
-				assembler_.xor_(CF, CF, out_reg);
-				assembler_.snez(CF, CF);
-				break;
-			case value_type_class::unsigned_integer:
-				assembler_.srli(CF, out_reg, n.val().type().width() / 2);
-				assembler_.snez(CF, CF);
-				break;
-			default:
-				throw std::runtime_error("Unsupported value type for multiply");
+				assembler_.mv(OF, CF);
 			}
-			assembler_.mv(OF, CF);
 			break;
 		}
 		break;
@@ -1288,9 +1308,10 @@ standardPath:
 	}
 
 	// TODO those should only be set on add, sub, xor, or, and
-	assembler_.seqz(ZF, out_reg); // ZF
-	assembler_.sltz(SF, out_reg); // SF
-
+	if (flags_needed) {
+		assembler_.seqz(ZF, out_reg); // ZF
+		assembler_.sltz(SF, out_reg); // SF
+	}
 	return out_reg;
 }
 
