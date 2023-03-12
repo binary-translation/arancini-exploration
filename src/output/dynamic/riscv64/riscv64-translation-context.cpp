@@ -99,6 +99,13 @@ void riscv64_translation_context::lower(ir::node *n)
 }
 
 static inline bool is_flag(const port &value) { return value.type().width() == 1; }
+
+static inline bool is_flag_port(const port &value)
+{
+	return value.kind() == port_kinds::zero || value.kind() == port_kinds::carry || value.kind() == port_kinds::negative
+		|| value.kind() == port_kinds::overflow;
+}
+
 static inline bool is_gpr(const port &value)
 {
 	int width = value.type().width();
@@ -581,8 +588,11 @@ void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 	if (is_flag(value) || is_gpr(value)) { // Flags or GPR
 		auto store_instr = store_instructions.at(value.type().width());
 		if (is_flag(value)) {
-			// FIXME breaks if flag generating node is ONLY used for flags (eg x86 test and cmp instructions)
-			Register reg = (value.owner()->kind() == node_kinds::constant) ? std::get<Register>(materialise(value.owner())) : flag_map.at(n.regoff());
+			Register reg = (!is_flag_port(value)) ? std::get<Register>(materialise(value.owner())) : flag_map.at(n.regoff());
+			if (is_flag_port(value) && !reg_for_port_.count(&value.owner()->val())) {
+				// Result of node not written only flags needed
+				materialise(value.owner());
+			}
 			(assembler_.*store_instr)(reg, { FP, static_cast<intptr_t>(n.regoff()) });
 		} else {
 			Register reg = std::get<Register>(materialise(value.owner()));
