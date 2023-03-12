@@ -183,10 +183,13 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise(
 		return materialise_binary_atomic(*reinterpret_cast<const binary_atomic_node *>(n));
 	case node_kinds::ternary_atomic:
 		return materialise_ternary_atomic(*reinterpret_cast<const ternary_atomic_node *>(n));
+	case node_kinds::csel:
+		return materialise_csel(*reinterpret_cast<const csel_node *>(n));
 	default:
 		throw std::runtime_error("unsupported node");
 	}
 }
+
 Register riscv64_translation_context::materialise_ternary_atomic(const ternary_atomic_node &n)
 {
 
@@ -1361,4 +1364,32 @@ Register riscv64_translation_context::materialise_constant(int64_t imm)
 		}
 		return out_reg;
 	}
+}
+
+Register riscv64_translation_context::materialise_csel(const csel_node &n)
+{
+
+	auto [out_reg, valid] = allocate_register(&n.val());
+	if (!valid) {
+		return out_reg;
+	}
+
+	Label false_calc {}, end {};
+
+	Register cond = std::get<Register>(materialise(n.condition().owner()));
+
+	assembler_.beqz(cond, &false_calc);
+
+	Register trueval = std::get<Register>(materialise(n.trueval().owner()));
+	assembler_.mv(out_reg, trueval);
+
+	assembler_.j(&end);
+
+	assembler_.Bind(&false_calc);
+
+	Register falseval = std::get<Register>(materialise(n.falseval().owner()));
+	assembler_.mv(out_reg, falseval);
+
+	assembler_.Bind(&end);
+	return out_reg;
 }
