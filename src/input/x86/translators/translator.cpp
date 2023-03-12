@@ -341,6 +341,8 @@ value_node *translator::compute_address(int mem_idx)
 		address_base = builder_.insert_constant_u64(0);
 	} else if (base_reg == XED_REG_RIP) {
 		address_base = builder_.insert_read_pc();
+		xed_uint_t instruction_length = xed_decoded_inst_get_length(xed_inst());
+		address_base = builder_.insert_add(address_base->val(), builder().insert_constant_u64(instruction_length)->val());
 	} else {
 		address_base = read_reg(value_type::u64(), xedreg_to_offset(base_reg));
 	}
