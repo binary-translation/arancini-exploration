@@ -15,7 +15,7 @@ void rep_translator::do_translate()
 
 		// cmpsb - compares byte at address DS:(E)SI with byte at address ES:(E)DI and sets the status flags accordingly
 
-		auto loop_start = builder().insert_label();
+		auto loop_start = builder().insert_label("rep_loop_start");
 
 		auto deref_rsi = builder().insert_read_mem(value_type::u8(), read_reg(value_type::u64(), reg_offsets::RSI)->val());
 		auto deref_rdi = builder().insert_read_mem(value_type::u8(), read_reg(value_type::u64(), reg_offsets::RDI)->val());

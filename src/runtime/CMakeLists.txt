@@ -37,4 +37,7 @@ target_link_libraries(arancini-runtime
                       arancini-ir
                       arancini-input-x86
                       arancini-trampoline)
+target_include_directories(arancini-runtime
+                           PUBLIC
+                           ${INC}/arancini/runtime/exec)
 
