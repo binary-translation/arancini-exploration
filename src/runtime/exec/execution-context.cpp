@@ -308,7 +308,9 @@ int execution_context::internal_call(void *cpu_state, int call)
 				return 0;
 			}
 
+#ifndef ARCH_X86_64
 			x86_state->RAX = native_syscall(__NR_ioctl, x86_state->RDI, request, arg);
+#endif
 			break;
 		}
 		case 20: // writev
@@ -325,7 +327,9 @@ int execution_context::internal_call(void *cpu_state, int call)
 				iovec_new[i].iov_len = iovec[i].iov_len;
 			}
 
+#ifndef ARCH_X86_64
 			x86_state->RAX = native_syscall(__NR_writev, x86_state->RDI, (uintptr_t)iovec_new, iocnt);
+#endif
 			break;
 		}
 		case 28: // madvise
@@ -446,10 +450,11 @@ int execution_context::internal_call(void *cpu_state, int call)
 			x86_state->RAX = gettid();
 			break;
 		}
-		case 231://exit_group
+        case 60:
+		case 231:
 		{
 			std::cerr << "Exiting from emulated process with exit code " << std::dec << x86_state->RDI << std::endl;
-			//exit(x86_state->RDI) ?
+			exit(x86_state->RDI);
 			return 1;
 		}
 		case 228: // clock_gettime
