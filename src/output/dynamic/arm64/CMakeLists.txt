@@ -6,7 +6,7 @@ if (NOT Keystone_FOUND)
     message("Keystone not found")
 
     # Try to fetch and build Keystone
-    include(../../../../cmake/getKeystone.cmake)
+    include("../../../../cmake/getKeystone.cmake")
     get_keystone()
 endif ()
 
@@ -15,7 +15,10 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(INCLUDE_PATH ../../../inc)
 add_library(arancini-output-arm64
-            arm64-dynamic-output-engine.cpp)
+            arm64-translation-context.cpp
+            arm64-dynamic-output-engine.cpp
+            arm64-instruction.cpp
+            arm64-instruction-builder.cpp)
 
 target_include_directories(arancini-output-arm64
                            PUBLIC
