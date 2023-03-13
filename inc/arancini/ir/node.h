@@ -11,7 +11,7 @@
 
 namespace arancini::ir {
 enum class node_kinds {
-	label,
+	label = 0,
 	read_pc,
 	write_pc,
 	constant,
@@ -153,7 +153,7 @@ public:
 	{
 	}
 
-	const std::string name() { return name_; }
+	const std::string& name() const { return name_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -506,6 +506,7 @@ public:
 
 	port &source_value() const { return source_value_; }
 	value_type &target_type() { return target_type_; }
+	const value_type &target_type() const { return target_type_; }
 
 	virtual void accept(visitor &v) override
 	{

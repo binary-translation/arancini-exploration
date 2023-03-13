@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdlib>
-#include <iostream>
+#include <cstdint>
 
 namespace arancini::runtime::dbt {
 
