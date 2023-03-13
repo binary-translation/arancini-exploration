@@ -6,7 +6,7 @@ if (NOT Keystone_FOUND)
     message("Keystone not found")
 
     # Try to fetch and build Keystone
-    include(../../../../cmake/getKeystone.cmake)
+    include("../../../../cmake/getKeystone.cmake")
     get_keystone()
 endif ()
 
