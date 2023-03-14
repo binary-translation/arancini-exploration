@@ -1,4 +1,3 @@
-#include "xed/xed-reg-class.h"
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/ir/ir-builder.h>
 #include <arancini/ir/node.h>
@@ -59,12 +58,8 @@ translator::reg_offsets translator::xedreg_to_offset(xed_reg_enum_t reg)
     auto largest_reg = xed_get_largest_enclosing_register(reg);
     return (translator::reg_offsets)((int)((largest_reg - XED_REG_RAX) * 8) + (int)reg_offsets::RAX);
   }
-  //case XED_REG_CLASS_XMM: {
-  //  return (translator::reg_offsets)((int)((reg - XED_REG_XMM0) * 16) + (int)reg_offsets::XMM0);
-  //}
-  // case XED_REG_CLASS_YMM: {
-  //   return (translator::reg_offsets)((int)((reg - XED_REG_YMM0) * 32) + (int)reg_offsets::YMM0);
-  // }
+  case XED_REG_CLASS_XMM:
+  case XED_REG_CLASS_YMM:
   case XED_REG_CLASS_ZMM: {
     return (translator::reg_offsets)((int)((reg - XED_REG_ZMM0) * 64) + (int)reg_offsets::ZMM0);
   }
@@ -131,10 +126,17 @@ action_node *translator::write_operand(int opnum, port &value, bool keep_enc)
 			auto val_len = value.type().width();
 			value_node *enc;
 			if (!keep_enc) {
+				value_node *flat;
+				switch(val_len) {
+					case 64: flat = builder_.insert_bitcast(value_type::u64(), value); break;
+					case 128: flat = builder_.insert_bitcast(value_type::u128(), value); break;
+					case 256: flat = builder_.insert_bitcast(value_type::u256(), value); break;
+					case 512: flat = builder_.insert_bitcast(value_type::u512(), value); break;
+				}
 				switch(xed_get_register_width_bits64(xed_get_largest_enclosing_register(reg))) {
-					case 128: return write_reg(enc_reg_off, builder_.insert_zx(value_type::u128(), value)->val());
-					case 256: return write_reg(enc_reg_off, builder_.insert_zx(value_type::u256(), value)->val());
-					case 512: return write_reg(enc_reg_off, builder_.insert_zx(value_type::u512(), value)->val());
+					case 128: return write_reg(enc_reg_off, builder_.insert_zx(value_type::u128(), flat->val())->val());
+					case 256: return write_reg(enc_reg_off, builder_.insert_zx(value_type::u256(), flat->val())->val());
+					case 512: return write_reg(enc_reg_off, builder_.insert_zx(value_type::u512(), flat->val())->val());
 				}
 			}
 			switch(xed_get_register_width_bits64(xed_get_largest_enclosing_register(reg))) {
@@ -214,7 +216,7 @@ value_node *translator::read_operand(int opnum)
 	case XED_OPERAND_REG0:
 	case XED_OPERAND_REG1:
 	case XED_OPERAND_REG2:
-  case XED_OPERAND_REG3: {
+	case XED_OPERAND_REG3: {
 		auto reg = xed_decoded_inst_get_reg(xed_inst(), opname);
 		auto regclass = xed_reg_class(reg);
 
@@ -233,8 +235,9 @@ value_node *translator::read_operand(int opnum)
 				throw std::runtime_error("unsupported register size");
 			}
 
-		case XED_REG_CLASS_XMM:
-			return read_reg(value_type::u128(), xedreg_to_offset(reg));
+		case XED_REG_CLASS_XMM: return read_reg(value_type::u128(), xedreg_to_offset(xed_get_largest_enclosing_register(reg)));
+		case XED_REG_CLASS_YMM: return read_reg(value_type::u256(), xedreg_to_offset(xed_get_largest_enclosing_register(reg)));
+		case XED_REG_CLASS_ZMM: return read_reg(value_type::u512(), xedreg_to_offset(xed_get_largest_enclosing_register(reg)));
 
       // case XED_REG_CLASS_FLAGS:
       // 	return read_reg(value_type::u64(), xedreg_to_offset(reg));
