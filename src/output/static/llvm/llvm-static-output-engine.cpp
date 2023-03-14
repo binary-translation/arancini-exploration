@@ -56,6 +56,8 @@ void llvm_static_output_engine_impl::initialise_types()
 	types.i16 = Type::getInt16Ty(*llvm_context_);
 	types.i32 = Type::getInt32Ty(*llvm_context_);
 	types.i64 = Type::getInt64Ty(*llvm_context_);
+	types.f32 = Type::getFloatTy(*llvm_context_);
+	types.f64 = Type::getDoubleTy(*llvm_context_);
 	types.i128 = Type::getInt128Ty(*llvm_context_);
 	types.i256 = IntegerType::get(*llvm_context_, 256);
 	types.i512 = IntegerType::get(*llvm_context_, 512);
@@ -290,6 +292,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		}
 
 		::llvm::Type *ty;
+		Align align = Align(64);
 		switch (rrn->val().type().width()) {
 		case 1:
 			ty = types.i1;
@@ -308,11 +311,20 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			break;
 		case 128:
 			ty = types.i128;
+			align = Align(512);
+			break;
+		case 256:
+			ty = types.i256;
+			align = Align(512);
+			break;
+		case 512:
+			ty = types.i512;
+			align = Align(512);
 			break;
 		default:
 			throw std::runtime_error("unsupported register width " + std::to_string(rrn->val().type().width()) + " in load");
 		}
-		return builder.CreateLoad(ty, src_reg);
+		return builder.CreateAlignedLoad(ty, src_reg, align);
 	}
 
 	case node_kinds::binary_arith: {
@@ -329,14 +341,26 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 				return builder.CreateAnd(lhs, rhs);
 			case binary_arith_op::bor:
 				return builder.CreateOr(lhs, rhs);
-			case binary_arith_op::add:
+			case binary_arith_op::add: {
+				if (lhs->getType()->isFloatingPointTy())
+					return builder.CreateFAdd(lhs, rhs);
 				return builder.CreateAdd(lhs, rhs);
-			case binary_arith_op::sub:
+			}
+			case binary_arith_op::sub: {
+				if (lhs->getType()->isFloatingPointTy())
+					return builder.CreateFSub(lhs, rhs);
 				return builder.CreateSub(lhs, rhs);
-			case binary_arith_op::mul:
+			}
+			case binary_arith_op::mul: {
+				if (lhs->getType()->isFloatingPointTy())
+					return builder.CreateFMul(lhs, rhs);
 				return builder.CreateMul(lhs, rhs);
-			case binary_arith_op::div:
+			}
+			case binary_arith_op::div: {
+				if (lhs->getType()->isFloatingPointTy())
+					return builder.CreateFDiv(lhs, rhs);
 				return builder.CreateUDiv(lhs, rhs);
+			}
 			case binary_arith_op::cmpeq:
 				return builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, lhs, rhs);
 			case binary_arith_op::cmpne:
@@ -397,6 +421,12 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			case 128:
 				ty = types.i128;
 				break;
+			case 256:
+				ty = types.i256;
+				break;
+			case 512:
+				ty = types.i512;
+				break;
 
 			default:
 				throw std::runtime_error("unsupported zx width " + std::to_string(cn->val().type().width()));
@@ -456,16 +486,56 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 				case 16:
 					ty = types.i16;
 					break;
+				case 32: {
+					if (cn->target_type().is_floating_point())
+						ty = types.f32;
+					else
+						ty = types.i32;
+					break;
+				}
+				case 64: {
+					if (cn->target_type().is_floating_point())
+						ty = types.f64;
+					else
+						ty = types.i64;
+					break;
+				}
+				default:
+					throw std::runtime_error("unsupported bitcast element width");
+				}
+				return builder.CreateBitCast(val, ::llvm::VectorType::get(ty, cn->target_type().nr_elements(), false));
+			}
+			if (val->getType()->isVectorTy()) {
+				switch (cn->target_type().width()) {
+				case 1:
+					ty = types.i1;
+					break;
+				case 8:
+					ty = types.i8;
+					break;
+				case 16:
+					ty = types.i16;
+					break;
 				case 32:
 					ty = types.i32;
 					break;
 				case 64:
 					ty = types.i64;
 					break;
+				case 128:
+					ty = types.i128;
+					break;
+				case 256:
+					ty = types.i256;
+					break;
+				case 512:
+					ty = types.i512;
+					break;
 				default:
 					throw std::runtime_error("unsupported bitcast element width");
 				}
-				return builder.CreateBitCast(val, ::llvm::VectorType::get(ty, cn->target_type().nr_elements(), false));
+				return builder.CreateBitCast(val, ty);
+
 			}
 			return val;
 		}
@@ -646,7 +716,8 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		//other casting operations.
 		auto reg_val = builder.CreateBitCast(val, reg_type);
 
-		return builder.CreateStore(reg_val, dest_reg);
+		// TODO: ALign vector registers to 512
+		return builder.CreateAlignedStore(reg_val, dest_reg, Align(64));
 	}
 
 	case node_kinds::write_mem: {
@@ -841,7 +912,7 @@ void llvm_static_output_engine_impl::compile()
 	//Specify abi as 64 bits using double float registers
 	TO.MCOptions.ABIName="lp64d";
 #else
-	const char *features = "";
+	const char *features = "+avx";
 	const char *cpu = "generic";
 #endif
 

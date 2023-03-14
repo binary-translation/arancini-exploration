@@ -88,12 +88,18 @@ void fpvec_translator::do_translate()
         write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
 		break;
 	}
+	case XED_ICLASS_VMULSS:
+	case XED_ICLASS_VMULSD: {
+        	auto res = builder().insert_mul(builder().insert_vector_extract(src1->val(), 0)->val(), builder().insert_vector_extract(src2->val(), 0)->val());
+
+        	write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
+		break;
+	}
 	case XED_ICLASS_MULSS:
 	case XED_ICLASS_MULSD: {
+        	auto res = builder().insert_mul(builder().insert_vector_extract(src1->val(), 0)->val(), builder().insert_vector_extract(src2->val(), 0)->val());
 
-        auto res = builder().insert_mul(builder().insert_vector_extract(src1->val(), 0)->val(), builder().insert_vector_extract(src2->val(), 0)->val());
-
-        write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
+        	write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val(), true);
 		break;
 	}
 	case XED_ICLASS_CVTSD2SS: {
@@ -104,6 +110,6 @@ void fpvec_translator::do_translate()
 		break;
 	}
 	default:
-    break;
+    		break;
 	}
 }
