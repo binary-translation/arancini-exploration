@@ -547,8 +547,36 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		auto result = builder.CreateInsertVector(dst_bit->getType(), dst_bit, val_bit, ConstantInt::get( types.i64, bin->to()));
 		return builder.CreateBitCast(result, dst->getType());
 	}
+<<<<<<< HEAD
+=======
+			
+        case node_kinds::vector_insert: {
+                auto vin = (vector_insert_node *)n;
+
+                auto vec = lower_port(builder, state_arg, pkt, vin->source_vector());
+                auto val = lower_port(builder, state_arg, pkt, vin->insert_value());
+
+                auto insert = builder.CreateInsertElement(vec, val, vin->index(), "vector_insert");
+
+                return insert;
+        }
+
+        case node_kinds::vector_extract: {
+                auto ven = (vector_extract_node *)n;
+
+                auto vec = lower_port(builder, state_arg, pkt, ven->source_vector());
+
+                auto extract = builder.CreateExtractElement(vec, ven->index(), "vector_extract");
+
+                return extract;
+        }
+
+	case node_kinds::binary_atomic:
+		return lower_node(builder, state_arg, pkt, n);
+
+>>>>>>> 1632b58 (Lower atomic xadd)
 	default:
-		throw std::runtime_error("unsupported port node kind " + std::to_string((int)n->kind()));
+		throw std::runtime_error("materialize_port: unsupported port node kind " + std::to_string((int)n->kind()));
 	}
 }
 
@@ -669,8 +697,20 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
                 return extract;
         }
 
+	case node_kinds::binary_atomic: {
+		auto ban = (binary_atomic_node *)a;
+		auto lhs = lower_port(builder, state_arg, pkt, ban->lhs());
+		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
+
+		AtomicRMWInst *out;
+		switch(ban->op()) {
+			case binary_atomic_op::xadd: out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
+			default: throw std::runtime_error("unsupported atomic operation " + std::to_string((int)ban->op()));
+		}
+		return out;
+	}
 	default:
-		throw std::runtime_error("unsupported node kind " + std::to_string((int)a->kind()));
+		throw std::runtime_error("lower_node: unsupported node kind " + std::to_string((int)a->kind()));
 	}
 }
 
