@@ -547,8 +547,6 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		auto result = builder.CreateInsertVector(dst_bit->getType(), dst_bit, val_bit, ConstantInt::get( types.i64, bin->to()));
 		return builder.CreateBitCast(result, dst->getType());
 	}
-<<<<<<< HEAD
-=======
 			
         case node_kinds::vector_insert: {
                 auto vin = (vector_insert_node *)n;
@@ -574,7 +572,6 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 	case node_kinds::binary_atomic:
 		return lower_node(builder, state_arg, pkt, n);
 
->>>>>>> 1632b58 (Lower atomic xadd)
 	default:
 		throw std::runtime_error("materialize_port: unsupported port node kind " + std::to_string((int)n->kind()));
 	}
