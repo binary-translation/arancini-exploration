@@ -51,6 +51,7 @@ private:
     void materialise_read_mem(const ir::read_mem_node &n);
     void materialise_write_mem(const ir::write_mem_node &n);
     void materialise_constant(const ir::constant_node &n);
+    void materialise_unary_arith(const ir::unary_arith_node &n);
     void materialise_binary_arith(const ir::binary_arith_node &n);
 };
 } // namespace arancini::output::dynamic::arm64

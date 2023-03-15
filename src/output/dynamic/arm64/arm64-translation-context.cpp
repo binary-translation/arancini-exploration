@@ -65,17 +65,19 @@ void arm64_translation_context::materialise(const ir::node* n) {
 
     switch (n->kind()) {
     case node_kinds::read_reg:
-        return materialise_read_reg(reinterpret_cast<const read_reg_node&>(*n));
+        return materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));
     case node_kinds::write_reg:
-        return materialise_write_reg(reinterpret_cast<const write_reg_node&>(*n));
+        return materialise_write_reg(*reinterpret_cast<const write_reg_node*>(n));
     case node_kinds::read_mem:
-        return materialise_read_mem(reinterpret_cast<const read_mem_node&>(*n));
+        return materialise_read_mem(*reinterpret_cast<const read_mem_node*>(n));
     case node_kinds::write_mem:
-        return materialise_write_mem(reinterpret_cast<const write_mem_node&>(*n));
+        return materialise_write_mem(*reinterpret_cast<const write_mem_node*>(n));
     case node_kinds::constant:
-        return materialise_constant(reinterpret_cast<const constant_node&>(*n));
+        return materialise_constant(*reinterpret_cast<const constant_node*>(n));
+	case node_kinds::unary_arith:
+        return materialise_unary_arith(*reinterpret_cast<const unary_arith_node*>(n));
 	case node_kinds::binary_arith:
-		return materialise_binary_arith(reinterpret_cast<const binary_arith_node&>(*n));
+		return materialise_binary_arith(*reinterpret_cast<const binary_arith_node*>(n));
     default:
         throw std::runtime_error("unknown node encountered");
     }
@@ -161,11 +163,14 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 	case binary_arith_op::sub:
 		builder_.sub(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.rhs()));
 		break;
-	case binary_arith_op::bxor:
-		builder_.xor_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.rhs()));
+	case binary_arith_op::bor:
+		builder_.or_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.rhs()));
 		break;
 	case binary_arith_op::band:
 		builder_.and_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.rhs()));
+		break;
+	case binary_arith_op::bxor:
+		builder_.xor_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.rhs()));
 		break;
 	default:
 		throw std::runtime_error("unsupported binary arithmetic operation " + std::to_string((int)n.op()));
@@ -175,6 +180,27 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 	builder_.seto(virtreg_operand(v_vreg, 8));
 	builder_.setc(virtreg_operand(c_vreg, 8));
 	builder_.sets(virtreg_operand(n_vreg, 8));
+}
+
+void arm64_translation_context::materialise_unary_arith(const unary_arith_node &n) {
+	int val_vreg = alloc_vreg_for_port(n.val());
+
+    int w = n.val().type().element_width();
+
+    materialise(n.lhs().owner());
+
+    switch (n.op()) {
+    case unary_arith_op::bnot:
+        builder_.not_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.lhs()));
+        break;
+    case unary_arith_op::neg:
+        // neg: ~reg + 1 for complement-of-2
+        builder_.not_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.lhs()));
+        builder_.add(virtreg_operand(val_vreg, w), imm_operand(1, 64));
+        break;
+    default:
+        throw std::runtime_error("Unknown unary operation");
+    }
 }
 
 void arm64_translation_context::do_register_allocation() { builder_.allocate(); }

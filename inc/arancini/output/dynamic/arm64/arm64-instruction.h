@@ -426,12 +426,20 @@ struct arm64_instruction {
         return arm64_instruction("sub", usedef(dst), use(src));
     }
 
-    static arm64_instruction xor_(const arm64_operand &dst, const arm64_operand &src) {
-        return arm64_instruction("xor", usedef(dst), use(src));
+    static arm64_instruction or_(const arm64_operand &dst, const arm64_operand &src) {
+        return arm64_instruction("orr", usedef(dst), use(src));
     }
 
     static arm64_instruction and_(const arm64_operand &dst, const arm64_operand &src) {
         return arm64_instruction("and", usedef(dst), use(src));
+    }
+
+    static arm64_instruction xor_(const arm64_operand &dst, const arm64_operand &src) {
+        return arm64_instruction("xor", usedef(dst), use(src));
+    }
+
+    static arm64_instruction not_(const arm64_operand &dst, const arm64_operand &src) {
+        return arm64_instruction("mvn", def(dst), use(src));
     }
 
     static arm64_instruction moveq(const arm64_operand &dst, const arm64_immediate_operand &src) {
