@@ -572,6 +572,9 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 	case node_kinds::binary_atomic:
 		return lower_node(builder, state_arg, pkt, n);
 
+	case node_kinds::ternary_atomic:
+		return lower_node(builder, state_arg, pkt, n);
+		
 	default:
 		throw std::runtime_error("materialize_port: unsupported port node kind " + std::to_string((int)n->kind()));
 	}
@@ -702,6 +705,21 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		AtomicRMWInst *out;
 		switch(ban->op()) {
 			case binary_atomic_op::xadd: out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
+			default: throw std::runtime_error("unsupported atomic operation " + std::to_string((int)ban->op()));
+		}
+		return out;
+	}
+	case node_kinds::ternary_atomic: {
+		auto tan = (ternary_atomic_node *)a;
+		auto lhs = lower_port(builder, state_arg, pkt, tan->lhs());
+		auto rhs = lower_port(builder, state_arg, pkt, tan->rhs());
+		auto top = lower_port(builder, state_arg, pkt, tan->top());
+
+		Value *out;
+		switch(tan->op()) {
+			case ternary_atomic_op::cmpxchg:
+			  out = builder.CreateAtomicCmpXchg(lhs, rhs, top, Align(64), AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
+			  break;
 			default: throw std::runtime_error("unsupported atomic operation " + std::to_string((int)ban->op()));
 		}
 		return out;
