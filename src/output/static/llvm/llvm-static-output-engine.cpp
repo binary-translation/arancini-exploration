@@ -547,7 +547,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		auto result = builder.CreateInsertVector(dst_bit->getType(), dst_bit, val_bit, ConstantInt::get( types.i64, bin->to()));
 		return builder.CreateBitCast(result, dst->getType());
 	}
-			
+
         case node_kinds::vector_insert: {
                 auto vin = (vector_insert_node *)n;
 
@@ -574,7 +574,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 	case node_kinds::ternary_atomic:
 		return lower_node(builder, state_arg, pkt, n);
-		
+
 	default:
 		throw std::runtime_error("materialize_port: unsupported port node kind " + std::to_string((int)n->kind()));
 	}
@@ -675,7 +675,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 		return br;
 	}
-			
+
         case node_kinds::vector_insert: {
                 auto vin = (vector_insert_node *)a;
 
@@ -720,7 +720,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 			case ternary_atomic_op::cmpxchg:
 			  out = builder.CreateAtomicCmpXchg(lhs, rhs, top, Align(64), AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
 			  break;
-			default: throw std::runtime_error("unsupported atomic operation " + std::to_string((int)ban->op()));
+			default: throw std::runtime_error("unsupported atomic operation " + std::to_string((int)tan->op()));
 		}
 		return out;
 	}
