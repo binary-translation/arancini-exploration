@@ -61,11 +61,13 @@ std::pair<Register, bool> riscv64_translation_context::allocate_register(const p
  */
 void riscv64_translation_context::add_marker(int payload)
 {
+	// TODO Remove/only in debug
 	assembler_.li(ZERO, payload);
 }
 
 void riscv64_translation_context::begin_block()
 {
+	// TODO Remove/only in debug
 	assembler_.ebreak();
 
 	add_marker(1);
@@ -90,6 +92,7 @@ void riscv64_translation_context::end_instruction()
 
 void riscv64_translation_context::end_block()
 {
+	// TODO Remove/only in debug
 	assembler_.ebreak();
 	assembler_.ret();
 	// TODO return value?
