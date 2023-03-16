@@ -26,7 +26,7 @@ public:
 		: ec_(ec)
 		, ia_(ia)
 		, oe_(oe)
-		, code_arena_(0x100000000)
+		, code_arena_(0x100000000), alloc_ {code_arena_}
 	{
 	}
 
@@ -37,6 +37,7 @@ private:
 	execution_context &ec_;
 	translation_cache cache_;
 	output::dynamic::arena code_arena_;
+	output::dynamic::arena_machine_code_allocator alloc_;
 
 	input::input_arch &ia_;
 	output::dynamic::dynamic_output_engine &oe_;

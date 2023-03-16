@@ -70,7 +70,8 @@ function (get_xed)
     FetchContent_MakeAvailable(XED)
 
     if (CMAKE_FIND_ROOT_PATH)
-        set(MBUILD_EXTRA --toolchain "${TOOLCHAIN_PREFIX}-")
+        string(TOLOWER ${CMAKE_SYSTEM_PROCESSOR} XED_PROCESSOR)
+        set(MBUILD_EXTRA --toolchain "${TOOLCHAIN_PREFIX}-" --host-cpu ${XED_PROCESSOR})
     endif ()
 
     # Build target
