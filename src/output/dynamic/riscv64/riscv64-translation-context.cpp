@@ -18,6 +18,8 @@ constexpr Register CF = S9;
 constexpr Register OF = S10;
 constexpr Register SF = S11;
 
+constexpr Register MEM_BASE = T6;
+
 #define X86_OFFSET_OF(reg) __builtin_offsetof(struct arancini::runtime::exec::x86::x86_cpu_state, reg)
 enum class reg_offsets {
 #define DEFREG(ctype, ltype, name) name = X86_OFFSET_OF(name),
@@ -37,7 +39,7 @@ std::pair<Register, bool> riscv64_translation_context::allocate_register(const p
 	if (p && reg_for_port_.count(p)) {
 		return { Register { reg_for_port_[p] }, false };
 	}
-	constexpr Register registers[] { S1, A0, A1, A2, A3, A4, A5, T0, T1, T2, A6, A7, S2, S3, S4, S5, S6, S7, T3, T4, T5, T6 };
+	constexpr Register registers[] { S1, A0, A1, A2, A3, A4, A5, T0, T1, T2, A6, A7, S2, S3, S4, S5, S6, S7, T3, T4, T5 };
 	// FIXME already materialised nodes
 
 	if (reg_allocator_index_ >= std::size(registers)) {
@@ -613,7 +615,11 @@ Register riscv64_translation_context::materialise_read_mem(const read_mem_node &
 	}
 	Register addr_reg = std::get<Register>(materialise(n.address().owner()));
 
-	Address addr { addr_reg };
+	auto [reg, _] = allocate_register();
+
+	assembler_.add(reg, addr_reg, MEM_BASE);
+
+	Address addr { reg };
 	auto load_instr = load_instructions.at(n.val().type().width());
 	(assembler_.*load_instr)(out_reg, addr);
 
@@ -625,7 +631,11 @@ void riscv64_translation_context::materialise_write_mem(const write_mem_node &n)
 	Register src_reg = std::get<Register>(materialise(n.value().owner()));
 	Register addr_reg = std::get<Register>(materialise(n.address().owner()));
 
-	Address addr { addr_reg };
+	auto [reg, _] = allocate_register();
+
+	assembler_.add(reg, addr_reg, MEM_BASE);
+
+	Address addr { reg };
 	auto store_instr = store_instructions.at(n.value().type().width());
 	(assembler_.*store_instr)(src_reg, addr);
 }

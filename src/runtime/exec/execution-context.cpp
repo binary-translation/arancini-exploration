@@ -88,5 +88,5 @@ int execution_context::invoke(void *cpu_state)
 		return 1;
 	}
 
-	return txln->invoke(cpu_state);
+	return txln->invoke(cpu_state, memory_);
 }

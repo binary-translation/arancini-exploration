@@ -21,6 +21,9 @@ call_native:
     // Get state pointer into right register
     mv fp, a1
 
+    // Get mem base into register
+    mv t6, a2
+
     // Call function
     jalr a0
 
