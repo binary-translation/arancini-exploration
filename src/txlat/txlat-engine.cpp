@@ -70,6 +70,10 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
 	oe->set_entrypoint(elf.get_entrypoint());
 
+  // Ahead-of-time translation
+  std::set<unsigned long> translated_addrs;
+  std::list<symbol> zero_size_symbol;
+  auto static_size = 0;
 	if (!cmdline.count("no-static")) {
 		// Loop over each symbol table, and translate the symbol.
 		for (auto s : elf.sections()) {
@@ -77,13 +81,30 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 				auto st = std::static_pointer_cast<symbol_table>(s);
 				for (const auto &sym : st->symbols()) {
 					// if (allowed_symbols.count(sym.name())) {
-					if (sym.is_func() && sym.size()) {
+					if (sym.is_func() && !translated_addrs.count(sym.value())) {
+						translated_addrs.insert(sym.value());
+            // Don't translate symbols with a size of 0, we'll do this in a second pass.
+						if (!sym.size()) {
+							zero_size_symbol.push_front(sym);
+							continue;
+						}
 						oe->add_chunk(translate_symbol(*ia, elf, sym));
+            static_size += sym.size();
 					}
 				}
 			}
 		}
+    // Loop over symbols of size zero and optimistically translate
+    for (auto s : zero_size_symbol) {
+      // find the address of the symbol after s in the text section, and assume that the size of s is until there
+      auto next = *(std::next(translated_addrs.find(s.value()), 1));
+      auto size = next - s.value();
+      auto fixed_sym = symbol(s.name(), s.value(), size, s.section_index(), s.info());
+      oe->add_chunk(translate_symbol(*ia, elf, fixed_sym));
+      static_size += size;
+    }
 	}
+  std::cout << "ahead-of-time: translated " << static_size << " bytes" << std::endl;
 
 	// Generate a dot graph of the IR if required
 	if (cmdline.count("graph")) {
