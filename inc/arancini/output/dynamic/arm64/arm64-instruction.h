@@ -56,7 +56,8 @@ public:
 
     arm64_physreg_op(const uint8_t index) {
         if (index > xzr_sp)
-			throw std::runtime_error("allocation assignment '" + std::to_string(index) + "' out-of-range");
+			throw std::runtime_error("allocation assignment '" +
+                                     std::to_string(index) + "' out-of-range");
         reg_ = static_cast<regname>(index);
     }
 
@@ -472,6 +473,14 @@ struct arm64_instruction {
 
     static arm64_instruction movcs(const arm64_operand &dst, const arm64_immediate_operand &src) {
         return arm64_instruction("movcs", def(dst), use(src));
+    }
+
+    static arm64_instruction movn(const arm64_operand &dst, const arm64_operand &src) {
+        return arm64_instruction("movn", def(dst), use(src));
+    }
+
+    static arm64_instruction movz(const arm64_operand &dst, const arm64_operand &src) {
+        return arm64_instruction("movz", def(dst), use(src));
     }
 
     static arm64_instruction mov(const arm64_operand &dst, const arm64_operand &src) {

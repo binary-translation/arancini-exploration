@@ -22,6 +22,10 @@ public:
 
 	void not_(const arm64_operand &dst, const arm64_operand &src) { append(arm64_instruction::not_(dst, src)); }
 
+    void movn(const arm64_operand &dst, const arm64_operand &src) { append(arm64_instruction::movn(dst, src)); }
+
+    void movz(const arm64_operand &dst, const arm64_operand &src) { append(arm64_instruction::movz(dst, src)); }
+
     void mov(const arm64_operand &dst, const arm64_operand &src) { append(arm64_instruction::mov(dst, src)); }
 
 	void setz(const arm64_operand &dst) {
