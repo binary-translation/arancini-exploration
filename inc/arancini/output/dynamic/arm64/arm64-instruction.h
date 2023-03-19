@@ -4,11 +4,33 @@
 
 #include <arancini/output/dynamic/machine-code-writer.h>
 
-#include <iostream>
 #include <sstream>
+#include <iostream>
 #include <stdexcept>
 
 namespace arancini::output::dynamic::arm64 {
+
+class assembler {
+public:
+    assembler() {
+        status_ = ks_open(KS_ARCH_ARM64, 0, &ks_);
+        if (status_ != KS_ERR_OK) {
+            std::string msg("Failed to initialise keystone assembler: ");
+            throw std::runtime_error(msg + ks_strerror(status_));
+        }
+    }
+
+    size_t assemble(const char *code, unsigned char **out);
+
+    ~assembler() {
+        ks_close(ks_);
+    }
+private:
+    ks_err status_;
+    ks_engine* ks_;
+};
+
+static assembler asm_;
 
 struct arm64_vreg_op {
 	unsigned int index;
@@ -291,14 +313,10 @@ struct arm64_instruction {
     arm64_opform opform;
     arm64_operand operands[nr_operands];
 
-    ks_engine *ks_;
-    ks_err ks_err_;
-
     arm64_instruction(const std::string& opc)
         : opcode(opc)
 		, opform(arm64_opform::OF_NONE)
 	{
-        init_keystone();
 	}
 
 	arm64_instruction(const std::string& opc, const arm64_operand &o1)
@@ -306,7 +324,6 @@ struct arm64_instruction {
 		, opform(classify(o1))
 	{
 		operands[0] = o1;
-        init_keystone();
 	}
 
 	arm64_instruction(const std::string& opc, const arm64_operand &o1, const arm64_operand &o2)
@@ -315,7 +332,6 @@ struct arm64_instruction {
 	{
 		operands[0] = o1;
 		operands[1] = o2;
-        init_keystone();
 	}
 
 	arm64_instruction(const std::string& opc,
@@ -328,7 +344,6 @@ struct arm64_instruction {
 		operands[0] = o1;
 		operands[1] = o2;
 		operands[2] = o3;
-        init_keystone();
 	}
 
 	static int operand_type_to_form_type(arm64_operand_type t)
@@ -470,16 +485,6 @@ struct arm64_instruction {
 	bool is_dead() const { return opcode.empty(); }
 
 	arm64_operand &get_operand(int index) { return operands[index]; }
-
-    ~arm64_instruction() {
-        ks_close(ks_);
-    }
-private:
-    void init_keystone() {
-        ks_err_ = ks_open(KS_ARCH_ARM64, KS_MODE_64, &ks_);
-        if (ks_err_ != KS_ERR_OK)
-            throw std::runtime_error("AARCH64 DBT: ks_open() failed");
-    }
 };
 
 } // namespace arancini::output::dynamic::arm64
