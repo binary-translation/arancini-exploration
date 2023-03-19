@@ -15,7 +15,7 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
 void arm64_translation_context::end_instruction() { }
 
 void arm64_translation_context::end_block() {
-	do_register_allocation();
+	// do_register_allocation();
 
     // TODO: add operations to finish block
 	// builder_.xor_(
@@ -72,6 +72,10 @@ void arm64_translation_context::materialise(const ir::node* n) {
         return materialise_read_mem(*reinterpret_cast<const read_mem_node*>(n));
     case node_kinds::write_mem:
         return materialise_write_mem(*reinterpret_cast<const write_mem_node*>(n));
+	case node_kinds::read_pc:
+		return materialise_read_pc(*reinterpret_cast<const read_pc_node *>(n));
+	case node_kinds::write_pc:
+		return materialise_write_pc(*reinterpret_cast<const write_pc_node *>(n));
 	case node_kinds::cast:
 		return materialise_cast(*reinterpret_cast<const cast_node *>(n));
     case node_kinds::constant:
@@ -143,6 +147,21 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
 	builder_.mov(arm64_operand(arm64_memory_operand(addr_vreg, 0), w), vreg_operand_for_port(n.value()));
 }
 
+void arm64_translation_context::materialise_read_pc(const read_pc_node &n)
+{
+	int dst_vreg = alloc_vreg_for_port(n.val());
+
+	builder_.mov(virtreg_operand(dst_vreg, n.val().type().element_width()),
+                 arm64_operand(arm64_immediate_operand(this_pc_, 64)));
+}
+
+void arm64_translation_context::materialise_write_pc(const write_pc_node &n)
+{
+	int dst_vreg = alloc_vreg_for_port(n.val());
+
+    // TODO
+}
+
 void arm64_translation_context::materialise_constant(const constant_node &n) {
 	int dst_vreg = alloc_vreg_for_port(n.val());
 	builder_.mov(virtreg_operand(dst_vreg, n.val().type().element_width()), imm_operand(n.const_val_i(), n.val().type().element_width()));
@@ -212,12 +231,12 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 	switch (n.op()) {
 	case cast_op::zx:
 		builder_.movz(virtreg_operand(dst_vreg, n.val().type().element_width()),
-                      vreg_operand_for_port(n.source_value()));
+                      vreg_operand_for_port(n.source_value()), imm_operand(0, 64));
 		break;
 
 	case cast_op::sx:
 		builder_.movn(virtreg_operand(dst_vreg, n.val().type().element_width()),
-                      vreg_operand_for_port(n.source_value(), false));
+                      vreg_operand_for_port(n.source_value(), false), imm_operand(0, 64));
 		break;
 
 	case cast_op::bitcast:
