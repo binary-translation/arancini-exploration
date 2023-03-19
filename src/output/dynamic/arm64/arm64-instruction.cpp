@@ -17,15 +17,23 @@ const char* arm64_physreg_op::to_string() const {
     return name[static_cast<size_t>(reg_)];
 }
 
+size_t assembler::assemble(const char *code, unsigned char **out) {
+    size_t size = 0;
+    if (ks_asm(ks_, code, 0, out, &size, nullptr)) {
+        std::string msg("Keystone assembler encountered error: ");
+        throw std::runtime_error(msg + ks_strerror(ks_errno(ks_)));
+    }
+    return size;
+}
+
 void arm64_instruction::emit(machine_code_writer &writer) const {
 	if (opcode.empty()) {
 		return;
 	}
 
     size_t size;
-    size_t count;
-    std::stringstream assembly;
     uint8_t* encode;
+    std::stringstream assembly;
 
 	switch (opform) {
 	case arm64_opform::OF_NONE:
@@ -153,8 +161,7 @@ void arm64_instruction::emit(machine_code_writer &writer) const {
 
     // TODO: do this for all at once; not one by one
     dump(assembly);
-	if (ks_asm(ks_, assembly.str().c_str(), 0x1000, &encode, &size, &count))
-		throw std::runtime_error(ks_strerror(ks_errno(ks_)));
+    size = asm_.assemble(assembly.str().c_str(), &encode);
 
 	writer.copy_in(encode, size);
 
