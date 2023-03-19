@@ -72,6 +72,8 @@ void arm64_translation_context::materialise(const ir::node* n) {
         return materialise_read_mem(*reinterpret_cast<const read_mem_node*>(n));
     case node_kinds::write_mem:
         return materialise_write_mem(*reinterpret_cast<const write_mem_node*>(n));
+	case node_kinds::cast:
+		return materialise_cast(*reinterpret_cast<const cast_node *>(n));
     case node_kinds::constant:
         return materialise_constant(*reinterpret_cast<const constant_node*>(n));
 	case node_kinds::unary_arith:
@@ -79,7 +81,8 @@ void arm64_translation_context::materialise(const ir::node* n) {
 	case node_kinds::binary_arith:
 		return materialise_binary_arith(*reinterpret_cast<const binary_arith_node*>(n));
     default:
-        throw std::runtime_error("unknown node encountered");
+        throw std::runtime_error(std::string("unknown node encountered: ") +
+                                 std::to_string(static_cast<unsigned>(n->kind())));
     }
 }
 
@@ -201,6 +204,30 @@ void arm64_translation_context::materialise_unary_arith(const unary_arith_node &
     default:
         throw std::runtime_error("Unknown unary operation");
     }
+}
+
+void arm64_translation_context::materialise_cast(const cast_node &n) {
+	int dst_vreg = alloc_vreg_for_port(n.val());
+
+	switch (n.op()) {
+	case cast_op::zx:
+		builder_.movz(virtreg_operand(dst_vreg, n.val().type().element_width()),
+                      vreg_operand_for_port(n.source_value()));
+		break;
+
+	case cast_op::sx:
+		builder_.movn(virtreg_operand(dst_vreg, n.val().type().element_width()),
+                      vreg_operand_for_port(n.source_value(), false));
+		break;
+
+	case cast_op::bitcast:
+		builder_.mov(virtreg_operand(dst_vreg, n.val().type().element_width()),
+                     vreg_operand_for_port(n.source_value()));
+		break;
+
+	default:
+		throw std::runtime_error("unsupported cast operation");
+	}
 }
 
 void arm64_translation_context::do_register_allocation() { builder_.allocate(); }
