@@ -154,6 +154,7 @@ void arm64_instruction_builder::dump(std::ostream &os) const
 	for (auto &insn : instructions_) {
 		// if (!insn.is_dead()) {
 		insn.dump(os);
+        os << '\n';
 		//}
 	}
 }

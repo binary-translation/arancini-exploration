@@ -50,6 +50,8 @@ private:
     void materialise_write_reg(const ir::write_reg_node &n);
     void materialise_read_mem(const ir::read_mem_node &n);
     void materialise_write_mem(const ir::write_mem_node &n);
+    void materialise_read_pc(const ir::read_pc_node &n);
+    void materialise_write_pc(const ir::write_pc_node &n);
     void materialise_cast(const ir::cast_node &n);
     void materialise_constant(const ir::constant_node &n);
     void materialise_unary_arith(const ir::unary_arith_node &n);

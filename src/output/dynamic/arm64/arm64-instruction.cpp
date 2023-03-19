@@ -14,7 +14,7 @@ const char* arm64_physreg_op::to_string() const {
         "xzr_sp"
     };
 
-    return name[static_cast<size_t>(reg_)];
+    return name[static_cast<uint8_t>(reg_)];
 }
 
 size_t assembler::assemble(const char *code, unsigned char **out) {
@@ -166,25 +166,28 @@ void arm64_instruction::emit(machine_code_writer &writer) const {
 	writer.copy_in(encode, size);
 
     // TODO: do zero-copy keystone
-    ks_free(encode);
+    asm_.free(encode);
 }
 
 void arm64_instruction::dump(std::ostream &os) const {
     os << opcode;
 
-	for (size_t i = 0; i < nr_operands; i++) {
-		if (operands[i].type != arm64_operand_type::invalid) {
-			os << " ";
-			operands[i].dump(os);
-		}
+	for (size_t i = 0; i < opcount - 1; i++) {
+        os << ' ';
+        operands[i].dump(os);
+        os << ", ";
 	}
 
-	os << '\n';
+    operands[opcount - 1].dump(os);
 }
 
 // TODO: adapt all
 void arm64_operand::dump(std::ostream &os) const {
 	switch (type) {
+    case arm64_operand_type::shift:
+        os << "LSL $0x" << std::hex << shiftop.u64;
+        break;
+
 	case arm64_operand_type::imm:
 		os << "$0x" << std::hex << immop.u64;
 		break;
@@ -192,19 +195,20 @@ void arm64_operand::dump(std::ostream &os) const {
 	case arm64_operand_type::mem:
 		os << "[";
 
-		if (memop.virt_base) {
+		if (memop.virt_base)
 			os << "V" << std::dec << memop.vbase;
-		} else {
+		else
 			os << memop.pbase.to_string();
-		}
 
-        if (memop.post_index)
-            os << "]";
-
-        os << ", $0x" << std::hex << memop.offset;
 
         if (memop.pre_index)
-            os << "]!";
+            os << ", $0x" << std::hex << memop.offset << "]!";
+        else
+            os << ']';
+
+        if (memop.post_index)
+            os << ", " << std::hex << memop.offset;
+
 
         // TODO: register indirect with index
 		break;
@@ -217,7 +221,8 @@ void arm64_operand::dump(std::ostream &os) const {
 		os << "%V" << std::dec << vregop.index;
 		break;
     default:
-        throw std::runtime_error("arm64_operand::dump() encountered invalid operand type");
+        throw std::runtime_error("arm64_operand::dump() encountered invalid operand type: "
+                                 + std::to_string(static_cast<unsigned>(type)));
 	}
 }
 
