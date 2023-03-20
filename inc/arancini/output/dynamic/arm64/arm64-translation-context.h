@@ -28,6 +28,7 @@ private:
 	std::map<unsigned long, off_t> instruction_index_to_guest_;
 	int next_vreg_;
 	off_t this_pc_;
+    size_t instr_cnt_ = 0;
 
 	void do_register_allocation();
 
@@ -52,8 +53,13 @@ private:
     void materialise_write_mem(const ir::write_mem_node &n);
     void materialise_read_pc(const ir::read_pc_node &n);
     void materialise_write_pc(const ir::write_pc_node &n);
+    void materialise_label(const ir::label_node &n);
+    void materialise_br(const ir::br_node &n);
+    void materialise_cond_br(const ir::cond_br_node &n);
     void materialise_cast(const ir::cast_node &n);
     void materialise_constant(const ir::constant_node &n);
+    void materialise_csel(const ir::csel_node &n);
+    void materialise_bit_shift(const ir::bit_shift_node &n);
     void materialise_unary_arith(const ir::unary_arith_node &n);
     void materialise_binary_arith(const ir::binary_arith_node &n);
 };

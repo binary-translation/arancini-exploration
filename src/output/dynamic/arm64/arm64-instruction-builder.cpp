@@ -116,7 +116,7 @@ void arm64_instruction_builder::allocate() {
 
 						vreg_to_preg[vri] = allocation;
 
-						// o.mem.base().regname = (x86_register::x86_regname)allocation;
+						o.memop.pbase = arm64_physreg_op(allocation);
 						o.allocate_base(allocation);
 
 #ifdef DEBUG_REGALLOC

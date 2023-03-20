@@ -15,7 +15,7 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
 void arm64_translation_context::end_instruction() { }
 
 void arm64_translation_context::end_block() {
-	// do_register_allocation();
+	do_register_allocation();
 
     // TODO: add operations to finish block
 	// builder_.xor_(
@@ -76,8 +76,18 @@ void arm64_translation_context::materialise(const ir::node* n) {
 		return materialise_read_pc(*reinterpret_cast<const read_pc_node *>(n));
 	case node_kinds::write_pc:
 		return materialise_write_pc(*reinterpret_cast<const write_pc_node *>(n));
+    case node_kinds::label:
+        return materialise_label(*reinterpret_cast<const label_node *>(n));
+    case node_kinds::br:
+        return materialise_br(*reinterpret_cast<const br_node *>(n));
+    case node_kinds::cond_br:
+        return materialise_cond_br(*reinterpret_cast<const cond_br_node *>(n));
 	case node_kinds::cast:
 		return materialise_cast(*reinterpret_cast<const cast_node *>(n));
+    case node_kinds::csel:
+		return materialise_csel(*reinterpret_cast<const csel_node *>(n));
+    case node_kinds::bit_shift:
+		return materialise_bit_shift(*reinterpret_cast<const bit_shift_node *>(n));
     case node_kinds::constant:
         return materialise_constant(*reinterpret_cast<const constant_node*>(n));
 	case node_kinds::unary_arith:
@@ -85,8 +95,8 @@ void arm64_translation_context::materialise(const ir::node* n) {
 	case node_kinds::binary_arith:
 		return materialise_binary_arith(*reinterpret_cast<const binary_arith_node*>(n));
     default:
-        throw std::runtime_error(std::string("unknown node encountered: ") +
-                                 std::to_string(static_cast<unsigned>(n->kind())));
+        throw std::runtime_error("unknown node encountered: " +
+                                 std::to_string(static_cast<size_t>(n->kind())));
     }
 }
 
@@ -160,6 +170,25 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n)
 	int dst_vreg = alloc_vreg_for_port(n.val());
 
     // TODO
+}
+
+void arm64_translation_context::materialise_label(const label_node &n) {
+    builder_.label(n.name(), instr_cnt_);
+}
+
+void arm64_translation_context::materialise_br(const br_node &n) {
+    materialise(n.target());
+
+    builder_.b(n.target()->name());
+}
+
+void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
+    materialise(n.target());
+
+	int cond_vreg = alloc_vreg_for_port(n.cond());
+
+    // builder_.cmp(cond_vreg, imm_operand(0, 64));
+    builder_.beq(n.target()->name());
 }
 
 void arm64_translation_context::materialise_constant(const constant_node &n) {
@@ -247,6 +276,40 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 	default:
 		throw std::runtime_error("unsupported cast operation");
 	}
+}
+
+void arm64_translation_context::materialise_csel(const csel_node &n) {
+    int dst_vreg = alloc_vreg_for_port(n.val());
+
+    builder_.csel(virtreg_operand(dst_vreg, n.val().type().element_width()),
+                  vreg_operand_for_port(n.trueval(), false),
+                  vreg_operand_for_port(n.falseval(), false),
+                  vreg_operand_for_port(n.condition(), false));
+}
+
+void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
+    int dst_vreg = alloc_vreg_for_port(n.val());
+
+    switch (n.op()) {
+    case shift_op::lsl:
+        builder_.lsl(virtreg_operand(dst_vreg, n.val().type().element_width()),
+                     vreg_operand_for_port(n.input(), false),
+                     vreg_operand_for_port(n.amount(), false));
+        break;
+    case shift_op::lsr:
+        builder_.lsr(virtreg_operand(dst_vreg, n.val().type().element_width()),
+                     vreg_operand_for_port(n.input(), false),
+                     vreg_operand_for_port(n.amount(), false));
+        break;
+    case shift_op::asr:
+        builder_.asr(virtreg_operand(dst_vreg, n.val().type().element_width()),
+                     vreg_operand_for_port(n.input(), false),
+                     vreg_operand_for_port(n.amount(), false));
+        break;
+    default:
+        throw std::runtime_error("unsupported shift operation: " +
+                                 std::to_string(static_cast<int>(n.op())));
+    }
 }
 
 void arm64_translation_context::do_register_allocation() { builder_.allocate(); }
