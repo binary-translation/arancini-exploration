@@ -60,6 +60,8 @@ private:
     void materialise_constant(const ir::constant_node &n);
     void materialise_csel(const ir::csel_node &n);
     void materialise_bit_shift(const ir::bit_shift_node &n);
+    void materialise_bit_extract(const ir::bit_extract_node &n);
+    void materialise_bit_insert(const ir::bit_insert_node &n);
     void materialise_unary_arith(const ir::unary_arith_node &n);
     void materialise_binary_arith(const ir::binary_arith_node &n);
 };

@@ -585,6 +585,20 @@ struct arm64_instruction {
         return arm64_instruction("csel", def(dst), use(src1), use(src2), use(cond));
     }
 
+    static arm64_instruction ubfx(const arm64_operand &dst,
+                                  const arm64_operand &src1,
+                                  const arm64_operand &src2,
+                                  const arm64_operand &cond) {
+        return arm64_instruction("ubfx", def(dst), use(src1), use(src2), use(cond));
+    }
+
+    static arm64_instruction bfi(const arm64_operand &dst,
+                                 const arm64_operand &src1,
+                                 const arm64_operand &src2,
+                                 const arm64_operand &cond) {
+        return arm64_instruction("bfi", def(dst), use(src1), use(src2), use(cond));
+    }
+
 	void dump(std::ostream &os) const;
 	void emit(machine_code_writer &writer, const std::vector<std::string>& = {}) const;
 	void kill() { opcode = ""; }
