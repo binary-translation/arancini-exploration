@@ -88,6 +88,10 @@ void arm64_translation_context::materialise(const ir::node* n) {
 		return materialise_csel(*reinterpret_cast<const csel_node *>(n));
     case node_kinds::bit_shift:
 		return materialise_bit_shift(*reinterpret_cast<const bit_shift_node *>(n));
+    case node_kinds::bit_extract:
+		return materialise_bit_extract(*reinterpret_cast<const bit_extract_node *>(n));
+    case node_kinds::bit_insert:
+		return materialise_bit_insert(*reinterpret_cast<const bit_insert_node *>(n));
     case node_kinds::constant:
         return materialise_constant(*reinterpret_cast<const constant_node*>(n));
 	case node_kinds::unary_arith:
@@ -310,6 +314,25 @@ void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
         throw std::runtime_error("unsupported shift operation: " +
                                  std::to_string(static_cast<int>(n.op())));
     }
+}
+
+void arm64_translation_context::materialise_bit_extract(const bit_extract_node &n) {
+    int dst_vreg = alloc_vreg_for_port(n.val());
+
+    builder_.ubfx(virtreg_operand(dst_vreg, n.val().type().element_width()),
+                  vreg_operand_for_port(n.source_value(), false),
+                  imm_operand(n.from(), 64),
+                  imm_operand(n.length(), 64));
+}
+
+void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n) {
+    int dst_vreg = alloc_vreg_for_port(n.val());
+
+    // TODO
+    builder_.bfi(virtreg_operand(dst_vreg, n.val().type().element_width()),
+                 vreg_operand_for_port(n.bits(), false),
+                 imm_operand(n.to(), 64),
+                 imm_operand(n.length(), 64));
 }
 
 void arm64_translation_context::do_register_allocation() { builder_.allocate(); }

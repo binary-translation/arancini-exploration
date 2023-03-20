@@ -90,6 +90,20 @@ public:
         append(arm64_instruction::csel(dst, src1, src2, cond));
     }
 
+    void ubfx(const arm64_operand &dst,
+              const arm64_operand &src1,
+              const arm64_operand &src2,
+              const arm64_operand &cond) {
+        append(arm64_instruction::ubfx(dst, src1, src2, cond));
+    }
+
+    void bfi(const arm64_operand &dst,
+             const arm64_operand &src1,
+             const arm64_operand &src2,
+             const arm64_operand &cond) {
+        append(arm64_instruction::bfi(dst, src1, src2, cond));
+    }
+
 	void append(const arm64_instruction &i) { instructions_.push_back(i); }
 
 	void allocate();
