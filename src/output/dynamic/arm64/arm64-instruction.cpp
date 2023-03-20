@@ -26,7 +26,9 @@ size_t assembler::assemble(const char *code, unsigned char **out) {
     return size;
 }
 
-void arm64_instruction::emit(machine_code_writer &writer) const {
+void arm64_instruction::emit(machine_code_writer &writer,
+                             const std::vector<std::string> &labels) const
+{
 	if (opcode.empty()) {
 		return;
 	}
@@ -156,10 +158,13 @@ void arm64_instruction::emit(machine_code_writer &writer) const {
 		break;
 
 	default:
-		throw std::runtime_error("unsupported operand form");
+        (void)0;
+		// throw std::runtime_error("unsupported operand form");
 	}
 
     // TODO: do this for all at once; not one by one
+    for (const auto& label : labels)
+        assembly << label << ":\n";
     dump(assembly);
     size = asm_.assemble(assembly.str().c_str(), &encode);
 
@@ -184,6 +189,9 @@ void arm64_instruction::dump(std::ostream &os) const {
 // TODO: adapt all
 void arm64_operand::dump(std::ostream &os) const {
 	switch (type) {
+    case arm64_operand_type::label:
+        os << labelop.name << ':';
+        break;
     case arm64_operand_type::shift:
         os << "LSL $0x" << std::hex << shiftop.u64;
         break;

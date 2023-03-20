@@ -3,9 +3,10 @@
 #include <arancini/output/dynamic/machine-code-writer.h>
 #include <arancini/output/dynamic/arm64/arm64-instruction.h>
 
+#include <vector>
 #include <iostream>
 #include <stdexcept>
-#include <vector>
+#include <unordered_map>
 
 namespace arancini::output::dynamic::arm64 {
 class arm64_instruction_builder {
@@ -52,14 +53,55 @@ public:
         append(arm64_instruction::movvs(dst, 1));
     }
 
+    void b(const std::string &label) {
+        append(arm64_instruction::b(label));
+    }
+
+    void beq(const std::string &label) {
+        append(arm64_instruction::beq(label));
+    }
+
+    void label(const std::string &name, size_t pos) {
+        labels_[pos].push_back(name);
+    }
+
+    void lsl(const arm64_operand &dst,
+             const arm64_operand &input,
+             const arm64_operand &amount) {
+        append(arm64_instruction::lsl(dst, input, amount));
+    }
+
+    void lsr(const arm64_operand &dst,
+             const arm64_operand &input,
+             const arm64_operand &amount) {
+        append(arm64_instruction::lsr(dst, input, amount));
+    }
+
+    void asr(const arm64_operand &dst,
+             const arm64_operand &input,
+             const arm64_operand &amount) {
+        append(arm64_instruction::asr(dst, input, amount));
+    }
+
+    void csel(const arm64_operand &dst,
+              const arm64_operand &src1,
+              const arm64_operand &src2,
+              const arm64_operand &cond) {
+        append(arm64_instruction::csel(dst, src1, src2, cond));
+    }
+
 	void append(const arm64_instruction &i) { instructions_.push_back(i); }
 
 	void allocate();
 
 	void emit(machine_code_writer &writer)
 	{
-		for (const auto &i : instructions_) {
-			i.emit(writer);
+        for (size_t i = 0; i < instructions_.size(); ++i) {
+            if (labels_.count(i)) {
+                const auto& labels = labels_[i];
+                instructions_[i].emit(writer, labels);
+            } else
+                instructions_[i].emit(writer);
 		}
 	}
 
@@ -68,6 +110,7 @@ public:
 	size_t nr_instructions() const { return instructions_.size(); }
 private:
 	std::vector<arm64_instruction> instructions_;
+    std::unordered_map<size_t, std::vector<std::string>> labels_;
 };
 } // namespace arancini::output::dynamic::arm64
 

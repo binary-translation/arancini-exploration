@@ -4,6 +4,7 @@
 
 #include <arancini/output/dynamic/machine-code-writer.h>
 
+#include <vector>
 #include <sstream>
 #include <iostream>
 #include <stdexcept>
@@ -88,7 +89,7 @@ struct arm64_memory_operand {
 	{
     }
 
-	arm64_memory_operand(arm64_physreg_op base, int offset,
+	arm64_memory_operand(const arm64_physreg_op &base, int offset,
                          bool pre_index = false, bool post_index = false)
 		: virt_base(false)
 		, pbase(base)
@@ -144,12 +145,21 @@ struct arm64_immediate_operand {
 	}
 };
 
-struct arm64_shift_operand : public arm64_immediate_operand
-{
+struct arm64_shift_operand : public arm64_immediate_operand {
     // TODO: check fit in 48-bit shift specifier
 };
 
-enum class arm64_operand_type { invalid, preg, vreg, mem, imm, shift};
+struct arm64_label_operand {
+    arm64_label_operand() = default;
+
+    arm64_label_operand(const std::string &label): name(label)
+    {
+    }
+
+    std::string name;
+};
+
+enum class arm64_operand_type { invalid, preg, vreg, mem, imm, shift, label};
 
 struct arm64_operand {
 	arm64_operand_type type;
@@ -161,6 +171,8 @@ struct arm64_operand {
 		arm64_immediate_operand immop;
 		arm64_shift_operand shiftop;
 	};
+
+    arm64_label_operand labelop;
 
 	bool use, def;
 
@@ -212,6 +224,14 @@ struct arm64_operand {
 		: type(arm64_operand_type::shift)
 		, width(o.width)
 		, shiftop(o)
+		, use(false)
+		, def(false)
+	{
+	}
+
+	arm64_operand(const arm64_label_operand &o)
+		: type(arm64_operand_type::label)
+		, labelop(o)
 		, use(false)
 		, def(false)
 	{
@@ -325,7 +345,7 @@ enum class arm64_opform {
 
 struct arm64_instruction {
     size_t opcount = 0;
-	static constexpr size_t nr_operands = 4;
+	static constexpr size_t nr_operands = 5;
 
     std::string opcode;
     arm64_opform opform;
@@ -337,7 +357,7 @@ struct arm64_instruction {
 	{
 	}
 
-	arm64_instruction(const std::string& opc, const arm64_operand &o1)
+	arm64_instruction(const std::string &opc, const arm64_operand &o1)
 		: opcode(opc)
 		, opform(classify(o1))
 	{
@@ -345,7 +365,7 @@ struct arm64_instruction {
         opcount = 1;
 	}
 
-	arm64_instruction(const std::string& opc, const arm64_operand &o1, const arm64_operand &o2)
+	arm64_instruction(const std::string &opc, const arm64_operand &o1, const arm64_operand &o2)
 		: opcode(opc)
 		, opform(classify(o1, o2))
 	{
@@ -354,7 +374,7 @@ struct arm64_instruction {
         opcount = 2;
 	}
 
-	arm64_instruction(const std::string& opc,
+	arm64_instruction(const std::string &opc,
                       const arm64_operand &o1,
                       const arm64_operand &o2,
                       const arm64_operand &o3)
@@ -365,6 +385,21 @@ struct arm64_instruction {
 		operands[1] = o2;
 		operands[2] = o3;
         opcount = 3;
+	}
+
+	arm64_instruction(const std::string &opc,
+                      const arm64_operand &o1,
+                      const arm64_operand &o2,
+                      const arm64_operand &o3,
+                      const arm64_operand &o4)
+		: opcode(opc)
+		, opform(classify(o1, o2, o3))
+	{
+		operands[0] = o1;
+		operands[1] = o2;
+		operands[2] = o3;
+		operands[3] = o4;
+        opcount = 4;
 	}
 
 	static int operand_type_to_form_type(arm64_operand_type t)
@@ -511,8 +546,47 @@ struct arm64_instruction {
         return arm64_instruction("mov", def(dst), use(src));
     }
 
+    static arm64_instruction b(const std::string &src) {
+        return arm64_instruction("b", use(arm64_label_operand(src)));
+    }
+
+    static arm64_instruction beq(const std::string &src) {
+        return arm64_instruction("beq", use(arm64_label_operand(src)));
+    }
+
+    static arm64_instruction cmp(const arm64_operand &dst,
+                                 const arm64_operand &src1,
+                                 const arm64_operand &src2) {
+        return arm64_instruction("cmp", def(dst), use(src1), use(src2));
+    }
+
+    static arm64_instruction lsl(const arm64_operand &dst,
+                                 const arm64_operand &src1,
+                                 const arm64_operand &src2) {
+        return arm64_instruction("lsl", def(dst), use(src1), use(src2));
+    }
+
+    static arm64_instruction lsr(const arm64_operand &dst,
+                                 const arm64_operand &src1,
+                                 const arm64_operand &src2) {
+        return arm64_instruction("lsr", def(dst), use(src1), use(src2));
+    }
+
+    static arm64_instruction asr(const arm64_operand &dst,
+                                 const arm64_operand &src1,
+                                 const arm64_operand &src2) {
+        return arm64_instruction("asr", def(dst), use(src1), use(src2));
+    }
+
+    static arm64_instruction csel(const arm64_operand &dst,
+                                  const arm64_operand &src1,
+                                  const arm64_operand &src2,
+                                  const arm64_operand &cond) {
+        return arm64_instruction("csel", def(dst), use(src1), use(src2), use(cond));
+    }
+
 	void dump(std::ostream &os) const;
-	void emit(machine_code_writer &writer) const;
+	void emit(machine_code_writer &writer, const std::vector<std::string>& = {}) const;
 	void kill() { opcode = ""; }
 
 	bool is_dead() const { return opcode.empty(); }
