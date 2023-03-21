@@ -11,7 +11,7 @@ const char* arm64_physreg_op::to_string() const {
         "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
         "x11", "x12", "x13", "x14", "x15", "x16", "x17", "x18", "x19", "x20",
         "x21", "x22", "x23", "x24", "x25", "x26", "x27", "x28", "x29", "x30",
-        "x31"
+        "sp"
     };
 
     return name[static_cast<uint8_t>(reg_)];
@@ -19,10 +19,13 @@ const char* arm64_physreg_op::to_string() const {
 
 size_t assembler::assemble(const char *code, unsigned char **out) {
     size_t size = 0;
-    if (ks_asm(ks_, code, 0, out, &size, nullptr)) {
+    size_t count = 0;
+    unsigned char *encode;
+    if (ks_asm(ks_, code, 0, out, &size, &count)) {
         std::string msg("Keystone assembler encountered error: ");
         throw std::runtime_error(msg + ks_strerror(ks_errno(ks_)));
     }
+
     return size;
 }
 
@@ -189,15 +192,18 @@ void arm64_instruction::dump(std::ostream &os) const {
 // TODO: adapt all
 void arm64_operand::dump(std::ostream &os) const {
 	switch (type) {
+    case arm64_operand_type::cond:
+        os << condop.cond;
+        break;
     case arm64_operand_type::label:
         os << labelop.name << ':';
         break;
     case arm64_operand_type::shift:
-        os << "LSL $0x" << std::hex << shiftop.u64;
+        os << "LSL #0x" << std::hex << shiftop.u64;
         break;
 
 	case arm64_operand_type::imm:
-		os << "$0x" << std::hex << immop.u64;
+		os << "#0x" << std::hex << immop.u64;
 		break;
 
 	case arm64_operand_type::mem:
@@ -210,12 +216,12 @@ void arm64_operand::dump(std::ostream &os) const {
 
 
         if (!memop.post_index)
-            os << ", $0x" << std::hex << memop.offset << ']';
+            os << ", #0x" << std::hex << memop.offset << ']';
         else if (memop.pre_index)
             os << '!';
 
         if (memop.post_index)
-            os << "], " << std::hex << memop.offset;
+            os << "], #0x" << std::hex << memop.offset;
 
 
         // TODO: register indirect with index
