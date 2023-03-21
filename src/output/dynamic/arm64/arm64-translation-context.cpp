@@ -63,7 +63,7 @@ arm64_translation_context::guestreg_memory_operand(int width, int regoff,
 
 arm64_operand arm64_translation_context::vreg_operand_for_port(port &p, bool constant_fold) {
     // TODO
-	if (0 && constant_fold) {
+	if (constant_fold) {
 		if (p.owner()->kind() == node_kinds::read_pc) {
 			return arm64_operand(arm64_immediate_operand(this_pc_, 64));
 		} else if (p.owner()->kind() == node_kinds::constant) {
@@ -140,8 +140,8 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
 	int value_vreg = alloc_vreg_for_port(n.val());
 	int w = n.val().type().element_width() == 1 ? 8 : n.val().type().element_width();
 
-	// builder_.ldr(virtreg_operand(value_vreg, w),
-    //              guestreg_memory_operand(w, regoff));
+	builder_.ldr(virtreg_operand(value_vreg, w),
+                 guestreg_memory_operand(w, n.regoff()));
 }
 
 void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
@@ -153,17 +153,17 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
 			auto lhs = (read_reg_node *)binop->lhs().owner();
 			auto rhs = (constant_node *)binop->rhs().owner();
 
-		// 	if (lhs->regoff() == n.regoff()) {
-        //         // TODO
-		// 		switch (binop->op()) {
-		// 		case binary_arith_op::sub:
-		// 			builder_.sub(guestreg_memory_operand(n.value().type().element_width(), n.regoff()),
-		// 				arm64_operand(arm64_immediate_operand(rhs->const_val_i(), n.value().type().element_width())));
-		// 			return;
-        //         default:
-        //             throw std::runtime_error("unexpected");
-		// 		}
-		// 	}
+		if (lhs->regoff() == n.regoff()) {
+           // TODO
+			switch (binop->op()) {
+			case binary_arith_op::sub:
+				builder_.sub(guestreg_memory_operand(n.value().type().element_width(), n.regoff()),
+					arm64_operand(arm64_immediate_operand(rhs->const_val_i(), n.value().type().element_width())));
+				return;
+               default:
+                   throw std::runtime_error("unexpected");
+			}
+		}
 		}
 	}
 
@@ -186,8 +186,8 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
 	int addr_vreg = vreg_for_port(n.address());
 
     // TODO
-	// builder_.ldr(virtreg_operand(value_vreg, w),
-    //              arm64_operand(arm64_memory_operand(addr_vreg, 0), w));
+	builder_.ldr(virtreg_operand(value_vreg, w),
+                 arm64_operand(arm64_memory_operand(addr_vreg, 0), w));
 }
 
 void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
