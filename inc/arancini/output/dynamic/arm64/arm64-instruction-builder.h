@@ -36,6 +36,13 @@ public:
 
 	void and_(const arm64_operand &dst, const arm64_operand &src) { append(arm64_instruction::and_(dst, src)); }
 
+	void and_(const arm64_operand &dst,
+              const arm64_operand &src1,
+              const arm64_operand &src2)
+    {
+        append(arm64_instruction::and_(dst, src1, src2));
+    }
+
 	void xor_(const arm64_operand &dst, const arm64_operand &src) { append(arm64_instruction::xor_(dst, src)); }
 
 	void not_(const arm64_operand &dst, const arm64_operand &src) { append(arm64_instruction::not_(dst, src)); }
@@ -134,6 +141,23 @@ public:
     void str(const arm64_operand &dst,
              const arm64_operand &base) {
         append(arm64_instruction::str(dst, base));
+    }
+
+    void mul(const arm64_operand &dst,
+             const arm64_operand &src1,
+             const arm64_operand &src2) {
+        append(arm64_instruction::mul(dst, src1, src2));
+    }
+
+    void sdiv(const arm64_operand &dst,
+              const arm64_operand &src1,
+              const arm64_operand &src2) {
+        append(arm64_instruction::sdiv(dst, src1, src2));
+    }
+
+    void cmp(const arm64_operand &src1,
+             const arm64_operand &src2) {
+        append(arm64_instruction::cmp(src1, src2));
     }
 
 	void allocate();

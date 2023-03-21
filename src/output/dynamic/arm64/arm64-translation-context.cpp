@@ -242,6 +242,21 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                      vreg_operand_for_port(n.lhs()),
                      vreg_operand_for_port(n.rhs()));
 		break;
+	case binary_arith_op::mul:
+		builder_.mul(virtreg_operand(val_vreg, w),
+                     vreg_operand_for_port(n.lhs()),
+                     vreg_operand_for_port(n.rhs()));
+		break;
+	case binary_arith_op::div:
+		builder_.sdiv(virtreg_operand(val_vreg, w),
+                      vreg_operand_for_port(n.lhs()),
+                      vreg_operand_for_port(n.rhs()));
+		break;
+	case binary_arith_op::mod:
+		builder_.and_(virtreg_operand(val_vreg, w),
+                      vreg_operand_for_port(n.lhs()),
+                      vreg_operand_for_port(n.rhs()));
+		break;
 	case binary_arith_op::bor:
 		builder_.or_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.rhs()));
 		break;
@@ -250,6 +265,16 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 		break;
 	case binary_arith_op::bxor:
 		builder_.xor_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.rhs()));
+		break;
+	case binary_arith_op::cmpeq:
+        // NOTE: set*() will modify the flags
+        builder_.cmp(vreg_operand_for_port(n.lhs()), vreg_operand_for_port(n.rhs()));
+		break;
+	case binary_arith_op::cmpne:
+        builder_.cmp(vreg_operand_for_port(n.lhs()), vreg_operand_for_port(n.rhs()));
+		break;
+	case binary_arith_op::cmpgt:
+        builder_.cmp(vreg_operand_for_port(n.lhs()), vreg_operand_for_port(n.rhs()));
 		break;
 	default:
 		throw std::runtime_error("unsupported binary arithmetic operation " + std::to_string((int)n.op()));
