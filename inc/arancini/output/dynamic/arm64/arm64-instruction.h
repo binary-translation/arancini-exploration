@@ -53,6 +53,8 @@ public:
         xzr_sp
     };
 
+    arm64_physreg_op() = default;
+
     explicit arm64_physreg_op(regname reg): reg_(reg) { }
 
     explicit arm64_physreg_op(size_t index) {
@@ -83,6 +85,8 @@ struct arm64_memory_operand {
 	int offset;
     bool pre_index = false;
     bool post_index = false;
+
+    arm64_memory_operand() = default;
 
 	arm64_memory_operand(arm64_physreg_op base)
 		: arm64_memory_operand(base, 0)

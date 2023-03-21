@@ -14,7 +14,12 @@ void arm64_instruction_builder::allocate() {
 #endif
 
 	std::unordered_map<unsigned int, unsigned int> vreg_to_preg;
-	std::bitset<6> avail_physregs = 0x3f;
+
+    // All registers can be used except:
+    // SP (x31),
+    // FP (x29),
+    // zero (x0)
+	std::bitset<32> avail_physregs = 0x5FFFFFFFE;
 
 	for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
 		auto &insn = *RI;
@@ -83,6 +88,14 @@ void arm64_instruction_builder::allocate() {
 
 				if (!vreg_to_preg.count(vri)) {
 					auto allocation = avail_physregs._Find_first();
+
+                    // TODO: register spilling
+                    // Choose SP
+                    if (allocation == 30) {
+                        allocation = 1; // set to x1
+                        std::cerr << "Run out of registers for block\n";
+                    }
+
 					avail_physregs.flip(allocation);
 
 					vreg_to_preg[vri] = allocation;
@@ -112,6 +125,13 @@ void arm64_instruction_builder::allocate() {
 
 					if (!vreg_to_preg.count(vri)) {
 						auto allocation = avail_physregs._Find_first();
+
+                        // TODO: register spilling
+                        if (allocation == 30) {
+                            allocation = 1; // set to x1
+                            std::cerr << "Run out of registers for block\n";
+                        }
+
 						avail_physregs.flip(allocation);
 
 						vreg_to_preg[vri] = allocation;
