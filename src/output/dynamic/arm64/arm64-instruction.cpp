@@ -29,9 +29,8 @@ size_t assembler::assemble(const char *code, unsigned char **out) {
 void arm64_instruction::emit(machine_code_writer &writer,
                              const std::vector<std::string> &labels) const
 {
-	if (opcode.empty()) {
+	if (is_dead())
 		return;
-	}
 
     size_t size;
     uint8_t* encode;

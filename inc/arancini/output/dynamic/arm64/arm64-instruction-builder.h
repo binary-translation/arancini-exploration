@@ -104,12 +104,9 @@ public:
         append(arm64_instruction::bfi(dst, src1, src2, cond));
     }
 
-	void append(const arm64_instruction &i) { instructions_.push_back(i); }
-
 	void allocate();
 
-	void emit(machine_code_writer &writer)
-	{
+	void emit(machine_code_writer &writer) {
         for (size_t i = 0; i < instructions_.size(); ++i) {
             if (labels_.count(i)) {
                 const auto& labels = labels_[i];
@@ -125,6 +122,9 @@ public:
 private:
 	std::vector<arm64_instruction> instructions_;
     std::unordered_map<size_t, std::vector<std::string>> labels_;
+
+	void append(const arm64_instruction &i) { instructions_.push_back(i); }
+
 };
 } // namespace arancini::output::dynamic::arm64
 
