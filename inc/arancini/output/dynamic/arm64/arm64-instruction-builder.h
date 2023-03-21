@@ -4,7 +4,6 @@
 #include <arancini/output/dynamic/arm64/arm64-instruction.h>
 
 #include <vector>
-#include <iostream>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -111,8 +110,10 @@ public:
             if (labels_.count(i)) {
                 const auto& labels = labels_[i];
                 instructions_[i].emit(writer, labels);
-            } else
-                instructions_[i].emit(writer);
+                continue;
+            }
+
+            instructions_[i].emit(writer);
 		}
 	}
 

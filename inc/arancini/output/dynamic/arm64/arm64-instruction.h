@@ -89,7 +89,7 @@ struct arm64_memory_operand {
 	{
     }
 
-	arm64_memory_operand(const arm64_physreg_op &base, int offset,
+	explicit arm64_memory_operand(arm64_physreg_op::regname base, int offset,
                          bool pre_index = false, bool post_index = false)
 		: virt_base(false)
 		, pbase(base)
@@ -101,7 +101,13 @@ struct arm64_memory_operand {
             throw std::runtime_error("Both pre- and post-index passed to ARM DBT");
     }
 
-	arm64_memory_operand(unsigned int virt_base_index, int offset,
+	explicit arm64_memory_operand(const arm64_physreg_op &base, int offset,
+                         bool pre_index = false, bool post_index = false)
+        :arm64_memory_operand(base.get(), offset, pre_index, post_index)
+    {
+    }
+
+	explicit arm64_memory_operand(unsigned int virt_base_index, int offset,
                          bool pre_index = false, bool post_index = false)
 		: virt_base(true)
 		, vbase(virt_base_index)
@@ -121,6 +127,18 @@ struct arm64_memory_operand {
     {
         if (m.virt_base) vbase = m.vbase;
         else pbase = m.pbase;
+    }
+
+    arm64_memory_operand& operator=(const arm64_memory_operand& m)
+    {
+        virt_base = m.virt_base;
+        offset = m.offset;
+        pre_index = m.pre_index;
+        post_index = m.post_index;
+        if (m.virt_base) vbase = m.vbase;
+        else pbase = m.pbase;
+
+        return *this;
     }
 };
 
@@ -248,9 +266,11 @@ struct arm64_operand {
             pregop = o.pregop;
         if (type == arm64_operand_type::vreg)
             vregop = o.vregop;
+        if (type == arm64_operand_type::mem)
+            memop = o.memop;
         if (type == arm64_operand_type::imm)
             immop = o.immop;
-        if (type == arm64_operand_type::imm)
+        if (type == arm64_operand_type::shift)
             shiftop = o.shiftop;
     }
 
@@ -264,9 +284,11 @@ struct arm64_operand {
             pregop = o.pregop;
         if (type == arm64_operand_type::vreg)
             vregop = o.vregop;
+        if (type == arm64_operand_type::mem)
+            memop = o.memop;
         if (type == arm64_operand_type::imm)
             immop = o.immop;
-        if (type == arm64_operand_type::imm)
+        if (type == arm64_operand_type::shift)
             shiftop = o.shiftop;
 
         return *this;
@@ -603,6 +625,8 @@ struct arm64_instruction {
 	bool is_dead() const { return opcode.empty(); }
 
 	arm64_operand &get_operand(int index) { return operands[index]; }
+
+	const arm64_operand &get_operand(int index) const { return operands[index]; }
 };
 
 } // namespace arancini::output::dynamic::arm64
