@@ -103,6 +103,11 @@ public:
         append(arm64_instruction::bfi(dst, src1, src2, cond));
     }
 
+    void ldr(const arm64_operand &dst,
+             const arm64_operand &base) {
+        append(arm64_instruction::ldr(dst, base));
+    }
+
 	void allocate();
 
 	void emit(machine_code_writer &writer) {

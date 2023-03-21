@@ -618,6 +618,11 @@ struct arm64_instruction {
         return arm64_instruction("bfi", def(dst), use(src1), use(src2), use(cond));
     }
 
+    static arm64_instruction ldr(const arm64_operand &dst,
+                                 const arm64_operand &base) {
+        return arm64_instruction("ldr", def(dst), use(base));
+    }
+
 	void dump(std::ostream &os) const;
 	void emit(machine_code_writer &writer, const std::vector<std::string>& = {}) const;
 	void kill() { opcode.clear(); }

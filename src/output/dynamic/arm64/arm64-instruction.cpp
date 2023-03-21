@@ -179,9 +179,10 @@ void arm64_instruction::dump(std::ostream &os) const {
 	for (size_t i = 0; i < opcount - 1; i++) {
         os << ' ';
         operands[i].dump(os);
-        os << ", ";
+        os << ',';
 	}
 
+    os << ' ';
     operands[opcount - 1].dump(os);
 }
 
