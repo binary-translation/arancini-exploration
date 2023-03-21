@@ -204,7 +204,7 @@ void arm64_operand::dump(std::ostream &os) const {
 		os << "[";
 
 		if (memop.virt_base)
-			os << "V" << std::dec << memop.vbase;
+			os << "%V" << std::dec << memop.vbase;
 		else
 			os << memop.pbase.to_string();
 

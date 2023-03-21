@@ -4,7 +4,7 @@
 
 using namespace arancini::output::dynamic::arm64;
 
-// #define DEBUG_REGALLOC
+#define DEBUG_REGALLOC
 #define DEBUG_STREAM std::cerr
 
 void arm64_instruction_builder::allocate() {

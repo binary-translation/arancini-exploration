@@ -508,12 +508,26 @@ struct arm64_instruction {
 		return r;
 	}
 
-    static arm64_instruction add(const arm64_operand &dst, const arm64_operand &src) {
+    static arm64_instruction add(const arm64_operand &dst,
+                                 const arm64_operand &src1,
+                                 const arm64_operand &src2) {
+        return arm64_instruction("add", def(dst), use(src1), use(src2));
+    }
+
+    static arm64_instruction add(const arm64_operand &dst,
+                                 const arm64_operand &src) {
         return arm64_instruction("add", usedef(dst), use(src));
     }
 
-    static arm64_instruction sub(const arm64_operand &dst, const arm64_operand &src) {
-        return arm64_instruction("sub", usedef(dst), use(src));
+    static arm64_instruction sub(const arm64_operand &dst,
+                                 const arm64_operand &src1,
+                                 const arm64_operand &src2) {
+        return arm64_instruction("sub", def(dst), use(src1), use(src2));
+    }
+
+    static arm64_instruction sub(const arm64_operand &dst,
+                                 const arm64_operand &src) {
+        return arm64_instruction("sub", def(dst), use(src));
     }
 
     static arm64_instruction or_(const arm64_operand &dst, const arm64_operand &src) {
@@ -621,6 +635,11 @@ struct arm64_instruction {
     static arm64_instruction ldr(const arm64_operand &dst,
                                  const arm64_operand &base) {
         return arm64_instruction("ldr", def(dst), use(base));
+    }
+
+    static arm64_instruction str(const arm64_operand &src,
+                                 const arm64_operand &base) {
+        return arm64_instruction("str", use(src), use(base));
     }
 
 	void dump(std::ostream &os) const;
