@@ -13,6 +13,7 @@ void arm64_instruction_builder::allocate() {
 #ifdef DEBUG_REGALLOC
 	DEBUG_STREAM << "REGISTER ALLOCATION" << std::endl;
 #endif
+    // TODO: handle direct physical register usage
 
 	std::unordered_map<unsigned int, unsigned int> vreg_to_preg;
 
