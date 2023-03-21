@@ -54,8 +54,9 @@ arm64_translation_context::guestreg_memory_operand(int width, int regoff,
                      arm64_operand(arm64_physreg_op(arm64_physreg_op::x29), 64),
                      virtreg_operand(base_vreg, 64));
         mem = arm64_memory_operand(base_vreg, 0, pre, post);
-    } else
+    } else {
         mem = arm64_memory_operand(arm64_physreg_op::xzr_sp, regoff, pre, post);
+    }
 
 	return arm64_operand(mem, width == 1 ? 8 : width);
 }
@@ -72,6 +73,20 @@ arm64_operand arm64_translation_context::vreg_operand_for_port(port &p, bool con
 
 	materialise(p.owner());
 	return virtreg_operand(vreg_for_port(p), p.type().element_width());
+}
+
+static void func_push_args(arm64_instruction_builder *builder, const
+                           std::vector<port *> &args)
+{
+    if (!builder)
+        throw std::runtime_error("Instruction builder is invalid");
+
+    for (auto* arg : args) {
+        // TODO: handle the calling convention
+        // this depends on the expectations of the function
+        // TODO: maybe mark all functions as asm_linkage for stack-based
+        // argument passing?
+    }
 }
 
 void arm64_translation_context::materialise(const ir::node* n) {
@@ -113,6 +128,8 @@ void arm64_translation_context::materialise(const ir::node* n) {
         return materialise_unary_arith(*reinterpret_cast<const unary_arith_node*>(n));
 	case node_kinds::binary_arith:
 		return materialise_binary_arith(*reinterpret_cast<const binary_arith_node*>(n));
+    case node_kinds::internal_call:
+        return materialise_internal_call(*reinterpret_cast<const internal_call_node*>(n));
     default:
         throw std::runtime_error("unknown node encountered: " +
                                  std::to_string(static_cast<size_t>(n->kind())));
@@ -383,6 +400,12 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
                  vreg_operand_for_port(n.bits(), false),
                  imm_operand(n.to(), 64),
                  imm_operand(n.length(), 64));
+}
+
+void arm64_translation_context::materialise_internal_call(const internal_call_node &n) {
+    // TODO
+    func_push_args(&builder_, n.args());
+    builder_.bl(n.fn().name());
 }
 
 void arm64_translation_context::do_register_allocation() { builder_.allocate(); }

@@ -622,6 +622,10 @@ struct arm64_instruction {
         return arm64_instruction("beq", use(arm64_label_operand(src)));
     }
 
+    static arm64_instruction bl(const std::string &name) {
+        return arm64_instruction("bl", use(arm64_label_operand(name)));
+    }
+
     static arm64_instruction cmp(const arm64_operand &dst,
                                  const arm64_operand &src1,
                                  const arm64_operand &src2) {

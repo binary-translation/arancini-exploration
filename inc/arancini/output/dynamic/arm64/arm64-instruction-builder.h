@@ -160,6 +160,10 @@ public:
         append(arm64_instruction::cmp(src1, src2));
     }
 
+    void bl(const std::string &n) {
+        append(arm64_instruction::bl(n));
+    }
+
 	void allocate();
 
 	void emit(machine_code_writer &writer) {
