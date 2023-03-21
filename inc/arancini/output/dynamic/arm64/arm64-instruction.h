@@ -76,8 +76,8 @@ struct arm64_memory_operand {
 	bool virt_base;
 
 	union {
-		arm64_physreg_op pbase;
 		unsigned int vbase;
+		arm64_physreg_op pbase;
 	};
 
 	int offset;
@@ -114,11 +114,12 @@ struct arm64_memory_operand {
     }
 
     arm64_memory_operand(const arm64_memory_operand& m)
-        : offset(m.offset)
+        : virt_base(m.virt_base)
+        , offset(m.offset)
         , pre_index(m.pre_index)
         , post_index(m.post_index)
     {
-        if (m.virt_base) { virt_base = true; vbase = m.vbase; }
+        if (m.virt_base) vbase = m.vbase;
         else pbase = m.pbase;
     }
 };
@@ -281,8 +282,7 @@ struct arm64_operand {
 	bool is_def() const { return def; }
 	bool is_usedef() const { return use && def; }
 
-	void allocate(int index)
-	{
+	void allocate(int index) {
 		if (type != arm64_operand_type::vreg)
 			throw std::runtime_error("trying to allocate non-vreg");
 
@@ -290,15 +290,12 @@ struct arm64_operand {
 		pregop = arm64_physreg_op(index);
 	}
 
-	void allocate_base(int index)
-	{
-		if (type != arm64_operand_type::mem) {
+	void allocate_base(int index) {
+		if (type != arm64_operand_type::mem)
 			throw std::runtime_error("trying to allocate non-mem");
-		}
 
-		if (!memop.virt_base) {
+		if (!memop.virt_base)
 			throw std::runtime_error("trying to allocate non-virtual membase ");
-		}
 
 		memop.virt_base = false;
 		memop.pbase = arm64_physreg_op(index);
@@ -601,7 +598,7 @@ struct arm64_instruction {
 
 	void dump(std::ostream &os) const;
 	void emit(machine_code_writer &writer, const std::vector<std::string>& = {}) const;
-	void kill() { opcode = ""; }
+	void kill() { opcode.clear(); }
 
 	bool is_dead() const { return opcode.empty(); }
 

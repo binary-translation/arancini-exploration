@@ -134,28 +134,21 @@ void arm64_instruction_builder::allocate() {
 		// get defs, make free
 
 		// Kill MOVs
-	    //	switch (insn.raw_opcode) {
-	    //	case FE_MOV8rr:
-	    //	case FE_MOV16rr:
-	    //	case FE_MOV32rr:
-	    //	case FE_MOV64rr:
-	    //		if (insn.operands[0].pregop.regname == insn.operands[1].pregop.regname) {
-	    //			insn.kill();
-	    //		}
-
-		// default:
-		// 	break;
-		// }
+        if (insn.opcode.find("mov") != std::string::npos) {
+            if (insn.operands[0].pregop.get() == insn.operands[1].pregop.get()) {
+                insn.kill();
+            }
+        }
 	}
 }
 
 void arm64_instruction_builder::dump(std::ostream &os) const
 {
 	for (auto &insn : instructions_) {
-		// if (!insn.is_dead()) {
-		insn.dump(os);
-        os << '\n';
-		//}
+		if (!insn.is_dead()) {
+            insn.dump(os);
+            os << '\n';
+		}
 	}
 }
 
