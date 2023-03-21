@@ -14,6 +14,7 @@ void arm64_instruction_builder::allocate() {
 	DEBUG_STREAM << "REGISTER ALLOCATION" << std::endl;
 #endif
     // TODO: handle direct physical register usage
+    // TODO: handle different sizes
 
 	std::unordered_map<unsigned int, unsigned int> vreg_to_preg;
 
@@ -51,7 +52,7 @@ void arm64_instruction_builder::allocate() {
 
 					avail_physregs.set(pri);
 
-					o.allocate(pri);
+					o.allocate(pri, 64);
 #ifdef DEBUG_REGALLOC
 					DEBUG_STREAM << " allocated to ";
 					o.dump(DEBUG_STREAM);
@@ -105,7 +106,7 @@ void arm64_instruction_builder::allocate() {
 
 					vreg_to_preg[vri] = allocation;
 
-					o.allocate(allocation);
+					o.allocate(allocation, 64);
 
                     alloced[i] = allocation;
 #ifdef DEBUG_REGALLOC
@@ -114,7 +115,7 @@ void arm64_instruction_builder::allocate() {
                     DEBUG_STREAM << '\n';
 #endif
 				} else {
-					o.allocate(vreg_to_preg.at(vri));
+					o.allocate(vreg_to_preg.at(vri), 64);
 				}
 
 #ifdef DEBUG_REGALLOC
@@ -128,7 +129,7 @@ void arm64_instruction_builder::allocate() {
 #endif
 
 				if (o.memop.virt_base) {
-					unsigned int vri = o.memop.vbase;
+					unsigned int vri = o.memop.vbase.index;
 
 					if (!vreg_to_preg.count(vri)) {
 						auto allocation = avail_physregs._Find_first();
@@ -152,14 +153,14 @@ void arm64_instruction_builder::allocate() {
 
                         // TODO size
 						o.memop.pbase = arm64_physreg_op(allocation, 64);
-						o.allocate_base(allocation);
+						o.allocate_base(allocation, 64);
 
 #ifdef DEBUG_REGALLOC
 						DEBUG_STREAM << " allocating vreg to ";
 						o.dump(DEBUG_STREAM);
 #endif
 					} else {
-						o.allocate_base(vreg_to_preg.at(vri));
+						o.allocate_base(vreg_to_preg.at(vri), 64);
 					}
 				}
 			}

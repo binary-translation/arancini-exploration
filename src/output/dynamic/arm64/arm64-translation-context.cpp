@@ -34,7 +34,7 @@ void arm64_translation_context::lower(ir::node *n) {
 }
 
 static arm64_operand virtreg_operand(unsigned int index, int width) {
-    return arm64_operand(arm64_vreg_op(index), width == 1 ? 8 : width);
+    return arm64_operand(arm64_vreg_op(index, width == 1 ? 8 : width));
 }
 
 static arm64_operand imm_operand(unsigned long value, int width) {
@@ -45,20 +45,23 @@ arm64_operand
 arm64_translation_context::guestreg_memory_operand(int width, int regoff,
                                                    bool pre, bool post)
 {
+    // FIXME: handle width
     arm64_memory_operand mem;
     if (regoff > 255 || regoff < -256) {
         auto base_vreg = alloc_vreg();
-        builder_.mov(virtreg_operand(base_vreg, 64),
+        auto preg = arm64_physreg_op(arm64_physreg_op::x29);
+        builder_.mov(virtreg_operand(base_vreg, width),
                      imm_operand(regoff, 16));
-        builder_.add(virtreg_operand(base_vreg, 64),
-                     arm64_operand(arm64_physreg_op(arm64_physreg_op::x29), 64),
-                     virtreg_operand(base_vreg, 64));
-        mem = arm64_memory_operand(base_vreg, 0, pre, post);
+        builder_.add(virtreg_operand(base_vreg, width),
+                     arm64_operand(preg),
+                     virtreg_operand(base_vreg, width));
+        mem = arm64_memory_operand(arm64_vreg_op(base_vreg, width), 0, pre, post);
     } else {
-        mem = arm64_memory_operand(arm64_physreg_op::xzr_sp, regoff, pre, post);
+        auto preg = arm64_physreg_op(arm64_physreg_op::xzr_sp);
+        mem = arm64_memory_operand(preg, regoff, pre, post);
     }
 
-	return arm64_operand(mem, width == 1 ? 8 : width);
+	return arm64_operand(mem);
 }
 
 arm64_operand arm64_translation_context::vreg_operand_for_port(port &p, bool constant_fold) {
@@ -145,36 +148,41 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
 }
 
 void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
+	int w = n.val().type().element_width() == 1 ? 8 : n.val().type().element_width();
+
 	// Detect register decrement/increment : write X <= Read X (+/-) Constant
 	if (n.value().owner()->kind() == node_kinds::binary_arith) {
 		auto binop = (binary_arith_node *)n.value().owner();
 
-		if (binop->lhs().owner()->kind() == node_kinds::read_reg && binop->rhs().owner()->kind() == node_kinds::constant) {
+		if (binop->lhs().owner()->kind() == node_kinds::read_reg &&
+                binop->rhs().owner()->kind() == node_kinds::constant)
+        {
 			auto lhs = (read_reg_node *)binop->lhs().owner();
 			auto rhs = (constant_node *)binop->rhs().owner();
 
-		if (lhs->regoff() == n.regoff()) {
-           // TODO
-			switch (binop->op()) {
-			case binary_arith_op::sub:
-				builder_.sub(guestreg_memory_operand(n.value().type().element_width(), n.regoff()),
-					arm64_operand(arm64_immediate_operand(rhs->const_val_i(), n.value().type().element_width())));
-				return;
-               default:
-                   throw std::runtime_error("unexpected");
-			}
-		}
+
+            if (lhs->regoff() == n.regoff()) {
+               // TODO
+                switch (binop->op()) {
+                case binary_arith_op::sub:
+                    builder_.sub(guestreg_memory_operand(w, n.regoff()),
+                        arm64_operand(arm64_immediate_operand(rhs->const_val_i(), w)));
+                    return;
+                   default:
+                       throw std::runtime_error("unexpected");
+                }
+            }
 		}
 	}
 
 	if (n.value().owner()->kind() == node_kinds::constant) {
         // FIXME
 		auto cv = (constant_node *)n.value().owner();
-		builder_.mov(guestreg_memory_operand(n.value().type().element_width(), n.regoff()),
-                     imm_operand(cv->const_val_i(), n.value().type().element_width()));
+		builder_.mov(guestreg_memory_operand(w, n.regoff()),
+                     imm_operand(cv->const_val_i(), w));
 	} else {
 		builder_.str(vreg_operand_for_port(n.value()),
-                     guestreg_memory_operand(n.value().type().element_width(), n.regoff()));
+                     guestreg_memory_operand(w, n.regoff()));
 	}
 }
 
@@ -186,8 +194,9 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
 	int addr_vreg = vreg_for_port(n.address());
 
     // TODO
+    auto mem = arm64_memory_operand(arm64_vreg_op(addr_vreg, w));
 	builder_.ldr(virtreg_operand(value_vreg, w),
-                 arm64_operand(arm64_memory_operand(addr_vreg, 0), w));
+                 arm64_operand(mem));
 }
 
 void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
@@ -196,8 +205,9 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
 	materialise(n.address().owner());
 	int addr_vreg = vreg_for_port(n.address());
 
+    auto mem = arm64_memory_operand(arm64_vreg_op(addr_vreg, w), 0, false, true);
 	builder_.str(vreg_operand_for_port(n.value()),
-                 arm64_operand(arm64_memory_operand(addr_vreg, 0, false, true), w));
+                 arm64_operand(mem));
 }
 
 void arm64_translation_context::materialise_read_pc(const read_pc_node &n)
