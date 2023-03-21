@@ -567,6 +567,12 @@ struct arm64_instruction {
         return arm64_instruction("and", usedef(dst), use(src));
     }
 
+    static arm64_instruction and_(const arm64_operand &dst,
+                                  const arm64_operand &src1,
+                                  const arm64_operand &src2) {
+        return arm64_instruction("and", usedef(dst), use(src1), use(src2));
+    }
+
     static arm64_instruction xor_(const arm64_operand &dst, const arm64_operand &src) {
         return arm64_instruction("xor", usedef(dst), use(src));
     }
@@ -674,6 +680,23 @@ struct arm64_instruction {
     static arm64_instruction str(const arm64_operand &src,
                                  const arm64_operand &base) {
         return arm64_instruction("str", use(src), usedef(base));
+    }
+
+    static arm64_instruction mul(const arm64_operand &dest,
+                                 const arm64_operand &src1,
+                                 const arm64_operand &src2) {
+        return arm64_instruction("mul", def(dest), use(src1), use(src2));
+    }
+
+    static arm64_instruction sdiv(const arm64_operand &dest,
+                                  const arm64_operand &src1,
+                                  const arm64_operand &src2) {
+        return arm64_instruction("sdiv", def(dest), use(src1), use(src2));
+    }
+
+    static arm64_instruction cmp(const arm64_operand &src1,
+                                 const arm64_operand &src2) {
+        return arm64_instruction("cmp", use(src1), use(src2));
     }
 
 	void dump(std::ostream &os) const;
