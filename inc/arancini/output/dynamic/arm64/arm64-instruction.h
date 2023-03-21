@@ -668,12 +668,12 @@ struct arm64_instruction {
 
     static arm64_instruction ldr(const arm64_operand &dst,
                                  const arm64_operand &base) {
-        return arm64_instruction("ldr", def(dst), use(base));
+        return arm64_instruction("ldr", usedef(dst), use(base));
     }
 
     static arm64_instruction str(const arm64_operand &src,
                                  const arm64_operand &base) {
-        return arm64_instruction("str", use(src), use(base));
+        return arm64_instruction("str", use(src), usedef(base));
     }
 
 	void dump(std::ostream &os) const;
