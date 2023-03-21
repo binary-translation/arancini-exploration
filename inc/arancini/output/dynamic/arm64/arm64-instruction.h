@@ -178,7 +178,17 @@ struct arm64_label_operand {
     std::string name;
 };
 
-enum class arm64_operand_type { invalid, preg, vreg, mem, imm, shift, label};
+struct arm64_cond_operand {
+    arm64_cond_operand() = default;
+
+    arm64_cond_operand(const std::string &cond): cond(cond)
+    {
+    }
+
+    std::string cond;
+};
+
+enum class arm64_operand_type { invalid, preg, vreg, mem, imm, shift, label, cond};
 
 struct arm64_operand {
 	arm64_operand_type type;
@@ -192,6 +202,7 @@ struct arm64_operand {
 	};
 
     arm64_label_operand labelop;
+    arm64_cond_operand condop;
 
 	bool use, def;
 
@@ -256,6 +267,15 @@ struct arm64_operand {
 	{
 	}
 
+	arm64_operand(const arm64_cond_operand &o)
+		: type(arm64_operand_type::cond)
+		, condop(o)
+		, use(false)
+		, def(false)
+	{
+        // TODO: check cond
+	}
+
     arm64_operand(const arm64_operand &o)
         : type(o.type),
           width(o.width),
@@ -272,6 +292,8 @@ struct arm64_operand {
             immop = o.immop;
         if (type == arm64_operand_type::shift)
             shiftop = o.shiftop;
+        if (type == arm64_operand_type::cond)
+            condop = o.condop;
     }
 
     arm64_operand& operator=(const arm64_operand &o) {
@@ -290,6 +312,8 @@ struct arm64_operand {
             immop = o.immop;
         if (type == arm64_operand_type::shift)
             shiftop = o.shiftop;
+        if (type == arm64_operand_type::cond)
+            condop = o.condop;
 
         return *this;
     }
@@ -299,6 +323,7 @@ struct arm64_operand {
 	bool is_mem() const { return type == arm64_operand_type::mem; }
 	bool is_imm() const { return type == arm64_operand_type::imm; }
     bool is_shift() const { return type == arm64_operand_type::shift; }
+    bool is_cond() const { return type == arm64_operand_type::cond; }
 
 	bool is_use() const { return use; }
 	bool is_def() const { return def; }
@@ -616,6 +641,11 @@ struct arm64_instruction {
                                   const arm64_operand &src2,
                                   const arm64_operand &cond) {
         return arm64_instruction("csel", def(dst), use(src1), use(src2), use(cond));
+    }
+
+    static arm64_instruction cset(const arm64_operand &dst,
+                                  const arm64_operand &cond) {
+        return arm64_instruction("cset", def(dst), use(cond));
     }
 
     static arm64_instruction ubfx(const arm64_operand &dst,

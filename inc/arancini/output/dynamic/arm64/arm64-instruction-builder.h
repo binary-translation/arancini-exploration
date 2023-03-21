@@ -55,19 +55,19 @@ public:
     void mov(const arm64_operand &dst, const arm64_operand &src) { append(arm64_instruction::mov(dst, src)); }
 
 	void setz(const arm64_operand &dst) {
-        append(arm64_instruction::moveq(dst, 1));
+        append(arm64_instruction::cset(dst, arm64_cond_operand("eq")));
     }
 
 	void sets(const arm64_operand &dst) {
-        append(arm64_instruction::movss(dst, 1));
+        append(arm64_instruction::cset(dst, arm64_cond_operand("lt")));
     }
 
 	void setc(const arm64_operand &dst) {
-        append(arm64_instruction::movcs(dst, 1));
+        append(arm64_instruction::cset(dst, arm64_cond_operand("cs")));
     }
 
 	void seto(const arm64_operand &dst) {
-        append(arm64_instruction::movvs(dst, 1));
+        append(arm64_instruction::cset(dst, arm64_cond_operand("vs")));
     }
 
     void b(const std::string &label) {
@@ -105,6 +105,11 @@ public:
               const arm64_operand &src2,
               const arm64_operand &cond) {
         append(arm64_instruction::csel(dst, src1, src2, cond));
+    }
+
+    void csel(const arm64_operand &dst,
+              const arm64_operand &cond) {
+        append(arm64_instruction::cset(dst, cond));
     }
 
     void ubfx(const arm64_operand &dst,
