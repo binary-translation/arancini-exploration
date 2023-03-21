@@ -1,6 +1,7 @@
 #include <arancini/output/dynamic/arm64/arm64-instruction-builder.h>
 #include <bitset>
 #include <unordered_map>
+#include <array>
 
 using namespace arancini::output::dynamic::arm64;
 
@@ -74,7 +75,8 @@ void arm64_instruction_builder::allocate() {
 		}
 
 		// alloc uses next
-		for (size_t i = 0; i < arm64_instruction::nr_operands; i++) {
+        std::array<unsigned int, arm64_instruction::nr_operands> alloced;
+		for (size_t i = 0; i < insn.opcount; i++) {
 			auto &o = insn.get_operand(i);
 
 			// We only care about REG uses - but we also need to consider REGs used in MEM expressions
@@ -82,6 +84,7 @@ void arm64_instruction_builder::allocate() {
 #ifdef DEBUG_REGALLOC
 				DEBUG_STREAM << "  USE ";
 				o.dump(DEBUG_STREAM);
+                DEBUG_STREAM << '\n';
 #endif
 
 				unsigned int vri = o.vregop.index;
@@ -93,6 +96,7 @@ void arm64_instruction_builder::allocate() {
                     // Choose SP
                     if (allocation == 30) {
                         allocation = 1; // set to x1
+
                         std::cerr << "Run out of registers for block\n";
                     }
 
@@ -102,9 +106,11 @@ void arm64_instruction_builder::allocate() {
 
 					o.allocate(allocation);
 
+                    alloced[i] = allocation;
 #ifdef DEBUG_REGALLOC
 					DEBUG_STREAM << " allocating vreg to ";
 					o.dump(DEBUG_STREAM);
+                    DEBUG_STREAM << '\n';
 #endif
 				} else {
 					o.allocate(vreg_to_preg.at(vri));
@@ -129,6 +135,13 @@ void arm64_instruction_builder::allocate() {
                         // TODO: register spilling
                         if (allocation == 30) {
                             allocation = 1; // set to x1
+                            for (auto alloc : alloced) {
+                                if (alloc == allocation) {
+                                    allocation++;
+                                    break;
+                                }
+                            }
+
                             std::cerr << "Run out of registers for block\n";
                         }
 
