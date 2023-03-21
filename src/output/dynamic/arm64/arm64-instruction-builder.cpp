@@ -150,7 +150,8 @@ void arm64_instruction_builder::allocate() {
 
 						vreg_to_preg[vri] = allocation;
 
-						o.memop.pbase = arm64_physreg_op(allocation);
+                        // TODO size
+						o.memop.pbase = arm64_physreg_op(allocation, 64);
 						o.allocate_base(allocation);
 
 #ifdef DEBUG_REGALLOC
