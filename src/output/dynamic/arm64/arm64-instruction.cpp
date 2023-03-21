@@ -23,7 +23,7 @@ const char* arm64_physreg_op::to_string() const {
     };
 
     uint8_t reg_idx = static_cast<uint8_t>(reg_);
-    if (width == 32)
+    if (width() == 32)
         return name32[reg_idx];
     return name64[reg_idx];
 }
@@ -221,7 +221,7 @@ void arm64_operand::dump(std::ostream &os) const {
 		os << "[";
 
 		if (memop.virt_base)
-			os << "%V" << std::dec << memop.vbase;
+			os << "%V" << memop.vbase.width << "_" << std::dec << memop.vbase.index;
 		else
 			os << memop.pbase.to_string();
 

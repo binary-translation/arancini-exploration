@@ -36,10 +36,14 @@ private:
 static assembler asm_;
 
 struct arm64_vreg_op {
+    size_t width;
 	unsigned int index;
 
-	arm64_vreg_op(unsigned int i)
-		: index(i)
+    arm64_vreg_op() = default;
+
+	arm64_vreg_op(unsigned int i, size_t width)
+		: width(width)
+        , index(i)
 	{
 	}
 };
@@ -48,7 +52,7 @@ class arm64_physreg_op {
 public:
     enum regname64 : uint8_t {
         none = 0,
-        x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15,
+        x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15,
         x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, x29, x30,
         xzr_sp
     };
@@ -69,13 +73,16 @@ public:
     explicit arm64_physreg_op(regname64 reg): reg_(reg), width_(64) { }
 
     explicit arm64_physreg_op(size_t index, size_t width) {
-        if (index + 1 > static_cast<size_t>(xzr_sp))
+        width_ = width;
+        if (index >= static_cast<size_t>(xzr_sp) + 1)
             throw std::runtime_error("Allocating unavailable register at index: "
                                      + std::to_string(index));
         if (width == 64)
             reg_ = static_cast<regname64>(index + 1);
         else if (width == 32)
             reg_ = static_cast<regname32>(index + 1);
+        else if (width == 8)
+            (void)0; // FIXME
         else
             throw std::runtime_error("Physical registers are specified as 32-bit or 64-bit only");
     }
@@ -90,6 +97,8 @@ public:
 
     regname get() const { return reg_; }
 
+    size_t width() const { return width_; }
+
     const char* to_string() const;
 private:
     regname reg_;
@@ -100,7 +109,7 @@ struct arm64_memory_operand {
 	bool virt_base;
 
     // TODO: add as union
-    unsigned int vbase;
+    arm64_vreg_op vbase;
     arm64_physreg_op pbase;
 
 	int offset;
@@ -109,13 +118,8 @@ struct arm64_memory_operand {
 
     arm64_memory_operand() = default;
 
-	arm64_memory_operand(const arm64_physreg_op& base)
-		: arm64_memory_operand(base, 0)
-	{
-    }
-
-	explicit arm64_memory_operand(const arm64_physreg_op &base, int offset,
-                         bool pre_index = false, bool post_index = false)
+	explicit arm64_memory_operand(const arm64_physreg_op &base, int offset = 0,
+                                  bool pre_index = false, bool post_index = false)
 		: virt_base(false)
 		, pbase(base)
 		, offset(offset)
@@ -126,10 +130,10 @@ struct arm64_memory_operand {
             throw std::runtime_error("Both pre- and post-index passed to ARM DBT");
     }
 
-	explicit arm64_memory_operand(unsigned int virt_base_index, int offset,
+	explicit arm64_memory_operand(const arm64_vreg_op &virt_base, int offset = 0,
                          bool pre_index = false, bool post_index = false)
 		: virt_base(true)
-		, vbase(virt_base_index)
+		, vbase(virt_base)
 		, offset(offset)
         , pre_index(pre_index)
         , post_index(post_index)
@@ -159,6 +163,11 @@ struct arm64_memory_operand {
 
         return *this;
     }
+
+    size_t base_width() const {
+        if (virt_base) return vbase.width;
+        return pbase.width();
+    }
 };
 
 // TODO: how are immediates represented in arm
@@ -176,7 +185,7 @@ struct arm64_immediate_operand {
 	};
     uint8_t width = 0;
 
-	arm64_immediate_operand(unsigned long v, uint8_t width = 64)
+	arm64_immediate_operand(unsigned long v, uint8_t width)
 		: u64(v)
         , width(width)
 	{
@@ -211,7 +220,6 @@ enum class arm64_operand_type { invalid, preg, vreg, mem, imm, shift, label, con
 
 struct arm64_operand {
 	arm64_operand_type type;
-	int width;
 	union {
 		arm64_physreg_op pregop;
 		arm64_vreg_op vregop;
@@ -227,33 +235,29 @@ struct arm64_operand {
 
 	arm64_operand()
 		: type(arm64_operand_type::invalid)
-		, width(0)
 		, use(false)
 		, def(false)
 	{
 	}
 
-	arm64_operand(const arm64_physreg_op &o, int w)
+	arm64_operand(const arm64_physreg_op &o)
 		: type(arm64_operand_type::preg)
-		, width(w)
 		, pregop(o)
 		, use(false)
 		, def(false)
 	{
 	}
 
-	arm64_operand(const arm64_vreg_op &o, int w)
+	arm64_operand(const arm64_vreg_op &o)
 		: type(arm64_operand_type::vreg)
-		, width(w)
 		, vregop(o)
 		, use(false)
 		, def(false)
 	{
 	}
 
-	arm64_operand(const arm64_memory_operand &o, int w)
+	arm64_operand(const arm64_memory_operand &o)
 		: type(arm64_operand_type::mem)
-		, width(w)
 		, memop(o)
 		, use(false)
 		, def(false)
@@ -262,7 +266,6 @@ struct arm64_operand {
 
 	arm64_operand(const arm64_immediate_operand &o)
 		: type(arm64_operand_type::imm)
-		, width(o.width)
 		, immop(o)
 		, use(false)
 		, def(false)
@@ -271,7 +274,6 @@ struct arm64_operand {
 
 	arm64_operand(const arm64_shift_operand &o)
 		: type(arm64_operand_type::shift)
-		, width(o.width)
 		, shiftop(o)
 		, use(false)
 		, def(false)
@@ -297,7 +299,6 @@ struct arm64_operand {
 
     arm64_operand(const arm64_operand &o)
         : type(o.type),
-          width(o.width),
           use(o.use),
           def(o.def)
     {
@@ -317,7 +318,6 @@ struct arm64_operand {
 
     arm64_operand& operator=(const arm64_operand &o) {
         type = o.type;
-        width = o.width;
         use = o.use;
         def = o.def;
 
@@ -348,17 +348,32 @@ struct arm64_operand {
 	bool is_def() const { return def; }
 	bool is_usedef() const { return use && def; }
 
-	void allocate(int index) {
+    size_t width() const {
+        switch (type) {
+        case arm64_operand_type::preg:
+            return pregop.width();
+        case arm64_operand_type::vreg:
+            return vregop.width;
+        case arm64_operand_type::mem:
+            return memop.base_width();
+        case arm64_operand_type::imm:
+            return immop.width;
+        default:
+            return 0;
+        }
+    }
+
+	void allocate(int index, size_t width) {
 		if (type != arm64_operand_type::vreg)
 			throw std::runtime_error("trying to allocate non-vreg");
 
 		type = arm64_operand_type::preg;
 
         // TODO: change
-		pregop = arm64_physreg_op(index, 64);
+		pregop = arm64_physreg_op(index, width);
 	}
 
-	void allocate_base(int index) {
+	void allocate_base(int index, size_t width) {
 		if (type != arm64_operand_type::mem)
 			throw std::runtime_error("trying to allocate non-mem");
 
@@ -368,7 +383,7 @@ struct arm64_operand {
 		memop.virt_base = false;
 
         // TODO: change
-		memop.pbase = arm64_physreg_op(index, 64);
+		memop.pbase = arm64_physreg_op(index, width);
 	}
 
 	void dump(std::ostream &os) const;
@@ -486,19 +501,19 @@ struct arm64_instruction {
 	}
 
 	static arm64_opform classify(const arm64_operand &o1) {
-        return (arm64_opform)GET_OPFORM1(operand_type_to_form_type(o1.type), o1.width);
+        return (arm64_opform)GET_OPFORM1(operand_type_to_form_type(o1.type), o1.width());
     }
 
 	static arm64_opform classify(const arm64_operand &o1, const arm64_operand &o2) {
-		return (arm64_opform)GET_OPFORM2(operand_type_to_form_type(o1.type), o1.width,
-                                         operand_type_to_form_type(o2.type), o2.width);
+		return (arm64_opform)GET_OPFORM2(operand_type_to_form_type(o1.type), o1.width(),
+                                         operand_type_to_form_type(o2.type), o2.width());
 	}
 
 	static arm64_opform classify(const arm64_operand &o1, const arm64_operand &o2, const arm64_operand &o3)
 	{
-		return (arm64_opform)GET_OPFORM3(operand_type_to_form_type(o1.type), o1.width,
-                                         operand_type_to_form_type(o2.type), o2.width,
-                                         operand_type_to_form_type(o3.type), o3.width);
+		return (arm64_opform)GET_OPFORM3(operand_type_to_form_type(o1.type), o1.width(),
+                                         operand_type_to_form_type(o2.type), o2.width(),
+                                         operand_type_to_form_type(o3.type), o3.width());
 	}
 
     // TODO: handle this
