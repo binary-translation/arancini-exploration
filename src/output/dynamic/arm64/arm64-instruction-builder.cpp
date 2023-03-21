@@ -25,7 +25,7 @@ void arm64_instruction_builder::allocate() {
 #endif
 
 		// kill defs first
-		for (size_t i = 0; i < arm64_instruction::nr_operands; i++) {
+		for (size_t i = 0; i < insn.opcount; i++) {
 			auto &o = insn.get_operand(i);
 
 			// Only regs can be /real/ defs

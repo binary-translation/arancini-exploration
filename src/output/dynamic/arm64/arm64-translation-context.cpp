@@ -137,10 +137,11 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
 
 	if (n.value().owner()->kind() == node_kinds::constant) {
 		auto cv = (constant_node *)n.value().owner();
-		builder_.mov(
-			guestreg_memory_operand(n.value().type().element_width(), n.regoff()), imm_operand(cv->const_val_i(), n.value().type().element_width()));
+		builder_.mov(guestreg_memory_operand(n.value().type().element_width(), n.regoff()),
+                     imm_operand(cv->const_val_i(), n.value().type().element_width()));
 	} else {
-		builder_.mov(guestreg_memory_operand(n.value().type().element_width(), n.regoff()), vreg_operand_for_port(n.value()));
+		builder_.mov(guestreg_memory_operand(n.value().type().element_width(), n.regoff()),
+                     vreg_operand_for_port(n.value()));
 	}
 }
 
