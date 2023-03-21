@@ -11,7 +11,7 @@ const char* arm64_physreg_op::to_string() const {
         "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
         "x11", "x12", "x13", "x14", "x15", "x16", "x17", "x18", "x19", "x20",
         "x21", "x22", "x23", "x24", "x25", "x26", "x27", "x28", "x29", "x30",
-        "xzr_sp"
+        "x31"
     };
 
     return name[static_cast<uint8_t>(reg_)];
@@ -209,13 +209,13 @@ void arm64_operand::dump(std::ostream &os) const {
 			os << memop.pbase.to_string();
 
 
-        if (memop.pre_index)
-            os << ", $0x" << std::hex << memop.offset << "]!";
-        else
-            os << ']';
+        if (!memop.post_index)
+            os << ", $0x" << std::hex << memop.offset << ']';
+        else if (memop.pre_index)
+            os << '!';
 
         if (memop.post_index)
-            os << ", " << std::hex << memop.offset;
+            os << "], " << std::hex << memop.offset;
 
 
         // TODO: register indirect with index
