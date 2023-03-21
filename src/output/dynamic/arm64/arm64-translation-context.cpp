@@ -125,26 +125,28 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
 			auto lhs = (read_reg_node *)binop->lhs().owner();
 			auto rhs = (constant_node *)binop->rhs().owner();
 
-			if (lhs->regoff() == n.regoff()) {
-				switch (binop->op()) {
-				case binary_arith_op::sub:
-					builder_.sub(guestreg_memory_operand(n.value().type().element_width(), n.regoff()),
-						arm64_operand(arm64_immediate_operand(rhs->const_val_i(), n.value().type().element_width())));
-					return;
-                default:
-                    throw std::runtime_error("unexpected");
-				}
-			}
+		// 	if (lhs->regoff() == n.regoff()) {
+        //         // TODO
+		// 		switch (binop->op()) {
+		// 		case binary_arith_op::sub:
+		// 			builder_.sub(guestreg_memory_operand(n.value().type().element_width(), n.regoff()),
+		// 				arm64_operand(arm64_immediate_operand(rhs->const_val_i(), n.value().type().element_width())));
+		// 			return;
+        //         default:
+        //             throw std::runtime_error("unexpected");
+		// 		}
+		// 	}
 		}
 	}
 
 	if (n.value().owner()->kind() == node_kinds::constant) {
+        // FIXME
 		auto cv = (constant_node *)n.value().owner();
 		builder_.mov(guestreg_memory_operand(n.value().type().element_width(), n.regoff()),
                      imm_operand(cv->const_val_i(), n.value().type().element_width()));
 	} else {
-		builder_.mov(guestreg_memory_operand(n.value().type().element_width(), n.regoff()),
-                     vreg_operand_for_port(n.value()));
+		builder_.str(vreg_operand_for_port(n.value()),
+                     guestreg_memory_operand(n.value().type().element_width(), n.regoff(), false, true));
 	}
 }
 
@@ -155,7 +157,9 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
 	materialise(n.address().owner());
 	int addr_vreg = vreg_for_port(n.address());
 
-	builder_.mov(virtreg_operand(value_vreg, w), arm64_operand(arm64_memory_operand(addr_vreg, 0), w));
+    // TODO
+	builder_.ldr(virtreg_operand(value_vreg, w),
+                 arm64_operand(arm64_memory_operand(addr_vreg, 0, false, true), w));
 }
 
 void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
@@ -164,7 +168,8 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
 	materialise(n.address().owner());
 	int addr_vreg = vreg_for_port(n.address());
 
-	builder_.mov(arm64_operand(arm64_memory_operand(addr_vreg, 0), w), vreg_operand_for_port(n.value()));
+	builder_.str(vreg_operand_for_port(n.value()),
+                 arm64_operand(arm64_memory_operand(addr_vreg, 0, false, true), w));
 }
 
 void arm64_translation_context::materialise_read_pc(const read_pc_node &n)
@@ -215,14 +220,16 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 
 	int w = n.val().type().element_width();
 
-	builder_.mov(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.lhs()));
-
 	switch (n.op()) {
 	case binary_arith_op::add:
-		builder_.add(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.rhs()));
+		builder_.add(virtreg_operand(val_vreg, w),
+                     vreg_operand_for_port(n.lhs()),
+                     vreg_operand_for_port(n.rhs()));
 		break;
 	case binary_arith_op::sub:
-		builder_.sub(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.rhs()));
+		builder_.sub(virtreg_operand(val_vreg, w),
+                     vreg_operand_for_port(n.lhs()),
+                     vreg_operand_for_port(n.rhs()));
 		break;
 	case binary_arith_op::bor:
 		builder_.or_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.rhs()));
@@ -257,7 +264,8 @@ void arm64_translation_context::materialise_unary_arith(const unary_arith_node &
     case unary_arith_op::neg:
         // neg: ~reg + 1 for complement-of-2
         builder_.not_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.lhs()));
-        builder_.add(virtreg_operand(val_vreg, w), imm_operand(1, 64));
+        builder_.add(virtreg_operand(val_vreg, w),
+                     imm_operand(1, 64));
         break;
     default:
         throw std::runtime_error("Unknown unary operation");

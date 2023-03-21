@@ -10,9 +10,27 @@
 namespace arancini::output::dynamic::arm64 {
 class arm64_instruction_builder {
 public:
-	void add(const arm64_operand &dst, const arm64_operand &src) { append(arm64_instruction::add(dst, src)); }
+	void add(const arm64_operand &dst,
+             const arm64_operand &src1,
+             const arm64_operand &src2) {
+        append(arm64_instruction::add(dst, src1, src2));
+    }
 
-	void sub(const arm64_operand &dst, const arm64_operand &src) { append(arm64_instruction::sub(dst, src)); }
+	void add(const arm64_operand &dst,
+             const arm64_operand &src) {
+        append(arm64_instruction::add(dst, src));
+    }
+
+	void sub(const arm64_operand &dst,
+             const arm64_operand &src1,
+             const arm64_operand &src2) {
+        append(arm64_instruction::sub(dst, src1, src2));
+    }
+
+	void sub(const arm64_operand &dst,
+             const arm64_operand &src) {
+        append(arm64_instruction::sub(dst, src));
+    }
 
 	void or_(const arm64_operand &dst, const arm64_operand &src) { append(arm64_instruction::or_(dst, src)); }
 
@@ -106,6 +124,11 @@ public:
     void ldr(const arm64_operand &dst,
              const arm64_operand &base) {
         append(arm64_instruction::ldr(dst, base));
+    }
+
+    void str(const arm64_operand &dst,
+             const arm64_operand &base) {
+        append(arm64_instruction::str(dst, base));
     }
 
 	void allocate();
