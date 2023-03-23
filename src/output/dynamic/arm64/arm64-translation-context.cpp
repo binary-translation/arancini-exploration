@@ -3,6 +3,9 @@
 using namespace arancini::output::dynamic::arm64;
 using namespace arancini::ir;
 
+arm64_physreg_op memory_base_reg(arm64_physreg_op::x18);
+arm64_physreg_op context_block_reg(arm64_physreg_op::x29);
+
 void arm64_translation_context::begin_block() { }
 
 void arm64_translation_context::begin_instruction(off_t address, const std::string &disasm) {
@@ -17,7 +20,7 @@ void arm64_translation_context::end_instruction() { }
 void arm64_translation_context::end_block() {
 	do_register_allocation();
 
-    // TODO: add operations to finish block
+    // Return value in x0 = 0;
 	builder_.mov(arm64_operand(arm64_physreg_op(arm64_physreg_op::x0)),
                  arm64_operand(arm64_physreg_op(arm64_physreg_op::xzr_sp)));
 	builder_.ret();
@@ -49,7 +52,7 @@ arm64_translation_context::guestreg_memory_operand(int width, int regoff,
     arm64_memory_operand mem;
     if (regoff > 255 || regoff < -256) {
         auto base_vreg = alloc_vreg();
-        auto preg = arm64_physreg_op(arm64_physreg_op::x29);
+        auto preg = context_block_reg;
         builder_.mov(virtreg_operand(base_vreg, width),
                      imm_operand(regoff, 16));
         builder_.add(virtreg_operand(base_vreg, width),
@@ -57,7 +60,7 @@ arm64_translation_context::guestreg_memory_operand(int width, int regoff,
                      virtreg_operand(base_vreg, width));
         mem = arm64_memory_operand(arm64_vreg_op(base_vreg, width), 0, pre, post);
     } else {
-        auto preg = arm64_physreg_op(arm64_physreg_op::xzr_sp);
+        auto preg = context_block_reg;
         mem = arm64_memory_operand(preg, regoff, pre, post);
     }
 
@@ -193,8 +196,14 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
 	materialise(n.address().owner());
 	int addr_vreg = vreg_for_port(n.address());
 
+    // Add base to addr_vreg
+    int addr = alloc_vreg();
+    builder_.add(virtreg_operand(addr, 64),
+                 memory_base_reg,
+                 virtreg_operand(addr_vreg, 64));
+
     // TODO
-    auto mem = arm64_memory_operand(arm64_vreg_op(addr_vreg, w));
+    auto mem = arm64_memory_operand(arm64_vreg_op(addr, w));
 	builder_.ldr(virtreg_operand(value_vreg, w),
                  arm64_operand(mem));
 }
@@ -205,7 +214,12 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
 	materialise(n.address().owner());
 	int addr_vreg = vreg_for_port(n.address());
 
-    auto mem = arm64_memory_operand(arm64_vreg_op(addr_vreg, w), 0, false, true);
+    int addr = alloc_vreg();
+    builder_.add(virtreg_operand(addr, 64),
+                 memory_base_reg,
+                 virtreg_operand(addr_vreg, 64));
+
+    auto mem = arm64_memory_operand(arm64_vreg_op(addr, w), 0, false, true);
 	builder_.str(vreg_operand_for_port(n.value()),
                  arm64_operand(mem));
 }
