@@ -1,18 +1,33 @@
 #include <arancini/output/dynamic/arm64/arm64-translation-context.h>
 
+#include <arancini/runtime/exec/x86/x86-cpu-state.h>
+
 using namespace arancini::output::dynamic::arm64;
 using namespace arancini::ir;
 
 arm64_physreg_op memory_base_reg(arm64_physreg_op::x18);
 arm64_physreg_op context_block_reg(arm64_physreg_op::x29);
 
-void arm64_translation_context::begin_block() { }
+#define X86_OFFSET_OF(reg) __builtin_offsetof(struct arancini::runtime::exec::x86::x86_cpu_state, reg)
+enum class reg_offsets {
+#define DEFREG(ctype, ltype, name) name = X86_OFFSET_OF(name),
+#include <arancini/input/x86/reg.def>
+#undef DEFREG
+};
+
+void arm64_translation_context::begin_block() {
+    instr_cnt_ = 0;
+}
 
 void arm64_translation_context::begin_instruction(off_t address, const std::string &disasm) {
 	instruction_index_to_guest_[builder_.nr_instructions()] = address;
 
 	this_pc_ = address;
 	std::cerr << "  " << std::hex << address << ": " << disasm << std::endl;
+
+    instr_cnt_++;
+
+    builder_.insert_sep("____" + disasm);
 }
 
 void arm64_translation_context::end_instruction() { }
@@ -69,7 +84,7 @@ arm64_translation_context::guestreg_memory_operand(int width, int regoff,
 
 arm64_operand arm64_translation_context::vreg_operand_for_port(port &p, bool constant_fold) {
     // TODO
-	if (0 && constant_fold) {
+	if (constant_fold) {
 		if (p.owner()->kind() == node_kinds::read_pc) {
 			return arm64_operand(arm64_immediate_operand(this_pc_, 64));
 		} else if (p.owner()->kind() == node_kinds::constant) {
@@ -143,68 +158,36 @@ void arm64_translation_context::materialise(const ir::node* n) {
 }
 
 void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
-	int value_vreg = alloc_vreg_for_port(n.val());
+    // TODO: deal with widths
+	int dest_vreg = alloc_vreg_for_port(n.val());
 	int w = n.val().type().element_width() == 1 ? 8 : n.val().type().element_width();
 
-	builder_.ldr(virtreg_operand(value_vreg, w),
+	builder_.ldr(virtreg_operand(dest_vreg, w),
                  guestreg_memory_operand(w, n.regoff()));
 }
 
 void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
-	int w = n.val().type().element_width() == 1 ? 8 : n.val().type().element_width();
+    // TODO: deal with widths
+    int value_vreg = alloc_vreg_for_port(n.value());
+	int w = n.value().type().element_width() == 1 ? 8 : n.val().type().element_width();
 
-	// Detect register decrement/increment : write X <= Read X (+/-) Constant
-	if (n.value().owner()->kind() == node_kinds::binary_arith) {
-		auto binop = (binary_arith_node *)n.value().owner();
-
-		if (binop->lhs().owner()->kind() == node_kinds::read_reg &&
-                binop->rhs().owner()->kind() == node_kinds::constant)
-        {
-			auto lhs = (read_reg_node *)binop->lhs().owner();
-			auto rhs = (constant_node *)binop->rhs().owner();
-
-
-            if (lhs->regoff() == n.regoff()) {
-               // TODO
-                switch (binop->op()) {
-                case binary_arith_op::sub:
-                    builder_.sub(guestreg_memory_operand(w, n.regoff()),
-                        arm64_operand(arm64_immediate_operand(rhs->const_val_i(), w)));
-                    return;
-                   default:
-                       throw std::runtime_error("unexpected");
-                }
-            }
-		}
-	}
-
-	if (n.value().owner()->kind() == node_kinds::constant) {
-        // FIXME
-		auto cv = (constant_node *)n.value().owner();
-		builder_.mov(guestreg_memory_operand(w, n.regoff()),
-                     imm_operand(cv->const_val_i(), w));
-	} else {
-		builder_.str(vreg_operand_for_port(n.value()),
-                     guestreg_memory_operand(w, n.regoff()));
-	}
+    builder_.str(virtreg_operand(value_vreg, w),
+                 guestreg_memory_operand(w, n.regoff()));
 }
 
 void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
-	int value_vreg = alloc_vreg_for_port(n.val());
+	int dest_vreg = alloc_vreg_for_port(n.val());
 	int w = n.val().type().element_width();
-
-	materialise(n.address().owner());
-	int addr_vreg = vreg_for_port(n.address());
 
     // Add base to addr_vreg
     int addr = alloc_vreg();
     builder_.add(virtreg_operand(addr, 64),
                  memory_base_reg,
-                 virtreg_operand(addr_vreg, 64));
+                 vreg_operand_for_port(n.address()));
 
-    // TODO
+    // TODO: widths
     auto mem = arm64_memory_operand(arm64_vreg_op(addr, w));
-	builder_.ldr(virtreg_operand(value_vreg, w),
+	builder_.ldr(virtreg_operand(dest_vreg, w),
                  arm64_operand(mem));
 }
 
@@ -224,22 +207,24 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
                  arm64_operand(mem));
 }
 
-void arm64_translation_context::materialise_read_pc(const read_pc_node &n)
-{
+void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
 	int dst_vreg = alloc_vreg_for_port(n.val());
+    int w = n.val().type().element_width();
 
-	builder_.mov(virtreg_operand(dst_vreg, n.val().type().element_width()),
+	builder_.mov(virtreg_operand(dst_vreg, w),
                  arm64_operand(arm64_immediate_operand(this_pc_, 64)));
 }
 
-void arm64_translation_context::materialise_write_pc(const write_pc_node &n)
-{
-	int dst_vreg = alloc_vreg_for_port(n.val());
+void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
+    auto value_vreg = vreg_operand_for_port(n.value());
+    size_t w = value_vreg.width();
 
-    // TODO
+    builder_.str(value_vreg,
+                 guestreg_memory_operand(w, static_cast<int>(reg_offsets::PC)));
 }
 
 void arm64_translation_context::materialise_label(const label_node &n) {
+    // TODO: it's not inserted.. name() invalid
     builder_.label(n.name(), instr_cnt_);
 }
 
@@ -258,9 +243,11 @@ void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
 }
 
 void arm64_translation_context::materialise_constant(const constant_node &n) {
+    // TODO: width
 	int dst_vreg = alloc_vreg_for_port(n.val());
+
 	builder_.mov(virtreg_operand(dst_vreg, n.val().type().element_width()),
-                 imm_operand(n.const_val_i(), n.val().type().element_width()));
+                 imm_operand(n.const_val_i(), 64));
 }
 
 void arm64_translation_context::materialise_binary_arith(const binary_arith_node &n) {
