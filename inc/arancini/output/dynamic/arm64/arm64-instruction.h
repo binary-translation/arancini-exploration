@@ -426,11 +426,12 @@ enum class arm64_opform {
 #undef I
 
 struct arm64_instruction {
-    size_t opcount = 0;
 	static constexpr size_t nr_operands = 5;
 
     std::string opcode;
     arm64_opform opform;
+    size_t opcount;
+
     arm64_operand operands[nr_operands];
 
     arm64_instruction(const std::string& opc)
@@ -740,6 +741,10 @@ struct arm64_instruction {
 
     static arm64_instruction ret() {
         return arm64_instruction("ret");
+    }
+
+    static arm64_instruction label(const std::string &label) {
+        return arm64_instruction(label + ":");
     }
 
 	void dump(std::ostream &os) const;
