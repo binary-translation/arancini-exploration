@@ -335,7 +335,15 @@ void arm64_instruction_builder::allocate() {
 
 void arm64_instruction_builder::dump(std::ostream &os) const
 {
-	for (auto &insn : instructions_) {
+	for (size_t i = 0; i < instructions_.size(); ++i) {
+        auto &insn = instructions_[i];
+
+        if (labels_.find(i) != labels_.end()) {
+            for (const auto& label : labels_.at(i)) {
+                os << label << ":\n";
+            }
+        }
+
 		if (!insn.is_dead()) {
             insn.dump(os);
             os << '\n';

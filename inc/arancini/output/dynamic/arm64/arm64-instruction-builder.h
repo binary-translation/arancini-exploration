@@ -170,6 +170,12 @@ public:
         append(arm64_instruction::ret());
     }
 
+    // TODO: insert separators before/after instructions
+    void insert_sep(const std::string &sep) {
+        auto last_instr_pos = instructions_.size();
+        labels_[++last_instr_pos].push_back(sep);
+    }
+
 	void allocate();
 
 	void emit(machine_code_writer &writer);
@@ -182,7 +188,6 @@ private:
     std::unordered_map<size_t, std::vector<std::string>> labels_;
 
 	void append(const arm64_instruction &i) { instructions_.push_back(i); }
-
 };
 } // namespace arancini::output::dynamic::arm64
 

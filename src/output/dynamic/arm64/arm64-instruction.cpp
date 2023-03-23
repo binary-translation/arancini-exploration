@@ -60,7 +60,7 @@ void arm64_operand::dump(std::ostream &os) const {
         os << condop.cond;
         break;
     case arm64_operand_type::label:
-        os << labelop.name << ':';
+        os << labelop.name;
         break;
     case arm64_operand_type::shift:
         os << "LSL #0x" << std::hex << shiftop.u64;
