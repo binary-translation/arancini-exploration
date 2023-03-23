@@ -43,8 +43,6 @@ void arm64_translation_context::end_block() {
 	builder_.dump(std::cerr);
 
 	builder_.emit(writer());
-
-    // TODO: add code to dump
 }
 
 void arm64_translation_context::lower(ir::node *n) {
@@ -224,8 +222,8 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
 }
 
 void arm64_translation_context::materialise_label(const label_node &n) {
-    // TODO: it's not inserted.. name() invalid
-    builder_.label(n.name(), instr_cnt_);
+    if (!builder_.has_label(n.name() + ":"))
+        builder_.label(n.name());
 }
 
 void arm64_translation_context::materialise_br(const br_node &n) {
