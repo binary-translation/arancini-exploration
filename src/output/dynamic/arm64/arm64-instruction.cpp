@@ -31,7 +31,6 @@ const char* arm64_physreg_op::to_string() const {
 size_t assembler::assemble(const char *code, unsigned char **out) {
     size_t size = 0;
     size_t count = 0;
-    unsigned char *encode;
     if (ks_asm(ks_, code, 0, out, &size, &count)) {
         std::string msg("Keystone assembler encountered error: ");
         throw std::runtime_error(msg + ks_strerror(ks_errno(ks_)));

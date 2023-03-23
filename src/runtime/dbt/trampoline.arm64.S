@@ -4,7 +4,6 @@
 .globl call_native
 call_native:
     stp x29, x30, [sp, #-16]! // Save x29 and x30 on the stack and adjust sp by -16 bytes
-    mov x29, sp // Set x29 to the current stack pointer
 
     stp x19, x20, [sp, #-16]! // Save x19 and x20 on the stack and adjust sp by -16 bytes
     stp x21, x22, [sp, #-16]! // Save x21 and x22 on the stack and adjust sp by -16 bytes
@@ -23,7 +22,11 @@ call_native:
     stp x16, x17, [sp, #-16]! // Save x16 and x17 on the stack and adjust sp by -16 bytes
     stp x18, x19, [sp, #-16]! // Save x18 and x19 on the stack and adjust sp by -16 bytes
 
-    blr x0 // call function
+
+    // Set frame pointer to x86 context block
+    mov x29, x1
+
+    blr x0 // call translation block
 
     ldp x18, x19, [sp], #16 // Restore x18 and x19 from the stack and adjust sp by 16 bytes
     ldp x16, x17, [sp], #16 // Restore x16 and x17 from the stack and adjust sp by 16 bytes
@@ -33,8 +36,11 @@ call_native:
     ldp x8, x9, [sp], #16 // Restore x8 and x9 from the stack and adjust sp by 16 bytes
     ldp x6, x7, [sp], #16 // Restore x6 and x7 from the stack and adjust sp by 16 bytes
     ldp x4, x5, [sp], #16 // Restore x4 and x5 from the stack and adjust sp by 16 bytes
-    ldp x2, x3, [sp], #16 // Restore x2 and x3 from the stack and adjust sp by 16 bytes
-    ldp x0, x1, [sp], #16 // Restore x0 and x1 from the stack and adjust sp by 16 bytes
+
+
+    // NOTE: adjust by 24 bytes because x0 is returned unchanged from translated block
+    ldp x2, x3, [sp], #24 // Restore x2 and x3 from the stack and adjust sp by 24 bytes
+    ldr x1, [sp], #16 // Restore x1 from the stack and adjust sp by 16 bytes
 
     ldp x27, x28, [sp], #16 // Restore x27 and x28 from the stack and adjust sp by 16 bytes
     ldp x25, x26, [sp], #16 // Restore x25 and x26 from the stack and adjust sp by 16 bytes
