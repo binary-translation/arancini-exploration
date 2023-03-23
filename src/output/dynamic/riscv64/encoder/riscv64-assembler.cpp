@@ -9,9 +9,9 @@
 
 namespace arancini::output::dynamic::riscv64 {
 
-Assembler::Assembler(ExtensionSet extensions)
+Assembler::Assembler(arancini::output::dynamic::machine_code_writer *writer, ExtensionSet extensions)
 	: extensions_(extensions)
-	, writer {}
+	, writer {writer}
 {
 }
 
@@ -20,7 +20,7 @@ Assembler::~Assembler() = default;
 void Assembler::Bind(Label *label)
 {
 	ASSERT(!label->IsBound());
-	intptr_t target_position = writer.size();
+	intptr_t target_position = writer->size();
 
 	while (label->IsLinked()) {
 		int32_t branch_position = label->Position();
@@ -1828,6 +1828,8 @@ void Assembler::c_slli(Register rd, Register rs1, intptr_t imm)
 	ASSERT(Supports(RV_C));
 	ASSERT(rd == rs1);
 	ASSERT(imm != 0);
+	//TODO Temp fix
+	imm=SignExtend(6, imm);
 	Emit16(C_SLLI | EncodeCRd(rd) | EncodeCIImm(imm));
 }
 
@@ -1836,6 +1838,7 @@ void Assembler::c_srli(Register rd, Register rs1, intptr_t imm)
 	ASSERT(Supports(RV_C));
 	ASSERT(rd == rs1);
 	ASSERT(imm != 0);
+	imm = SignExtend(6, imm);
 	Emit16(C_SRLI | EncodeCRs1p(rd) | EncodeCIImm(imm));
 }
 
@@ -1844,6 +1847,7 @@ void Assembler::c_srai(Register rd, Register rs1, intptr_t imm)
 	ASSERT(Supports(RV_C));
 	ASSERT(rd == rs1);
 	ASSERT(imm != 0);
+	imm = SignExtend(6, imm);
 	Emit16(C_SRAI | EncodeCRs1p(rd) | EncodeCIImm(imm));
 }
 

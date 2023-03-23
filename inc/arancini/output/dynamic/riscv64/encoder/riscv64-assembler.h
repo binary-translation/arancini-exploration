@@ -73,7 +73,7 @@ class Assembler {
   static const bool kNearJump = true;
   static const bool kFarJump = false;
 
-  explicit Assembler(ExtensionSet extensions = RV_G);
+  explicit Assembler(machine_code_writer*, ExtensionSet extensions = RV_G);
   ~Assembler();
 
   bool Supports(Extension extension) const {
@@ -659,7 +659,7 @@ class Assembler {
   uint32_t EncodeCBranchOrJumpOffset(int32_t offset, uint32_t encoded);
   int32_t DecodeCBranchOrJumpOffset(uint32_t encoded);
 
-  intptr_t Position() { return writer.size(); }
+  intptr_t Position() { return writer->size(); }
   void EmitBranch(Register rs1, Register rs2, Label* label, Funct3 func);
   void EmitJump(Register rd, Label* label, Opcode op);
   void EmitCBranch(Register rs1p, Label* label, COpcode op);
@@ -762,26 +762,26 @@ class Assembler {
   void EmitJType(intptr_t imm, Register rd, Opcode opcode);
 
   uint32_t Read32(intptr_t position) {
-    return *reinterpret_cast<uint32_t*>(reinterpret_cast<uword>(writer.ptr()) +
+    return *reinterpret_cast<uint32_t*>(reinterpret_cast<uword>(writer->ptr()) +
                                         position);
   }
   void Write32(intptr_t position, uint32_t instruction) {
-    *reinterpret_cast<uint32_t*>(reinterpret_cast<uword>(writer.ptr()) + position) =
+    *reinterpret_cast<uint32_t*>(reinterpret_cast<uword>(writer->ptr()) + position) =
         instruction;
   }
-  void Emit32(uint32_t instruction) { writer.emit32(instruction); }
+  void Emit32(uint32_t instruction) { writer->emit32(instruction); }
   uint16_t Read16(intptr_t position) {
-    return *reinterpret_cast<uint16_t*>(reinterpret_cast<uword>(writer.ptr()) +
+    return *reinterpret_cast<uint16_t*>(reinterpret_cast<uword>(writer->ptr()) +
                                         position);
   }
   void Write16(intptr_t position, uint16_t instruction) {
-    *reinterpret_cast<uint16_t*>(reinterpret_cast<uword>(writer.ptr()) + position) =
+    *reinterpret_cast<uint16_t*>(reinterpret_cast<uword>(writer->ptr()) + position) =
         instruction;
   }
-  void Emit16(uint16_t instruction) { writer.emit16(instruction); }
+  void Emit16(uint16_t instruction) { writer->emit16(instruction); }
 
   const ExtensionSet extensions_;
-  arancini::output::dynamic::machine_code_writer writer;
+  arancini::output::dynamic::machine_code_writer* writer;
 };
 
 }  // namespace arancini::output::dynamic::riscv64
