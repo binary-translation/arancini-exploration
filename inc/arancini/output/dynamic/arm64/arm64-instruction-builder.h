@@ -172,17 +172,7 @@ public:
 
 	void allocate();
 
-	void emit(machine_code_writer &writer) {
-        for (size_t i = 0; i < instructions_.size(); ++i) {
-            if (labels_.count(i)) {
-                const auto& labels = labels_[i];
-                instructions_[i].emit(writer, labels);
-                continue;
-            }
-
-            instructions_[i].emit(writer);
-		}
-	}
+	void emit(machine_code_writer &writer);
 
 	void dump(std::ostream &os) const;
 

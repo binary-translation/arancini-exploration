@@ -743,14 +743,15 @@ struct arm64_instruction {
     }
 
 	void dump(std::ostream &os) const;
-	void emit(machine_code_writer &writer, const std::vector<std::string>& = {}) const;
 	void kill() { opcode.clear(); }
 
 	bool is_dead() const { return opcode.empty(); }
 
 	arm64_operand &get_operand(int index) { return operands[index]; }
-
 	const arm64_operand &get_operand(int index) const { return operands[index]; }
+
+	decltype(operands) &get_operands() { return operands; }
+	const decltype(operands) &get_operands() const { return operands; }
 };
 
 } // namespace arancini::output::dynamic::arm64
