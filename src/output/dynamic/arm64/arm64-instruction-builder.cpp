@@ -21,8 +21,8 @@ void arm64_instruction_builder::allocate() {
     // All registers can be used except:
     // SP (x31),
     // FP (x29),
-    // zero (x0)
-	std::bitset<32> avail_physregs = 0x5FFFFFFFE;
+    // zero (x31)
+	std::bitset<32> avail_physregs = 0x5FFFFFFFF;
 
 	for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
 		auto &insn = *RI;
@@ -30,6 +30,7 @@ void arm64_instruction_builder::allocate() {
 #ifdef DEBUG_REGALLOC
 		DEBUG_STREAM << "considering instruction ";
 		insn.dump(DEBUG_STREAM);
+		DEBUG_STREAM << '\n';
 #endif
 
 		// kill defs first
@@ -56,7 +57,7 @@ void arm64_instruction_builder::allocate() {
 #ifdef DEBUG_REGALLOC
 					DEBUG_STREAM << " allocated to ";
 					o.dump(DEBUG_STREAM);
-					DEBUG_STREAM << " -- releasing";
+					DEBUG_STREAM << " -- releasing\n";
 #endif
 				} else {
 #ifdef DEBUG_REGALLOC
@@ -158,6 +159,7 @@ void arm64_instruction_builder::allocate() {
 #ifdef DEBUG_REGALLOC
 						DEBUG_STREAM << " allocating vreg to ";
 						o.dump(DEBUG_STREAM);
+                        DEBUG_STREAM << '\n';
 #endif
 					} else {
 						o.allocate_base(vreg_to_preg.at(vri), 64);

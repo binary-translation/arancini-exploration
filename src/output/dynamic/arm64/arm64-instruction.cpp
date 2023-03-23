@@ -190,7 +190,8 @@ void arm64_instruction::emit(machine_code_writer &writer,
 void arm64_instruction::dump(std::ostream &os) const {
     os << opcode;
 
-	for (size_t i = 0; i < opcount - 1; i++) {
+    if (opcount == 0) return;
+	for (size_t i = 0; i < opcount - 1; ++i) {
         os << ' ';
         operands[i].dump(os);
         os << ',';
