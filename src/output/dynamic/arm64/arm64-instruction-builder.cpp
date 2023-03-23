@@ -8,6 +8,159 @@ using namespace arancini::output::dynamic::arm64;
 #define DEBUG_REGALLOC
 #define DEBUG_STREAM std::cerr
 
+void arm64_instruction_builder::emit(machine_code_writer &writer) {
+    size_t size;
+    uint8_t* encode;
+    std::stringstream assembly;
+
+    for (std::size_t i = 0; i < instructions_.size(); ++i) {
+        const auto &insn = instructions_[i];
+
+        if (insn.is_dead())
+            return;
+
+        const auto &operands = insn.get_operands();
+
+        switch (insn.opform) {
+        case arm64_opform::OF_NONE:
+            break;
+
+        case arm64_opform::OF_R32:
+        case arm64_opform::OF_R64:
+            if (!operands[0].is_preg()) {
+                throw std::runtime_error("expected preg operand 0");
+            }
+
+            break;
+
+        // TODO: handle 32-bit regs
+        case arm64_opform::OF_R32_R32:
+        case arm64_opform::OF_R64_R64:
+        // case arm64_opform::OF_R64_R32:
+            if (!operands[0].is_preg()) {
+                throw std::runtime_error("expected preg operand 0");
+            }
+
+            if (!operands[1].is_preg()) {
+                throw std::runtime_error("expected preg operand 1");
+            }
+
+            break;
+
+        case arm64_opform::OF_R32_M32:
+        case arm64_opform::OF_R64_M64: {
+            if (!operands[0].is_preg()) {
+                throw std::runtime_error("expected preg operand 0");
+            }
+
+            if (!operands[1].is_mem()) {
+                throw std::runtime_error("expected mem operand 1");
+            }
+
+            if (operands[1].memop.virt_base) {
+                throw std::runtime_error("expected mem preg base operand 1");
+            }
+
+            break;
+        }
+
+        // case arm64_opform::OF_M8_R8:
+        // case arm64_opform::OF_M16_R16:
+        case arm64_opform::OF_M32_R32:
+        case arm64_opform::OF_M64_R64: {
+            if (!operands[0].is_mem()) {
+                throw std::runtime_error("expected mem operand 0");
+            }
+
+            if (operands[0].memop.virt_base) {
+                throw std::runtime_error("expected mem preg base operand 0");
+            }
+
+            if (!operands[1].is_preg()) {
+                throw std::runtime_error("expected preg operand 1");
+            }
+
+            break;
+        }
+
+        // case arm64_opform::OF_M8_I8:
+        // case arm64_opform::OF_M16_I16:
+        // case arm64_opform::OF_M32_I32:
+        // case arm64_opform::OF_M64_I64: {
+        // 	if (!operands[0].is_mem()) {
+        // 		throw std::runtime_error("expected mem operand 0");
+        // 	}
+
+        // 	if (operands[0].memop.virt_base) {
+        // 		throw std::runtime_error("expected mem preg base operand 0");
+        // 	}
+
+        // 	unsigned long overridden_opcode = raw_opcode;
+
+        // 	// switch (operands[0].memop.seg) {
+        // 	// case arm64_register_names::FS:
+        // 	// 	overridden_opcode |= FE_SEG(FE_FS);
+        // 	// 	break;
+        // 	// case arm64_register_names::GS:
+        // 	// 	overridden_opcode |= FE_SEG(FE_GS);
+        // 	// 	break;
+        // 	// default:
+        // 	// 	break;
+        // 	// }
+
+        // 	if (!operands[1].is_imm()) {
+        // 		throw std::runtime_error("expected imm operand 1");
+        // 	}
+        // 	break;
+        // }
+
+        // case arm64_opform::OF_R8_I8:
+        // case arm64_opform::OF_R16_I16:
+        case arm64_opform::OF_R32_I32:
+        case arm64_opform::OF_R64_I64:
+            if (!operands[0].is_preg()) {
+                throw std::runtime_error("expected preg operand 0");
+            }
+
+            if (!operands[1].is_imm()) {
+                throw std::runtime_error("expected imm operand 1");
+            }
+            break;
+
+        case arm64_opform::OF_R64_R64_I64:
+            if (!operands[0].is_preg()) {
+                throw std::runtime_error("expected preg operand 0");
+            }
+
+            if (!operands[1].is_preg()) {
+                throw std::runtime_error("expected preg operand 1");
+            }
+
+            if (!operands[2].is_imm()) {
+                throw std::runtime_error("expected imm operand 2");
+            }
+            break;
+
+        default:
+            (void)0;
+            // throw std::runtime_error("unsupported operand form");
+        }
+
+        // TODO: do this for all at once; not one by one
+        for (const auto& label : labels_[i])
+            assembly << label << ":\n";
+        dump(assembly);
+    }
+
+    size = asm_.assemble(assembly.str().c_str(), &encode);
+
+    // TODO: write directly
+    writer.copy_in(encode, size);
+
+    // TODO: do zero-copy keystone
+    asm_.free(encode);
+}
+
 void arm64_instruction_builder::allocate() {
 	// reverse linear scan allocator
 #ifdef DEBUG_REGALLOC
