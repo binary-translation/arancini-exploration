@@ -87,7 +87,7 @@ public:
             throw std::runtime_error("Physical registers are specified as 32-bit or 64-bit only");
     }
 
-    arm64_physreg_op(const arm64_physreg_op& r): arm64_physreg_op(r.reg_, r.width_) { }
+    arm64_physreg_op(const arm64_physreg_op& r): reg_(r.reg_), width_(r.width_) { }
 
     arm64_physreg_op& operator=(const arm64_physreg_op& r) {
         reg_ = r.reg_;
