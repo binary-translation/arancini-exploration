@@ -146,9 +146,6 @@ void arm64_instruction_builder::emit(machine_code_writer &writer) {
             // throw std::runtime_error("unsupported operand form");
         }
 
-        // TODO: do this for all at once; not one by one
-        for (const auto& label : labels_[i])
-            assembly << label << ":\n";
         dump(assembly);
     }
 
@@ -333,17 +330,8 @@ void arm64_instruction_builder::allocate() {
 	}
 }
 
-void arm64_instruction_builder::dump(std::ostream &os) const
-{
-	for (size_t i = 0; i < instructions_.size(); ++i) {
-        auto &insn = instructions_[i];
-
-        if (labels_.find(i) != labels_.end()) {
-            for (const auto& label : labels_.at(i)) {
-                os << label << ":\n";
-            }
-        }
-
+void arm64_instruction_builder::dump(std::ostream &os) const {
+	for (const auto &insn : instructions_) {
 		if (!insn.is_dead()) {
             insn.dump(os);
             os << '\n';

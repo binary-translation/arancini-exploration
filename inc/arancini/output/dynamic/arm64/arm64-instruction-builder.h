@@ -5,6 +5,7 @@
 
 #include <vector>
 #include <stdexcept>
+#include <algorithm>
 #include <unordered_map>
 
 namespace arancini::output::dynamic::arm64 {
@@ -87,8 +88,8 @@ public:
         append(arm64_instruction::beq(label));
     }
 
-    void label(const std::string &name, size_t pos) {
-        labels_[pos].push_back(name);
+    void label(const std::string &name) {
+        append(arm64_instruction::label(name));
     }
 
     void lsl(const arm64_operand &dst,
@@ -171,9 +172,14 @@ public:
     }
 
     // TODO: insert separators before/after instructions
-    void insert_sep(const std::string &sep) {
-        auto last_instr_pos = instructions_.size();
-        labels_[++last_instr_pos].push_back(sep);
+    void insert_sep(const std::string &sep) { label(sep); }
+
+    bool has_label(const std::string &label) {
+        auto insn = instructions_;
+        return std::any_of(insn.rbegin(), insn.rend(),
+                            [&](const arm64_instruction &i) {
+                                return i.opcode == label;
+                            });
     }
 
 	void allocate();
@@ -185,7 +191,6 @@ public:
 	size_t nr_instructions() const { return instructions_.size(); }
 private:
 	std::vector<arm64_instruction> instructions_;
-    std::unordered_map<size_t, std::vector<std::string>> labels_;
 
 	void append(const arm64_instruction &i) { instructions_.push_back(i); }
 };
