@@ -595,7 +595,7 @@ struct arm64_instruction {
     }
 
     static arm64_instruction or_(const arm64_operand &dst, const arm64_operand &src) {
-        return arm64_instruction("orr", usedef(dst), use(src));
+        return arm64_instruction("orr", usedef(dst), use(src), use(dst));
     }
 
     static arm64_instruction and_(const arm64_operand &dst, const arm64_operand &src) {

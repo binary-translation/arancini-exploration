@@ -32,7 +32,9 @@ public:
         append(arm64_instruction::sub(dst, src));
     }
 
-	void or_(const arm64_operand &dst, const arm64_operand &src) { append(arm64_instruction::or_(dst, src)); }
+	void or_(const arm64_operand &dst, const arm64_operand &src) {
+        append(arm64_instruction::or_(dst, src));
+    }
 
 	void and_(const arm64_operand &dst, const arm64_operand &src) { append(arm64_instruction::and_(dst, src)); }
 
