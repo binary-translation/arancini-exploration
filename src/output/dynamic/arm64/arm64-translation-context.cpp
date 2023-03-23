@@ -18,8 +18,8 @@ void arm64_translation_context::end_block() {
 	do_register_allocation();
 
     // TODO: add operations to finish block
-	builder_.mov(arm64_operand(arm64_physreg_op(arm64_physreg_op::x0, 64)),
-                 arm64_operand(arm64_physreg_op(arm64_physreg_op::xzr_sp, 64)));
+	builder_.mov(arm64_operand(arm64_physreg_op(arm64_physreg_op::x0)),
+                 arm64_operand(arm64_physreg_op(arm64_physreg_op::xzr_sp)));
 	builder_.ret();
 
 	builder_.dump(std::cerr);
