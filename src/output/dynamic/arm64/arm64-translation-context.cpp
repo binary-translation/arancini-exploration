@@ -18,9 +18,9 @@ void arm64_translation_context::end_block() {
 	do_register_allocation();
 
     // TODO: add operations to finish block
-	// builder_.xor_(
-	// 	x86_operand(x86_physical_register_operand(x86_register_names::AX), 32), x86_operand(x86_physical_register_operand(x86_register_names::AX), 32));
-	// builder_.ret();
+	builder_.mov(arm64_operand(arm64_physreg_op(arm64_physreg_op::x0, 64)),
+                 arm64_operand(arm64_physreg_op(arm64_physreg_op::xzr_sp, 64)));
+	builder_.ret();
 
 	builder_.dump(std::cerr);
 
@@ -66,7 +66,7 @@ arm64_translation_context::guestreg_memory_operand(int width, int regoff,
 
 arm64_operand arm64_translation_context::vreg_operand_for_port(port &p, bool constant_fold) {
     // TODO
-	if (constant_fold) {
+	if (0 && constant_fold) {
 		if (p.owner()->kind() == node_kinds::read_pc) {
 			return arm64_operand(arm64_immediate_operand(this_pc_, 64));
 		} else if (p.owner()->kind() == node_kinds::constant) {
@@ -238,15 +238,15 @@ void arm64_translation_context::materialise_br(const br_node &n) {
 void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
     materialise(n.target());
 
-	int cond_vreg = alloc_vreg_for_port(n.cond());
-
-    // builder_.cmp(cond_vreg, imm_operand(0, 64));
+    builder_.cmp(vreg_operand_for_port(n.cond()),
+                 imm_operand(0, 64));
     builder_.beq(n.target()->name());
 }
 
 void arm64_translation_context::materialise_constant(const constant_node &n) {
 	int dst_vreg = alloc_vreg_for_port(n.val());
-	builder_.mov(virtreg_operand(dst_vreg, n.val().type().element_width()), imm_operand(n.const_val_i(), n.val().type().element_width()));
+	builder_.mov(virtreg_operand(dst_vreg, n.val().type().element_width()),
+                 imm_operand(n.const_val_i(), n.val().type().element_width()));
 }
 
 void arm64_translation_context::materialise_binary_arith(const binary_arith_node &n) {

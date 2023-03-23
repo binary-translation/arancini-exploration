@@ -164,6 +164,10 @@ public:
         append(arm64_instruction::bl(n));
     }
 
+    void ret() {
+        append(arm64_instruction::ret());
+    }
+
 	void allocate();
 
 	void emit(machine_code_writer &writer) {

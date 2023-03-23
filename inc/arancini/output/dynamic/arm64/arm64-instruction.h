@@ -52,7 +52,7 @@ class arm64_physreg_op {
 public:
     enum regname64 : uint8_t {
         none = 0,
-        x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15,
+        x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15,
         x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, x29, x30,
         xzr_sp
     };
@@ -74,7 +74,7 @@ public:
 
     explicit arm64_physreg_op(size_t index, size_t width) {
         width_ = width;
-        if (index >= static_cast<size_t>(xzr_sp) + 1)
+        if (index > static_cast<size_t>(xzr_sp) + 1)
             throw std::runtime_error("Allocating unavailable register at index: "
                                      + std::to_string(index));
         if (width == 64)
@@ -436,6 +436,7 @@ struct arm64_instruction {
     arm64_instruction(const std::string& opc)
         : opcode(opc)
 		, opform(arm64_opform::OF_NONE)
+        , opcount(0)
 	{
 	}
 
@@ -735,6 +736,10 @@ struct arm64_instruction {
     static arm64_instruction cmp(const arm64_operand &src1,
                                  const arm64_operand &src2) {
         return arm64_instruction("cmp", use(src1), use(src2));
+    }
+
+    static arm64_instruction ret() {
+        return arm64_instruction("ret");
     }
 
 	void dump(std::ostream &os) const;
