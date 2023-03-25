@@ -839,6 +839,7 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 		}
 		switch (n.op()) {
 		case shift_op::lsl:
+			/*
 			assembler_.srli(CF, src_reg, n.val().type().width() - amt); // CF
 
 			if (amt == 1) {
@@ -846,7 +847,7 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 				assembler_.xor_(OF, OF, CF);
 				assembler_.andi(OF, OF, 1);
 			}
-
+			*/
 			switch (n.val().type().width()) {
 			case 64:
 				assembler_.slli(out_reg, src_reg, amt);
@@ -863,7 +864,7 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 
 			break;
 		case shift_op::lsr:
-			assembler_.srli(CF, src_reg, amt - 1); // CF
+			//			assembler_.srli(CF, src_reg, amt - 1); // CF
 			switch (n.val().type().width()) {
 			case 64:
 				assembler_.srli(out_reg, src_reg, amt);
@@ -880,22 +881,22 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 				assembler_.srli(out_reg, src_reg, amt);
 				break;
 			}
-			if (amt == 1) {
+			/*if (amt == 1) {
 				assembler_.srli(OF, src_reg, n.val().type().width() - 1);
 				assembler_.andi(OF, OF, 1); // OF
-			}
+			}*/
 			break;
 		case shift_op::asr:
-			assembler_.srli(CF, src_reg, amt - 1); // CF
+			//			assembler_.srli(CF, src_reg, amt - 1); // CF
 			assembler_.srai(out_reg, src_reg, amt); // Sign extension preserved
 			if (amt == 1) {
 				assembler_.li(OF, 0);
 			}
 			break;
 		}
-
+		/*
 		assembler_.andi(CF, CF, 1); // CF
-
+		*/
 		assembler_.seqz(ZF, out_reg); // ZF
 		assembler_.sltz(SF, out_reg); // SF
 
@@ -903,11 +904,11 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 	}
 
 	auto amount = std::get<Register>(materialise(n.amount().owner()));
-	assembler_.subi(OF, amount, 1);
+	//	assembler_.subi(OF, amount, 1);
 
 	switch (n.op()) {
 	case shift_op::lsl:
-		assembler_.sll(CF, src_reg, OF); // CF in highest bit
+		//		assembler_.sll(CF, src_reg, OF); // CF in highest bit
 
 		switch (n.val().type().width()) {
 		case 64:
@@ -923,16 +924,17 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 			assembler_.srai(out_reg, src_reg, (64 - n.val().type().width()));
 			break;
 		}
-
+		/*
 		assembler_.xor_(OF, out_reg, CF); // OF in highest bit
 
 		assembler_.srli(CF, CF, n.val().type().width() - 1);
 
 		assembler_.srli(OF, OF, n.val().type().width() - 1);
 		assembler_.andi(OF, OF, 1); // OF
+		*/
 		break;
 	case shift_op::lsr:
-		assembler_.srl(CF, src_reg, OF); // CF
+		//		assembler_.srl(CF, src_reg, OF); // CF
 		switch (n.val().type().width()) {
 		case 64:
 			assembler_.srl(out_reg, src_reg, amount);
@@ -950,22 +952,26 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 			assembler_.srl(out_reg, src_reg, amount);
 			break;
 		}
-
+		/*
 		// Undefined on shift amt > 1 (use same formula as amt == 1)
 		assembler_.srli(OF, src_reg, n.val().type().width() - 1);
 		assembler_.andi(OF, OF, 1); // OF
+		*/
 
 		break;
 	case shift_op::asr:
+		/*
 		assembler_.srl(CF, src_reg, OF); // CF
 		assembler_.li(OF, 0); // OF
+		*/
 
 		assembler_.sra(out_reg, src_reg, amount); // Sign extension preserved
 
 		break;
 	}
-
+	/*
 	assembler_.andi(CF, CF, 1); // Limit CF to single bit
+	*/
 	assembler_.seqz(ZF, out_reg); // ZF
 	assembler_.sltz(SF, out_reg); // SF
 
