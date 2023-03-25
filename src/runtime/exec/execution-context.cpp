@@ -90,3 +90,15 @@ int execution_context::invoke(void *cpu_state)
 
 	return txln->invoke(cpu_state, memory_);
 }
+
+int execution_context::internal_call(void *cpu_state, int call)
+{
+	std::cerr << "Executing internal call via TEMPORARY interface" << std::endl;
+	if (call == 1) { // syscall
+
+	} else {
+		std::cerr << "Unknown internal call id " << std::dec << call << std::endl;
+		return 1;
+	}
+	return 0;
+}
