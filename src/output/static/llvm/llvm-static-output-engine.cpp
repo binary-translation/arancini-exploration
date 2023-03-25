@@ -92,6 +92,7 @@ void llvm_static_output_engine_impl::initialise_types()
 	types.loop_fn = FunctionType::get(types.vd, { types.cpu_state_ptr }, false);
 	types.init_dbt = FunctionType::get(types.cpu_state_ptr, { types.i64 }, false);
 	types.dbt_invoke = FunctionType::get(types.i32, { types.cpu_state_ptr }, false);
+	types.internal_call_handler = FunctionType::get(types.i32, { types.cpu_state_ptr, types.i32 }, false);
 }
 
 void llvm_static_output_engine_impl::create_main_function(Function *loop_fn)
@@ -147,6 +148,8 @@ void llvm_static_output_engine_impl::build()
 	auto entry_block = BasicBlock::Create(*llvm_context_, "entry", loop_fn);
 	auto loop_block = BasicBlock::Create(*llvm_context_, "loop", loop_fn);
 	auto switch_to_dbt = BasicBlock::Create(*llvm_context_, "switch_to_dbt", loop_fn);
+	auto check_for_int_call_block = BasicBlock::Create(*llvm_context_, "check_for_internal_call", loop_fn);
+	auto internal_call_block = BasicBlock::Create(*llvm_context_, "internal_call", loop_fn);
 	auto exit_block = BasicBlock::Create(*llvm_context_, "exit", loop_fn);
 
 	IRBuilder<> builder(*llvm_context_);
@@ -168,7 +171,16 @@ void llvm_static_output_engine_impl::build()
 
 	auto switch_callee = module_->getOrInsertFunction("invoke_code", types.dbt_invoke);
 	auto invoke_result = builder.CreateCall(switch_callee, { state_arg });
-	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 0)), loop_block, exit_block);
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 0)), loop_block, check_for_int_call_block);
+
+	builder.SetInsertPoint(check_for_int_call_block);
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_SGT, invoke_result, ConstantInt::get(types.i32, 0)), internal_call_block, exit_block);
+
+	builder.SetInsertPoint(internal_call_block);
+	auto internal_call_callee = module_->getOrInsertFunction("execute_internal_call", types.internal_call_handler);
+	auto internal_call_result = builder.CreateCall(internal_call_callee, { state_arg, invoke_result });
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, internal_call_result, ConstantInt::get(types.i32, 0)), loop_block, exit_block);
+
 
 	builder.SetInsertPoint(exit_block);
 	builder.CreateRetVoid();
