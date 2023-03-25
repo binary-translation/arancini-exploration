@@ -524,6 +524,9 @@ void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
 		case node_kinds::ternary_atomic:
 			write_reg(reg_offsets::ZF, ((atomic_node *)op)->zero());
 			break;
+		case node_kinds::bit_shift:
+			write_reg(reg_offsets::ZF, ((bit_shift_node *)op)->zero());
+			break;
 		case node_kinds::constant:
 			write_reg(reg_offsets::ZF, builder_.insert_constant_i(value_type::u1(), ((constant_node *)op)->is_zero())->val());
 			break;
@@ -613,6 +616,9 @@ void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
 		case node_kinds::ternary_atomic:
 			write_reg(reg_offsets::SF, ((atomic_node *)op)->negative());
 			break;
+		case node_kinds::bit_shift:
+			write_reg(reg_offsets::SF, ((bit_shift_node *)op)->negative());
+			break ;
 		case node_kinds::constant:
 			write_reg(reg_offsets::SF, builder_.insert_constant_i(value_type::u1(), ((constant_node *)op)->const_val_i() < 0)->val());
 			break;

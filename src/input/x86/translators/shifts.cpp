@@ -54,8 +54,9 @@ void shifts_translator::do_translate()
             write_reg(reg_offsets::OF, msb->val());
           }
         }
-      }
-    } else { // shift amount is a register
+		write_flags(shift, flag_op::update, flag_op::ignore, flag_op::ignore, flag_op::update, flag_op::update, flag_op::ignore);
+	  }
+	} else { // shift amount is a register
       auto zero_shift = builder().insert_cmpeq(amt->val(), builder().insert_constant_i(amt->val().type(), 0)->val());
       cond_br_node *zero_br = (cond_br_node *)builder().insert_cond_br(zero_shift->val(), nullptr);
 
@@ -70,7 +71,9 @@ void shifts_translator::do_translate()
       }
       write_operand(0, shift->val());
 
-      // CF flag receives the last shifted bit
+	  write_flags(shift, flag_op::update, flag_op::ignore, flag_op::ignore, flag_op::update, flag_op::update, flag_op::ignore);
+
+	  // CF flag receives the last shifted bit
       value_node *last_shift_bit;
       auto amt_min_1 = builder().insert_sub(amt->val(), builder().insert_constant_i(amt->val().type(), 1)->val());
       if (inst == XED_ICLASS_SHL) {
