@@ -20,12 +20,15 @@ void branch_translator::do_translate()
 		auto next_target_node = builder().insert_add(builder().insert_read_pc()->val(), builder().insert_constant_u64(instruction_length)->val());
 		builder().insert_write_mem(new_rsp->val(), next_target_node->val());
 
-		int64_t value = xed_decoded_inst_get_branch_displacement(xed_inst());
-		uint64_t target = value + instruction_length;
 
-		auto target_node = builder().insert_add(builder().insert_read_pc()->val(), builder().insert_constant_u64(target)->val());
+		auto target = read_operand(0);
 
-		builder().insert_write_pc(target_node->val());
+		if (target->kind() == ir::node_kinds::constant) {
+			auto call_target = builder().insert_add(target->val(), builder().insert_constant_u64(instruction_length)->val());
+			target = builder().insert_add(builder().insert_read_pc()->val(), call_target->val());
+		}
+
+		builder().insert_write_pc(target->val());
 		break;
 	}
 
@@ -46,10 +49,12 @@ void branch_translator::do_translate()
 
 	case XED_ICLASS_JMP: {
 		xed_uint_t instruction_length = xed_decoded_inst_get_length(xed_inst());
-		int64_t branch_displacement = xed_decoded_inst_get_branch_displacement(xed_inst());
-		uint64_t branch_target = branch_displacement + instruction_length;
+		auto target = read_operand(0);
 
-		auto target = builder().insert_add(builder().insert_read_pc()->val(), builder().insert_constant_u64(branch_target)->val());
+		if (target->kind() == ir::node_kinds::constant) {
+			auto branch_target = builder().insert_add(target->val(), builder().insert_constant_u64(instruction_length)->val());
+			target = builder().insert_add(builder().insert_read_pc()->val(), branch_target->val());
+		}
 
 		builder().insert_write_pc(target->val());
 

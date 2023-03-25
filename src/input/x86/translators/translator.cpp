@@ -319,8 +319,11 @@ value_node *translator::read_operand(int opnum)
 			throw std::runtime_error("invalid memory width in read");
 		}
 	}
-
-  default:
+	case XED_OPERAND_RELBR:{
+		int32_t displacement = xed_decoded_inst_get_branch_displacement(xed_inst());
+		return builder_.insert_constant_u64(displacement);
+	}
+	default:
 		throw std::logic_error("unsupported read operand type: " + std::to_string((int)opname));
 	}
 }
