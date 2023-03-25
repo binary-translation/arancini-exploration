@@ -231,21 +231,32 @@ value_node *translator::read_operand(int opnum)
 	}
 
 	case XED_OPERAND_IMM0: {
-		switch (xed_decoded_inst_get_immediate_width_bits(xed_inst())) {
-		case 8:
-			return builder_.insert_constant_s8(xed_decoded_inst_get_signed_immediate(xed_inst()));
-
-		case 16:
-			return builder_.insert_constant_s16(xed_decoded_inst_get_signed_immediate(xed_inst()));
-
-		case 32:
-			return builder_.insert_constant_s32(xed_decoded_inst_get_signed_immediate(xed_inst()));
-
-		case 64:
-			return builder_.insert_constant_s64(xed_decoded_inst_get_signed_immediate(xed_inst()));
-
-		default:
-			throw std::runtime_error("unsupported immediate width");
+		if (xed_decoded_inst_get_immediate_is_signed(xed_inst())){
+			switch (xed_decoded_inst_get_immediate_width_bits(xed_inst())) {
+			case 8:
+				return builder_.insert_constant_s8(xed_decoded_inst_get_signed_immediate(xed_inst()));
+			case 16:
+				return builder_.insert_constant_s16(xed_decoded_inst_get_signed_immediate(xed_inst()));
+			case 32:
+				return builder_.insert_constant_s32(xed_decoded_inst_get_signed_immediate(xed_inst()));
+			case 64:
+				return builder_.insert_constant_s64(xed_decoded_inst_get_signed_immediate(xed_inst()));
+			default:
+				throw std::runtime_error("unsupported immediate width");
+			}
+		} else {
+			switch (xed_decoded_inst_get_immediate_width_bits(xed_inst())) {
+			case 8:
+				return builder_.insert_constant_u8(xed_decoded_inst_get_unsigned_immediate(xed_inst()));
+			case 16:
+				return builder_.insert_constant_u16(xed_decoded_inst_get_unsigned_immediate(xed_inst()));
+			case 32:
+				return builder_.insert_constant_u32(xed_decoded_inst_get_unsigned_immediate(xed_inst()));
+			case 64:
+				return builder_.insert_constant_u64(xed_decoded_inst_get_unsigned_immediate(xed_inst()));
+			default:
+				throw std::runtime_error("unsupported immediate width");
+			}
 		}
 	}
 
