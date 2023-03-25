@@ -420,6 +420,8 @@ public:
 		, op_(op)
 		, input_(input)
 		, amount_(amount)
+		, zero_(port_kinds::zero, value_type::u1(), this)
+		, negative_(port_kinds::negative, value_type::u1(), this)
 	{
 		input.add_target(this);
 		amount.add_target(this);
@@ -429,6 +431,9 @@ public:
 
 	port &input() const { return input_; }
 	port &amount() const { return amount_; }
+
+	port &zero() { return zero_; }
+	port &negative() { return negative_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -440,6 +445,7 @@ private:
 	shift_op op_;
 	port &input_;
 	port &amount_;
+	port zero_, negative_;
 };
 
 enum class cast_op { bitcast, zx, sx, trunc, convert };
