@@ -54,7 +54,7 @@ static void segv_handler(int signo, siginfo_t *info, void *context)
 
 	uintptr_t emulated_base = (uintptr_t)ctx->get_memory_ptr(0);
 	if ((uintptr_t)info->si_addr >= emulated_base) {
-		std::cerr << ", guest-virtual-address=" << std::hex << (info->si_addr - emulated_base);
+		std::cerr << ", guest-virtual-address=" << std::hex << ((uintptr_t)info->si_addr - emulated_base);
 	}
 
 	std::cerr << std::endl;
@@ -172,4 +172,9 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point)
  * translated.
  */
 extern "C" int invoke_code(void *cpu_state) { return ctx->invoke(cpu_state); }
+
+/*
+ * Entry point from /static/ code when internal call needs to be executed.
+ */
+extern "C" int execute_internal_call(void *cpu_state, int call) { return ctx->internal_call(cpu_state, call); }
 

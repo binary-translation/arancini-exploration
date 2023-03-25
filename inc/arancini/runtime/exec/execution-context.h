@@ -28,6 +28,7 @@ public:
 	void *get_memory_ptr(off_t base_address) const { return (void *)((uintptr_t)memory_ + base_address); }
 
 	int invoke(void *cpu_state);
+	int internal_call(void *cpu_state, int call);
 
 private:
 	void *memory_;
