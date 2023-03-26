@@ -532,6 +532,23 @@ Register riscv64_translation_context::materialise_bit_extract(const bit_extract_
 
 	Register src = std::get<Register>(materialise(n.source_value().owner()));
 
+	if (is_flag(n.val())) {
+		if (from == 0) {
+			assembler_.andi(out_reg, src, 1);
+		} else if (from==63){
+			assembler_.srli(out_reg, src, 63);
+		} else if (from == 31) {
+			assembler_.srliw(out_reg, src, 31);
+		} else {
+			assembler_.srli(out_reg, src, from);
+			assembler_.andi(out_reg, out_reg, 1);
+		}
+		return out_reg;
+	}
+	if (!is_gpr(n.val())) {
+		throw std::runtime_error("Unsupported bit extract width.");
+	}
+
 	// TODO Handle upper 64 from 128 for split Register multiply case
 
 	if (from == 0 && length == 32) {
