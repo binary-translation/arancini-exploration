@@ -484,10 +484,7 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise_
 Register riscv64_translation_context::materialise_cast(const cast_node &n)
 {
 	Register src_reg = std::get<Register>(materialise(n.source_value().owner()));
-	auto [out_reg, valid] = allocate_register(&n.val());
-	if (!valid) {
-		return out_reg;
-	}
+
 	switch (n.op()) {
 
 	case cast_op::bitcast:
@@ -495,15 +492,29 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 		// No-op
 		return src_reg;
 
-	case cast_op::zx:
+	case cast_op::zx: {
+		auto [out_reg, valid] = allocate_register(&n.val());
+		if (!valid) {
+			return out_reg;
+		}
 		if (n.source_value().type().width() == 8) {
 			assembler_.andi(out_reg, src_reg, 0xff);
 		} else {
 			assembler_.slli(out_reg, src_reg, 64 - n.source_value().type().width());
-			assembler_.srli(out_reg, src_reg, 64 - n.source_value().type().width());
+			assembler_.srli(out_reg, out_reg, 64 - n.source_value().type().width());
 		}
-		break;
-	case cast_op::trunc:
+		return out_reg;
+	}
+	case cast_op::trunc: {
+		if (n.val().type().width() == 64) {
+			return src_reg;
+		}
+
+		auto [out_reg, valid] = allocate_register(&n.val());
+		if (!valid) {
+			return out_reg;
+		}
+
 		if (is_flag(n.val())) {
 			// Flags are always zero extended
 			assembler_.andi(out_reg, src_reg, 1);
@@ -512,13 +523,13 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 			assembler_.sextw(out_reg, src_reg);
 		} else {
 			assembler_.slli(out_reg, src_reg, 64 - n.val().type().width());
-			assembler_.srai(out_reg, src_reg, 64 - n.val().type().width());
+			assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
 		}
-		break;
+		return out_reg;
+	}
 	default:
 		throw std::runtime_error("unsupported cast op");
 	}
-	return out_reg;
 }
 
 Register riscv64_translation_context::materialise_bit_extract(const bit_extract_node &n)
