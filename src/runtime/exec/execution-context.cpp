@@ -12,6 +12,7 @@
 #define GM_BASE nullptr
 #endif
 
+#include <csignal>
 #include <iostream>
 #include <stdexcept>
 #include <sys/mman.h>
@@ -95,7 +96,50 @@ int execution_context::internal_call(void *cpu_state, int call)
 {
 	std::cerr << "Executing internal call via TEMPORARY interface" << std::endl;
 	if (call == 1) { // syscall
-
+		auto x86_state = (x86::x86_cpu_state *)cpu_state;
+		switch (x86_state->RAX) {
+		case 158: // arch_prctl
+		{
+			switch (x86_state->RDI) { // code
+			case 0x1001: // ARCH_SET_GS
+				x86_state->GS = x86_state->RSI;
+				x86_state->RAX = 0;
+				break;
+			case 0x1002: // ARCH_SET_FS
+				x86_state->FS = x86_state->RSI;
+				x86_state->RAX = 0;
+				break;
+			case 0x1003: // ARCH_GET_FS
+				(*((uint64_t *)(x86_state->RSI + (intptr_t)memory_))) = x86_state->FS;
+				x86_state->RAX = 0;
+				break;
+			case 0x1004: // ARCH_GET_GS
+				(*((uint64_t *)(x86_state->RSI + (intptr_t)memory_))) = x86_state->GS;
+				x86_state->RAX = 0;
+				break;
+			default:
+				x86_state->RAX = -EINVAL;
+			}
+			break;
+		}
+		case 218: // set_tid_address
+		{
+			// TODO Handle clear_child_tid in exit
+			auto et = threads_[cpu_state];
+			et->clear_child_tid_ = (int *)(x86_state->RDI + (uintptr_t)memory_);
+			x86_state->RAX = gettid();
+			break;
+		}
+		case 231://exit_group
+		{
+			std::cerr << "Exiting from emulated process with exit code " << std::dec << x86_state->RDI << std::endl;
+			//exit(x86_state->RDI) ?
+			return 1;
+		}
+		default:
+			std::cerr << "Unsupported syscall id " << std::dec << x86_state->RAX << std::endl;
+			return 1;
+		}
 	} else {
 		std::cerr << "Unknown internal call id " << std::dec << call << std::endl;
 		return 1;
