@@ -1003,6 +1003,8 @@ public:
 	const internal_function &fn() const { return fn_; }
 	const std::vector<port *> &args() const { return args_; }
 
+	virtual bool updates_pc() const override { return true; }
+
 	virtual void accept(visitor &v) override
 	{
 		action_node::accept(v);
