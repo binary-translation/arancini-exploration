@@ -113,7 +113,6 @@ void mov_translator::do_translate()
 		break;
 	}
 
-  case XED_ICLASS_MOVSD:
   case XED_ICLASS_MOVSD_XMM: {
     auto src = read_operand(1);
     auto dst_width = get_operand_width(0);
@@ -132,34 +131,57 @@ void mov_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_MOVSB:
+  case XED_ICLASS_MOVSD:
+  case XED_ICLASS_MOVSW:
   case XED_ICLASS_MOVSQ: {
-    // move qword from [rsi] to [rdi], then inc/dec rsi and rdi depending on DF flag
-    auto rsi = read_reg(value_type::u64(), reg_offsets::RSI);
-    auto rdi = read_reg(value_type::u64(), reg_offsets::RDI);
-    auto rsi_val = builder().insert_read_mem(value_type::u64(), rsi->val());
+	int addr_align;
 
-    builder().insert_write_mem(rdi->val(), rsi_val->val());
+	switch (xed_decoded_inst_get_iclass(xed_inst())) {
+	case XED_ICLASS_MOVSQ:
+	  addr_align = 8;
+	  break;
+	case XED_ICLASS_MOVSD:
+	  addr_align = 4;
+	  break;
+	case XED_ICLASS_MOVSW:
+	  addr_align = 2;
+	  break;
+	case XED_ICLASS_MOVSB:
+	  addr_align = 1;
+	  break;
+	default:
+	  throw std::runtime_error("unsupported rep movs size");
+	}
+	auto cst_align = builder().insert_constant_u64(addr_align);
 
-    // update rdi and rsi according to DF register (0: inc, 1: dec)
-    auto cst_8 = builder().insert_constant_u64(8);
-    auto df = read_reg(value_type::u1(), reg_offsets::DF);
-    auto df_test = builder().insert_cmpne(df->val(), builder().insert_constant_i(value_type::u1(), 0)->val());
-    cond_br_node *br_df = (cond_br_node *)builder().insert_cond_br(df_test->val(), nullptr);
+	// move byte/word/dword/qword from [rsi] to [rdi], then inc/dec rsi and rdi depending on DF flag
+	auto rsi = read_reg(value_type::u64(), reg_offsets::RSI);
+	auto rdi = read_reg(value_type::u64(), reg_offsets::RDI);
+	const value_type &vt = addr_align == 8 ? value_type::u64() : addr_align == 4 ? value_type::u32() : addr_align == 2 ? value_type::u16() : value_type::u8();
+	auto rsi_val = builder().insert_read_mem(vt, rsi->val());
 
-    write_reg(reg_offsets::RDI, builder().insert_add(rdi->val(), cst_8->val())->val());
-    write_reg(reg_offsets::RSI, builder().insert_add(rsi->val(), cst_8->val())->val());
-    br_node *br_then = (br_node *)builder().insert_br(nullptr);
+	builder().insert_write_mem(rdi->val(), rsi_val->val());
 
-    auto else_label = builder().insert_label("else");
-    br_df->add_br_target(else_label);
+	// update rdi and rsi according to DF register (0: inc, 1: dec)
+	auto df = read_reg(value_type::u1(), reg_offsets::DF);
+	auto df_test = builder().insert_cmpne(df->val(), builder().insert_constant_i(value_type::u1(), 0)->val());
+	cond_br_node *br_df = (cond_br_node *)builder().insert_cond_br(df_test->val(), nullptr);
 
-    write_reg(reg_offsets::RDI, builder().insert_sub(rdi->val(), cst_8->val())->val());
-    write_reg(reg_offsets::RSI, builder().insert_sub(rsi->val(), cst_8->val())->val());
+	write_reg(reg_offsets::RDI, builder().insert_add(rdi->val(), cst_align->val())->val());
+	write_reg(reg_offsets::RSI, builder().insert_add(rsi->val(), cst_align->val())->val());
+	br_node *br_then = (br_node *)builder().insert_br(nullptr);
 
-    auto endif_label = builder().insert_label("endif");
-    br_then->add_br_target(endif_label);
+	auto else_label = builder().insert_label("else");
+	br_df->add_br_target(else_label);
 
-    break;
+	write_reg(reg_offsets::RDI, builder().insert_sub(rdi->val(), cst_align->val())->val());
+	write_reg(reg_offsets::RSI, builder().insert_sub(rsi->val(), cst_align->val())->val());
+
+	auto endif_label = builder().insert_label("endif");
+	br_then->add_br_target(endif_label);
+
+	break;
   }
 
 	case XED_ICLASS_MOVHPS:
