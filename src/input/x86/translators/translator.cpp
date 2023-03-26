@@ -128,10 +128,12 @@ action_node *translator::write_operand(int opnum, port &value, bool keep_enc)
 			if (!keep_enc) {
 				value_node *flat;
 				switch(val_len) {
+					case 32: flat = builder_.insert_bitcast(value_type::u32(), value); break;
 					case 64: flat = builder_.insert_bitcast(value_type::u64(), value); break;
 					case 128: flat = builder_.insert_bitcast(value_type::u128(), value); break;
 					case 256: flat = builder_.insert_bitcast(value_type::u256(), value); break;
 					case 512: flat = builder_.insert_bitcast(value_type::u512(), value); break;
+					default: throw std::runtime_error("unsupported value width when writing X/Y/ZMM registers");
 				}
 				switch(xed_get_register_width_bits64(xed_get_largest_enclosing_register(reg))) {
 					case 128: return write_reg(enc_reg_off, builder_.insert_zx(value_type::u128(), flat->val())->val());
