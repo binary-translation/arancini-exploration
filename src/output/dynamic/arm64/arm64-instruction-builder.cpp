@@ -8,6 +8,9 @@ using namespace arancini::output::dynamic::arm64;
 #define DEBUG_REGALLOC
 #define DEBUG_STREAM std::cerr
 
+void arm64_instruction_builder::spill() {
+}
+
 void arm64_instruction_builder::emit(machine_code_writer &writer) {
     size_t size;
     uint8_t* encode;
