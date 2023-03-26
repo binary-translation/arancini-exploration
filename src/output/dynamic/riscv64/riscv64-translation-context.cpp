@@ -81,6 +81,7 @@ void riscv64_translation_context::begin_instruction(off_t address, const std::st
 	labels_.clear();
 	nodes_.clear();
 	current_address_ = address;
+	ret_val_ = 0;
 }
 void riscv64_translation_context::end_instruction()
 {
@@ -94,8 +95,8 @@ void riscv64_translation_context::end_block()
 {
 	// TODO Remove/only in debug
 	assembler_.ebreak();
+	assembler_.li(A0, ret_val_);
 	assembler_.ret();
-	// TODO return value?
 }
 void riscv64_translation_context::lower(ir::node *n)
 {
@@ -188,6 +189,9 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise(
 		return materialise_ternary_atomic(*reinterpret_cast<const ternary_atomic_node *>(n));
 	case node_kinds::csel:
 		return materialise_csel(*reinterpret_cast<const csel_node *>(n));
+	case node_kinds::internal_call:
+		materialise_internal_call(*reinterpret_cast<const internal_call_node *>(n));
+		return std::monostate {};
 	default:
 		throw std::runtime_error("unsupported node");
 	}
@@ -1401,4 +1405,19 @@ Register riscv64_translation_context::materialise_csel(const csel_node &n)
 
 	assembler_.Bind(&end);
 	return out_reg;
+}
+
+void riscv64_translation_context::materialise_internal_call(const internal_call_node &n)
+{
+	const auto &function = n.fn();
+	if (function.name() == "handle_syscall") {
+
+		assembler_.sd(materialise_constant(current_address_ + 2), { FP, static_cast<intptr_t>(reg_offsets::PC) });
+		ret_val_ = 1;
+	} else if (function.name() == "handle_int") {
+		// TODO handle argument
+		ret_val_ = 2;
+	} else {
+		throw std::runtime_error("unsupported internal call");
+	}
 }
