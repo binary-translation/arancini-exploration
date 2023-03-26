@@ -44,7 +44,7 @@ call_native:
     addi sp, sp, 80   // Deallocate the stack space
 
     # Set return value to 0 (the error code)
-    li a0, 0
+    # li a0, 0
 
     ret
 .size call_native,.-call_native
