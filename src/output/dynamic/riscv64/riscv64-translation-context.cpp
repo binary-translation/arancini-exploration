@@ -1157,7 +1157,7 @@ standardPath:
 			case value_type_class::signed_integer:
 				assembler_.mulh(out_reg2, src_reg1, src_reg2);
 				if (flags_needed) {
-					assembler_.srai(CF, out_reg, 64);
+					assembler_.srai(CF, out_reg, 63);
 					assembler_.xor_(CF, CF, out_reg2);
 					assembler_.snez(CF, CF);
 				}
