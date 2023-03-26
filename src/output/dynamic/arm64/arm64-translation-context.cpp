@@ -362,9 +362,9 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
     int dst_vreg = alloc_vreg_for_port(n.val());
 
     builder_.csel(virtreg_operand(dst_vreg, n.val().type().element_width()),
-                  vreg_operand_for_port(n.trueval(), false),
-                  vreg_operand_for_port(n.falseval(), false),
-                  vreg_operand_for_port(n.condition(), false));
+                  vreg_operand_for_port(n.trueval()),
+                  vreg_operand_for_port(n.falseval()),
+                  vreg_operand_for_port(n.condition()));
 }
 
 void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
@@ -373,18 +373,18 @@ void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
     switch (n.op()) {
     case shift_op::lsl:
         builder_.lsl(virtreg_operand(dst_vreg, n.val().type().element_width()),
-                     vreg_operand_for_port(n.input(), false),
-                     vreg_operand_for_port(n.amount(), false));
+                     vreg_operand_for_port(n.input()),
+                     vreg_operand_for_port(n.amount()));
         break;
     case shift_op::lsr:
         builder_.lsr(virtreg_operand(dst_vreg, n.val().type().element_width()),
-                     vreg_operand_for_port(n.input(), false),
-                     vreg_operand_for_port(n.amount(), false));
+                     vreg_operand_for_port(n.input()),
+                     vreg_operand_for_port(n.amount()));
         break;
     case shift_op::asr:
         builder_.asr(virtreg_operand(dst_vreg, n.val().type().element_width()),
-                     vreg_operand_for_port(n.input(), false),
-                     vreg_operand_for_port(n.amount(), false));
+                     vreg_operand_for_port(n.input()),
+                     vreg_operand_for_port(n.amount()));
         break;
     default:
         throw std::runtime_error("unsupported shift operation: " +

@@ -193,6 +193,8 @@ private:
 	std::vector<arm64_instruction> instructions_;
 
 	void append(const arm64_instruction &i) { instructions_.push_back(i); }
+
+    void spill();
 };
 } // namespace arancini::output::dynamic::arm64
 
