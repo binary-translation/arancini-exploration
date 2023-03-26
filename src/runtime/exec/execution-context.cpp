@@ -1,6 +1,7 @@
 #include <arancini/runtime/dbt/translation.h>
 #include <arancini/runtime/exec/execution-context.h>
 #include <arancini/runtime/exec/execution-thread.h>
+#include <arancini/runtime/exec/native_syscall.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
 
 #if defined(ARCH_X86_64)
@@ -12,6 +13,8 @@
 #define GM_BASE nullptr
 #endif
 
+#include <asm-generic/ioctls.h>
+#include <sys/uio.h>
 #include <csignal>
 #include <iostream>
 #include <stdexcept>
@@ -98,6 +101,44 @@ int execution_context::internal_call(void *cpu_state, int call)
 	if (call == 1) { // syscall
 		auto x86_state = (x86::x86_cpu_state *)cpu_state;
 		switch (x86_state->RAX) {
+		case 16: // ioctl
+		{
+			// Not sure how many actually needed
+
+			uint64_t arg = x86_state->RDX;
+
+			uint64_t request = x86_state->RSI;
+
+			switch (request) {
+			case TIOCGWINSZ:
+				arg += (uintptr_t)memory_;
+				break;
+			default:
+				std::cerr << "Unknown ioctl request " << std::dec << request << std::endl;
+				x86_state->RAX = -EINVAL;
+				return 0;
+			}
+
+			x86_state->RAX = native_syscall(__NR_ioctl, x86_state->RDI, request, arg);
+			break;
+		}
+		case 20: // writev
+		{
+
+			auto iovec = (const struct iovec *)(x86_state->RSI + (uintptr_t(memory_)));
+
+			auto iocnt = x86_state->RDX;
+
+			struct iovec iovec_new[iocnt];
+
+			for (auto i = 0ull; i < iocnt; ++i) {
+				iovec_new[i].iov_base = reinterpret_cast<void *>((uintptr_t)iovec[i].iov_base + (uintptr_t)memory_);
+				iovec_new[i].iov_len = iovec[i].iov_len;
+			}
+
+			x86_state->RAX = native_syscall(__NR_writev, x86_state->RDI, (uintptr_t)iovec_new, iocnt);
+			break;
+		}
 		case 158: // arch_prctl
 		{
 			switch (x86_state->RDI) { // code
