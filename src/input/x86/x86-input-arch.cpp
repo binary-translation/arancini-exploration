@@ -35,8 +35,10 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_MOVD:
 	case XED_ICLASS_MOVSX:
 	case XED_ICLASS_MOVSXD:
-	case XED_ICLASS_MOVSD:
 	case XED_ICLASS_MOVSD_XMM:
+	case XED_ICLASS_MOVSB:
+	case XED_ICLASS_MOVSW:
+	case XED_ICLASS_MOVSD:
 	case XED_ICLASS_MOVSQ:
 	case XED_ICLASS_MOVZX:
 	case XED_ICLASS_MOVHPS:

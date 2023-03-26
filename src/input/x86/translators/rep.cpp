@@ -141,7 +141,8 @@ void rep_translator::do_translate()
 
     // movsq [rdi], [rsi]
 		auto rsi = read_reg(value_type::u64(), reg_offsets::RSI);
-    auto rsi_val = builder().insert_read_mem(value_type::u64(), rsi->val());
+	    const value_type &vt = addr_align == 8 ? value_type::u64() : addr_align == 4 ? value_type::u32() : addr_align == 2 ? value_type::u16() : value_type::u8();
+	  	auto rsi_val = builder().insert_read_mem(vt, rsi->val());
 		auto rdi = read_reg(value_type::u64(), reg_offsets::RDI);
 		builder().insert_write_mem(rdi->val(), rsi_val->val());
 
