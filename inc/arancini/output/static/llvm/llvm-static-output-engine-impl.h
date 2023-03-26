@@ -60,6 +60,10 @@ private:
 		::llvm::IntegerType *i32;
 		::llvm::IntegerType *i64;
 		::llvm::IntegerType *i128;
+		::llvm::IntegerType *i256;
+		::llvm::IntegerType *i512;
+		::llvm::Type *f32;
+		::llvm::Type *f64;
 		::llvm::StructType *cpu_state;
 		::llvm::PointerType *cpu_state_ptr;
 		::llvm::FunctionType *main_fn;

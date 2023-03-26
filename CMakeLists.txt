@@ -9,6 +9,8 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 # Generate the compile commands for development
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+# Needed to get stdlibs in compile_commands.json on NixOS
+set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
 
 # Get host architecture
 include(cmake/utils.cmake)
