@@ -577,6 +577,10 @@ Register riscv64_translation_context::materialise_bit_extract(const bit_extract_
 
 Register riscv64_translation_context::materialise_bit_insert(const bit_insert_node &n)
 {
+	if (!is_gpr(n.val())) {
+		throw std::runtime_error("Unsupported bit insert width.");
+	}
+
 	auto [out_reg, valid] = allocate_register(&n.val());
 	if (!valid) {
 		return out_reg;
