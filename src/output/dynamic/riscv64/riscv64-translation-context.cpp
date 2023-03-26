@@ -75,6 +75,8 @@ Register riscv64_translation_context::get_secondary_register(const port *p)
 	return reg;
 }
 
+bool insert_ebreak = false;
+
 /**
  * Adds a NOP with a non standard encoding to the generated instructions as a marker.
  * @param payload The immediate to use in the immediate field of the NOP
@@ -88,7 +90,9 @@ void riscv64_translation_context::add_marker(int payload)
 void riscv64_translation_context::begin_block()
 {
 	// TODO Remove/only in debug
-	assembler_.ebreak();
+	if (insert_ebreak) {
+		assembler_.ebreak();
+	}
 
 	add_marker(1);
 }
@@ -104,7 +108,15 @@ void riscv64_translation_context::begin_instruction(off_t address, const std::st
 	nodes_.clear();
 	current_address_ = address;
 	ret_val_ = 0;
+
+	// Enable automatic breakpoints after certain program counter
+//	if (address == 0x401cb3) {
+//		insert_ebreak = true;
+//		assembler_.ebreak();
+//	}
+
 }
+
 void riscv64_translation_context::end_instruction()
 {
 	for (const auto &item : nodes_) {
@@ -116,10 +128,13 @@ void riscv64_translation_context::end_instruction()
 void riscv64_translation_context::end_block()
 {
 	// TODO Remove/only in debug
-	assembler_.ebreak();
+	if (insert_ebreak) {
+		assembler_.ebreak();
+	}
 	assembler_.li(A0, ret_val_);
 	assembler_.ret();
 }
+
 void riscv64_translation_context::lower(ir::node *n)
 {
 	// Defer until end of block (when generation is finished)
