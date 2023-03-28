@@ -185,6 +185,8 @@ struct arm64_immediate_operand {
 	};
     uint8_t width = 0;
 
+    arm64_immediate_operand() = default;
+
 	arm64_immediate_operand(unsigned long v, uint8_t width)
 		: u64(v)
         , width(width)
@@ -194,6 +196,16 @@ struct arm64_immediate_operand {
 
 struct arm64_shift_operand : public arm64_immediate_operand {
     // TODO: check fit in 48-bit shift specifier
+    std::string modifier;
+
+    arm64_shift_operand() = default;
+
+    arm64_shift_operand(const std::string &modifier,
+                        size_t amount = 0, size_t width = 64)
+        : arm64_immediate_operand(amount, width)
+    {
+        this->modifier = modifier;
+    }
 };
 
 struct arm64_label_operand {
@@ -225,11 +237,11 @@ struct arm64_operand {
 		arm64_vreg_op vregop;
 		arm64_memory_operand memop;
 		arm64_immediate_operand immop;
-		arm64_shift_operand shiftop;
 	};
 
-    arm64_label_operand labelop;
     arm64_cond_operand condop;
+    arm64_label_operand labelop;
+    arm64_shift_operand shiftop;
 
 	bool use, def;
 
@@ -577,6 +589,13 @@ struct arm64_instruction {
                                  const arm64_operand &src1,
                                  const arm64_operand &src2) {
         return arm64_instruction("add", def(dst), use(src1), use(src2));
+    }
+
+    static arm64_instruction add(const arm64_operand &dst,
+                                 const arm64_operand &src1,
+                                 const arm64_operand &src2,
+                                 const arm64_operand &shift) {
+        return arm64_instruction("add", def(dst), use(src1), use(src2), use(shift));
     }
 
     static arm64_instruction sub(const arm64_operand &dst,

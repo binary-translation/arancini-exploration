@@ -407,12 +407,14 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 	switch (n.op()) {
 	case cast_op::zx:
 		builder_.movz(virtreg_operand(dst_vreg, n.val().type().element_width()),
-                      vreg_operand_for_port(n.source_value()), imm_operand(0, 64));
+                      vreg_operand_for_port(n.source_value()),
+                      arm64_shift_operand("LSL", 0, 64));
 		break;
 
 	case cast_op::sx:
 		builder_.movn(virtreg_operand(dst_vreg, n.val().type().element_width()),
-                      vreg_operand_for_port(n.source_value(), false), imm_operand(0, 64));
+                      vreg_operand_for_port(n.source_value(), false),
+                      arm64_shift_operand("LSL", 0, 64));
 		break;
 
 	case cast_op::bitcast:

@@ -63,9 +63,10 @@ void arm64_operand::dump(std::ostream &os) const {
         os << labelop.name;
         break;
     case arm64_operand_type::shift:
-        os << "LSL #0x" << std::hex << shiftop.u64;
+        if (!shiftop.modifier.empty())
+            os << shiftop.modifier << ' ';
+        os << "#0x" << std::hex << shiftop.u64;
         break;
-
 	case arm64_operand_type::imm:
 		os << "#0x" << std::hex << immop.u64;
 		break;
