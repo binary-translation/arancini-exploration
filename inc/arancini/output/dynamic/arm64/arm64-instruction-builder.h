@@ -17,38 +17,33 @@ public:
         append(arm64_instruction::add(dst, src1, src2));
     }
 
-	void add(const arm64_operand &dst,
-             const arm64_operand &src) {
-        append(arm64_instruction::add(dst, src));
-    }
-
 	void sub(const arm64_operand &dst,
              const arm64_operand &src1,
              const arm64_operand &src2) {
         append(arm64_instruction::sub(dst, src1, src2));
     }
 
-	void sub(const arm64_operand &dst,
-             const arm64_operand &src) {
-        append(arm64_instruction::sub(dst, src));
+	void or_(const arm64_operand &dst,
+             const arm64_operand &src1,
+             const arm64_operand &src2) {
+        append(arm64_instruction::or_(dst, src2, src2));
     }
-
-	void or_(const arm64_operand &dst, const arm64_operand &src) {
-        append(arm64_instruction::or_(dst, src));
-    }
-
-	void and_(const arm64_operand &dst, const arm64_operand &src) { append(arm64_instruction::and_(dst, src)); }
 
 	void and_(const arm64_operand &dst,
               const arm64_operand &src1,
-              const arm64_operand &src2)
-    {
+              const arm64_operand &src2) {
         append(arm64_instruction::and_(dst, src1, src2));
     }
 
-	void xor_(const arm64_operand &dst, const arm64_operand &src) { append(arm64_instruction::xor_(dst, src)); }
+	void xor_(const arm64_operand &dst,
+              const arm64_operand &src1,
+              const arm64_operand &src2) {
+        append(arm64_instruction::xor_(dst, src1, src2));
+    }
 
-	void not_(const arm64_operand &dst, const arm64_operand &src) { append(arm64_instruction::not_(dst, src)); }
+	void not_(const arm64_operand &dst, const arm64_operand &src) {
+        append(arm64_instruction::not_(dst, src));
+    }
 
     void movn(const arm64_operand &dst,
               const arm64_operand &src,
