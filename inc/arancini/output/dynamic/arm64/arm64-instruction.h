@@ -604,6 +604,13 @@ struct arm64_instruction {
         return arm64_instruction("sub", def(dst), use(src1), use(src2));
     }
 
+    static arm64_instruction sub(const arm64_operand &dst,
+                                 const arm64_operand &src1,
+                                 const arm64_operand &src2,
+                                 const arm64_operand &shift) {
+        return arm64_instruction("sub", def(dst), use(src1), use(src2), use(shift));
+    }
+
     static arm64_instruction or_(const arm64_operand &dst,
                                  const arm64_operand &src1,
                                  const arm64_operand &src2) {
