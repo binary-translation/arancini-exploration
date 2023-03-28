@@ -174,24 +174,37 @@ struct arm64_memory_operand {
 // TODO: fix this
 struct arm64_immediate_operand {
 	union {
-		unsigned char u8;
-		unsigned short u16;
-		unsigned int u32;
 		unsigned long int u64;
-		signed char s8;
-		signed short s16;
-		signed int s32;
 		signed long int s64;
 	};
+    bool sign = 0;
     uint8_t width = 0;
 
     arm64_immediate_operand() = default;
 
-	arm64_immediate_operand(unsigned long v, uint8_t width)
+	arm64_immediate_operand(unsigned long int v, uint8_t width)
 		: u64(v)
+        , sign(false)
         , width(width)
 	{
+        if (width && !fits(v, width))
+            throw std::runtime_error("Specified immediate does not fit in width: " +
+                                     std::to_string(width) + " " + std::to_string(v));
 	}
+
+	arm64_immediate_operand(signed long int v, uint8_t width)
+		: s64(v)
+        , sign(true)
+        , width(width)
+	{
+        if (width && !fits(v, width))
+            throw std::runtime_error("Specified immediate does not fit in width: " +
+                                     std::to_string(width) + " " + std::to_string(v));
+	}
+private:
+    bool fits(uint64_t v, uint8_t width) {
+        return (v & ((1llu << (width - 1)) - 1)) == v;
+    }
 };
 
 struct arm64_shift_operand : public arm64_immediate_operand {
