@@ -34,7 +34,7 @@ public:
 	void or_(const arm64_operand &dst,
              const arm64_operand &src1,
              const arm64_operand &src2) {
-        append(arm64_instruction::or_(dst, src2, src2));
+        append(arm64_instruction::or_(dst, src1, src2));
     }
 
 	void and_(const arm64_operand &dst,
