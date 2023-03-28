@@ -579,38 +579,28 @@ struct arm64_instruction {
         return arm64_instruction("add", def(dst), use(src1), use(src2));
     }
 
-    static arm64_instruction add(const arm64_operand &dst,
-                                 const arm64_operand &src) {
-        return arm64_instruction("add", usedef(dst), use(src));
-    }
-
     static arm64_instruction sub(const arm64_operand &dst,
                                  const arm64_operand &src1,
                                  const arm64_operand &src2) {
         return arm64_instruction("sub", def(dst), use(src1), use(src2));
     }
 
-    static arm64_instruction sub(const arm64_operand &dst,
-                                 const arm64_operand &src) {
-        return arm64_instruction("sub", def(dst), use(src));
-    }
-
-    static arm64_instruction or_(const arm64_operand &dst, const arm64_operand &src) {
-        return arm64_instruction("orr", usedef(dst), use(src), use(dst));
-    }
-
-    static arm64_instruction and_(const arm64_operand &dst, const arm64_operand &src) {
-        return arm64_instruction("and", usedef(dst), use(src));
+    static arm64_instruction or_(const arm64_operand &dst,
+                                 const arm64_operand &src1,
+                                 const arm64_operand &src2) {
+        return arm64_instruction("orr", def(dst), use(src1), use(src2));
     }
 
     static arm64_instruction and_(const arm64_operand &dst,
                                   const arm64_operand &src1,
                                   const arm64_operand &src2) {
-        return arm64_instruction("and", usedef(dst), use(src1), use(src2));
+        return arm64_instruction("and", def(dst), use(src1), use(src2));
     }
 
-    static arm64_instruction xor_(const arm64_operand &dst, const arm64_operand &src) {
-        return arm64_instruction("xor", usedef(dst), use(src));
+    static arm64_instruction xor_(const arm64_operand &dst,
+                                  const arm64_operand &src1,
+                                  const arm64_operand &src2) {
+        return arm64_instruction("xor", def(dst), use(src1), use(src2));
     }
 
     static arm64_instruction not_(const arm64_operand &dst, const arm64_operand &src) {
@@ -714,12 +704,12 @@ struct arm64_instruction {
 
     static arm64_instruction ldr(const arm64_operand &dst,
                                  const arm64_operand &base) {
-        return arm64_instruction("ldr", usedef(dst), use(base));
+        return arm64_instruction("ldr", def(dst), use(base));
     }
 
     static arm64_instruction str(const arm64_operand &src,
                                  const arm64_operand &base) {
-        return arm64_instruction("str", use(src), usedef(base));
+        return arm64_instruction("str", use(src), def(base));
     }
 
     static arm64_instruction mul(const arm64_operand &dest,

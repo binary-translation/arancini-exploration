@@ -2,6 +2,7 @@
 
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
 
+#include <cctype>
 #include <unordered_map>
 
 using namespace arancini::output::dynamic::arm64;
@@ -21,6 +22,19 @@ void arm64_translation_context::begin_block() {
     instr_cnt_ = 0;
 }
 
+std::string labelify(const std::string &str) {
+    std::string label;
+    for (auto c : str) {
+        if (std::ispunct(c))
+            c = '_';
+        if (std::isspace(c))
+            c = '_';
+        label.push_back(c);
+    }
+
+    return label;
+}
+
 void arm64_translation_context::begin_instruction(off_t address, const std::string &disasm) {
 	instruction_index_to_guest_[builder_.nr_instructions()] = address;
 
@@ -29,7 +43,7 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
 
     instr_cnt_++;
 
-    builder_.insert_sep("____" + disasm);
+    builder_.insert_sep("S" + std::to_string(instr_cnt_) + labelify(disasm));
 }
 
 void arm64_translation_context::end_instruction() { }
@@ -331,13 +345,19 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                       vreg_operand_for_port(n.rhs()));
 		break;
 	case binary_arith_op::bor:
-		builder_.or_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.rhs()));
+		builder_.or_(virtreg_operand(val_vreg, w),
+                     vreg_operand_for_port(n.lhs()),
+                     vreg_operand_for_port(n.rhs()));
 		break;
 	case binary_arith_op::band:
-		builder_.and_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.rhs()));
+		builder_.and_(virtreg_operand(val_vreg, w),
+                      vreg_operand_for_port(n.lhs()),
+                      vreg_operand_for_port(n.rhs()));
 		break;
 	case binary_arith_op::bxor:
-		builder_.xor_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.rhs()));
+		builder_.xor_(virtreg_operand(val_vreg, w),
+                      vreg_operand_for_port(n.lhs()),
+                      vreg_operand_for_port(n.rhs()));
 		break;
 	case binary_arith_op::cmpeq:
         // NOTE: set*() will modify the flags
@@ -373,6 +393,7 @@ void arm64_translation_context::materialise_unary_arith(const unary_arith_node &
         // neg: ~reg + 1 for complement-of-2
         builder_.not_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.lhs()));
         builder_.add(virtreg_operand(val_vreg, w),
+                     virtreg_operand(val_vreg, w),
                      imm_operand(1, 64));
         break;
     default:
