@@ -56,12 +56,17 @@ const arm64_physreg_op CF(arm64_physreg_op::x11);
 const arm64_physreg_op OF(arm64_physreg_op::x12);
 const arm64_physreg_op SF(arm64_physreg_op::x13);
 
-static std::unordered_map<unsigned long, arm64_physreg_op> flag_map {
-	{ (unsigned long)reg_offsets::ZF, ZF },
-	{ (unsigned long)reg_offsets::CF, CF },
-	{ (unsigned long)reg_offsets::OF, OF },
-	{ (unsigned long)reg_offsets::SF, SF },
+static std::unordered_map<unsigned long, int> flag_map {
+	{ (unsigned long)reg_offsets::ZF, {} },
+	{ (unsigned long)reg_offsets::CF, {} },
+	{ (unsigned long)reg_offsets::OF, {} },
+	{ (unsigned long)reg_offsets::SF, {} },
 };
+
+static bool is_gpr(const port &p) {
+    auto w = p.type().element_width();
+    return w == 8 || w == 16 || w == 32 || w == 64;
+}
 
 static bool is_flag(const port &p) {
     return p.type().element_width() == 1;
@@ -190,13 +195,19 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
 }
 
 void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
+	int w = n.value().type().element_width();
+
+    if (!is_gpr(n.value()) && !is_flag(n.value()))
+        throw std::runtime_error("Invalid destination width on register write: "
+                                 + std::to_string(w));
+
+    std::cout << "Flag?: " << n.value().type().element_width() << "\n";
+
     // TODO: deal with widths
     arm64_operand reg;
-	int w = n.value().type().element_width() == 1 ? 8 : n.val().type().element_width();
-
     if (is_flag(n.value()) && is_flag_port(n.value())) {
-        // TODO: check if materialised
-        reg = flag_map.at(n.regoff());
+        std::cout << "Flag!: " << flag_map.at(n.regoff()) << "\n";
+        reg = virtreg_operand(flag_map.at(n.regoff()), 64);
     } else {
         reg = vreg_operand_for_port(n.value());
     }
@@ -285,10 +296,11 @@ void arm64_translation_context::materialise_constant(const constant_node &n) {
 
 void arm64_translation_context::materialise_binary_arith(const binary_arith_node &n) {
 	int val_vreg = alloc_vreg_for_port(n.val());
-	int z_vreg = alloc_vreg_for_port(n.zero());
-	int n_vreg = alloc_vreg_for_port(n.negative());
-	int v_vreg = alloc_vreg_for_port(n.overflow());
-	int c_vreg = alloc_vreg_for_port(n.carry());
+
+    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg_for_port(n.zero());
+    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg_for_port(n.negative());
+    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg_for_port(n.overflow());
+    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg_for_port(n.carry());
 
 	int w = n.val().type().element_width();
 
@@ -342,10 +354,10 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 	}
 
     // FIXME Another write-reg node generated?
-	builder_.setz(virtreg_operand(z_vreg, 8));
-	builder_.seto(virtreg_operand(v_vreg, 8));
-	builder_.setc(virtreg_operand(c_vreg, 8));
-	builder_.sets(virtreg_operand(n_vreg, 8));
+	builder_.setz(virtreg_operand(flag_map[(unsigned long)reg_offsets::ZF], 64));
+	builder_.sets(virtreg_operand(flag_map[(unsigned long)reg_offsets::SF], 64));
+	builder_.seto(virtreg_operand(flag_map[(unsigned long)reg_offsets::OF], 64));
+	builder_.setc(virtreg_operand(flag_map[(unsigned long)reg_offsets::CF], 64));
 }
 
 void arm64_translation_context::materialise_unary_arith(const unary_arith_node &n) {
