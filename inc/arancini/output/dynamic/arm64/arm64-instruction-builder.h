@@ -17,6 +17,13 @@ public:
         append(arm64_instruction::add(dst, src1, src2));
     }
 
+	void add(const arm64_operand &dst,
+             const arm64_operand &src1,
+             const arm64_operand &src2,
+             const arm64_operand &shift) {
+        append(arm64_instruction::add(dst, src1, src2, shift));
+    }
+
 	void sub(const arm64_operand &dst,
              const arm64_operand &src1,
              const arm64_operand &src2) {
