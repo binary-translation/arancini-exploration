@@ -2,6 +2,8 @@
 
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
 
+#include <unordered_map>
+
 using namespace arancini::output::dynamic::arm64;
 using namespace arancini::ir;
 
@@ -47,6 +49,29 @@ void arm64_translation_context::end_block() {
 
 void arm64_translation_context::lower(ir::node *n) {
     materialise(n);
+}
+
+const arm64_physreg_op ZF(arm64_physreg_op::x10);
+const arm64_physreg_op CF(arm64_physreg_op::x11);
+const arm64_physreg_op OF(arm64_physreg_op::x12);
+const arm64_physreg_op SF(arm64_physreg_op::x13);
+
+static std::unordered_map<unsigned long, arm64_physreg_op> flag_map {
+	{ (unsigned long)reg_offsets::ZF, ZF },
+	{ (unsigned long)reg_offsets::CF, CF },
+	{ (unsigned long)reg_offsets::OF, OF },
+	{ (unsigned long)reg_offsets::SF, SF },
+};
+
+static bool is_flag(const port &p) {
+    return p.type().element_width() == 1;
+}
+
+static inline bool is_flag_port(const port &value) {
+	return value.kind() == port_kinds::zero ||
+           value.kind() == port_kinds::carry ||
+           value.kind() == port_kinds::negative ||
+           value.kind() == port_kinds::overflow;
 }
 
 static arm64_operand virtreg_operand(unsigned int index, int width) {
@@ -166,11 +191,17 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
 
 void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     // TODO: deal with widths
-    int value_vreg = alloc_vreg_for_port(n.value());
+    arm64_operand reg;
 	int w = n.value().type().element_width() == 1 ? 8 : n.val().type().element_width();
 
-    builder_.str(virtreg_operand(value_vreg, w),
-                 guestreg_memory_operand(w, n.regoff()));
+    if (is_flag(n.value()) && is_flag_port(n.value())) {
+        // TODO: check if materialised
+        reg = flag_map.at(n.regoff());
+    } else {
+        reg = vreg_operand_for_port(n.value());
+    }
+
+    builder_.str(reg, guestreg_memory_operand(w, n.regoff()));
 }
 
 void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
@@ -192,13 +223,13 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
 void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
 	int w = n.value().type().element_width();
 
-	materialise(n.address().owner());
-	int addr_vreg = vreg_for_port(n.address());
+	auto addr_vreg = vreg_operand_for_port(n.address());
 
+    // TODO: separate to function
     int addr = alloc_vreg();
     builder_.add(virtreg_operand(addr, 64),
                  memory_base_reg,
-                 virtreg_operand(addr_vreg, 64));
+                 addr_vreg);
 
     auto mem = arm64_memory_operand(arm64_vreg_op(addr, w), 0, false, true);
 	builder_.str(vreg_operand_for_port(n.value()),
@@ -209,8 +240,9 @@ void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
 	int dst_vreg = alloc_vreg_for_port(n.val());
     int w = n.val().type().element_width();
 
-	builder_.mov(virtreg_operand(dst_vreg, w),
-                 arm64_operand(arm64_immediate_operand(this_pc_, 64)));
+    // TODO: check out immediate size
+	builder_.ldr(virtreg_operand(dst_vreg, w),
+                 guestreg_memory_operand(w, static_cast<int>(reg_offsets::PC)));
 }
 
 void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
@@ -235,6 +267,7 @@ void arm64_translation_context::materialise_br(const br_node &n) {
 void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
     materialise(n.target());
 
+    // TODO: width
     builder_.cmp(vreg_operand_for_port(n.cond()),
                  imm_operand(0, 64));
     builder_.beq(n.target()->name());
@@ -244,6 +277,8 @@ void arm64_translation_context::materialise_constant(const constant_node &n) {
     // TODO: width
 	int dst_vreg = alloc_vreg_for_port(n.val());
 
+    // TODO: check width
+    // TODO: what if floating point?
 	builder_.mov(virtreg_operand(dst_vreg, n.val().type().element_width()),
                  imm_operand(n.const_val_i(), 64));
 }
@@ -306,6 +341,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 		throw std::runtime_error("unsupported binary arithmetic operation " + std::to_string((int)n.op()));
 	}
 
+    // FIXME Another write-reg node generated?
 	builder_.setz(virtreg_operand(z_vreg, 8));
 	builder_.seto(virtreg_operand(v_vreg, 8));
 	builder_.setc(virtreg_operand(c_vreg, 8));
@@ -316,8 +352,6 @@ void arm64_translation_context::materialise_unary_arith(const unary_arith_node &
 	int val_vreg = alloc_vreg_for_port(n.val());
 
     int w = n.val().type().element_width();
-
-    materialise(n.lhs().owner());
 
     switch (n.op()) {
     case unary_arith_op::bnot:
