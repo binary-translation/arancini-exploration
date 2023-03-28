@@ -318,16 +318,31 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 
 	int w = n.val().type().element_width();
 
+    const char* mod = (w == 16 ? "UXTB" : "UXTH");
 	switch (n.op()) {
 	case binary_arith_op::add:
-		builder_.add(virtreg_operand(val_vreg, w),
-                     vreg_operand_for_port(n.lhs()),
-                     vreg_operand_for_port(n.rhs()));
+        if (w == 8 || w == 16) {
+            builder_.add(virtreg_operand(val_vreg, w),
+                         vreg_operand_for_port(n.lhs()),
+                         vreg_operand_for_port(n.rhs()),
+                         arm64_shift_operand(mod, 0, 64));
+        } else {
+            builder_.add(virtreg_operand(val_vreg, w),
+                         vreg_operand_for_port(n.lhs()),
+                         vreg_operand_for_port(n.rhs()));
+        }
 		break;
 	case binary_arith_op::sub:
-		builder_.sub(virtreg_operand(val_vreg, w),
-                     vreg_operand_for_port(n.lhs()),
-                     vreg_operand_for_port(n.rhs()));
+        if (w == 8 || w == 16) {
+            builder_.add(virtreg_operand(val_vreg, w),
+                         vreg_operand_for_port(n.lhs()),
+                         vreg_operand_for_port(n.rhs()),
+                         arm64_shift_operand(mod, 0, 64));
+        } else {
+            builder_.add(virtreg_operand(val_vreg, w),
+                         vreg_operand_for_port(n.lhs()),
+                         vreg_operand_for_port(n.rhs()));
+        }
 		break;
 	case binary_arith_op::mul:
 		builder_.mul(virtreg_operand(val_vreg, w),
