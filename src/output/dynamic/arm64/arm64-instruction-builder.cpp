@@ -176,7 +176,8 @@ void arm64_instruction_builder::allocate() {
     // SP (x31),
     // FP (x29),
     // zero (x31)
-	std::bitset<32> avail_physregs = 0x5FFFFFFFF;
+    // Return to trampoline (x30)
+	std::bitset<32> avail_physregs = 0x1FFFFFFFF;
 
 	for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
 		auto &insn = *RI;
