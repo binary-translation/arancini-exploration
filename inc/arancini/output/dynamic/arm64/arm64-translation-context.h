@@ -26,6 +26,7 @@ private:
 	std::set<ir::node *> materialised_nodes_;
 	std::map<const ir::port *, int> port_to_vreg_;
 	std::map<unsigned long, off_t> instruction_index_to_guest_;
+    int ret_;
 	int next_vreg_;
 	off_t this_pc_;
     size_t instr_cnt_ = 0;
@@ -41,8 +42,6 @@ private:
 		return v;
 	}
 
-	// operand operand_for_port(ir::port &p);
-	// operand vreg_operand_for_port(ir::port &p);
 	arm64_operand vreg_operand_for_port(ir::port &p, bool constant_fold = false);
 	int vreg_for_port(ir::port &p) const { return port_to_vreg_.at(&p); }
 

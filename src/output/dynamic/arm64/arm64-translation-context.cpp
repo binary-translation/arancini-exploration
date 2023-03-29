@@ -18,53 +18,6 @@ enum class reg_offsets {
 #undef DEFREG
 };
 
-void arm64_translation_context::begin_block() {
-    instr_cnt_ = 0;
-}
-
-std::string labelify(const std::string &str) {
-    std::string label;
-    for (auto c : str) {
-        if (std::ispunct(c))
-            c = '_';
-        if (std::isspace(c))
-            c = '_';
-        label.push_back(c);
-    }
-
-    return label;
-}
-
-void arm64_translation_context::begin_instruction(off_t address, const std::string &disasm) {
-	instruction_index_to_guest_[builder_.nr_instructions()] = address;
-
-	this_pc_ = address;
-	std::cerr << "  " << std::hex << address << ": " << disasm << std::endl;
-
-    instr_cnt_++;
-
-    builder_.insert_sep("S" + std::to_string(instr_cnt_) + labelify(disasm));
-}
-
-void arm64_translation_context::end_instruction() { }
-
-void arm64_translation_context::end_block() {
-	do_register_allocation();
-
-    // Return value in x0 = 0;
-	builder_.mov(arm64_operand(arm64_physreg_op(arm64_physreg_op::x0)),
-                 arm64_operand(arm64_physreg_op(arm64_physreg_op::xzr_sp)));
-	builder_.ret();
-
-	builder_.dump(std::cerr);
-
-	builder_.emit(writer());
-}
-
-void arm64_translation_context::lower(ir::node *n) {
-    materialise(n);
-}
-
 const arm64_physreg_op ZF(arm64_physreg_op::x10);
 const arm64_physreg_op CF(arm64_physreg_op::x11);
 const arm64_physreg_op OF(arm64_physreg_op::x12);
@@ -152,6 +105,55 @@ static void func_push_args(arm64_instruction_builder *builder, const
     }
 }
 
+void arm64_translation_context::begin_block() {
+    ret_ = 0;
+    instr_cnt_ = 0;
+    builder_ = arm64_instruction_builder();
+}
+
+std::string labelify(const std::string &str) {
+    std::string label;
+    for (auto c : str) {
+        if (std::ispunct(c))
+            c = '_';
+        if (std::isspace(c))
+            c = '_';
+        label.push_back(c);
+    }
+
+    return label;
+}
+
+void arm64_translation_context::begin_instruction(off_t address, const std::string &disasm) {
+	instruction_index_to_guest_[builder_.nr_instructions()] = address;
+
+	this_pc_ = address;
+	std::cerr << "  " << std::hex << address << ": " << disasm << std::endl;
+
+    instr_cnt_++;
+
+    builder_.insert_sep("S" + std::to_string(instr_cnt_) + labelify(disasm));
+}
+
+void arm64_translation_context::end_instruction() { }
+
+void arm64_translation_context::end_block() {
+	do_register_allocation();
+
+    // Return value in x0 = 0;
+	builder_.mov(arm64_operand(arm64_physreg_op(arm64_physreg_op::x0)),
+                 imm_operand(ret_, 64));
+	builder_.ret();
+
+	// builder_.dump(std::cerr);
+
+	builder_.emit(writer());
+}
+
+void arm64_translation_context::lower(ir::node *n) {
+    materialise(n);
+}
+
 void arm64_translation_context::materialise(const ir::node* n) {
     if (!n)
         throw std::runtime_error("ARM64 DBT received NULL pointer to node");
@@ -215,12 +217,9 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
         throw std::runtime_error("Invalid destination width on register write: "
                                  + std::to_string(w));
 
-    std::cout << "Flag?: " << n.value().type().element_width() << "\n";
-
     // TODO: deal with widths
     arm64_operand reg;
     if (is_flag(n.value()) && is_flag_port(n.value())) {
-        std::cout << "Flag!: " << flag_map.at(n.regoff()) << "\n";
         reg = virtreg_operand(flag_map.at(n.regoff()), 64);
     } else {
         reg = vreg_operand_for_port(n.value());
@@ -302,10 +301,12 @@ void arm64_translation_context::materialise_constant(const constant_node &n) {
     // TODO: width
 	int dst_vreg = alloc_vreg_for_port(n.val());
 
+    int w = n.val().type().element_width();
+
     // TODO: check width
     // TODO: what if floating point?
-	builder_.mov(virtreg_operand(dst_vreg, n.val().type().element_width()),
-                 imm_operand(n.const_val_i(), 64));
+	builder_.mov(virtreg_operand(dst_vreg, w),
+                 imm_operand(n.const_val_i(), w));
 }
 
 void arm64_translation_context::materialise_binary_arith(const binary_arith_node &n) {
@@ -318,7 +319,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 
 	int w = n.val().type().element_width();
 
-    const char* mod = (w == 16 ? "UXTB" : "UXTH");
+    // TODO: check
+    const char* mod = (w == 16 ? "UXTX" : "UXTX");
 	switch (n.op()) {
 	case binary_arith_op::add:
         if (w == 8 || w == 16) {
@@ -497,8 +499,17 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
 
 void arm64_translation_context::materialise_internal_call(const internal_call_node &n) {
     // TODO
-    func_push_args(&builder_, n.args());
-    builder_.bl(n.fn().name());
+    // func_push_args(&builder_, n.args());
+    // builder_.bl(n.fn().name());
+    if (n.fn().name() == "handle_syscall") {
+        builder_.str(imm_operand(this_pc_ + 2, 64),
+                     guestreg_memory_operand(64, static_cast<int>(reg_offsets::PC)));
+        ret_ = 1;
+    } else if (n.fn().name() == "handle_int") {
+        ret_ = 2;
+    } else {
+        throw std::runtime_error("unsupported internal call");
+    }
 }
 
 void arm64_translation_context::do_register_allocation() { builder_.allocate(); }

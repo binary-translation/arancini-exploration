@@ -5,7 +5,7 @@
 
 using namespace arancini::output::dynamic::arm64;
 
-#define DEBUG_REGALLOC
+// #define DEBUG_REGALLOC
 #define DEBUG_STREAM std::cerr
 
 void arm64_instruction_builder::spill() {
@@ -20,7 +20,7 @@ void arm64_instruction_builder::emit(machine_code_writer &writer) {
         const auto &insn = instructions_[i];
 
         if (insn.is_dead())
-            return;
+            continue;
 
         const auto &operands = insn.get_operands();
 
@@ -148,9 +148,10 @@ void arm64_instruction_builder::emit(machine_code_writer &writer) {
             (void)0;
             // throw std::runtime_error("unsupported operand form");
         }
-
-        dump(assembly);
     }
+
+    dump(assembly);
+    std::cerr << assembly.str() << '\n';
 
     size = asm_.assemble(assembly.str().c_str(), &encode);
 
@@ -249,12 +250,6 @@ void arm64_instruction_builder::allocate() {
 					auto allocation = avail_physregs._Find_first();
 
                     // TODO: register spilling
-                    // Choose SP
-                    if (allocation == 30) {
-                        allocation = 1; // set to x1
-
-                        std::cerr << "Run out of registers for block\n";
-                    }
 
 					avail_physregs.flip(allocation);
 
