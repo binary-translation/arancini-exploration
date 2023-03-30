@@ -332,7 +332,7 @@ void arm64_translation_context::materialise_constant(const constant_node &n) {
 
     // TODO: what if floating point?
     arm64_operand op;
-    if (w <= 16)
+    if (arm64_immediate_operand::fits(n.const_val_i(), w))
         op = imm_operand(n.const_val_i(), w);
     else
         op = mov_immediate(n.const_val_i(), w);

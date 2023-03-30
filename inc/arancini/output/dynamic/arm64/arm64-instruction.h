@@ -201,8 +201,8 @@ struct arm64_immediate_operand {
             throw std::runtime_error("Specified immediate does not fit in width: " +
                                      std::to_string(width) + " " + std::to_string(v));
 	}
-private:
-    bool fits(uint64_t v, uint8_t width) {
+
+    static bool fits(uint64_t v, uint8_t width) {
         return (v & ((1llu << (width - 1)) - 1)) == v;
     }
 };
