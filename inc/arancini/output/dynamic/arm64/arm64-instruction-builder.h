@@ -65,6 +65,12 @@ public:
         append(arm64_instruction::movz(dst, src, shift));
     }
 
+    void movk(const arm64_operand &dst,
+              const arm64_operand &src,
+              const arm64_operand &shift) {
+        append(arm64_instruction::movk(dst, src, shift));
+    }
+
     void mov(const arm64_operand &dst, const arm64_operand &src) { append(arm64_instruction::mov(dst, src)); }
 
 	void setz(const arm64_operand &dst) {

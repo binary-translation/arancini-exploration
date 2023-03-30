@@ -299,6 +299,7 @@ void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
 
 void arm64_translation_context::materialise_constant(const constant_node &n) {
     // TODO: width
+    // TODO: handle immediate size that cannot be stored
 	int dst_vreg = alloc_vreg_for_port(n.val());
 
     int w = n.val().type().element_width();
@@ -502,7 +503,21 @@ void arm64_translation_context::materialise_internal_call(const internal_call_no
     // func_push_args(&builder_, n.args());
     // builder_.bl(n.fn().name());
     if (n.fn().name() == "handle_syscall") {
-        builder_.str(imm_operand(this_pc_ + 2, 64),
+        int pc_vreg = alloc_vreg();
+        auto pc_op = virtreg_operand(pc_vreg, 64);
+        builder_.movz(pc_op,
+                      imm_operand((this_pc_ + 2) & 0xFFFF, 16),
+                      arm64_shift_operand("LSL", 0));
+        builder_.movk(pc_op,
+                      imm_operand((this_pc_ + 2) >> 16 & 0xFFFF, 16),
+                      arm64_shift_operand("LSL", 16));
+        builder_.movk(pc_op,
+                      imm_operand((this_pc_ + 2) >> 32 & 0xFFFF, 16),
+                      arm64_shift_operand("LSL", 32));
+        builder_.movk(pc_op,
+                      imm_operand((this_pc_ + 2) >> 48 & 0xFFFF, 16),
+                      arm64_shift_operand("LSL", 48));
+        builder_.str(pc_op,
                      guestreg_memory_operand(64, static_cast<int>(reg_offsets::PC)));
         ret_ = 1;
     } else if (n.fn().name() == "handle_int") {
