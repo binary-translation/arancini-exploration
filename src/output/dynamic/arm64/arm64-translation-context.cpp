@@ -137,6 +137,7 @@ void arm64_translation_context::begin_block() {
     ret_ = 0;
     instr_cnt_ = 0;
     builder_ = arm64_instruction_builder();
+    materialised_nodes_.clear();
 }
 
 std::string labelify(const std::string &str) {
@@ -183,50 +184,75 @@ void arm64_translation_context::lower(ir::node *n) {
 }
 
 void arm64_translation_context::materialise(const ir::node* n) {
+    // Invalid node
     if (!n)
         throw std::runtime_error("ARM64 DBT received NULL pointer to node");
 
+    // Avoid materialising again
+    if (materialised_nodes_.count(n))
+        return;
+
     switch (n->kind()) {
     case node_kinds::read_reg:
-        return materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));
+        materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));
+        break;
     case node_kinds::write_reg:
-        return materialise_write_reg(*reinterpret_cast<const write_reg_node*>(n));
+        materialise_write_reg(*reinterpret_cast<const write_reg_node*>(n));
+        break;
     case node_kinds::read_mem:
-        return materialise_read_mem(*reinterpret_cast<const read_mem_node*>(n));
+        materialise_read_mem(*reinterpret_cast<const read_mem_node*>(n));
+        break;
     case node_kinds::write_mem:
-        return materialise_write_mem(*reinterpret_cast<const write_mem_node*>(n));
+        materialise_write_mem(*reinterpret_cast<const write_mem_node*>(n));
+        break;
 	case node_kinds::read_pc:
-		return materialise_read_pc(*reinterpret_cast<const read_pc_node *>(n));
+		materialise_read_pc(*reinterpret_cast<const read_pc_node *>(n));
+        break;
 	case node_kinds::write_pc:
-		return materialise_write_pc(*reinterpret_cast<const write_pc_node *>(n));
+		materialise_write_pc(*reinterpret_cast<const write_pc_node *>(n));
+        break;
     case node_kinds::label:
-        return materialise_label(*reinterpret_cast<const label_node *>(n));
+        materialise_label(*reinterpret_cast<const label_node *>(n));
+        break;
     case node_kinds::br:
-        return materialise_br(*reinterpret_cast<const br_node *>(n));
+        materialise_br(*reinterpret_cast<const br_node *>(n));
+        break;
     case node_kinds::cond_br:
-        return materialise_cond_br(*reinterpret_cast<const cond_br_node *>(n));
+        materialise_cond_br(*reinterpret_cast<const cond_br_node *>(n));
+        break;
 	case node_kinds::cast:
-		return materialise_cast(*reinterpret_cast<const cast_node *>(n));
+		materialise_cast(*reinterpret_cast<const cast_node *>(n));
+        break;
     case node_kinds::csel:
-		return materialise_csel(*reinterpret_cast<const csel_node *>(n));
+		materialise_csel(*reinterpret_cast<const csel_node *>(n));
+        break;
     case node_kinds::bit_shift:
-		return materialise_bit_shift(*reinterpret_cast<const bit_shift_node *>(n));
+		materialise_bit_shift(*reinterpret_cast<const bit_shift_node *>(n));
+        break;
     case node_kinds::bit_extract:
-		return materialise_bit_extract(*reinterpret_cast<const bit_extract_node *>(n));
+		materialise_bit_extract(*reinterpret_cast<const bit_extract_node *>(n));
+        break;
     case node_kinds::bit_insert:
-		return materialise_bit_insert(*reinterpret_cast<const bit_insert_node *>(n));
+		materialise_bit_insert(*reinterpret_cast<const bit_insert_node *>(n));
+        break;
     case node_kinds::constant:
-        return materialise_constant(*reinterpret_cast<const constant_node*>(n));
+        materialise_constant(*reinterpret_cast<const constant_node*>(n));
+        break;
 	case node_kinds::unary_arith:
-        return materialise_unary_arith(*reinterpret_cast<const unary_arith_node*>(n));
+        materialise_unary_arith(*reinterpret_cast<const unary_arith_node*>(n));
+        break;
 	case node_kinds::binary_arith:
-		return materialise_binary_arith(*reinterpret_cast<const binary_arith_node*>(n));
+		materialise_binary_arith(*reinterpret_cast<const binary_arith_node*>(n));
+        break;
     case node_kinds::internal_call:
-        return materialise_internal_call(*reinterpret_cast<const internal_call_node*>(n));
+        materialise_internal_call(*reinterpret_cast<const internal_call_node*>(n));
+        break;
     default:
         throw std::runtime_error("unknown node encountered: " +
                                  std::to_string(static_cast<size_t>(n->kind())));
     }
+
+    materialised_nodes_.insert(n);
 }
 
 void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
