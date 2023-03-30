@@ -11,7 +11,7 @@ call_native:
     stp x25, x26, [sp, #-16]! // Save x25 and x26 on the stack and adjust sp by -16 bytes
     stp x27, x28, [sp, #-16]! // Save x27 and x28 on the stack and adjust sp by -16 bytes
 
-    stp x0, x1, [sp, #-16]! // Save x0 and x1 on the stack and adjust sp by -16 bytes
+    str x0, x1, [sp, #-16]! // Save x0 and x1 on the stack and adjust sp by -16 bytes
     stp x2, x3, [sp, #-16]! // Save x2 and x3 on the stack and adjust sp by -16 bytes
     stp x4, x5, [sp, #-16]! // Save x4 and x5 on the stack and adjust sp by -16 bytes
     stp x6, x7, [sp, #-16]! // Save x6 and x7 on the stack and adjust sp by -16 bytes
@@ -38,9 +38,9 @@ call_native:
     ldp x4, x5, [sp], #16 // Restore x4 and x5 from the stack and adjust sp by 16 bytes
 
 
-    // NOTE: adjust by 24 bytes because x0 is returned unchanged from translated block
-    ldp x2, x3, [sp], #24 // Restore x2 and x3 from the stack and adjust sp by 24 bytes
-    ldr x1, [sp], #16 // Restore x1 from the stack and adjust sp by 16 bytes
+    // NOTE: x0 not restored on stack, used for return code
+    ldp x2, x3, [sp], #32 // Restore x2 and x3 from the stack and adjust sp by 32 bytes
+    ldr x1, [sp, #-8]     // Restore only x1
 
     ldp x27, x28, [sp], #16 // Restore x27 and x28 from the stack and adjust sp by 16 bytes
     ldp x25, x26, [sp], #16 // Restore x25 and x26 from the stack and adjust sp by 16 bytes
@@ -49,4 +49,6 @@ call_native:
     ldp x19, x20, [sp], #16 // Restore x19 and x20 from the stack and adjust sp by 16 bytes
 
     ldp x29, x30, [sp], #16 // Restore x29 and x30 from the stack and adjust sp by 16 bytes
+
+    ret // Return to runtime
 .size call_native,.-call_native

@@ -18,7 +18,7 @@ if (TARGET arancini-output-x86)
                           PRIVATE
                           arancini-output-x86)
 elseif (TARGET arancini-output-arm64)
-    add_library(arancini-trampoline OBJECT dbt/trampoline.x86_64.S)
+    add_library(arancini-trampoline OBJECT dbt/trampoline.arm64.S)
     target_link_libraries(arancini-runtime
                           PRIVATE
                           arancini-output-arm64)

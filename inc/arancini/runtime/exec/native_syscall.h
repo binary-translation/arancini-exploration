@@ -95,7 +95,10 @@ template <> inline uint64_t native_syscall(uint64_t syscall_no, uint64_t arg1, u
 	register uint64_t x0 __asm__("x0") = arg1;
 	register uint64_t x1 __asm__("x1") = arg2;
 	register uint64_t x8 __asm__("x8") = syscall_no;
-	__asm__ __volatile__("svc #0\n\t" : "=r"(x0) : "r"(x8), "0"(x0), "r"(x1) : "memory");
+	__asm__ __volatile__("svc #0\n\t"
+                         : "=r"(x0)
+                         : "r"(x8), "0"(x0), "r"(x1)
+                         : "memory");
 	return x0;
 }
 template <> inline uint64_t native_syscall(uint64_t syscall_no, uint64_t arg1, uint64_t arg2, uint64_t arg3)
@@ -104,7 +107,10 @@ template <> inline uint64_t native_syscall(uint64_t syscall_no, uint64_t arg1, u
 	register uint64_t x1 __asm__("x1") = arg2;
 	register uint64_t x2 __asm__("x2") = arg3;
 	register uint64_t x8 __asm__("x8") = syscall_no;
-	__asm__ __volatile__("svc #0\n\t" : "=r"(x0) : "r"(x8), "0"(x0), "r"(x1), "r"(x2) : "memory");
+	__asm__ __volatile__("svc #0\n\t"
+                         : "=r"(x0)
+                         : "r"(x8), "0"(x0), "r"(x1), "r"(x2)
+                         : "memory");
 	return x0;
 }
 template <> inline uint64_t native_syscall(uint64_t syscall_no, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4)
@@ -114,7 +120,10 @@ template <> inline uint64_t native_syscall(uint64_t syscall_no, uint64_t arg1, u
 	register uint64_t x2 __asm__("x2") = arg3;
 	register uint64_t x3 __asm__("x3") = arg4;
 	register uint64_t x8 __asm__("x8") = syscall_no;
-	__asm__ __volatile__("svc #0\n\t" : "=r"(x0) : "r"(x8), "0"(x0), "r"(x1), "r"(x2), "r"(x3) : "memory");
+	__asm__ __volatile__("svc #0\n\t"
+                         : "=r"(x0)
+                         : "r"(x8), "0"(x0), "r"(x1), "r"(x2), "r"(x3)
+                         : "memory");
 	return x0;
 }
 template <> inline uint64_t native_syscall(uint64_t syscall_no, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5)
@@ -125,7 +134,26 @@ template <> inline uint64_t native_syscall(uint64_t syscall_no, uint64_t arg1, u
 	register uint64_t x3 __asm__("x3") = arg4;
 	register uint64_t x4 __asm__("x4") = arg5;
 	register uint64_t x8 __asm__("x8") = syscall_no;
-	__asm__ __volatile__("svc #0\n\t" : "=r"(x0) : "r"(x8), "0"(x0), "r"(x1), "r"(x2), "r"(x3), "r"(x4): "memory");
+	__asm__ __volatile__("svc #0\n\t"
+                         : "=r"(x0)
+                         : "r"(x8), "0"(x0), "r"(x1), "r"(x2), "r"(x3), "r"(x4)
+                         : "memory");
+	return x0;
+}
+template <> inline uint64_t native_syscall(uint64_t syscall_no, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6)
+{
+	register uint64_t x0 __asm__("x0") = arg1;
+	register uint64_t x1 __asm__("x1") = arg2;
+	register uint64_t x2 __asm__("x2") = arg3;
+	register uint64_t x3 __asm__("x3") = arg4;
+	register uint64_t x4 __asm__("x4") = arg5;
+	register uint64_t x5 __asm__("x5") = arg6;
+	register uint64_t x8 __asm__("x8") = syscall_no;
+	__asm__ __volatile__("svc #0\n\t"
+                         : "=r"(x0)
+                         : "r"(x8), "0"(x0), "r"(x1), "r"(x2),
+                           "r"(x3), "r"(x4), "r"(x5)
+                         : "memory");
 	return x0;
 }
 #endif // ARCH_AARCH64

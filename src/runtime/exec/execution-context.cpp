@@ -171,10 +171,11 @@ int execution_context::internal_call(void *cpu_state, int call)
 			x86_state->RAX = gettid();
 			break;
 		}
-		case 231://exit_group
+        case 60:
+		case 231:
 		{
 			std::cerr << "Exiting from emulated process with exit code " << std::dec << x86_state->RDI << std::endl;
-			//exit(x86_state->RDI) ?
+			exit(x86_state->RDI);
 			return 1;
 		}
 		default:
