@@ -68,6 +68,8 @@ private:
     void materialise_unary_arith(const ir::unary_arith_node &n);
     void materialise_binary_arith(const ir::binary_arith_node &n);
     void materialise_internal_call(const ir::internal_call_node &n);
+
+    arm64_operand mov_immediate(uint64_t imm, uint8_t size);
 };
 } // namespace arancini::output::dynamic::arm64
 

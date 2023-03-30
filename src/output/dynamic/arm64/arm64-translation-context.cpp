@@ -2,6 +2,7 @@
 
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
 
+#include <cmath>
 #include <cctype>
 #include <unordered_map>
 
@@ -89,6 +90,33 @@ arm64_operand arm64_translation_context::vreg_operand_for_port(port &p, bool con
 
 	materialise(p.owner());
 	return virtreg_operand(vreg_for_port(p), p.type().element_width());
+}
+
+arm64_operand arm64_translation_context::mov_immediate(uint64_t imm, uint8_t size) {
+    int move_count = static_cast<int>(std::ceil(size / 16.0));
+
+    int vreg = alloc_vreg();
+    auto reg = virtreg_operand(vreg, 64);
+    if (size <= 16) {
+        builder_.mov(reg,
+                     imm_operand(imm, 16));
+        return reg;
+    }
+
+    if (size <= 64) {
+        builder_.movz(reg,
+                      imm_operand(imm & 0xFFFF, 16),
+                      arm64_shift_operand("LSL", 0));
+        for (int i = 1; i < move_count; ++i) {
+            builder_.movk(reg,
+                          imm_operand(imm >> (i * 16) & 0xFFFF, 16),
+                          arm64_shift_operand("LSL", (i * 16)));
+        }
+
+        return reg;
+    }
+
+    throw std::runtime_error("Too large immediate");
 }
 
 static void func_push_args(arm64_instruction_builder *builder, const
@@ -503,21 +531,8 @@ void arm64_translation_context::materialise_internal_call(const internal_call_no
     // func_push_args(&builder_, n.args());
     // builder_.bl(n.fn().name());
     if (n.fn().name() == "handle_syscall") {
-        int pc_vreg = alloc_vreg();
-        auto pc_op = virtreg_operand(pc_vreg, 64);
-        builder_.movz(pc_op,
-                      imm_operand((this_pc_ + 2) & 0xFFFF, 16),
-                      arm64_shift_operand("LSL", 0));
-        builder_.movk(pc_op,
-                      imm_operand((this_pc_ + 2) >> 16 & 0xFFFF, 16),
-                      arm64_shift_operand("LSL", 16));
-        builder_.movk(pc_op,
-                      imm_operand((this_pc_ + 2) >> 32 & 0xFFFF, 16),
-                      arm64_shift_operand("LSL", 32));
-        builder_.movk(pc_op,
-                      imm_operand((this_pc_ + 2) >> 48 & 0xFFFF, 16),
-                      arm64_shift_operand("LSL", 48));
-        builder_.str(pc_op,
+        auto pc_vreg = mov_immediate(this_pc_ + 2, 64);
+        builder_.str(pc_vreg,
                      guestreg_memory_operand(64, static_cast<int>(reg_offsets::PC)));
         ret_ = 1;
     } else if (n.fn().name() == "handle_int") {
