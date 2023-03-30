@@ -11,7 +11,7 @@ call_native:
     stp x25, x26, [sp, #-16]! // Save x25 and x26 on the stack and adjust sp by -16 bytes
     stp x27, x28, [sp, #-16]! // Save x27 and x28 on the stack and adjust sp by -16 bytes
 
-    str x0, x1, [sp, #-16]! // Save x0 and x1 on the stack and adjust sp by -16 bytes
+    stp x0, x1, [sp, #-16]! // Save x0 and x1 on the stack and adjust sp by -16 bytes
     stp x2, x3, [sp, #-16]! // Save x2 and x3 on the stack and adjust sp by -16 bytes
     stp x4, x5, [sp, #-16]! // Save x4 and x5 on the stack and adjust sp by -16 bytes
     stp x6, x7, [sp, #-16]! // Save x6 and x7 on the stack and adjust sp by -16 bytes
