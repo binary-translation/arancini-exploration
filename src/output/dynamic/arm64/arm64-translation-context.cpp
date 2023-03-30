@@ -326,16 +326,19 @@ void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
 }
 
 void arm64_translation_context::materialise_constant(const constant_node &n) {
-    // TODO: width
-    // TODO: handle immediate size that cannot be stored
 	int dst_vreg = alloc_vreg_for_port(n.val());
 
     int w = n.val().type().element_width();
 
-    // TODO: check width
     // TODO: what if floating point?
-	builder_.mov(virtreg_operand(dst_vreg, w),
-                 imm_operand(n.const_val_i(), w));
+    arm64_operand op;
+    if (w <= 16)
+        op = imm_operand(n.const_val_i(), w);
+    else
+        op = mov_immediate(n.const_val_i(), w);
+
+    // TODO: still needed?
+	builder_.mov(virtreg_operand(dst_vreg, w), op);
 }
 
 void arm64_translation_context::materialise_binary_arith(const binary_arith_node &n) {
