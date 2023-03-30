@@ -356,12 +356,18 @@ void arm64_translation_context::materialise_constant(const constant_node &n) {
 
     int w = n.val().type().element_width();
 
+    int actual_width = w;
+    if (n.val().owner()->kind() == node_kinds::cast) {
+        auto* owner = reinterpret_cast<const cast_node*>(n.val().owner());
+        actual_width = owner->target_type().element_width();
+    }
+
     // TODO: what if floating point?
     arm64_operand op;
-    if (arm64_immediate_operand::fits(n.const_val_i(), w))
+    if (actual_width <= 16)
         op = imm_operand(n.const_val_i(), w);
     else
-        op = mov_immediate(n.const_val_i(), w);
+        op = mov_immediate(n.const_val_i(), actual_width);
 
     // TODO: still needed?
 	builder_.mov(virtreg_operand(dst_vreg, w), op);
