@@ -675,6 +675,12 @@ struct arm64_instruction {
         return arm64_instruction("movz", def(dst), use(src), use(shift));
     }
 
+    static arm64_instruction movk(const arm64_operand &dst,
+                                  const arm64_operand &src,
+                                  const arm64_operand &shift) {
+        return arm64_instruction("movk", def(dst), use(src), use(shift));
+    }
+
     static arm64_instruction mov(const arm64_operand &dst, const arm64_operand &src) {
         return arm64_instruction("mov", def(dst), use(src));
     }
