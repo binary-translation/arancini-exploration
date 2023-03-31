@@ -1,5 +1,7 @@
+#include "arancini/output/dynamic/arm64/arm64-instruction.h"
 #include <arancini/output/dynamic/arm64/arm64-instruction-builder.h>
 #include <bitset>
+#include <stdexcept>
 #include <unordered_map>
 #include <array>
 
@@ -24,129 +26,13 @@ void arm64_instruction_builder::emit(machine_code_writer &writer) {
 
         const auto &operands = insn.get_operands();
 
-        switch (insn.opform) {
-        case arm64_opform::OF_NONE:
-            break;
-
-        case arm64_opform::OF_R32:
-        case arm64_opform::OF_R64:
-            if (!operands[0].is_preg()) {
-                throw std::runtime_error("expected preg operand 0");
+        for (size_t i = 0; i < insn.opcount; ++i) {
+            const auto &op = operands[i];
+            if (op.type == arm64_operand_type::invalid ||
+                op.type == arm64_operand_type::vreg ||
+                (op.type == arm64_operand_type::mem && op.memop.virt_base)) {
+                throw std::runtime_error("Virtual register after register allocation");
             }
-
-            break;
-
-        // TODO: handle 32-bit regs
-        case arm64_opform::OF_R32_R32:
-        case arm64_opform::OF_R64_R64:
-        // case arm64_opform::OF_R64_R32:
-            if (!operands[0].is_preg()) {
-                throw std::runtime_error("expected preg operand 0");
-            }
-
-            if (!operands[1].is_preg()) {
-                throw std::runtime_error("expected preg operand 1");
-            }
-
-            break;
-
-        case arm64_opform::OF_R32_M32:
-        case arm64_opform::OF_R64_M64: {
-            if (!operands[0].is_preg()) {
-                throw std::runtime_error("expected preg operand 0");
-            }
-
-            if (!operands[1].is_mem()) {
-                throw std::runtime_error("expected mem operand 1");
-            }
-
-            if (operands[1].memop.virt_base) {
-                throw std::runtime_error("expected mem preg base operand 1");
-            }
-
-            break;
-        }
-
-        // case arm64_opform::OF_M8_R8:
-        // case arm64_opform::OF_M16_R16:
-        case arm64_opform::OF_M32_R32:
-        case arm64_opform::OF_M64_R64: {
-            if (!operands[0].is_mem()) {
-                throw std::runtime_error("expected mem operand 0");
-            }
-
-            if (operands[0].memop.virt_base) {
-                throw std::runtime_error("expected mem preg base operand 0");
-            }
-
-            if (!operands[1].is_preg()) {
-                throw std::runtime_error("expected preg operand 1");
-            }
-
-            break;
-        }
-
-        // case arm64_opform::OF_M8_I8:
-        // case arm64_opform::OF_M16_I16:
-        // case arm64_opform::OF_M32_I32:
-        // case arm64_opform::OF_M64_I64: {
-        // 	if (!operands[0].is_mem()) {
-        // 		throw std::runtime_error("expected mem operand 0");
-        // 	}
-
-        // 	if (operands[0].memop.virt_base) {
-        // 		throw std::runtime_error("expected mem preg base operand 0");
-        // 	}
-
-        // 	unsigned long overridden_opcode = raw_opcode;
-
-        // 	// switch (operands[0].memop.seg) {
-        // 	// case arm64_register_names::FS:
-        // 	// 	overridden_opcode |= FE_SEG(FE_FS);
-        // 	// 	break;
-        // 	// case arm64_register_names::GS:
-        // 	// 	overridden_opcode |= FE_SEG(FE_GS);
-        // 	// 	break;
-        // 	// default:
-        // 	// 	break;
-        // 	// }
-
-        // 	if (!operands[1].is_imm()) {
-        // 		throw std::runtime_error("expected imm operand 1");
-        // 	}
-        // 	break;
-        // }
-
-        // case arm64_opform::OF_R8_I8:
-        // case arm64_opform::OF_R16_I16:
-        case arm64_opform::OF_R32_I32:
-        case arm64_opform::OF_R64_I64:
-            if (!operands[0].is_preg()) {
-                throw std::runtime_error("expected preg operand 0");
-            }
-
-            if (!operands[1].is_imm()) {
-                throw std::runtime_error("expected imm operand 1");
-            }
-            break;
-
-        case arm64_opform::OF_R64_R64_I64:
-            if (!operands[0].is_preg()) {
-                throw std::runtime_error("expected preg operand 0");
-            }
-
-            if (!operands[1].is_preg()) {
-                throw std::runtime_error("expected preg operand 1");
-            }
-
-            if (!operands[2].is_imm()) {
-                throw std::runtime_error("expected imm operand 2");
-            }
-            break;
-
-        default:
-            (void)0;
-            // throw std::runtime_error("unsupported operand form");
         }
     }
 

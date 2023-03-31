@@ -419,61 +419,22 @@ struct arm64_operand {
 	void dump(std::ostream &os) const;
 };
 
-#define OPFORM_BITS(T, W) (((T & 3) << 4) | ((W / 8) & 15))
-#define GET_OPFORM1(T1, W1) OPFORM_BITS(T1, W1)
-#define GET_OPFORM2(T1, W1, T2, W2) ((OPFORM_BITS(T2, W2) << 6) | OPFORM_BITS(T1, W1))
-#define GET_OPFORM3(T1, W1, T2, W2, T3, W3) ((OPFORM_BITS(T3, W3) << 12) | (OPFORM_BITS(T2, W2) << 6) | OPFORM_BITS(T1, W1))
-
-#define R 1
-#define M 2
-#define I 3
-#define DEFINE_OPFORM1(T1, W1) OF_##T1##W1 = GET_OPFORM1(T1, W1)
-#define DEFINE_OPFORM2(T1, W1, T2, W2) OF_##T1##W1##_##T2##W2 = GET_OPFORM2(T1, W1, T2, W2)
-#define DEFINE_OPFORM3(T1, W1, T2, W2, T3, W3) OF_##T1##W1##_##T2##W2##_##T3##W3 = GET_OPFORM3(T1, W1, T2, W2, T3, W3)
-
-enum class arm64_opform {
-	OF_NONE = 0,
-	DEFINE_OPFORM1(R, 32),
-	DEFINE_OPFORM1(M, 32),
-	DEFINE_OPFORM1(I, 32),
-	DEFINE_OPFORM1(R, 64),
-	DEFINE_OPFORM1(M, 64),
-	DEFINE_OPFORM1(I, 64),
-	DEFINE_OPFORM2(R, 32, R, 32),
-	DEFINE_OPFORM2(R, 64, R, 64),
-	DEFINE_OPFORM2(R, 32, M, 32),
-	DEFINE_OPFORM2(R, 64, M, 64),
-	DEFINE_OPFORM2(M, 32, R, 32),
-	DEFINE_OPFORM2(M, 64, R, 64),
-	DEFINE_OPFORM2(R, 32, I, 32),
-	DEFINE_OPFORM2(R, 64, I, 64),
-
-	DEFINE_OPFORM3(R, 64, R, 64, I, 64)
-};
-
-#undef R
-#undef M
-#undef I
-
 struct arm64_instruction {
 	static constexpr size_t nr_operands = 5;
 
     std::string opcode;
-    arm64_opform opform;
     size_t opcount;
 
     arm64_operand operands[nr_operands];
 
     arm64_instruction(const std::string& opc)
         : opcode(opc)
-		, opform(arm64_opform::OF_NONE)
         , opcount(0)
 	{
 	}
 
 	arm64_instruction(const std::string &opc, const arm64_operand &o1)
 		: opcode(opc)
-		, opform(classify(o1))
 	{
 		operands[0] = o1;
         opcount = 1;
@@ -481,7 +442,6 @@ struct arm64_instruction {
 
 	arm64_instruction(const std::string &opc, const arm64_operand &o1, const arm64_operand &o2)
 		: opcode(opc)
-		, opform(classify(o1, o2))
 	{
 		operands[0] = o1;
 		operands[1] = o2;
@@ -493,7 +453,6 @@ struct arm64_instruction {
                       const arm64_operand &o2,
                       const arm64_operand &o3)
 		: opcode(opc)
-		, opform(classify(o1, o2, o3))
 	{
 		operands[0] = o1;
 		operands[1] = o2;
@@ -507,7 +466,6 @@ struct arm64_instruction {
                       const arm64_operand &o3,
                       const arm64_operand &o4)
 		: opcode(opc)
-		, opform(classify(o1, o2, o3))
 	{
 		operands[0] = o1;
 		operands[1] = o2;
@@ -530,55 +488,6 @@ struct arm64_instruction {
 		default:
 			return 0;
 		}
-	}
-
-	static arm64_opform classify(const arm64_operand &o1) {
-        return (arm64_opform)GET_OPFORM1(operand_type_to_form_type(o1.type), o1.width());
-    }
-
-	static arm64_opform classify(const arm64_operand &o1, const arm64_operand &o2) {
-		return (arm64_opform)GET_OPFORM2(operand_type_to_form_type(o1.type), o1.width(),
-                                         operand_type_to_form_type(o2.type), o2.width());
-	}
-
-	static arm64_opform classify(const arm64_operand &o1, const arm64_operand &o2, const arm64_operand &o3)
-	{
-		return (arm64_opform)GET_OPFORM3(operand_type_to_form_type(o1.type), o1.width(),
-                                         operand_type_to_form_type(o2.type), o2.width(),
-                                         operand_type_to_form_type(o3.type), o3.width());
-	}
-
-    // TODO: handle this
-	static std::string opform_to_string(arm64_opform of)
-	{
-		std::stringstream ss;
-
-		unsigned int raw_of = (unsigned int)of;
-
-		for (int i = 0; i < 4; i++) {
-			int off = i * 6;
-			int width = (raw_of >> off) & 0xf;
-			int type = (raw_of >> (off + 4)) & 0x3;
-
-			switch (type) {
-			case 0:
-				continue;
-
-			case 1:
-				ss << "R";
-				break;
-			case 2:
-				ss << "M";
-				break;
-			case 3:
-				ss << "I";
-				break;
-			}
-
-			ss << std::dec << (width * 8);
-		}
-
-		return ss.str();
 	}
 
 	static arm64_operand def(const arm64_operand &o)
