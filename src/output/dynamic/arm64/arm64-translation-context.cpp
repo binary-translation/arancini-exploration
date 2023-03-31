@@ -1,4 +1,5 @@
 #include "arancini/ir/node.h"
+#include "arancini/output/dynamic/arm64/arm64-instruction.h"
 #include <arancini/output/dynamic/arm64/arm64-translation-context.h>
 
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
@@ -527,15 +528,10 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
 
     builder_.cmp(cond,
                  imm_operand(0, 64));
-    builder_.beq(unique + "false_cond");
-    builder_.mov(virtreg_operand(dst_vreg, w),
-                 true_val);
-    builder_.b(unique + "end");
-
-    builder_.label(unique + "false_cond");
-    builder_.mov(virtreg_operand(dst_vreg, w), false_val);
-
-    builder_.label(unique + "end");
+    builder_.csel(virtreg_operand(dst_vreg, w),
+                  true_val,
+                  false_val,
+                  arm64_label_operand("EQ"));
 }
 
 void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
