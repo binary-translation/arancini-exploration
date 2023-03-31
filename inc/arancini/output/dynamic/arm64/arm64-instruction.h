@@ -639,7 +639,7 @@ struct arm64_instruction {
     static arm64_instruction xor_(const arm64_operand &dst,
                                   const arm64_operand &src1,
                                   const arm64_operand &src2) {
-        return arm64_instruction("xor", def(dst), use(src1), use(src2));
+        return arm64_instruction("eor", def(dst), use(src1), use(src2));
     }
 
     static arm64_instruction not_(const arm64_operand &dst, const arm64_operand &src) {
