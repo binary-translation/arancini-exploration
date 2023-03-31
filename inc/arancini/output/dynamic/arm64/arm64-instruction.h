@@ -339,6 +339,8 @@ struct arm64_operand {
             shiftop = o.shiftop;
         if (type == arm64_operand_type::cond)
             condop = o.condop;
+        if (type == arm64_operand_type::label)
+            labelop = o.labelop;
     }
 
     arm64_operand& operator=(const arm64_operand &o) {
@@ -358,6 +360,8 @@ struct arm64_operand {
             shiftop = o.shiftop;
         if (type == arm64_operand_type::cond)
             condop = o.condop;
+        if (type == arm64_operand_type::label)
+            labelop = o.labelop;
 
         return *this;
     }
@@ -368,6 +372,7 @@ struct arm64_operand {
 	bool is_imm() const { return type == arm64_operand_type::imm; }
     bool is_shift() const { return type == arm64_operand_type::shift; }
     bool is_cond() const { return type == arm64_operand_type::cond; }
+    bool is_label() const { return type == arm64_operand_type::label; }
 
 	bool is_use() const { return use; }
 	bool is_def() const { return def; }
