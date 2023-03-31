@@ -162,9 +162,14 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
     instr_cnt_++;
 
     builder_.insert_sep("S" + std::to_string(instr_cnt_) + labelify(disasm));
+
+    nodes_.clear();
 }
 
-void arm64_translation_context::end_instruction() { }
+void arm64_translation_context::end_instruction() {
+    for (const auto* node : nodes_)
+        materialise(node);
+}
 
 void arm64_translation_context::end_block() {
 	do_register_allocation();
@@ -180,7 +185,7 @@ void arm64_translation_context::end_block() {
 }
 
 void arm64_translation_context::lower(ir::node *n) {
-    materialise(n);
+    nodes_.push_back(n);
 }
 
 void arm64_translation_context::materialise(const ir::node* n) {
@@ -319,8 +324,8 @@ void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
     int w = n.val().type().element_width();
 
     // TODO: check out immediate size
-	builder_.ldr(virtreg_operand(dst_vreg, w),
-                 guestreg_memory_operand(w, static_cast<int>(reg_offsets::PC)));
+	builder_.mov(virtreg_operand(dst_vreg, w),
+                 mov_immediate(this_pc_, 64));
 }
 
 void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {

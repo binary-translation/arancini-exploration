@@ -23,6 +23,7 @@ public:
     virtual ~arm64_translation_context() { }
 private:
 	arm64_instruction_builder builder_;
+    std::vector<ir::node *> nodes_;
 	std::set<const ir::node *> materialised_nodes_;
 	std::map<const ir::port *, int> port_to_vreg_;
 	std::map<unsigned long, off_t> instruction_index_to_guest_;

@@ -25,6 +25,7 @@ call_native:
 
     // Set frame pointer to x86 context block
     mov x29, x1
+    mov x18, x2
 
     blr x0 // call translation block
 
