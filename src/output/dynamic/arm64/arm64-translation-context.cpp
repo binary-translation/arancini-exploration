@@ -1,9 +1,11 @@
+#include "arancini/ir/node.h"
 #include <arancini/output/dynamic/arm64/arm64-translation-context.h>
 
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
 
 #include <cmath>
 #include <cctype>
+#include <stdexcept>
 #include <unordered_map>
 
 using namespace arancini::output::dynamic::arm64;
@@ -117,10 +119,6 @@ arm64_operand arm64_translation_context::mov_immediate(uint64_t imm, uint8_t siz
     }
 
     throw std::runtime_error("Too large immediate");
-}
-
-static arm64_operand match_condition(const arm64_operand &c) {
-    return arm64_label_operand("NE");
 }
 
 static void func_push_args(arm64_instruction_builder *builder, const
@@ -517,15 +515,24 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 
 void arm64_translation_context::materialise_csel(const csel_node &n) {
     int dst_vreg = alloc_vreg_for_port(n.val());
+    int w = n.val().type().element_width();
 
     auto cond = vreg_operand_for_port(n.condition());
 
-    auto condition = match_condition(cond);
+    auto true_val = vreg_operand_for_port(n.trueval());
+    auto false_val = vreg_operand_for_port(n.falseval());
 
-    builder_.csel(virtreg_operand(dst_vreg, n.val().type().element_width()),
-                  vreg_operand_for_port(n.trueval()),
-                  vreg_operand_for_port(n.falseval()),
-                  condition);
+    builder_.cmp(cond,
+                 imm_operand(0, 64));
+    builder_.beq("false_cond");
+    builder_.mov(virtreg_operand(dst_vreg, w),
+                 true_val);
+    builder_.b("end");
+
+    builder_.label("false_cond");
+    builder_.mov(virtreg_operand(dst_vreg, w), false_val);
+
+    builder_.label("end");
 }
 
 void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
