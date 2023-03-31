@@ -119,6 +119,10 @@ arm64_operand arm64_translation_context::mov_immediate(uint64_t imm, uint8_t siz
     throw std::runtime_error("Too large immediate");
 }
 
+static arm64_operand match_condition(const arm64_operand &c) {
+    return arm64_label_operand("NE");
+}
+
 static void func_push_args(arm64_instruction_builder *builder, const
                            std::vector<port *> &args)
 {
@@ -514,10 +518,14 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 void arm64_translation_context::materialise_csel(const csel_node &n) {
     int dst_vreg = alloc_vreg_for_port(n.val());
 
+    auto cond = vreg_operand_for_port(n.condition());
+
+    auto condition = match_condition(cond);
+
     builder_.csel(virtreg_operand(dst_vreg, n.val().type().element_width()),
                   vreg_operand_for_port(n.trueval()),
                   vreg_operand_for_port(n.falseval()),
-                  vreg_operand_for_port(n.condition()));
+                  condition);
 }
 
 void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
