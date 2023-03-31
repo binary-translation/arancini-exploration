@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cctype>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 
 using namespace arancini::output::dynamic::arm64;
@@ -522,17 +523,19 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
     auto true_val = vreg_operand_for_port(n.trueval());
     auto false_val = vreg_operand_for_port(n.falseval());
 
+    std::string unique = std::to_string(*reinterpret_cast<const size_t*>(&n));
+
     builder_.cmp(cond,
                  imm_operand(0, 64));
-    builder_.beq("false_cond");
+    builder_.beq(unique + "false_cond");
     builder_.mov(virtreg_operand(dst_vreg, w),
                  true_val);
-    builder_.b("end");
+    builder_.b(unique + "end");
 
-    builder_.label("false_cond");
+    builder_.label(unique + "false_cond");
     builder_.mov(virtreg_operand(dst_vreg, w), false_val);
 
-    builder_.label("end");
+    builder_.label(unique + "end");
 }
 
 void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
