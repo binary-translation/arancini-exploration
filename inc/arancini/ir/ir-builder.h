@@ -355,10 +355,10 @@ public:
 	/// @return A vector insert node.
 	value_node *insert_vector_insert(port &input, int index, port &value) { return create_and_insert<vector_insert_node>(input, index, value); };
 
-	value_node *insert_read_local(const local_var &local) { return create_and_insert<read_local_node>(local); }
-	action_node *insert_write_local(const local_var &local, port &value) { return create_and_insert<write_local_node>(local, value); }
+	value_node *insert_read_local(const local_var *local) { return create_and_insert<read_local_node>(local); }
+	action_node *insert_write_local(const local_var *local, port &value) { return create_and_insert<write_local_node>(local, value); }
 
-	virtual const local_var &alloc_local(const value_type &type) = 0;
+	virtual const local_var *alloc_local(const value_type &type) = 0;
 
 	action_node *insert_internal_call(const internal_function &fn, const std::vector<port *> &args) { return create_and_insert<internal_call_node>(fn, args); }
 

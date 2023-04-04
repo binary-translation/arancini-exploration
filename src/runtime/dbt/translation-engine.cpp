@@ -67,12 +67,12 @@ public:
 		return new translation(writer.ptr(), writer.size());
 	}
 
-	virtual local_var &alloc_local(const value_type &type) override
+	virtual local_var *alloc_local(const value_type &type) override
 	{
 		auto lcl = new local_var(type);
 		locals_.push_back(lcl);
 
-		return *lcl;
+		return lcl;
 	}
 
 protected:

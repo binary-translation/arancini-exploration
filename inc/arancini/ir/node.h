@@ -929,13 +929,13 @@ private:
 
 class read_local_node : public value_node {
 public:
-	read_local_node(const local_var &local)
-		: value_node(node_kinds::read_local, local.type())
+	read_local_node(const local_var *local)
+		: value_node(node_kinds::read_local, local->type())
 		, lvar_(local)
 	{
 	}
 
-	const local_var &local() const { return lvar_; }
+	const local_var *local() const { return lvar_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -944,19 +944,19 @@ public:
 	}
 
 private:
-	const local_var &lvar_;
+	const local_var *lvar_;
 };
 
 class write_local_node : public action_node {
 public:
-	write_local_node(const local_var &local, port &val)
+	write_local_node(const local_var *local, port &val)
 		: action_node(node_kinds::write_local)
 		, lvar_(local)
 		, val_(val)
 	{
 	}
 
-	const local_var &local() const { return lvar_; }
+	const local_var *local() const { return lvar_; }
 
 	port &write_value() const { return val_; }
 
@@ -967,7 +967,7 @@ public:
 	}
 
 private:
-	const local_var &lvar_;
+	const local_var *lvar_;
 	port &val_;
 };
 

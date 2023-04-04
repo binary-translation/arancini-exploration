@@ -62,7 +62,7 @@ packet_type default_ir_builder::end_packet()
 	return eob ? packet_type::end_of_block : packet_type::normal;
 }
 
-const local_var &default_ir_builder::alloc_local(const value_type &type)
+const local_var *default_ir_builder::alloc_local(const value_type &type)
 {
 	if (current_pkt_ == nullptr) {
 		throw std::runtime_error("cannot allocate local variable without packet");
