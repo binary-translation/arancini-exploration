@@ -118,8 +118,8 @@ void muldiv_translator::do_translate()
 		auto out_type = divisor->val().type();
 		divisor = builder().insert_sx(dividend->val().type(), divisor->val());
 
-		auto quo = builder().insert_div(divisor->val(), dividend->val());
-		auto rem = builder().insert_mod(divisor->val(), dividend->val());
+		auto quo = builder().insert_div(dividend->val(), divisor->val());
+		auto rem = builder().insert_mod(dividend->val(), divisor->val());
 
 		quo = builder().insert_trunc(out_type, quo->val());
 		rem = builder().insert_trunc(out_type, rem->val());
