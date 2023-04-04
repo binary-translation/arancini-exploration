@@ -39,8 +39,7 @@ std::pair<Register, bool> riscv64_translation_context::allocate_register(const p
 	if (p && reg_for_port_.count(p)) {
 		return { Register { reg_for_port_[p] }, false };
 	}
-	constexpr Register registers[] { S1, A0, A1, A2, A3, A4, A5, T0, T1, T2, A6, A7, S2, S3, S4, S5, S6, S7, T3, T4, T5 };
-	// FIXME already materialised nodes
+	constexpr static Register registers[] { S1, A0, A1, A2, A3, A4, A5, T0, T1, T2, A6, A7, S2, S3, S4, S5, S6, S7, T3, T4, T5 };
 
 	if (reg_allocator_index_ >= std::size(registers)) {
 		throw std::runtime_error("RISC-V DBT ran out of registers for packet");
