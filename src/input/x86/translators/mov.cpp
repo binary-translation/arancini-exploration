@@ -184,7 +184,6 @@ void mov_translator::do_translate()
 	break;
   }
 
-	case XED_ICLASS_MOVHPS:
 	case XED_ICLASS_MOVUPS:
 	case XED_ICLASS_MOVAPS:
 	case XED_ICLASS_MOVDQA:
@@ -214,7 +213,7 @@ void mov_translator::do_translate()
     }
     break;
   }
-
+  case XED_ICLASS_MOVHPS:
   case XED_ICLASS_MOVHPD: {
     auto src = read_operand(1);
     if (src->val().type().width() == 128) {
