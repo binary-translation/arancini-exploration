@@ -475,7 +475,7 @@ void dot_graph_generator::visit_read_local_node(read_local_node &n)
 {
 	std::stringstream s;
 
-	s << "read-local " << std::hex << (uintptr_t)&n.local();
+	s << "read-local " << std::hex << (uintptr_t)n.local();
 
 	add_node(&n, s.str());
 
@@ -486,7 +486,7 @@ void dot_graph_generator::visit_write_local_node(write_local_node &n)
 {
 	std::stringstream s;
 
-	s << "write-local " << std::hex << (uintptr_t)&n.local();
+	s << "write-local " << std::hex << (uintptr_t)n.local();
 
 	add_node(&n, s.str());
 	add_port_edge(&n.write_value(), &n);

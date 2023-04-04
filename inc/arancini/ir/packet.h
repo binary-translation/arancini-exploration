@@ -19,12 +19,12 @@ public:
 	{
 	}
 
-	local_var &alloc_local(const value_type &type)
+	local_var *alloc_local(const value_type &type)
 	{
 		auto lcl = new local_var(type);
 		locals_.push_back(lcl);
 
-		return *lcl;
+		return lcl;
 	}
 
 	void append_action(action_node *node) { actions_.push_back(node); }

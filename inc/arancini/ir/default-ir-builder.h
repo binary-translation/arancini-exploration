@@ -33,7 +33,7 @@ public:
 		return current_chunk_;
 	}
 
-	virtual const local_var &alloc_local(const value_type &type) override;
+	virtual const local_var *alloc_local(const value_type &type) override;
 
 protected:
 	virtual void insert_action(action_node *a) override;
