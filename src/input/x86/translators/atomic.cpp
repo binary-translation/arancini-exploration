@@ -39,8 +39,8 @@ void atomic_translator::do_translate()
 
   case XED_ICLASS_CMPXCHG_LOCK: {
     auto dst = compute_address(0);
-    auto acc = read_operand(1);
-    auto src = read_operand(2);
+    auto acc = read_operand(2);
+    auto src = read_operand(1);
 
     auto res = builder().insert_atomic_cmpxchg(dst->val(), acc->val(), src->val());
     write_flags(res, flag_op::update, flag_op::update, flag_op::update, flag_op::update, flag_op::update, flag_op::update);
