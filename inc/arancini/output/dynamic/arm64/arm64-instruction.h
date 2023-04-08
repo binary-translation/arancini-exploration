@@ -692,6 +692,10 @@ struct arm64_instruction {
         return arm64_instruction("ret");
     }
 
+    static arm64_instruction brk(const arm64_operand &imm) {
+        return arm64_instruction("brk", use(imm));
+    }
+
     static arm64_instruction label(const std::string &label) {
         return arm64_instruction(label + ":");
     }
