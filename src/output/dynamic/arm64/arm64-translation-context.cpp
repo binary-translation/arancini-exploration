@@ -173,6 +173,8 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
 void arm64_translation_context::end_instruction() {
     for (const auto* node : nodes_)
         materialise(node);
+    // TODO: enable debug mode
+    // builder_.brk(imm_operand(instr_cnt_, 64));
 }
 
 void arm64_translation_context::end_block() {
