@@ -180,6 +180,10 @@ public:
         append(arm64_instruction::ret());
     }
 
+    void brk(const arm64_operand &imm) {
+        append(arm64_instruction::brk(imm));
+    }
+
     // TODO: insert separators before/after instructions
     void insert_sep(const std::string &sep) { label(sep); }
 
