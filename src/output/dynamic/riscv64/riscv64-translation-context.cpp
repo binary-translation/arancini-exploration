@@ -114,8 +114,10 @@ static inline bool is_flag_port(const port &value)
 static inline bool is_gpr(const port &value)
 {
 	int width = value.type().width();
-	return width == 8 || width == 16 || width == 32 || width == 64;
+	return (width == 8 || width == 16 || width == 32 || width == 64) && (!value.type().is_vector()) && value.type().is_integer();
 }
+
+static inline bool is_gpr_or_flag(const port &value) { return (is_gpr(value) || is_flag(value)); }
 
 using load_store_func_t = decltype(&Assembler::ld);
 
@@ -168,8 +170,13 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise(
 	case node_kinds::cond_br:
 		materialise_cond_br(*reinterpret_cast<const cond_br_node *>(n));
 		return std::monostate {};
-	case node_kinds::constant:
-		return materialise_constant((int64_t)((constant_node *)n)->const_val_i());
+	case node_kinds::constant: {
+		const constant_node &node = *reinterpret_cast<const constant_node *>(n);
+		if (!is_gpr_or_flag(node.val())) {
+			throw std::runtime_error("unsupported width on constant");
+		}
+		return materialise_constant((int64_t)node.const_val_i());
+	}
 	case node_kinds::binary_arith:
 		return materialise_binary_arith(*reinterpret_cast<const binary_arith_node *>(n));
 	case node_kinds::unary_arith:
@@ -484,6 +491,10 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 {
 	Register src_reg = std::get<Register>(materialise(n.source_value().owner()));
 
+	if (!(is_gpr_or_flag(n.val()) && is_gpr_or_flag(n.source_value()))) {
+		throw std::runtime_error("unsupported types on cast operation");
+	}
+
 	switch (n.op()) {
 
 	case cast_op::bitcast:
@@ -538,7 +549,7 @@ Register riscv64_translation_context::materialise_bit_extract(const bit_extract_
 
 	Register src = std::get<Register>(materialise(n.source_value().owner()));
 
-	if (is_flag(n.val())) {
+	if (is_flag(n.val()) && is_gpr(n.source_value())) {
 		if (from == 0) {
 			assembler_.andi(out_reg, src, 1);
 		} else if (from == 63) {
@@ -551,7 +562,8 @@ Register riscv64_translation_context::materialise_bit_extract(const bit_extract_
 		}
 		return out_reg;
 	}
-	if (!is_gpr(n.val())) {
+
+	if (!(is_gpr(n.val()) && is_gpr(n.source_value()))) {
 		throw std::runtime_error("Unsupported bit extract width.");
 	}
 
@@ -572,6 +584,10 @@ Register riscv64_translation_context::materialise_bit_extract(const bit_extract_
 
 Register riscv64_translation_context::materialise_bit_insert(const bit_insert_node &n)
 {
+	if (!(is_gpr(n.val()) && is_gpr(n.source_value()) && is_gpr(n.bits()))) {
+		throw std::runtime_error("Unsupported bit insert width.");
+	}
+
 	auto [out_reg, valid] = allocate_register(&n.val());
 	if (!valid) {
 		return out_reg;
@@ -656,6 +672,11 @@ Register riscv64_translation_context::materialise_read_mem(const read_mem_node &
 	assembler_.add(reg, addr_reg, MEM_BASE);
 
 	Address addr { reg };
+
+	if (!(is_gpr(n.val()) && is_gpr(n.address()))) {
+		throw std::runtime_error("unsupported width on read mem operation");
+	}
+
 	auto load_instr = load_instructions.at(n.val().type().width());
 	(assembler_.*load_instr)(out_reg, addr);
 
@@ -672,6 +693,11 @@ void riscv64_translation_context::materialise_write_mem(const write_mem_node &n)
 	assembler_.add(reg, addr_reg, MEM_BASE);
 
 	Address addr { reg };
+
+	if (!(is_gpr(n.value()) && is_gpr(n.address()))) {
+		throw std::runtime_error("unsupported width on write mem operation");
+	}
+
 	auto store_instr = store_instructions.at(n.value().type().width());
 	(assembler_.*store_instr)(src_reg, addr);
 }
@@ -680,6 +706,9 @@ Register riscv64_translation_context::materialise_read_pc(const read_pc_node &n)
 
 void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 {
+	if (!is_gpr(n.value())) {
+		throw std::runtime_error("unsupported width on write pc operation");
+	}
 	Register src_reg = std::get<Register>(materialise(n.value().owner()));
 
 	Address addr { FP, static_cast<intptr_t>(reg_offsets::PC) };
@@ -721,6 +750,9 @@ void riscv64_translation_context::materialise_cond_br(const cond_br_node &n)
 
 Register riscv64_translation_context::materialise_unary_arith(const unary_arith_node &n)
 {
+	if (!(is_gpr_or_flag(n.val()) && is_gpr_or_flag(n.lhs()))) {
+		throw std::runtime_error("unsupported width on unary arith operation");
+	}
 	auto [out_reg, valid] = allocate_register(&n.val());
 	if (!valid) {
 		return out_reg;
@@ -741,6 +773,9 @@ Register riscv64_translation_context::materialise_unary_arith(const unary_arith_
 
 Register riscv64_translation_context::materialise_ternary_arith(const ternary_arith_node &n)
 {
+	if (!(is_gpr(n.val()) && is_gpr(n.lhs()) && is_gpr(n.rhs()) && is_gpr(n.top()))) {
+		throw std::runtime_error("unsupported width on ternary arith operation");
+	}
 	auto [out_reg, valid] = allocate_register(&n.val());
 	if (!valid) {
 		return out_reg;
@@ -852,6 +887,9 @@ Register riscv64_translation_context::materialise_ternary_arith(const ternary_ar
 
 Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node &n)
 {
+	if (!(is_gpr(n.val()) && is_gpr(n.input()) && is_gpr(n.amount()))) {
+		throw std::runtime_error("unsupported width on bit shift operation");
+	}
 	auto [out_reg, valid] = allocate_register(&n.val());
 	if (!valid) {
 		return out_reg;
@@ -1007,6 +1045,10 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 
 Register riscv64_translation_context::materialise_binary_arith(const binary_arith_node &n)
 {
+	bool works = (is_gpr_or_flag(n.val()) && is_gpr_or_flag(n.lhs()) && is_gpr_or_flag(n.rhs()));
+	if (!works) {
+		throw std::runtime_error("unsupported width on binary arith operation");
+	}
 	auto [out_reg, valid] = allocate_register(&n.val());
 	if (!valid) {
 		return out_reg;
@@ -1041,6 +1083,8 @@ Register riscv64_translation_context::materialise_binary_arith(const binary_arit
 					assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
 					assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
 					break;
+				default:
+					throw std::runtime_error("Unsupported width for sub immediate");
 				}
 				if (flags_needed) {
 					assembler_.sltu(CF, src_reg1, out_reg); // CF FIXME Assumes out_reg!=src_reg1
@@ -1066,6 +1110,8 @@ Register riscv64_translation_context::materialise_binary_arith(const binary_arit
 					assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
 					assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
 					break;
+				default:
+					throw std::runtime_error("Unsupported width for sub immediate");
 				}
 
 				if (flags_needed) {
@@ -1119,6 +1165,8 @@ standardPath:
 			assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
 			assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
 			break;
+		default:
+			throw std::runtime_error("Unsupported width for sub immediate");
 		}
 
 		if (flags_needed) {
@@ -1144,6 +1192,8 @@ standardPath:
 			assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
 			assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
 			break;
+		default:
+			throw std::runtime_error("Unsupported width for sub immediate");
 		}
 
 		if (flags_needed) {
@@ -1171,6 +1221,9 @@ standardPath:
 		case 128: {
 
 			// FIXME
+			if (n.lhs().owner()->kind() != node_kinds::cast || n.rhs().owner()->kind() != node_kinds::cast) {
+				throw std::runtime_error("128bit multiply without cast");
+			}
 
 			Register out_reg2 = allocate_register(nullptr).first;
 			// Split calculation
@@ -1227,6 +1280,8 @@ standardPath:
 				assembler_.mv(OF, CF);
 			}
 			break;
+		default:
+			throw std::runtime_error("Unsupported width for sub immediate");
 		}
 		break;
 	case binary_arith_op::div:
@@ -1275,6 +1330,8 @@ standardPath:
 				throw std::runtime_error("Unsupported value type for divide");
 			}
 			break;
+		default:
+			throw std::runtime_error("Unsupported width for sub immediate");
 		}
 		break;
 	case binary_arith_op::mod:
@@ -1323,6 +1380,8 @@ standardPath:
 				throw std::runtime_error("Unsupported value type for divide");
 			}
 			break;
+		default:
+			throw std::runtime_error("Unsupported width for sub immediate");
 		}
 		break;
 
@@ -1404,7 +1463,9 @@ Register riscv64_translation_context::materialise_constant(int64_t imm)
 
 Register riscv64_translation_context::materialise_csel(const csel_node &n)
 {
-
+	if (!(is_gpr(n.val()) && is_gpr_or_flag(n.condition()) && is_gpr(n.falseval()) && is_gpr(n.trueval()))) {
+		throw std::runtime_error("unsupported width on csel operation");
+	}
 	auto [out_reg, valid] = allocate_register(&n.val());
 	if (!valid) {
 		return out_reg;
