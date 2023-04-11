@@ -145,6 +145,11 @@ static inline bool is_i128(const port &value) { return value.type().width() == 1
 
 static inline bool is_scalar_int(const port &value) { return is_gpr_or_flag(value) || is_i128(value); }
 
+static inline bool is_int_vector(const port &value, int total_width, int element_width)
+{
+	return (value.type().is_vector() && value.type().is_integer() && value.type().width() == total_width && value.type().element_width() == element_width);
+}
+
 using load_store_func_t = decltype(&Assembler::ld);
 
 static std::unordered_map<std::size_t, load_store_func_t> load_instructions {
@@ -224,6 +229,10 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise(
 	case node_kinds::internal_call:
 		materialise_internal_call(*reinterpret_cast<const internal_call_node *>(n));
 		return std::monostate {};
+	case node_kinds::vector_insert:
+		return materialise_vector_insert(*reinterpret_cast<const vector_insert_node *>(n));
+	case node_kinds::vector_extract:
+		return materialise_vector_extract(*reinterpret_cast<const vector_extract_node *>(n));
 	default:
 		throw std::runtime_error("unsupported node");
 	}
@@ -529,7 +538,7 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 {
 	Register src_reg = std::get<Register>(materialise(n.source_value().owner()));
 
-	bool works = is_scalar_int(n.val())
+	bool works = (is_scalar_int(n.val()) || (is_int_vector(n.val(), 128, 64) && n.op() == cast_op::bitcast))
 		&& (is_gpr_or_flag(n.source_value()) || (is_i128(n.source_value()) && (n.op() == cast_op::trunc || n.op() == cast_op::bitcast)));
 	if (!works) {
 		throw std::runtime_error("unsupported types on cast operation");
@@ -761,7 +770,7 @@ void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 			(assembler_.*store_instr)(reg, { FP, static_cast<intptr_t>(n.regoff()) });
 		}
 		return;
-	} else if (is_i128(value)) {
+	} else if (is_i128(value) || is_int_vector(value, 128, 64)) {
 		Register reg = std::get<Register>(materialise(value.owner())); // Will give lower 64bit
 		Register reg2 = get_secondary_register(&value); // Will give higher 64bit
 
@@ -1641,5 +1650,58 @@ void riscv64_translation_context::materialise_internal_call(const internal_call_
 		ret_val_ = 2;
 	} else {
 		throw std::runtime_error("unsupported internal call");
+	}
+}
+
+Register riscv64_translation_context::materialise_vector_insert(const vector_insert_node &n)
+{
+	if (n.val().type().width() != 128) {
+		throw std::runtime_error("Unsupported vector insert width");
+	}
+	if (n.val().type().element_width() != 64) {
+		throw std::runtime_error("Unsupported vector insert element width");
+	}
+	if (n.insert_value().type().width() != 64) {
+		throw std::runtime_error("Unsupported vector insert insert_value width");
+	}
+
+	Register insert = std::get<Register>(materialise(n.insert_value().owner()));
+	Register src = std::get<Register>(materialise(n.source_vector().owner()));
+
+	if (n.index() == 0) {
+		// No value modification just map correctly
+		secondary_reg_for_port_[&n.val()] = get_secondary_register(&n.source_vector()).encoding();
+		return insert;
+	} else if (n.index() == 1) {
+		// No value modification just map correctly
+		secondary_reg_for_port_[&n.val()] = insert.encoding();
+		return src;
+	} else {
+		throw std::runtime_error("Unsupported vector insert index");
+	}
+}
+
+Register riscv64_translation_context::materialise_vector_extract(const vector_extract_node &n)
+{
+	if (n.source_vector().type().width() != 128) {
+		throw std::runtime_error("Unsupported vector extract width");
+	}
+	if (n.source_vector().type().element_width() != 64) {
+		throw std::runtime_error("Unsupported vector extract element width");
+	}
+	if (n.val().type().width() != 64) {
+		throw std::runtime_error("Unsupported vector extract value width");
+	}
+
+	Register src = std::get<Register>(materialise(n.source_vector().owner()));
+
+	if (n.index() == 0) {
+		// No value modification just map correctly
+		return src;
+	} else if (n.index() == 1) {
+		// No value modification just map correctly
+		return get_secondary_register(&n.source_vector());
+	} else {
+		throw std::runtime_error("Unsupported vector extract index");
 	}
 }
