@@ -99,6 +99,7 @@ void riscv64_translation_context::begin_instruction(off_t address, const std::st
 	reg_allocator_index_ = 0;
 	reg_for_port_.clear();
 	secondary_reg_for_port_.clear();
+	locals_.clear();
 	labels_.clear();
 	nodes_.clear();
 	current_address_ = address;
@@ -233,6 +234,22 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise(
 		return materialise_vector_insert(*reinterpret_cast<const vector_insert_node *>(n));
 	case node_kinds::vector_extract:
 		return materialise_vector_extract(*reinterpret_cast<const vector_extract_node *>(n));
+	case node_kinds::read_local:
+		return Register { locals_[reinterpret_cast<const read_local_node *>(n)->local()] };
+	case node_kinds::write_local: {
+		auto &node = *reinterpret_cast<const write_local_node *>(n);
+		Register write_reg = std::get<Register>(materialise(node.write_value().owner()));
+		uint32_t reg_enc;
+		if (!locals_.count(node.local())) {
+			Register local = allocate_register(nullptr).first;
+			reg_enc = local.encoding();
+			locals_[node.local()] = reg_enc;
+		} else {
+			reg_enc = locals_[node.local()];
+		}
+		assembler_.mv(Register { reg_enc }, write_reg);
+		return std::monostate {};
+	}
 	default:
 		throw std::runtime_error("unsupported node");
 	}
