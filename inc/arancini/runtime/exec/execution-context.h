@@ -21,7 +21,7 @@ public:
 	execution_context(input::input_arch &ia, output::dynamic::dynamic_output_engine &oe);
 	~execution_context();
 
-	void *add_memory_region(off_t base_address, size_t size);
+	void *add_memory_region(off_t base_address, size_t size, bool ignore_brk=false);
 
 	std::shared_ptr<execution_thread> create_execution_thread();
 
@@ -33,6 +33,8 @@ public:
 private:
 	void *memory_;
 	size_t memory_size_;
+	uintptr_t brk_;
+	uintptr_t brk_limit_;
 
 	std::map<void *, std::shared_ptr<execution_thread>> threads_;
 	dbt::translation_engine te_;
