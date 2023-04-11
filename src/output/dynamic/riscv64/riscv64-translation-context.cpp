@@ -672,13 +672,20 @@ Register riscv64_translation_context::materialise_bit_insert(const bit_insert_no
 Register riscv64_translation_context::materialise_read_reg(const read_reg_node &n)
 {
 	const port &value = n.val();
+	auto [out_reg, valid] = allocate_register(&n.val());
+	if (!valid) {
+		return out_reg;
+	}
 	if (is_flag(value) || is_gpr(value)) { // Flags or GPR
-		auto [out_reg, valid] = allocate_register(&n.val());
-		if (!valid) {
-			return out_reg;
-		}
+
 		auto load_instr = load_instructions.at(value.type().width());
 		(assembler_.*load_instr)(out_reg, { FP, static_cast<intptr_t>(n.regoff()) });
+		return out_reg;
+	} else if (is_i128(value)) {
+		Register out_reg2 = get_secondary_register(&value); // Will give higher 64bit
+
+		assembler_.ld(out_reg, { FP, static_cast<intptr_t>(n.regoff()) });
+		assembler_.ld(out_reg2, { FP, static_cast<intptr_t>(n.regoff() + 8) });
 		return out_reg;
 	}
 
@@ -703,6 +710,13 @@ void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 			(assembler_.*store_instr)(reg, { FP, static_cast<intptr_t>(n.regoff()) });
 		}
 		return;
+	} else if (is_i128(value)) {
+		Register reg = std::get<Register>(materialise(value.owner())); // Will give lower 64bit
+		Register reg2 = get_secondary_register(&value); // Will give higher 64bit
+
+		assembler_.sd(reg, { FP, static_cast<intptr_t>(n.regoff()) });
+		assembler_.sd(reg2, { FP, static_cast<intptr_t>(n.regoff() + 8) });
+		return;
 	}
 
 	throw std::runtime_error("Unsupported width on register write: " + std::to_string(value.type().width()));
@@ -721,6 +735,14 @@ Register riscv64_translation_context::materialise_read_mem(const read_mem_node &
 	assembler_.add(reg, addr_reg, MEM_BASE);
 
 	Address addr { reg };
+
+	if (is_i128(n.val())) {
+		Register out_reg2 = get_secondary_register(&n.val());
+
+		assembler_.ld(out_reg, addr);
+		assembler_.ld(out_reg2, Address { reg, 8 });
+		return out_reg;
+	}
 
 	if (!(is_gpr(n.val()) && is_gpr(n.address()))) {
 		throw std::runtime_error("unsupported width on read mem operation");
@@ -742,6 +764,14 @@ void riscv64_translation_context::materialise_write_mem(const write_mem_node &n)
 	assembler_.add(reg, addr_reg, MEM_BASE);
 
 	Address addr { reg };
+
+	if (is_i128(n.value())) {
+		Register reg2 = get_secondary_register(&n.value()); // Will give higher 64bit
+
+		assembler_.sd(src_reg, addr);
+		assembler_.sd(reg2, Address { reg, 8 });
+		return;
+	}
 
 	if (!(is_gpr(n.value()) && is_gpr(n.address()))) {
 		throw std::runtime_error("unsupported width on write mem operation");
