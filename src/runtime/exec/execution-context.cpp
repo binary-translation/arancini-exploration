@@ -177,6 +177,11 @@ int execution_context::internal_call(void *cpu_state, int call)
 			//exit(x86_state->RDI) ?
 			return 1;
 		}
+		case 228: // clock_gettime
+		{
+			x86_state->RAX = native_syscall(__NR_clock_gettime, x86_state->RDI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RSI));
+			break;
+		}
 		default:
 			std::cerr << "Unsupported syscall id " << std::dec << x86_state->RAX << std::endl;
 			return 1;
