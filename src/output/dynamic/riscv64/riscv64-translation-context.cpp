@@ -529,7 +529,8 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 {
 	Register src_reg = std::get<Register>(materialise(n.source_value().owner()));
 
-	bool works = is_gpr_or_flag(n.val()) && (is_gpr_or_flag(n.source_value()) || (is_i128(n.source_value()) && n.op() == cast_op::trunc);
+	bool works = is_scalar_int(n.val())
+		&& (is_gpr_or_flag(n.source_value()) || (is_i128(n.source_value()) && (n.op() == cast_op::trunc || n.op() == cast_op::bitcast)));
 	if (!works) {
 		throw std::runtime_error("unsupported types on cast operation");
 	}
@@ -537,11 +538,32 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 	switch (n.op()) {
 
 	case cast_op::bitcast:
+		if (n.val().type().width() == 128) {
+			secondary_reg_for_port_[&n.val()] = get_secondary_register(&n.source_value()).encoding();
+		}
+		return src_reg;
 	case cast_op::sx:
+		if (is_i128(n.val())) {
+			for (const node *target : n.val().targets()) {
+				if (target->kind() != node_kinds::binary_arith) {
+					throw std::runtime_error("unsupported types on cast sx operation");
+				}
+				binary_arith_op op = ((const binary_arith_node *)target)->op();
+				if (!(op == binary_arith_op::mul || op == binary_arith_op::div || op == binary_arith_op::mod)) {
+					throw std::runtime_error("unsupported types on cast sx operation");
+				}
+			}
+		}
 		// No-op
 		return src_reg;
 
 	case cast_op::zx: {
+		if (n.val().type().width() == 128) {
+			secondary_reg_for_port_[&n.val()] = ZERO.encoding();
+			if (n.source_value().type().width() == 64) {
+				return src_reg;
+			}
+		}
 		if (is_flag(n.source_value())) { // Flags always zero extended
 			return src_reg;
 		}
@@ -558,6 +580,10 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 		return out_reg;
 	}
 	case cast_op::trunc: {
+		if (is_i128(n.val())) {
+			throw std::runtime_error("truncate to 128bit unsupported");
+		}
+
 		if (n.val().type().width() == 64) {
 			return src_reg;
 		}
