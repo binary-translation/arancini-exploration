@@ -14,11 +14,13 @@
 #endif
 
 #include <asm-generic/ioctls.h>
-#include <sys/uio.h>
+#include <asm/stat.h>
 #include <csignal>
 #include <iostream>
+#include <linux/fcntl.h>
 #include <stdexcept>
 #include <sys/mman.h>
+#include <sys/uio.h>
 
 using namespace arancini::runtime::exec;
 
@@ -101,6 +103,72 @@ int execution_context::internal_call(void *cpu_state, int call)
 	if (call == 1) { // syscall
 		auto x86_state = (x86::x86_cpu_state *)cpu_state;
 		switch (x86_state->RAX) {
+		case 2: // open
+		{
+			auto filename = (uintptr_t)get_memory_ptr((off64_t)x86_state->RDI);
+			uint64_t flags = x86_state->RSI;
+			uint64_t mode = x86_state->RDX;
+			x86_state->RAX = native_syscall(__NR_openat, (uint64_t)AT_FDCWD, filename, flags, mode);
+			break;
+		}
+		case 3: // close
+		{
+			x86_state->RAX = native_syscall(__NR_close, x86_state->RDI);
+			break;
+		}
+		case 5: // fstat
+		{
+			uint64_t fd = x86_state->RDI;
+			uint64_t statp = x86_state->RSI;
+			struct stat tmp_struct { };
+
+			uint64_t result = native_syscall(__NR_fstat, fd, (uintptr_t)&tmp_struct);
+			x86_state->RAX = result;
+
+			if (result == 0) {
+
+				struct target_stat {
+					unsigned long st_dev;
+					unsigned long st_ino;
+					unsigned long st_nlink;
+
+					unsigned int st_mode;
+					unsigned int st_uid;
+					unsigned int st_gid;
+					unsigned int __pad0;
+					unsigned long st_rdev;
+					long st_size;
+					long st_blksize;
+					long st_blocks;
+
+					unsigned long st_atime;
+					unsigned long st_atime_nsec;
+					unsigned long st_mtime;
+					unsigned long st_mtime_nsec;
+					unsigned long st_ctime;
+					unsigned long st_ctime_nsec;
+					long __unused[3];
+				} __attribute__((packed)) *target = (struct target_stat *)get_memory_ptr((off_t)statp);
+
+				target->st_dev = tmp_struct.st_dev;
+				target->st_ino = tmp_struct.st_ino;
+				target->st_nlink = tmp_struct.st_nlink;
+				target->st_mode = tmp_struct.st_mode;
+				target->st_uid = tmp_struct.st_uid;
+				target->st_gid = tmp_struct.st_gid;
+				target->st_rdev = tmp_struct.st_rdev;
+				target->st_size = tmp_struct.st_size;
+				target->st_blksize = tmp_struct.st_blksize;
+				target->st_blocks = tmp_struct.st_blocks;
+				target->st_atime = tmp_struct.st_atime;
+				target->st_atime_nsec = tmp_struct.st_atime_nsec;
+				target->st_mtime = tmp_struct.st_mtime;
+				target->st_mtime_nsec = tmp_struct.st_mtime_nsec;
+				target->st_ctime = tmp_struct.st_ctime;
+				target->st_ctime_nsec = tmp_struct.st_ctime_nsec;
+			}
+			break;
+		}
 		case 9: // mmap
 		{
 			// Hint to higher than already mapped memory if no hint
@@ -172,6 +240,11 @@ int execution_context::internal_call(void *cpu_state, int call)
 			}
 
 			x86_state->RAX = native_syscall(__NR_writev, x86_state->RDI, (uintptr_t)iovec_new, iocnt);
+			break;
+		}
+		case 77: // ftruncate
+		{
+			x86_state->RAX = native_syscall(__NR_ftruncate, x86_state->RDI, x86_state->RSI);
 			break;
 		}
 		case 25: // mremap
