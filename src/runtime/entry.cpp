@@ -18,6 +18,7 @@
 #endif
 
 #include <arancini/input/x86/x86-input-arch.h>
+#include <sys/auxv.h>
 #include <sys/ucontext.h>
 
 using namespace arancini::runtime::exec;
@@ -129,10 +130,73 @@ static void load_guest_program_headers(execution_context *ctx)
 	}
 }
 
+static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, execution_context *execution_context)
+{
+	// Stack pointer always needs to be 16-Byte aligned per ABI convention
+	int envc = 0;
+	for (; environ[envc]; ++envc)
+		;
+
+	// auxv entries are always 16 Bytes
+	stack_top -= ((envc + argc) & 1) * 8;
+
+	// Add auxv to guest stack
+	{
+		auto *stack = (Elf64_auxv_t *)execution_context->get_memory_ptr(stack_top);
+		*(--stack) = (Elf64_auxv_t) { AT_NULL, { 0 } };
+		//		*(--stack) = (Elf64_auxv_t) {AT_ENTRY, {...}};
+		//		*(--stack) = (Elf64_auxv_t) {AT_PHDR, {...r}};
+		//		*(--stack) = (Elf64_auxv_t) {AT_PHNUM, {...}};
+		//		*(--stack) = (Elf64_auxv_t) {AT_PHENT, {...}};
+		*(--stack) = (Elf64_auxv_t) { AT_UID, { getauxval(AT_UID) } };
+		*(--stack) = (Elf64_auxv_t) { AT_GID, { getauxval(AT_GID) } };
+		*(--stack) = (Elf64_auxv_t) { AT_EGID, { getauxval(AT_EGID) } };
+		*(--stack) = (Elf64_auxv_t) { AT_EUID, { getauxval(AT_EUID) } };
+		*(--stack) = (Elf64_auxv_t) { AT_CLKTCK, { getauxval(AT_CLKTCK) } };
+		*(--stack) = (Elf64_auxv_t) { AT_RANDOM, { getauxval(AT_RANDOM) - (uintptr_t)ctx->get_memory_ptr(0) } }; // TODO Copy/Generate new one?
+		*(--stack) = (Elf64_auxv_t) { AT_SECURE, { 0 } };
+		*(--stack) = (Elf64_auxv_t) { AT_PAGESZ, { getauxval(AT_PAGESZ) } };
+		*(--stack) = (Elf64_auxv_t) { AT_HWCAP, { 0 } };
+		*(--stack) = (Elf64_auxv_t) { AT_HWCAP2, { 0 } };
+		//        *(--stack) = (Elf64_auxv_t) {AT_PLATFORM, {0}};
+		*(--stack) = (Elf64_auxv_t) { AT_EXECFN, { (uintptr_t)argv[0] - (uintptr_t)ctx->get_memory_ptr(0) } };
+		stack_top = (intptr_t)(stack) - (intptr_t)ctx->get_memory_ptr(0);
+	}
+	// Copy environ to guest stack
+	{
+		char **stack = (char **)execution_context->get_memory_ptr(stack_top);
+		*(--stack) = nullptr;
+		// Zero terminated so environ[envc] will be zero and also needs to be copied
+		for (int i = envc - 1; i >= 0; i--) {
+			*(--stack) = (char *)(((uintptr_t)environ[i]) - (uintptr_t)ctx->get_memory_ptr(0));
+		}
+		stack_top = (intptr_t)stack - (intptr_t)ctx->get_memory_ptr(0);
+	}
+	// Copy argv to guest stack
+	{
+		const char **stack = (const char **)execution_context->get_memory_ptr(stack_top);
+
+		// Zero terminated so argv[argc] will be zero and also needs to be copied
+		*(--stack) = nullptr;
+		for (int i = argc - 1; i >= 0; i--) {
+			*(--stack) = (char *)(((uintptr_t)argv[i]) - (uintptr_t)ctx->get_memory_ptr(0));
+		}
+		stack_top = (intptr_t)stack - (intptr_t)ctx->get_memory_ptr(0);
+	}
+	// Copy argc to guest stack
+	{
+		long *stack = (long *)execution_context->get_memory_ptr(stack_top);
+		*(--stack) = argc;
+		stack_top = (intptr_t)stack - (intptr_t)ctx->get_memory_ptr(0);
+	}
+
+	return (intptr_t)stack_top;
+}
+
 /*
  * Initialises the dynamic runtime for the guest program that is about to be executed.
  */
-extern "C" void *initialise_dynamic_runtime(unsigned long entry_point)
+extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc, char **argv)
 {
 	std::cerr << "arancini: dbt: initialise" << std::endl;
 
@@ -157,7 +221,8 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point)
 	// emulated address space.
 	x86_cpu_state *x86_state = (x86_cpu_state *)main_thread->get_cpu_state();
 	x86_state->PC = entry_point;
-	x86_state->RSP = 0x100000000 - 8;
+
+	x86_state->RSP = setup_guest_stack(argc, argv, 0x100000000, ctx);
 
 	// Report on various information for useful debugging purposes.
 	std::cerr << "state @ " << (void *)x86_state << ", pc @ " << std::hex << x86_state->PC << ", stack @ " << std::hex << x86_state->RSP << std::endl;
