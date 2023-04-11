@@ -90,7 +90,7 @@ void llvm_static_output_engine_impl::initialise_types()
 	// Functions
 	types.main_fn = FunctionType::get(types.i32, { types.i32, PointerType::get(Type::getInt8PtrTy(*llvm_context_), 0) }, false);
 	types.loop_fn = FunctionType::get(types.vd, { types.cpu_state_ptr }, false);
-	types.init_dbt = FunctionType::get(types.cpu_state_ptr, { types.i64 }, false);
+	types.init_dbt = FunctionType::get(types.cpu_state_ptr, { types.i64, types.i32, PointerType::get(Type::getInt8PtrTy(*llvm_context_),0) }, false);
 	types.dbt_invoke = FunctionType::get(types.i32, { types.cpu_state_ptr }, false);
 	types.internal_call_handler = FunctionType::get(types.i32, { types.cpu_state_ptr, types.i32 }, false);
 }
@@ -104,8 +104,8 @@ void llvm_static_output_engine_impl::create_main_function(Function *loop_fn)
 
 	IRBuilder<> builder(*llvm_context_);
 	builder.SetInsertPoint(main_entry_block);
-	auto init_dbt_result
-		= builder.CreateCall(module_->getOrInsertFunction("initialise_dynamic_runtime", types.init_dbt), { ConstantInt::get(types.i64, e_.get_entrypoint()) });
+	auto init_dbt_result = builder.CreateCall(module_->getOrInsertFunction("initialise_dynamic_runtime", types.init_dbt),
+		{ ConstantInt::get(types.i64, e_.get_entrypoint()), main_fn->getArg(0), main_fn->getArg(1) });
 
 	auto is_not_null = builder.CreateCmp(CmpInst::Predicate::ICMP_NE, builder.CreatePtrToInt(init_dbt_result, types.i64), ConstantInt::get(types.i64, 0));
 
