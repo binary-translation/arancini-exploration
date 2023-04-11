@@ -612,14 +612,24 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 
 Register riscv64_translation_context::materialise_bit_extract(const bit_extract_node &n)
 {
+	int from = n.from();
+	int length = n.length();
+	Register src = std::get<Register>(materialise(n.source_value().owner()));
+
+	if (n.source_value().type().width() == 128) {
+		if (length == 64) {
+			if (from == 0) {
+				return src;
+			} else if (from == 64) {
+				return get_secondary_register(&n.source_value());
+			}
+		}
+	}
+
 	auto [out_reg, valid] = allocate_register(&n.val());
 	if (!valid) {
 		return out_reg;
 	}
-	int from = n.from();
-	int length = n.length();
-
-	Register src = std::get<Register>(materialise(n.source_value().owner()));
 
 	if (is_flag(n.val()) && is_gpr(n.source_value())) {
 		if (from == 0) {
@@ -639,8 +649,6 @@ Register riscv64_translation_context::materialise_bit_extract(const bit_extract_
 		throw std::runtime_error("Unsupported bit extract width.");
 	}
 
-	// TODO Handle upper 64 from 128 for split Register multiply case
-
 	if (from == 0 && length == 32) {
 		assembler_.sextw(out_reg, src);
 		return out_reg;
@@ -657,7 +665,31 @@ Register riscv64_translation_context::materialise_bit_extract(const bit_extract_
 
 Register riscv64_translation_context::materialise_bit_insert(const bit_insert_node &n)
 {
-	if (!(is_gpr(n.val()) && is_gpr(n.source_value()) && is_gpr(n.bits()))) {
+	int to = n.to();
+	int length = n.length();
+
+	Register src = std::get<Register>(materialise(n.source_value().owner()));
+
+	Register bits = std::get<Register>(materialise(n.bits().owner()));
+
+	if (is_i128(n.val()) && is_i128(n.source_value()) && is_gpr(n.bits())) {
+		if (to + length < 64) { // No modification of high part
+			secondary_reg_for_port_[&n.val()] = get_secondary_register(&n.source_value()).encoding();
+		} else if (to >= 64) { // Only upper part modified
+
+			if (to == 64 && length == 64) {
+				secondary_reg_for_port_[&n.val()] = bits.encoding();
+				return src;
+			} /*else {
+				Register out_reg2 = get_secondary_register(&n.val());
+				Register src_reg2 = get_secondary_register(&n.source_value());
+			}*/
+			throw std::runtime_error("Unsupported bit insert arguments for 128 bit width.");
+		} else {
+			throw std::runtime_error("Unsupported bit insert arguments for 128 bit width.");
+		}
+
+	} else if (!(is_gpr(n.val()) && is_gpr(n.source_value()) && is_gpr(n.bits()))) {
 		throw std::runtime_error("Unsupported bit insert width.");
 	}
 
@@ -666,13 +698,6 @@ Register riscv64_translation_context::materialise_bit_insert(const bit_insert_no
 		return out_reg;
 	}
 	Register temp_reg = allocate_register(nullptr).first;
-	int to = n.to();
-	int length = n.length();
-
-	// TODO Handle inserts for div with 128bits
-
-	Register src = std::get<Register>(materialise(n.source_value().owner()));
-	Register bits = std::get<Register>(materialise(n.bits().owner()));
 
 	int64_t mask = ~(((1ll << length) - 1) << to);
 
@@ -1151,7 +1176,8 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 Register riscv64_translation_context::materialise_binary_arith(const binary_arith_node &n)
 {
 	bool works = (is_gpr_or_flag(n.val()) && is_gpr_or_flag(n.lhs()) && is_gpr_or_flag(n.rhs()))
-		|| ((n.op() == binary_arith_op::mul || n.op() == binary_arith_op::bxor) && is_i128(n.val()) && is_i128(n.lhs()) && is_i128(n.rhs()));
+		|| ((n.op() == binary_arith_op::mul || n.op() == binary_arith_op::div || n.op() == binary_arith_op::mod || n.op() == binary_arith_op::bxor)
+			&& is_i128(n.val()) && is_i128(n.lhs()) && is_i128(n.rhs()));
 	if (!works) {
 		throw std::runtime_error("unsupported width on binary arith operation");
 	}
