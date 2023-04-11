@@ -208,7 +208,7 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 
 	// Create a memory area for the stack.
 	unsigned long stack_size = 0x10000;
-	ctx->add_memory_region(0x100000000 - stack_size, stack_size);
+	ctx->add_memory_region(0x100000000 - stack_size, stack_size, true);
 
 	// TODO: Load guest .text, .data, .bss sections via program headers
 	load_guest_program_headers(ctx);

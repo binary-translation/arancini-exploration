@@ -27,6 +27,8 @@ using namespace arancini::runtime::exec;
 execution_context::execution_context(input::input_arch &ia, output::dynamic::dynamic_output_engine &oe)
 	: memory_(nullptr)
 	, memory_size_(0x100000000ull)
+	, brk_ { 0 }
+	, brk_limit_ { UINTPTR_MAX }
 	, te_(*this, ia, oe)
 {
 	allocate_guest_memory();
@@ -34,7 +36,7 @@ execution_context::execution_context(input::input_arch &ia, output::dynamic::dyn
 
 execution_context::~execution_context() { }
 
-void *execution_context::add_memory_region(off_t base_address, size_t size)
+void *execution_context::add_memory_region(off_t base_address, size_t size, bool ignore_brk)
 {
 	if ((base_address + size) > memory_size_) {
 		throw std::runtime_error("memory region out of bounds");
@@ -49,6 +51,12 @@ void *execution_context::add_memory_region(off_t base_address, size_t size)
 			  << ", size=" << size << ", aligned-size=" << aligned_size << std::endl;
 
 	mprotect((void *)aligned_base_ptr, aligned_size, PROT_READ | PROT_WRITE);
+
+	if (!ignore_brk) {
+		brk_ = std::max(aligned_base_ptr + aligned_size, brk_);
+	} else {
+		brk_limit_ = std::min(brk_limit_, aligned_base_ptr);
+	}
 
 	return (void *)base_ptr;
 }
@@ -202,6 +210,32 @@ int execution_context::internal_call(void *cpu_state, int call)
 			// Don't allow arbitrary unmaps?
 			x86_state->RAX = native_syscall(__NR_munmap, addr, length);
 
+			break;
+		}
+		case 12: // brk
+		{
+			// 407bf7
+			uint64_t addr = x86_state->RDI;
+			if (addr == 0) {
+				x86_state->RAX = brk_ - (uintptr_t)get_memory_ptr(0);
+			} else if ((uintptr_t)get_memory_ptr((off_t)addr) < brk_) {
+				brk_ = (uintptr_t)get_memory_ptr((off_t)addr);
+				x86_state->RAX = addr;
+			} else if ((uintptr_t)get_memory_ptr((off_t)addr) < brk_limit_) {
+
+				uint64_t size = (uintptr_t)get_memory_ptr((off_t)addr) - brk_;
+				uintptr_t aligned_ptr = brk_ & ~0xfffull;
+				uintptr_t base_ptr_off = brk_ & 0xfffull;
+				uintptr_t aligned_size = (size + base_ptr_off + 0xfff) & ~0xfffull;
+
+				mprotect((void *)aligned_ptr, aligned_size, PROT_READ | PROT_WRITE);
+
+				brk_ = (uintptr_t)get_memory_ptr((off_t)addr);
+
+				x86_state->RAX = addr;
+			} else {
+				x86_state->RAX = brk_ - (uintptr_t)get_memory_ptr(0);
+			}
 			break;
 		}
 		case 16: // ioctl
