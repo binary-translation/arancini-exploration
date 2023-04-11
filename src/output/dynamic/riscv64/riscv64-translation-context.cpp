@@ -1125,7 +1125,7 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 Register riscv64_translation_context::materialise_binary_arith(const binary_arith_node &n)
 {
 	bool works = (is_gpr_or_flag(n.val()) && is_gpr_or_flag(n.lhs()) && is_gpr_or_flag(n.rhs()))
-		|| ((n.op() == binary_arith_op::mul) && is_i128(n.val()) && is_i128(n.lhs()) && is_i128(n.rhs()));
+		|| ((n.op() == binary_arith_op::mul || n.op() == binary_arith_op::bxor) && is_i128(n.val()) && is_i128(n.lhs()) && is_i128(n.rhs()));
 	if (!works) {
 		throw std::runtime_error("unsupported width on binary arith operation");
 	}
@@ -1294,6 +1294,12 @@ standardPath:
 		break;
 	case binary_arith_op::bxor:
 		assembler_.xor_(out_reg, src_reg1, src_reg2);
+		if (is_i128(n.val())) {
+			Register out_reg2 = get_secondary_register(&n.val());
+			Register src_reg12 = get_secondary_register(&n.lhs());
+			Register src_reg22 = get_secondary_register(&n.rhs());
+			assembler_.xor_(out_reg2, src_reg12, src_reg22);
+		}
 		break;
 
 	case binary_arith_op::mul:
