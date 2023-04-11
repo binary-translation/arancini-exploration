@@ -54,6 +54,27 @@ std::pair<Register, bool> riscv64_translation_context::allocate_register(const p
 	return { reg, true };
 }
 
+Register riscv64_translation_context::get_secondary_register(const port *p)
+{
+	if (p && secondary_reg_for_port_.count(p)) {
+		return Register { secondary_reg_for_port_[p] };
+	}
+
+	constexpr static Register registers[] { S1, A0, A1, A2, A3, A4, A5, T0, T1, T2, A6, A7, S2, S3, S4, S5, S6, S7, T3, T4, T5 };
+
+	if (reg_allocator_index_ >= std::size(registers)) {
+		throw std::runtime_error("RISC-V DBT ran out of registers for packet");
+	}
+
+	Register reg = registers[reg_allocator_index_++];
+
+	if (p) {
+		secondary_reg_for_port_[p] = reg.encoding();
+	}
+
+	return reg;
+}
+
 /**
  * Adds a NOP with a non standard encoding to the generated instructions as a marker.
  * @param payload The immediate to use in the immediate field of the NOP
@@ -77,6 +98,7 @@ void riscv64_translation_context::begin_instruction(off_t address, const std::st
 	add_marker(2);
 	reg_allocator_index_ = 0;
 	reg_for_port_.clear();
+	secondary_reg_for_port_.clear();
 	labels_.clear();
 	nodes_.clear();
 	current_address_ = address;
@@ -118,6 +140,10 @@ static inline bool is_gpr(const port &value)
 }
 
 static inline bool is_gpr_or_flag(const port &value) { return (is_gpr(value) || is_flag(value)); }
+
+static inline bool is_i128(const port &value) { return value.type().width() == 128 && value.type().is_integer() && !value.type().is_vector(); }
+
+static inline bool is_scalar_int(const port &value) { return is_gpr_or_flag(value) || is_i128(value); }
 
 using load_store_func_t = decltype(&Assembler::ld);
 
@@ -503,7 +529,8 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 {
 	Register src_reg = std::get<Register>(materialise(n.source_value().owner()));
 
-	if (!(is_gpr_or_flag(n.val()) && is_gpr_or_flag(n.source_value()))) {
+	bool works = is_gpr_or_flag(n.val()) && (is_gpr_or_flag(n.source_value()) || (is_i128(n.source_value()) && n.op() == cast_op::trunc);
+	if (!works) {
 		throw std::runtime_error("unsupported types on cast operation");
 	}
 
@@ -531,6 +558,10 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 		return out_reg;
 	}
 	case cast_op::trunc: {
+		if (n.val().type().width() == 64) {
+			return src_reg;
+		}
+
 		auto [out_reg, valid] = allocate_register(&n.val());
 		if (!valid) {
 			return out_reg;
@@ -1063,7 +1094,8 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 
 Register riscv64_translation_context::materialise_binary_arith(const binary_arith_node &n)
 {
-	bool works = (is_gpr_or_flag(n.val()) && is_gpr_or_flag(n.lhs()) && is_gpr_or_flag(n.rhs()));
+	bool works = (is_gpr_or_flag(n.val()) && is_gpr_or_flag(n.lhs()) && is_gpr_or_flag(n.rhs()))
+		|| ((n.op() == binary_arith_op::mul) && is_i128(n.val()) && is_i128(n.lhs()) && is_i128(n.rhs()));
 	if (!works) {
 		throw std::runtime_error("unsupported width on binary arith operation");
 	}
@@ -1243,7 +1275,7 @@ standardPath:
 				throw std::runtime_error("128bit multiply without cast");
 			}
 
-			Register out_reg2 = allocate_register(nullptr).first;
+			Register out_reg2 = get_secondary_register(&n.val());
 			// Split calculation
 			assembler_.mul(out_reg, src_reg1, src_reg2);
 			switch (n.val().type().element_type().type_class()) {

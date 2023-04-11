@@ -34,7 +34,8 @@ private:
 	std::unordered_map<const ir::label_node *, std::unique_ptr<Label>> labels_;
 
 	size_t reg_allocator_index_ { 0 };
-	std::unordered_map<const ir::port *, uint32_t> reg_for_port_;
+    std::unordered_map<const ir::port *, uint32_t> reg_for_port_;
+    std::unordered_map<const ir::port *, uint32_t> secondary_reg_for_port_;
 
 	std::pair<Register, bool> allocate_register(const ir::port *p = nullptr);
 
@@ -63,5 +64,6 @@ private:
 	void materialise_internal_call(const ir::internal_call_node &n);
 
 	void add_marker(int payload);
+	Register get_secondary_register(const ir::port *p);
 };
 } // namespace arancini::output::dynamic::riscv64
