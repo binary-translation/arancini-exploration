@@ -101,6 +101,41 @@ int execution_context::internal_call(void *cpu_state, int call)
 	if (call == 1) { // syscall
 		auto x86_state = (x86::x86_cpu_state *)cpu_state;
 		switch (x86_state->RAX) {
+		case 9: // mmap
+		{
+			// Hint to higher than already mapped memory if no hint
+			auto addr = x86_state->RDI == 0 ? (uintptr_t)get_memory_ptr((off_t)memory_size_ + 4096) : (uintptr_t)get_memory_ptr((int64_t)x86_state->RDI);
+			uint64_t length = x86_state->RSI;
+			uint64_t prot = x86_state->RDX;
+			uint64_t flags = x86_state->R10;
+			uint64_t fd = x86_state->R8;
+			uint64_t offset = x86_state->R9;
+
+			if (flags & MAP_FIXED && (addr < (uintptr_t)get_memory_ptr(0) || (addr + length) > (uintptr_t)get_memory_ptr((off_t)memory_size_))) {
+				// Prevent overwriting non-guest memory
+				flags &= ~MAP_FIXED;
+				flags |= MAP_FIXED_NOREPLACE;
+			}
+
+			uint64_t ptr = native_syscall(__NR_mmap, addr, length, prot, flags, fd, offset);
+			if (!(ptr & (1ull << 63))) { // Positive return value (No error)
+				ptr -= (uintptr_t)get_memory_ptr(0); // Adjust to guest space
+				// TODO Negative pointer values possible (which might not be a good idea)
+			}
+			x86_state->RAX = ptr;
+
+			break;
+		}
+		case 11: // munmap
+		{
+			auto addr = (uintptr_t)get_memory_ptr((int64_t)x86_state->RDI);
+			uint64_t length = x86_state->RSI;
+
+			// Don't allow arbitrary unmaps?
+			x86_state->RAX = native_syscall(__NR_munmap, addr, length);
+
+			break;
+		}
 		case 16: // ioctl
 		{
 			// Not sure how many actually needed
@@ -137,6 +172,30 @@ int execution_context::internal_call(void *cpu_state, int call)
 			}
 
 			x86_state->RAX = native_syscall(__NR_writev, x86_state->RDI, (uintptr_t)iovec_new, iocnt);
+			break;
+		}
+		case 25: // mremap
+		{
+			// Hint to higher than already mapped memory if no hint
+			auto old_addr = (uintptr_t)get_memory_ptr((int64_t)x86_state->RDI);
+			uint64_t old_size = x86_state->RSI;
+			uint64_t new_size = x86_state->RDX;
+			uint64_t flags = x86_state->R10;
+			auto new_addr = (uintptr_t)get_memory_ptr((int64_t)x86_state->R8);
+
+			if (flags & MREMAP_FIXED && (new_addr < (uintptr_t)get_memory_ptr(0) || (new_addr + new_size) > (uintptr_t)get_memory_ptr((off_t)memory_size_))) {
+				x86_state->RAX = -EINVAL;
+				// IDK
+				break;
+			}
+
+			uint64_t ptr = native_syscall(__NR_mremap, old_addr, old_size, new_size, flags, new_addr);
+			if (!(ptr & (1ull << 63))) { // Positive return value (No error)
+				ptr -= (uintptr_t)get_memory_ptr(0); // Adjust to guest space
+				// TODO Negative pointer values possible (which might not be a good idea)
+			}
+			x86_state->RAX = ptr;
+
 			break;
 		}
 		case 158: // arch_prctl
