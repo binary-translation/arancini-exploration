@@ -216,6 +216,12 @@ Register riscv64_translation_context::materialise_ternary_atomic(const ternary_a
 	Label fail;
 	Label retry;
 	Label end;
+
+	auto [reg, _] = allocate_register();
+
+	assembler_.add(reg, dstAddr, MEM_BASE);
+
+	auto addr = Address { reg };
 	// FIXME Correct memory ordering?
 	switch (n.op()) {
 
@@ -224,9 +230,9 @@ Register riscv64_translation_context::materialise_ternary_atomic(const ternary_a
 		case 64:
 			assembler_.Bind(&retry);
 
-			assembler_.lrd(out_reg, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.lrd(out_reg, addr, std::memory_order_acq_rel);
 			assembler_.bne(out_reg, acc, &fail, Assembler::kNearJump);
-			assembler_.scd(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.scd(out_reg, src, addr, std::memory_order_acq_rel);
 			assembler_.bnez(out_reg, &retry, Assembler::kNearJump);
 
 			// Flags from comparison matching (i.e subtraction of equal values)
@@ -259,9 +265,9 @@ Register riscv64_translation_context::materialise_ternary_atomic(const ternary_a
 		case 32:
 			assembler_.Bind(&retry);
 
-			assembler_.lrw(out_reg, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.lrw(out_reg, addr, std::memory_order_acq_rel);
 			assembler_.bne(out_reg, acc, &fail, Assembler::kNearJump);
-			assembler_.scw(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.scw(out_reg, src, addr, std::memory_order_acq_rel);
 			assembler_.bnez(out_reg, &retry, Assembler::kNearJump);
 
 			// Flags from comparison matching (i.e subtraction of equal values)
@@ -308,16 +314,22 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise_
 	if (!valid) {
 		return out_reg;
 	}
+
+	auto [reg, _] = allocate_register();
+
+	assembler_.add(reg, dstAddr, MEM_BASE);
+
+	auto addr = Address { reg };
 	// FIXME Correct memory ordering?
 	switch (n.op()) {
 	case binary_atomic_op::xadd:
 		switch (n.rhs().type().width()) {
 		case 64:
-			assembler_.amoaddd(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.amoaddd(out_reg, src, addr, std::memory_order_acq_rel);
 			assembler_.add(SF, out_reg, src); // Actual sum for flag generation
 			break;
 		case 32:
-			assembler_.amoaddw(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.amoaddw(out_reg, src, addr, std::memory_order_acq_rel);
 			assembler_.addw(SF, out_reg, src); // Actual sum for flag generation
 			break;
 		default:
@@ -349,12 +361,12 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise_
 	case binary_atomic_op::add:
 		switch (n.rhs().type().width()) {
 		case 64:
-			assembler_.amoaddd(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.amoaddd(out_reg, src, addr, std::memory_order_acq_rel);
 
 			assembler_.add(SF, out_reg, src); // Actual sum for flag generation
 			break;
 		case 32:
-			assembler_.amoaddw(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.amoaddw(out_reg, src, addr, std::memory_order_acq_rel);
 
 			assembler_.addw(SF, out_reg, src); // Actual sum for flag generation
 			break;
@@ -375,12 +387,12 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise_
 		assembler_.neg(out_reg, src);
 		switch (n.rhs().type().width()) {
 		case 64:
-			assembler_.amoaddd(out_reg, out_reg, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.amoaddd(out_reg, out_reg, addr, std::memory_order_acq_rel);
 
 			assembler_.sub(SF, out_reg, src); // Actual difference for flag generation
 			break;
 		case 32:
-			assembler_.amoaddw(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.amoaddw(out_reg, src, addr, std::memory_order_acq_rel);
 
 			assembler_.subw(SF, out_reg, src); // Actual difference for flag generation
 			break;
@@ -400,12 +412,12 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise_
 	case binary_atomic_op::band:
 		switch (n.rhs().type().width()) {
 		case 64:
-			assembler_.amoandd(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.amoandd(out_reg, src, addr, std::memory_order_acq_rel);
 
 			assembler_.and_(SF, out_reg, src); // Actual and for flag generation
 			break;
 		case 32:
-			assembler_.amoandw(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.amoandw(out_reg, src, addr, std::memory_order_acq_rel);
 
 			assembler_.and_(SF, out_reg, src); // Actual and for flag generation
 			assembler_.slli(SF, SF, 32); // Get rid of higher 32 bits
@@ -420,12 +432,12 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise_
 	case binary_atomic_op::bor:
 		switch (n.rhs().type().width()) {
 		case 64:
-			assembler_.amoord(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.amoord(out_reg, src, addr, std::memory_order_acq_rel);
 
 			assembler_.or_(SF, out_reg, src); // Actual or for flag generation
 			break;
 		case 32:
-			assembler_.amoorw(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.amoorw(out_reg, src, addr, std::memory_order_acq_rel);
 
 			assembler_.or_(SF, out_reg, src); // Actual or for flag generation
 			assembler_.slli(SF, SF, 32); // Get rid of higher 32 bits
@@ -440,12 +452,12 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise_
 	case binary_atomic_op::bxor:
 		switch (n.rhs().type().width()) {
 		case 64:
-			assembler_.amoxord(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.amoxord(out_reg, src, addr, std::memory_order_acq_rel);
 
 			assembler_.xor_(SF, out_reg, src); // Actual xor for flag generation
 			break;
 		case 32:
-			assembler_.amoxorw(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.amoxorw(out_reg, src, addr, std::memory_order_acq_rel);
 
 			assembler_.xor_(SF, out_reg, src); // Actual xor for flag generation
 			assembler_.slli(SF, SF, 32); // Get rid of higher 32 bits
@@ -460,10 +472,10 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise_
 	case binary_atomic_op::xchg:
 		switch (n.rhs().type().width()) {
 		case 64:
-			assembler_.amoswapd(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.amoswapd(out_reg, src, addr, std::memory_order_acq_rel);
 			break;
 		case 32:
-			assembler_.amoswapw(out_reg, src, Address { dstAddr }, std::memory_order_seq_cst);
+			assembler_.amoswapw(out_reg, src, addr, std::memory_order_acq_rel);
 			break;
 		default:
 			throw std::runtime_error("unsupported xchg width");
@@ -503,6 +515,9 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 		return src_reg;
 
 	case cast_op::zx: {
+		if (is_flag(n.source_value())) { // Flags always zero extended
+			return src_reg;
+		}
 		auto [out_reg, valid] = allocate_register(&n.val());
 		if (!valid) {
 			return out_reg;
@@ -511,7 +526,7 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 			assembler_.andi(out_reg, src_reg, 0xff);
 		} else {
 			assembler_.slli(out_reg, src_reg, 64 - n.source_value().type().width());
-			assembler_.srli(out_reg, src_reg, 64 - n.source_value().type().width());
+			assembler_.srli(out_reg, out_reg, 64 - n.source_value().type().width());
 		}
 		return out_reg;
 	}
@@ -529,7 +544,7 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 			assembler_.sextw(out_reg, src_reg);
 		} else {
 			assembler_.slli(out_reg, src_reg, 64 - n.val().type().width());
-			assembler_.srai(out_reg, src_reg, 64 - n.val().type().width());
+			assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
 		}
 		return out_reg;
 	}
@@ -574,10 +589,11 @@ Register riscv64_translation_context::materialise_bit_extract(const bit_extract_
 		return out_reg;
 	}
 
+	Register temp = length + from < 64 ? out_reg : src;
 	if (length + from < 64) {
 		assembler_.slli(out_reg, src, 64 - (from + length));
 	}
-	assembler_.srai(out_reg, out_reg, 64 - length); // Use arithmetic shift to keep sign extension up
+	assembler_.srai(out_reg, temp, 64 - length); // Use arithmetic shift to keep sign extension up
 
 	return out_reg;
 }
@@ -609,10 +625,12 @@ Register riscv64_translation_context::materialise_bit_insert(const bit_insert_no
 		assembler_.andi(temp_reg, bits, ~mask);
 		assembler_.andi(out_reg, src, mask);
 	} else {
-		Register mask_reg = materialise_constant(~mask);
+		Register mask_reg = materialise_constant(mask);
 		assembler_.and_(out_reg, src, mask_reg);
 		assembler_.slli(temp_reg, bits, 64 - length);
-		assembler_.srli(temp_reg, temp_reg, 64 - (length + to));
+		if (length + to != 64) {
+			assembler_.srli(temp_reg, temp_reg, 64 - (length + to));
+		}
 	}
 
 	assembler_.or_(out_reg, out_reg, temp_reg);
@@ -923,7 +941,7 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 			case 8:
 			case 16:
 				assembler_.slli(out_reg, src_reg, amt + (64 - n.val().type().width()));
-				assembler_.srai(out_reg, src_reg, (64 - n.val().type().width()));
+				assembler_.srai(out_reg, out_reg, (64 - n.val().type().width()));
 				break;
 			}
 
@@ -939,11 +957,11 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 				break;
 			case 16:
 				assembler_.slli(out_reg, src_reg, 48);
-				assembler_.srli(out_reg, src_reg, 48 + amt);
+				assembler_.srli(out_reg, out_reg, 48 + amt);
 				break;
 			case 8:
 				assembler_.andi(out_reg, src_reg, 0xff);
-				assembler_.srli(out_reg, src_reg, amt);
+				assembler_.srli(out_reg, out_reg, amt);
 				break;
 			}
 			/*if (amt == 1) {
@@ -985,8 +1003,8 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 		case 8:
 		case 16:
 			assembler_.sll(out_reg, src_reg, amount);
-			assembler_.slli(out_reg, src_reg, (64 - n.val().type().width()));
-			assembler_.srai(out_reg, src_reg, (64 - n.val().type().width()));
+			assembler_.slli(out_reg, out_reg, (64 - n.val().type().width()));
+			assembler_.srai(out_reg, out_reg, (64 - n.val().type().width()));
 			break;
 		}
 		/*
@@ -1009,8 +1027,8 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 			break;
 		case 16:
 			assembler_.slli(out_reg, src_reg, 48);
-			assembler_.srli(out_reg, src_reg, 48);
-			assembler_.srl(out_reg, src_reg, amount);
+			assembler_.srli(out_reg, out_reg, 48);
+			assembler_.srl(out_reg, out_reg, amount);
 			break;
 		case 8:
 			assembler_.andi(out_reg, src_reg, 0xff);
@@ -1102,7 +1120,7 @@ Register riscv64_translation_context::materialise_binary_arith(const binary_arit
 					assembler_.addi(out_reg, src_reg1, imm);
 					break;
 				case 32:
-					assembler_.addiw(out_reg, src_reg1, -imm);
+					assembler_.addiw(out_reg, src_reg1, imm);
 					break;
 				case 8:
 				case 16:
@@ -1233,7 +1251,7 @@ standardPath:
 			case value_type_class::signed_integer:
 				assembler_.mulh(out_reg2, src_reg1, src_reg2);
 				if (flags_needed) {
-					assembler_.srai(CF, out_reg, 64);
+					assembler_.srai(CF, out_reg, 63);
 					assembler_.xor_(CF, CF, out_reg2);
 					assembler_.snez(CF, CF);
 				}
