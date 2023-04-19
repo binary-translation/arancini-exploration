@@ -1,10 +1,13 @@
+#include "arancini/ir/node.h"
 #include "arancini/ir/visitor.h"
 #include "llvm/Support/raw_ostream.h"
 #include <arancini/ir/chunk.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine-impl.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
 #include <iostream>
+#include <llvm/ADT/FloatingPointMode.h>
 #include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/Intrinsics.h>
 #include <map>
 #include <sstream>
 #include <string>
@@ -58,6 +61,7 @@ void llvm_static_output_engine_impl::initialise_types()
 	types.i64 = Type::getInt64Ty(*llvm_context_);
 	types.f32 = Type::getFloatTy(*llvm_context_);
 	types.f64 = Type::getDoubleTy(*llvm_context_);
+	types.f80 = Type::getX86_FP80Ty(*llvm_context_);
 	types.i128 = Type::getInt128Ty(*llvm_context_);
 	types.i256 = IntegerType::get(*llvm_context_, 256);
 	types.i512 = IntegerType::get(*llvm_context_, 512);
@@ -232,6 +236,8 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		::llvm::Type *ty;
 		switch (cn->val().type().width()) {
 		case 1:
+		// TODO: check if that makes sense
+		case 3:
 		case 8:
 			ty = types.i8;
 			break;
@@ -244,8 +250,11 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		case 64:
 			ty = types.i64;
 			break;
+		case 80:
+			ty = types.f80;
+			break;
 		default:
-			throw std::runtime_error("unsupported constant width");
+			throw std::runtime_error("unsupported constant width: " + std::to_string(cn->val().type().width()));
 		}
 		return ConstantInt::get(ty, cn->const_val_i());
 	}
@@ -274,12 +283,15 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		case 64:
 			ty = types.i64;
 			break;
+		case 80:
+			ty = types.f80;
+			break;
 		case 128:
 			ty = types.i128;
 			break;
 
 		default:
-			throw std::runtime_error("unsupported memory load width");
+			throw std::runtime_error("unsupported memory load width: " + std::to_string(rmn->val().type().width()));
 		}
 
 		LoadInst *li = builder.CreateLoad(ty, address_ptr);
@@ -339,6 +351,16 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			auto lhs = lower_port(builder, state_arg, pkt, ban->lhs());
 			auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
 
+			// Sometimes we need to extend some types
+			// For example when comparing a flag to an immediate
+			if (lhs->getType()->isIntegerTy()) {
+				if (lhs->getType()->getIntegerBitWidth() > rhs->getType()->getIntegerBitWidth())
+					rhs = builder.CreateSExt(rhs, lhs->getType());
+
+				if (lhs->getType()->getIntegerBitWidth() < rhs->getType()->getIntegerBitWidth())
+					lhs = builder.CreateSExt(lhs, rhs->getType());
+			}
+
 			switch (ban->op()) {
 			case binary_arith_op::bxor:
 				return builder.CreateXor(lhs, rhs);
@@ -366,10 +388,25 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 					return builder.CreateFDiv(lhs, rhs);
 				return builder.CreateUDiv(lhs, rhs);
 			}
-			case binary_arith_op::cmpeq:
+			case binary_arith_op::cmpeq: {
+				if (lhs->getType()->isFloatingPointTy())
+					return builder.CreateCmp(CmpInst::Predicate::FCMP_OEQ, lhs, rhs);
 				return builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, lhs, rhs);
-			case binary_arith_op::cmpne:
+			}
+			case binary_arith_op::cmpne: {
+				if (lhs->getType()->isFloatingPointTy())
+					return builder.CreateCmp(CmpInst::Predicate::FCMP_ONE, lhs, rhs);
 				return builder.CreateCmp(CmpInst::Predicate::ICMP_NE, lhs, rhs);
+			}
+			case binary_arith_op::cmpgt: {
+				// TODO: ordering for floats?
+				if (lhs->getType()->isFloatingPointTy())
+					return builder.CreateCmp(CmpInst::Predicate::FCMP_OGT, lhs, rhs);
+				if (((IntegerType *)lhs->getType())->getSignBit())
+					return builder.CreateCmp(CmpInst::Predicate::ICMP_SGT, lhs, rhs);
+				else
+					return builder.CreateCmp(CmpInst::Predicate::ICMP_UGT, lhs, rhs);
+			}
 			case binary_arith_op::mod: {
 				auto ltype = lhs->getType();
 				auto rtype = rhs->getType();
@@ -797,7 +834,8 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		AtomicRMWInst *out;
 		switch(ban->op()) {
 			case binary_atomic_op::xadd: out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
-			default: throw std::runtime_error("unsupported atomic operation " + std::to_string((int)ban->op()));
+			case binary_atomic_op::bor: out = builder.CreateAtomicRMW(AtomicRMWInst::Or, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
+			default: throw std::runtime_error("unsupported bin atomic operation " + std::to_string((int)ban->op()));
 		}
 		return out;
 	}
@@ -812,7 +850,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 			case ternary_atomic_op::cmpxchg:
 			  out = builder.CreateAtomicCmpXchg(lhs, rhs, top, Align(64), AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
 			  break;
-			default: throw std::runtime_error("unsupported atomic operation " + std::to_string((int)tan->op()));
+			default: throw std::runtime_error("unsupported tern atomic operation " + std::to_string((int)tan->op()));
 		}
 		return out;
 	}
