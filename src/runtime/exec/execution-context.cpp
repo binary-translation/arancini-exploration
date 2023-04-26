@@ -116,6 +116,9 @@ std::shared_ptr<execution_thread> execution_context::create_execution_thread()
 
 int execution_context::invoke(void *cpu_state)
 {
+    if (!cpu_state)
+        throw std::invalid_argument("invoke() received null CPU state");
+
 	auto et = threads_[cpu_state];
 	if (!et) {
 		throw std::runtime_error("unable to resolve execution thread");
