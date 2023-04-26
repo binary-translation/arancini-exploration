@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <iostream>
 
 namespace arancini::runtime::exec::x86 {
   typedef struct uint128_t {
@@ -18,6 +19,8 @@ namespace arancini::runtime::exec::x86 {
 #include <arancini/input/x86/reg.def>
 #undef DEFREG
     } __attribute__((packed));
+
+std::ostream& operator<<(std::ostream &os, const x86_cpu_state &s);
 
 #define X86_OFFSET_OF(reg) __builtin_offsetof(struct arancini::runtime::exec::x86::x86_cpu_state, reg)
 } // namespace arancini::runtime::exec::x86

@@ -10,6 +10,7 @@ add_library(arancini-runtime
             entry.cpp
             exec/execution-thread.cpp
             exec/execution-context.cpp
+            exec/x86/x86-cpu-state.cpp
             dbt/translation-engine.cpp)
 
 if (TARGET arancini-output-x86)
@@ -37,7 +38,4 @@ target_link_libraries(arancini-runtime
                       arancini-ir
                       arancini-input-x86
                       arancini-trampoline)
-target_include_directories(arancini-runtime
-                           PUBLIC
-                           ${INC}/arancini/runtime/exec)
 
