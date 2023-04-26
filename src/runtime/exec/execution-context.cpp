@@ -116,8 +116,10 @@ std::shared_ptr<execution_thread> execution_context::create_execution_thread()
 	return et;
 }
 
-int execution_context::invoke(void *cpu_state) {
-    if (!cpu_state) throw std::invalid_argument("invoke() received null CPU state");
+int execution_context::invoke(void *cpu_state)
+{
+    if (!cpu_state)
+        throw std::invalid_argument("invoke() received null CPU state");
 
 	auto et = threads_[cpu_state];
 	if (!et) throw std::runtime_error("unable to resolve execution thread");
@@ -133,6 +135,10 @@ int execution_context::invoke(void *cpu_state) {
                         debug("{}\n", util::logging_separator('-'));
     //auto* memptr = reinterpret_cast<uint64_t*>(get_memory_ptr(0)) + x86_state->RSP;
     //x86::print_stack(std::cerr, memptr, 20);
+
+#ifndef NDEBUG
+    std::cerr << *x86_state;
+#endif
 
 	auto txln = te_.get_translation(x86_state->PC);
 	if (txln == nullptr) {
