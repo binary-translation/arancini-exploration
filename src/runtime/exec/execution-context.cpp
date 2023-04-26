@@ -133,6 +133,10 @@ int execution_context::invoke(void *cpu_state) {
     //x86::print_stack(std::cerr, memptr, 20);
     util::global_logger.separator(util::basic_logging::levels::debug, '-');
 
+#ifndef NDEBUG
+    std::cerr << *x86_state;
+#endif
+
 	auto txln = te_.get_translation(x86_state->PC);
 	if (txln == nullptr) {
         util::global_logger.error("Unable to translate\n");
