@@ -25,7 +25,7 @@ using namespace arancini::output::o_static::llvm;
 using namespace arancini::util;
 
 static std::set<std::string> allowed_symbols
-	= { "cmpstr", "cmpnum", "swap", "_qsort", "_start", "test", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
+= { "cmpstr", "cmpnum", "swap", "_qsort", "_start", "test", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
 
 void txlat_engine::process_options(arancini::output::o_static::static_output_engine &oe, const boost::program_options::variables_map &cmdline)
 {
@@ -43,11 +43,11 @@ static void run_or_fail(const std::string &cmd)
 }
 
 /*
-This function acts as the main driver for the binary translation.
-First it parses the ELF binary, lifting each section to the Arancini IR.
-Finally, the lifted IR is processed by the output engine.
-For example, the output engine can generate the target binary or a
-visualisation of the Arancini IR.
+  This function acts as the main driver for the binary translation.
+  First it parses the ELF binary, lifting each section to the Arancini IR.
+  Finally, the lifted IR is processed by the output engine.
+  For example, the output engine can generate the target binary or a
+  visualisation of the Arancini IR.
 */
 void txlat_engine::translate(const boost::program_options::variables_map &cmdline)
 {
@@ -95,32 +95,40 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 			// TODO static translation of code in libraries
 			if (!cmdline.count("no-static") && elf.type() == elf_type::exec) {
 				for (const auto &sym : st->symbols()) {
-					// if (allowed_symbols.count(sym.name())) {
+          if (!sym.is_func())
+            continue;
+					std::cerr << "[DEBUG] PASS1: looking at symbol '" << sym.name() << "' @ 0x" << std::hex << sym.value() << std::endl;
 					if (sym.is_func() && !translated_addrs.count(sym.value())) {
 						translated_addrs.insert(sym.value());
             // Don't translate symbols with a size of 0, we'll do this in a second pass.
 						if (!sym.size()) {
+							std::cerr << "[DEBUG] PASS1: selecting for PASS2 (0 size), symbol '" << sym.name() << "'" << std::endl;
 							zero_size_symbol.push_front(sym);
 							continue;
 						}
+						std::cerr << "[DEBUG] PASS1: translating symbol '" << sym.name() << "' [" << std::dec << sym.size() << " bytes]" << std::endl;
 						oe->add_chunk(translate_symbol(*ia, elf, sym));
             static_size += sym.size();
-					}
+					} else {
+            std::cerr << "[DEBUG] PASS1: address already seen for '" << sym.name() << "' @ 0x" << std::hex << sym.value() << std::endl;
+          }
 				}
 			}
 			sym_t = std::move(st);
 		}
     // Loop over symbols of size zero and optimistically translate
-    for (auto s : zero_size_symbol) {
-      // find the address of the symbol after s in the text section, and assume that the size of s is until there
-      auto next = *(std::next(translated_addrs.find(s.value()), 1));
-      auto size = next - s.value();
-      auto fixed_sym = symbol(s.name(), s.value(), size, s.section_index(), s.info());
-      oe->add_chunk(translate_symbol(*ia, elf, fixed_sym));
-      static_size += size;
-    }
+		for (auto s : zero_size_symbol) {
+			std::cerr << "[DEBUG] PASS2: looking at symbol '" << s.name() << "' @ 0x" << std::hex << s.value() << std::endl;
+			// find the address of the symbol after s in the text section, and assume that the size of s is until there
+			auto next = *(std::next(translated_addrs.find(s.value()), 1));
+			auto size = next - s.value();
+			auto fixed_sym = symbol(s.name(), s.value(), size, s.section_index(), s.info());
+			std::cerr << "[DEBUG] PASS2: translating symbol '" << s.name() << "' [" << std::dec << size << " bytes]"  << std::endl;
+			oe->add_chunk(translate_symbol(*ia, elf, fixed_sym));
+			static_size += size;
+		}
 	}
-  std::cout << "ahead-of-time: translated " << static_size << " bytes" << std::endl;
+  std::cout << "ahead-of-time: translated " << std::dec << static_size << " bytes" << std::endl;
 
 	// Generate a dot graph of the IR if required
 	if (cmdline.count("graph")) {
@@ -193,6 +201,50 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	auto phobjsrc = tf.create_file(".S");
 
 	std::map<uint64_t, std::string> ifuncs = generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym, relocations, relocations_r, sym_t, tls);
+		// Put all segment data into the .gphdata section (guest program header data)
+		s << ".section .gphdata,\"a\"" << std::endl;
+
+		// For each segment...
+		for (unsigned int i = 0; i < phbins.size(); i++) {
+			// Create the metadata for the segment, which includes the load (virtual) address,
+			// the actual byte size of the segment, the size in memory, then the actual data
+			// itself.
+			s << ".align 16" << std::endl;
+			s << "__PH_" << std::dec << i << "_LOAD: .quad 0x" << std::hex << phbins[i].second->address() << std::endl;
+			s << "__PH_" << std::dec << i << "_FSIZE: .quad 0x" << std::hex << phbins[i].second->data_size() << std::endl;
+			s << "__PH_" << std::dec << i << "_MSIZE: .quad 0x" << std::hex << phbins[i].second->mem_size() << std::endl;
+			s << "__PH_" << std::dec << i << "_DATA: .incbin \"" << phbins[i].first->name() << "\"" << std::endl;
+
+			// Make sure the symbol is appropriately sized.
+			s << ".size __PH_" << std::dec << i << "_DATA,.-__PH_" << std::dec << i << "_DATA" << std::endl;
+		}
+
+		// Finally, create pointers to each guest program header in an array.
+		s << ".section .gph,\"a\"" << std::endl;
+		s << ".globl __GPH" << std::endl;
+		s << ".type __GPH,%object" << std::endl;
+		s << "__GPH:" << std::endl;
+		for (unsigned int i = 0; i < phbins.size(); i++) {
+			s << ".quad __PH_" << std::dec << i << "_LOAD" << std::endl;
+		}
+
+		// Null terminate the array.
+		s << ".quad 0" << std::endl;
+
+		// Size the symbol appropriately.
+		s << ".size __GPH,.-__GPH" << std::endl;
+	}
+
+	std::string cxx_compiler = cmdline.at("cxx-compiler-path").as<std::string>();
+
+	if (cmdline.count("wrapper")) {
+		cxx_compiler = cmdline.at("wrapper").as<std::string>() + " " + cxx_compiler;
+	}
+
+	std::string debug_info = cmdline.count("debug-gen") ? " -g" : "";
+	std::string arancini_runtime_lib_path = cmdline.at("runtime-lib-path").as<std::string>();
+	auto dir_start = arancini_runtime_lib_path.rfind("/");
+	std::string arancini_runtime_lib_dir = arancini_runtime_lib_path.substr(0, dir_start);
 
 	if (!cmdline.count("static-binary")) {
 		std::string libs;
@@ -381,8 +433,8 @@ void txlat_engine::add_symbol_to_output(const std::vector<std::shared_ptr<progra
 }
 
 /*
-This function uses an x86 implementation of the input_architecture class to lift
-x86 symbol sections to the Arancini IR.
+  This function uses an x86 implementation of the input_architecture class to lift
+  x86 symbol sections to the Arancini IR.
 */
 std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arch &ia, elf_reader &reader, const symbol &sym)
 {
