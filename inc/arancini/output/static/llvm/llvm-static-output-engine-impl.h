@@ -1,7 +1,9 @@
 #pragma once
+#include <arancini/ir/node.h>
 
 #include <map>
 #include <memory>
+#include <unordered_map>
 
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
@@ -93,6 +95,7 @@ private:
 
 	std::map<ir::port *, ::llvm::Value *> node_ports_to_llvm_values_;
 	std::map<ir::label_node *, ::llvm::BasicBlock *> label_nodes_to_llvm_blocks_;
+	std::unordered_map<const ir::local_var *, ::llvm::Value *> local_var_to_llvm_addr_;
 
 	void build();
 	void initialise_types();
