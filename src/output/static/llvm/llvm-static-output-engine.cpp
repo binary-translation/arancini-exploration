@@ -1,4 +1,5 @@
 #include "arancini/ir/node.h"
+#include "arancini/ir/port.h"
 #include "arancini/ir/visitor.h"
 #include "llvm/Support/raw_ostream.h"
 #include <arancini/ir/chunk.h>
@@ -697,12 +698,30 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
                 return extract;
         }
 
-	case node_kinds::binary_atomic:
-		return lower_node(builder, state_arg, pkt, n);
-
-	case node_kinds::ternary_atomic:
-		return lower_node(builder, state_arg, pkt, n);
-
+	case node_kinds::binary_atomic: {
+		if (p.kind() == port_kinds::value)
+			return lower_node(builder, state_arg, pkt, n);
+		// TODO: Flags
+		return ConstantInt::get(types.i8, 0);
+	}
+	case node_kinds::ternary_atomic: {
+		if (p.kind() == port_kinds::value)
+			return lower_node(builder, state_arg, pkt, n);
+		// TODO: Flags
+		return ConstantInt::get(types.i8, 0);
+	}
+	case node_kinds::read_local: {
+	        auto rln = (read_local_node *)n;
+	        auto address = local_var_to_llvm_addr_.at(rln->local());
+	        ::llvm::Type *ty;
+	        switch (rln->local()->type().width()) {
+	                case 80: ty = types.f80; break;
+	                default: throw std::runtime_error("unsupported read_local width"+std::to_string(rln->local()->type().width()));
+	        }
+	        auto load = builder.CreateLoad(ty, address, "read_local");
+	        load->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(load->getContext(), guest_mem_alias_scope_));
+	        return load;
+	}
 	default:
 		throw std::runtime_error("materialize_port: unsupported port node kind " + std::to_string((int)n->kind()));
 	}
@@ -756,7 +775,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		//Bitcast the resulting value to the type of the register
 		//since the operations can happen on different type after
 		//other casting operations.
-		auto reg_val = builder.CreateBitCast(val, reg_type);
+		auto reg_val = builder.CreateZExtOrBitCast(val, reg_type);
 
 		// TODO: ALign vector registers to 512
 		return builder.CreateAlignedStore(reg_val, dest_reg, Align(64));
@@ -803,8 +822,21 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		builder.SetInsertPoint(intermediate_block);
 
 		return br;
-	}
+		}
+		case node_kinds::br: {
+	        auto bn = (br_node *)a;
 
+			auto current_block = builder.GetInsertBlock();
+			auto intermediate_block = BasicBlock::Create(*llvm_context_, "IB", current_block->getParent());
+
+			lower_node(builder, state_arg, pkt, bn->target());
+
+			auto br = builder.CreateBr(intermediate_block);
+
+			builder.SetInsertPoint(intermediate_block);
+
+			return br;
+		}
         case node_kinds::vector_insert: {
                 auto vin = (vector_insert_node *)a;
 
@@ -831,10 +863,11 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto lhs = lower_port(builder, state_arg, pkt, ban->lhs());
 		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
 
-		AtomicRMWInst *out;
+		AtomicRMWInst *out = nullptr;
 		switch(ban->op()) {
-			case binary_atomic_op::xadd: out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
+			case binary_atomic_op::xadd: builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
 			case binary_atomic_op::bor: out = builder.CreateAtomicRMW(AtomicRMWInst::Or, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
+			case binary_atomic_op::xchg: out = builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
 			default: throw std::runtime_error("unsupported bin atomic operation " + std::to_string((int)ban->op()));
 		}
 		return out;
@@ -853,6 +886,30 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 			default: throw std::runtime_error("unsupported tern atomic operation " + std::to_string((int)tan->op()));
 		}
 		return out;
+	}
+	case node_kinds::internal_call: {
+        auto icn = (internal_call_node *)a;
+        auto switch_callee = module_->getOrInsertFunction("execute_internal_call", types.internal_call_handler);
+        if (icn->fn().name() == "handle_syscall") {
+                return builder.CreateCall(switch_callee, { state_arg, ConstantInt::get(types.i8, 1) });
+        }
+        throw std::runtime_error("unsupported internal call type" + icn->fn().name());
+	}
+	case node_kinds::write_local: {
+        auto wln = (write_local_node *)a;
+        auto val = lower_port(builder, state_arg, pkt, wln->write_value());
+        ::llvm::Type *ty;
+        switch (wln->write_value().type().width()) {
+                case 80: ty = types.f80; break;
+                default: throw std::runtime_error("unsupported alloca width");
+        }
+        // HACK: there is at least one case where the wln has an invalid type
+        auto var_ptr = builder.CreateAlloca(ty, nullptr, "local var");
+        local_var_to_llvm_addr_[wln->local()] = var_ptr;
+
+        auto store = builder.CreateStore(val, var_ptr);
+        store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), guest_mem_alias_scope_));
+        return store;
 	}
 	default:
 		throw std::runtime_error("lower_node: unsupported node kind " + std::to_string((int)a->kind()));

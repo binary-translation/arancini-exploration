@@ -61,6 +61,11 @@ public:
 		, shidx_(shidx)
 		, info_(info)
 	{
+		//HACK: for hello-world
+		if (name == "_start") {
+		     info_ = 2;
+		     size_ = 22;
+		}
 	}
 
 	const std::string &name() const { return name_; }
