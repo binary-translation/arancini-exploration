@@ -1,8 +1,10 @@
+#include <arancini/output/static/static-output-engine.h>
 #include <arancini/elf/elf-reader.h>
 #include <arancini/input/x86/x86-input-arch.h>
 #include <arancini/ir/chunk.h>
 #include <arancini/ir/default-ir-builder.h>
 #include <arancini/ir/dot-graph-generator.h>
+#include <arancini/ir/opt.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
 #include <arancini/txlat/txlat-engine.h>
 #include <arancini/util/tempfile-manager.h>
@@ -10,6 +12,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
+#include <string>
 
 using namespace arancini::txlat;
 using namespace arancini::elf;
@@ -81,28 +84,20 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		}
 	}
 
-	// Determine if we also need to produce a dot graph output.
+	// Generate a dot graph of the IR if required
 	if (cmdline.count("graph")) {
-		std::string graph_output_file = cmdline.at("graph").as<std::string>();
-		std::ostream *o;
+    generate_dot_graph(*oe, cmdline.at("graph").as<std::string>());
+	}
 
-		if (graph_output_file == "-") {
-			o = &std::cout;
-		} else {
-			o = new std::ofstream(graph_output_file);
-			if (!((std::ofstream *)o)->is_open()) {
-				throw std::runtime_error("unable to open file for graph output");
-			}
-		}
+  // Execute required optimisations from the command line
+  optimise(*oe, cmdline);
 
-		dot_graph_generator dgg(*o);
-		for (auto c : oe->chunks()) {
-			c->accept(dgg);
-		}
-
-		if (o != &std::cout) {
-			delete o;
-		}
+	// Generate a dot graph of the optimized IR if required
+	if (cmdline.count("graph")) {
+    std::string opt_filename = cmdline.at("graph").as<std::string>();
+    opt_filename = opt_filename.substr(0, opt_filename.find_last_of('.'));
+    opt_filename += ".opt.dot";
+    generate_dot_graph(*oe, opt_filename);
 	}
 
 	// If the main output command-line option was not specified, then don't go any further.
@@ -218,4 +213,41 @@ std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arc
 
 	std::cerr << "symbol translation time: " << std::dec << std::chrono::duration_cast<std::chrono::microseconds>(dur).count() << " us" << std::endl;
 	return irb.get_chunk();
+}
+
+
+void txlat_engine::generate_dot_graph(arancini::output::o_static::static_output_engine &oe, std::string filename)
+{
+	std::ostream *o;
+
+  std::cout << "Generating dot graph to: " << filename << std::endl;
+
+	if (filename == "-") {
+		o = &std::cout;
+	} else {
+		o = new std::ofstream(filename);
+		if (!((std::ofstream *)o)->is_open()) {
+			throw std::runtime_error("unable to open file for graph output");
+		}
+	}
+
+	dot_graph_generator dgg(*o);
+	for (auto c : oe.chunks()) {
+		c->accept(dgg);
+	}
+
+	if (o != &std::cout) {
+		delete o;
+	}
+}
+
+void txlat_engine::optimise(arancini::output::o_static::static_output_engine &oe, const boost::program_options::variables_map &cmdline)
+{
+  auto start = std::chrono::high_resolution_clock::now();
+  deadflags_opt_visitor deadflags;
+  for (auto c : oe.chunks()) {
+    c->accept(deadflags);
+  }
+	auto dur = std::chrono::high_resolution_clock::now() - start;
+  std::cerr << "Optimisation: dead flags elimination pass: " << std::dec << std::chrono::duration_cast<std::chrono::microseconds>(dur).count() << " us" << std::endl;
 }
