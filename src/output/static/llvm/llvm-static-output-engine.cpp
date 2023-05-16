@@ -10,6 +10,7 @@
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Intrinsics.h>
 #include <map>
+#include <memory>
 #include <sstream>
 #include <string>
 
@@ -206,8 +207,12 @@ void llvm_static_output_engine_impl::build()
 
 void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlock *contblock)
 {
+	auto blocks = std::make_shared<std::map<unsigned long, BasicBlock *>>();
 	for (auto c : chunks_) {
-		lower_chunk(pcswitch, contblock, c);
+		lower_chunk(pcswitch, contblock, c, blocks);
+	}
+	for (auto b : *blocks) {
+		pcswitch->addCase(ConstantInt::get(types.i64, b.first), b.second);
 	}
 }
 
@@ -916,10 +921,10 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 	}
 }
 
-void llvm_static_output_engine_impl::lower_chunk(SwitchInst *pcswitch, BasicBlock *contblock, std::shared_ptr<chunk> c)
+void llvm_static_output_engine_impl::lower_chunk(SwitchInst *pcswitch, BasicBlock *contblock, std::shared_ptr<chunk> c, std::shared_ptr<std::map<unsigned long, BasicBlock *>> blocks)
 {
 	IRBuilder<> builder(*llvm_context_);
-	std::map<unsigned long, BasicBlock *> blocks;
+	//std::map<unsigned long, BasicBlock *> blocks;
 
 	if (c->packets().empty()) {
 		return;
@@ -932,12 +937,12 @@ void llvm_static_output_engine_impl::lower_chunk(SwitchInst *pcswitch, BasicBloc
 		block_name << "INSN_" << std::hex << p->address();
 
 		BasicBlock *block = BasicBlock::Create(*llvm_context_, block_name.str(), contblock->getParent());
-		blocks[p->address()] = block;
+		(*blocks)[p->address()] = block;
 	}
 
 	BasicBlock *packet_block = nullptr;
 	for (auto p : c->packets()) {
-		auto next_block = blocks[p->address()];
+		auto next_block = (*blocks)[p->address()];
 
 		if (packet_block != nullptr) {
 			builder.CreateBr(next_block);
@@ -961,10 +966,6 @@ void llvm_static_output_engine_impl::lower_chunk(SwitchInst *pcswitch, BasicBloc
 
 	if (packet_block != nullptr) {
 		builder.CreateBr(contblock);
-	}
-
-	for (auto b : blocks) {
-		pcswitch->addCase(ConstantInt::get(types.i64, b.first), b.second);
 	}
 }
 
