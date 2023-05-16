@@ -31,6 +31,8 @@ public:
 
 	const std::vector<action_node *> &actions() const { return actions_; }
 
+  void set_actions(std::vector<action_node *> actions) { actions_ = actions;}
+
 	void accept(visitor &v) { v.visit_packet(*this); }
 
 	off_t address() const { return address_; }
