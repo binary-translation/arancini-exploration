@@ -103,7 +103,7 @@ private:
 	void optimise();
 	void compile();
 	void lower_chunks(::llvm::SwitchInst *pcswitch, ::llvm::BasicBlock *contblock);
-	void lower_chunk(::llvm::SwitchInst *pcswitch, ::llvm::BasicBlock *contblock, std::shared_ptr<ir::chunk> chunk);
+	void lower_chunk(::llvm::SwitchInst *pcswitch, ::llvm::BasicBlock *contblock, std::shared_ptr<ir::chunk> chunk, std::shared_ptr<std::map<unsigned long, ::llvm::BasicBlock *>> blocks);
 	::llvm::Value *lower_node(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
 		std::shared_ptr<ir::packet> pkt, ir::node *a);
 	::llvm::Value *lower_port(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
