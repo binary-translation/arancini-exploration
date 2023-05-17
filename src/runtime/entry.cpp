@@ -39,6 +39,8 @@ static arancini::output::dynamic::riscv64::riscv64_dynamic_output_engine oe;
 #error "Unsupported dynamic output architecture"
 #endif
 
+// HACK: for Debugging
+static x86_cpu_state *__current_state;
 /*
  * The segfault handler.
  */
@@ -58,7 +60,7 @@ static void segv_handler(int signo, siginfo_t *info, void *context)
 		std::cerr << ", guest-virtual-address=" << std::hex << ((uintptr_t)info->si_addr - emulated_base);
 	}
 
-	std::cerr << std::endl;
+	std::cerr << " Guest PC: " << __current_state->PC << std::endl;
 
 	exit(1);
 }
@@ -232,6 +234,7 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	// the guest program, and an emulated stack pointer at the top of the
 	// emulated address space.
 	x86_cpu_state *x86_state = (x86_cpu_state *)main_thread->get_cpu_state();
+	__current_state = x86_state;
 	x86_state->PC = entry_point;
 
 	x86_state->RSP = setup_guest_stack(argc, argv, 0x100000000, ctx_, start);
