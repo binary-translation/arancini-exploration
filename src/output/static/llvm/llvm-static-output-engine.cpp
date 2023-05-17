@@ -352,10 +352,10 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 	case node_kinds::binary_arith: {
 		auto ban = (binary_arith_node *)n;
+		auto lhs = lower_port(builder, state_arg, pkt, ban->lhs());
+		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
 
 		if (p.kind() == port_kinds::value) {
-			auto lhs = lower_port(builder, state_arg, pkt, ban->lhs());
-			auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
 
 			// Sometimes we need to extend some types
 			// For example when comparing a flag to an immediate
@@ -431,10 +431,13 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		} else if (p.kind() == port_kinds::negative) {
 			auto value_port = lower_port(builder, state_arg, pkt, n->val());
 			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_SLT, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
+		} else if (p.kind() == port_kinds::carry) {
+			return builder.CreateZExt(builder.CreateICmpUGT(lhs, rhs, "borrow"), types.i8);
+		} else if (p.kind() == port_kinds::overflow) {
+			auto value_port = lower_port(builder, state_arg, pkt, n->val());
+			return builder.CreateZExt(builder.CreateICmpNE(builder.CreateAdd(lhs, builder.CreateNeg(rhs)), value_port, "overflow"), types.i8);
 		} else {
-			// TODO: Need to support CARRY + OVERFLOW
-			return ConstantInt::get(types.i8, 0);
-			// throw std::runtime_error("unsupported port kind");
+			throw std::runtime_error("unsupported port kind");
 		}
 	}
 
@@ -587,6 +590,35 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			}
 			return val;
 		}
+		case cast_op::convert: {
+			::llvm::RoundingMode rm;
+			switch (cn->convert_type()) {
+				case fp_convert_type::round: rm = ::llvm::RoundingMode::NearestTiesToEven; break;
+				case fp_convert_type::trunc: rm = ::llvm::RoundingMode::TowardZero; break;
+			}
+			
+			if (cn->target_type().is_floating_point()) {
+				switch (cn->target_type().width()) {
+					case 32: ty = types.f32; break;
+					case 64: ty = types.f64; break;
+					case 80: ty = types.f80; break;
+				}
+				if (((IntegerType *)val->getType())->getSignBit())
+					return builder.CreateConstrainedFPCast(Intrinsic::experimental_constrained_sitofp, val, ty, nullptr, "", nullptr, rm);
+				return builder.CreateConstrainedFPCast(Intrinsic::experimental_constrained_uitofp, val, ty, nullptr, "", nullptr, rm);
+			}
+			switch (cn->target_type().width()) {
+				case 1: ty = types.i1; break;
+				case 8: ty = types.i8; break;
+				case 16: ty = types.i16; break;
+				case 32: ty = types.i32; break;
+				case 64: ty = types.i64; break;
+				case 128: ty = types.i128; break;
+				case 256: ty = types.i256; break;
+				case 512: ty = types.i512; break;
+			}
+			return builder.CreateFPToSI(val, ty);
+							   }
 		default:
 			throw std::runtime_error("unsupported cast op");
 		}
@@ -607,33 +639,45 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 		auto v = lower_port(builder, state_arg, pkt, un->lhs());
 
-		switch (un->op()) {
-		case unary_arith_op::bnot:
-			return builder.CreateNot(v);
+		switch (p.kind()) {
+		case port_kinds::value: {
 
-		default:
-			throw std::runtime_error("unsupported unary operator");
+			switch (un->op()) {
+			case unary_arith_op::bnot:
+				return builder.CreateNot(v);
+			default:
+				throw std::runtime_error("unsupported unary operator");
+			}
+		}
+		case port_kinds::zero: return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, v, ConstantInt::get(v->getType(), 0)), types.i8);
+		case port_kinds::negative: return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_SGT, v, ConstantInt::get(v->getType(), 0)), types.i8);
+		default: return ConstantInt::get(types.i8, 0);
 		}
 	}
 
 	case node_kinds::bit_shift: {
 		auto bsn = (bit_shift_node *)n;
 
-		auto input = lower_port(builder, state_arg, pkt, bsn->input());
-		auto amount = lower_port(builder, state_arg, pkt, bsn->amount());
+		if (p.kind() == port_kinds::value) {
+			auto input = lower_port(builder, state_arg, pkt, bsn->input());
+			auto amount = lower_port(builder, state_arg, pkt, bsn->amount());
 
-		amount = builder.CreateZExt(amount, input->getType());
+			amount = builder.CreateZExt(amount, input->getType());
 
-		switch (bsn->op()) {
-		case shift_op::asr:
-			return builder.CreateAShr(input, amount);
-		case shift_op::lsr:
-			return builder.CreateLShr(input, amount);
-		case shift_op::lsl:
-			return builder.CreateShl(input, amount);
+			switch (bsn->op()) {
+			case shift_op::asr:
+				return builder.CreateAShr(input, amount);
+			case shift_op::lsr:
+				return builder.CreateLShr(input, amount);
+			case shift_op::lsl:
+				return builder.CreateShl(input, amount);
 
-		default:
-			throw std::runtime_error("unsupported shift op");
+			default:
+				throw std::runtime_error("unsupported shift op");
+			}
+		} else {
+			// TODO: Flags
+			return ConstantInt::get(types.i8, 0);
 		}
 	}
 
@@ -656,8 +700,8 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 				throw std::runtime_error("unsupported ternary op");
 			}
 		} else {
+			// TODO: Flags
 			return ConstantInt::get(types.i8, 0);
-			// throw std::runtime_error("unsupported port kind");
 		}
 	}
 
@@ -896,7 +940,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
         auto icn = (internal_call_node *)a;
         auto switch_callee = module_->getOrInsertFunction("execute_internal_call", types.internal_call_handler);
         if (icn->fn().name() == "handle_syscall") {
-                return builder.CreateCall(switch_callee, { state_arg, ConstantInt::get(types.i8, 1) });
+                return builder.CreateCall(switch_callee, { state_arg, ConstantInt::get(types.i32, 1) });
         }
         throw std::runtime_error("unsupported internal call type" + icn->fn().name());
 	}
