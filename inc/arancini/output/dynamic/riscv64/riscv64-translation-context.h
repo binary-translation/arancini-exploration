@@ -29,10 +29,14 @@ private:
 	off_t current_address_;
 	std::vector<const ir::node *> nodes_;
 
+	intptr_t ret_val_;
+
 	std::unordered_map<const ir::label_node *, std::unique_ptr<Label>> labels_;
 
 	size_t reg_allocator_index_ { 0 };
-	std::unordered_map<const ir::port *, uint32_t> reg_for_port_;
+    std::unordered_map<const ir::port *, uint32_t> reg_for_port_;
+    std::unordered_map<const ir::port *, uint32_t> secondary_reg_for_port_;
+    std::unordered_map<const ir::local_var *, uint32_t> locals_;
 
 	std::pair<Register, bool> allocate_register(const ir::port *p = nullptr);
 
@@ -58,7 +62,11 @@ private:
 	std::variant<Register, std::monostate> materialise_binary_atomic(const ir::binary_atomic_node &n);
 	Register materialise_ternary_atomic(const ir::ternary_atomic_node &n);
 	Register materialise_csel(const ir::csel_node &n);
+	void materialise_internal_call(const ir::internal_call_node &n);
+	Register materialise_vector_insert(const ir::vector_insert_node &node);
+	Register materialise_vector_extract(const ir::vector_extract_node &n);
 
 	void add_marker(int payload);
+	Register get_secondary_register(const ir::port *p);
 };
 } // namespace arancini::output::dynamic::riscv64
