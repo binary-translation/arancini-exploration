@@ -444,8 +444,8 @@ static operand usedef(const operand &o)
 struct instruction {
 	static constexpr size_t nr_operands = 5;
 
-    std::string opcode;
     size_t opcount;
+    std::string opcode;
 
     operand operands[nr_operands];
 
