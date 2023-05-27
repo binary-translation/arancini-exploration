@@ -5,7 +5,7 @@
 
 using namespace arancini::output::dynamic::arm64;
 
-const char* arm64_physreg_op::to_string() const {
+const char* preg_operand::to_string() const {
     static const char* name64[] = {
         "",
         "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
@@ -39,7 +39,7 @@ size_t assembler::assemble(const char *code, unsigned char **out) {
     return size;
 }
 
-void arm64_instruction::dump(std::ostream &os) const {
+void instruction::dump(std::ostream &os) const {
     os << opcode;
 
     if (opcount == 0) return;
@@ -54,53 +54,53 @@ void arm64_instruction::dump(std::ostream &os) const {
 }
 
 // TODO: adapt all
-void arm64_operand::dump(std::ostream &os) const {
+void operand::dump(std::ostream &os) const {
 	switch (type) {
-    case arm64_operand_type::cond:
-        os << condop.cond;
+    case operand_type::cond:
+        os << condition.cond;
         break;
-    case arm64_operand_type::label:
-        os << labelop.name;
+    case operand_type::label:
+        os << label.name;
         break;
-    case arm64_operand_type::shift:
-        if (!shiftop.modifier.empty())
-            os << shiftop.modifier << ' ';
-        os << "#0x" << std::hex << shiftop.u64;
+    case operand_type::shift:
+        if (!shift.modifier.empty())
+            os << shift.modifier << ' ';
+        os << "#0x" << std::hex << shift.u64;
         break;
-	case arm64_operand_type::imm:
-		os << "#0x" << std::hex << immop.u64;
+	case operand_type::imm:
+		os << "#0x" << std::hex << immediate.u64;
 		break;
 
-	case arm64_operand_type::mem:
+	case operand_type::mem:
 		os << "[";
 
-		if (memop.virt_base)
-			os << "%V" << memop.vbase.width << "_" << std::dec << memop.vbase.index;
+		if (memory.virt_base)
+			os << "%V" << memory.vbase.width << "_" << std::dec << memory.vbase.index;
 		else
-			os << memop.pbase.to_string();
+			os << memory.pbase.to_string();
 
 
-        if (!memop.post_index)
-            os << ", #0x" << std::hex << memop.offset << ']';
-        else if (memop.pre_index)
+        if (!memory.post_index)
+            os << ", #0x" << std::hex << memory.offset << ']';
+        else if (memory.pre_index)
             os << '!';
 
-        if (memop.post_index)
-            os << "], #0x" << std::hex << memop.offset;
+        if (memory.post_index)
+            os << "], #0x" << std::hex << memory.offset;
 
 
         // TODO: register indirect with index
 		break;
 
-	case arm64_operand_type::preg:
-		os << pregop.to_string();
+	case operand_type::preg:
+		os << preg.to_string();
 		break;
 
-	case arm64_operand_type::vreg:
-		os << "%V" << std::dec << vregop.index;
+	case operand_type::vreg:
+		os << "%V" << std::dec << vreg.index;
 		break;
     default:
-        throw std::runtime_error("arm64_operand::dump() encountered invalid operand type: "
+        throw std::runtime_error("operand::dump() encountered invalid operand type: "
                                  + std::to_string(static_cast<unsigned>(type)));
 	}
 }
