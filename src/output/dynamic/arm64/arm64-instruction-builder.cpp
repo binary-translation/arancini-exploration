@@ -10,10 +10,10 @@ using namespace arancini::output::dynamic::arm64;
 // #define DEBUG_REGALLOC
 #define DEBUG_STREAM std::cerr
 
-void arm64_instruction_builder::spill() {
+void instruction_builder::spill() {
 }
 
-void arm64_instruction_builder::emit(machine_code_writer &writer) {
+void instruction_builder::emit(machine_code_writer &writer) {
     size_t size;
     uint8_t* encode;
     std::stringstream assembly;
@@ -28,9 +28,9 @@ void arm64_instruction_builder::emit(machine_code_writer &writer) {
 
         for (size_t i = 0; i < insn.opcount; ++i) {
             const auto &op = operands[i];
-            if (op.type == arm64_operand_type::invalid ||
-                op.type == arm64_operand_type::vreg ||
-                (op.type == arm64_operand_type::mem && op.memop.virt_base)) {
+            if (op.type == operand_type::invalid ||
+                op.type == operand_type::vreg ||
+                (op.type == operand_type::mem && op.memory.virt_base)) {
                 throw std::runtime_error("Virtual register after register allocation");
             }
         }
@@ -48,7 +48,7 @@ void arm64_instruction_builder::emit(machine_code_writer &writer) {
     asm_.free(encode);
 }
 
-void arm64_instruction_builder::allocate() {
+void instruction_builder::allocate() {
 	// reverse linear scan allocator
 #ifdef DEBUG_REGALLOC
 	DEBUG_STREAM << "REGISTER ALLOCATION" << std::endl;
@@ -86,7 +86,7 @@ void arm64_instruction_builder::allocate() {
 				o.dump(DEBUG_STREAM);
 #endif
 
-				unsigned int vri = o.vregop.index;
+				unsigned int vri = o.vreg.index;
 
 				auto alloc = vreg_to_preg.find(vri);
 
@@ -120,7 +120,7 @@ void arm64_instruction_builder::allocate() {
 		}
 
 		// alloc uses next
-        std::array<unsigned int, arm64_instruction::nr_operands> alloced;
+        std::array<unsigned int, instruction::nr_operands> alloced;
 		for (size_t i = 0; i < insn.opcount; i++) {
 			auto &o = insn.get_operand(i);
 
@@ -132,7 +132,7 @@ void arm64_instruction_builder::allocate() {
                 DEBUG_STREAM << '\n';
 #endif
 
-				unsigned int vri = o.vregop.index;
+				unsigned int vri = o.vreg.index;
 
 				if (!vreg_to_preg.count(vri)) {
 					auto allocation = avail_physregs._Find_first();
@@ -165,8 +165,8 @@ void arm64_instruction_builder::allocate() {
 				DEBUG_STREAM << std::endl;
 #endif
 
-				if (o.memop.virt_base) {
-					unsigned int vri = o.memop.vbase.index;
+				if (o.memory.virt_base) {
+					unsigned int vri = o.memory.vbase.index;
 
 					if (!vreg_to_preg.count(vri)) {
 						auto allocation = avail_physregs._Find_first();
@@ -189,7 +189,7 @@ void arm64_instruction_builder::allocate() {
 						vreg_to_preg[vri] = allocation;
 
                         // TODO size
-						o.memop.pbase = arm64_physreg_op(allocation, 64);
+						o.memory.pbase = preg_operand(allocation, 64);
 						o.allocate_base(allocation, 64);
 
 #ifdef DEBUG_REGALLOC
@@ -209,14 +209,14 @@ void arm64_instruction_builder::allocate() {
 
 		// Kill MOVs
         if (insn.opcode.find("mov") != std::string::npos) {
-            if (insn.operands[0].pregop.get() == insn.operands[1].pregop.get()) {
+            if (insn.operands[0].preg.get() == insn.operands[1].preg.get()) {
                 insn.kill();
             }
         }
 	}
 }
 
-void arm64_instruction_builder::dump(std::ostream &os) const {
+void instruction_builder::dump(std::ostream &os) const {
 	for (const auto &insn : instructions_) {
 		if (!insn.is_dead()) {
             insn.dump(os);
