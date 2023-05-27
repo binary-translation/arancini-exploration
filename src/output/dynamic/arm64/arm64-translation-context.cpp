@@ -13,8 +13,8 @@
 using namespace arancini::output::dynamic::arm64;
 using namespace arancini::ir;
 
-arm64_physreg_op memory_base_reg(arm64_physreg_op::x18);
-arm64_physreg_op context_block_reg(arm64_physreg_op::x29);
+preg_operand memory_base_reg(preg_operand::x18);
+preg_operand context_block_reg(preg_operand::x29);
 
 #define X86_OFFSET_OF(reg) __builtin_offsetof(struct arancini::runtime::exec::x86::x86_cpu_state, reg)
 enum class reg_offsets {
@@ -23,10 +23,10 @@ enum class reg_offsets {
 #undef DEFREG
 };
 
-const arm64_physreg_op ZF(arm64_physreg_op::x10);
-const arm64_physreg_op CF(arm64_physreg_op::x11);
-const arm64_physreg_op OF(arm64_physreg_op::x12);
-const arm64_physreg_op SF(arm64_physreg_op::x13);
+const preg_operand ZF(preg_operand::x10);
+const preg_operand CF(preg_operand::x11);
+const preg_operand OF(preg_operand::x12);
+const preg_operand SF(preg_operand::x13);
 
 static std::unordered_map<unsigned long, int> flag_map {
 	{ (unsigned long)reg_offsets::ZF, {} },
@@ -51,44 +51,44 @@ static inline bool is_flag_port(const port &value) {
            value.kind() == port_kinds::overflow;
 }
 
-static arm64_operand virtreg_operand(unsigned int index, int width) {
-    return arm64_operand(arm64_vreg_op(index, width == 1 ? 8 : width));
+static operand virtreg_operand(unsigned int index, int width) {
+    return operand(vreg_operand(index, width == 1 ? 8 : width));
 }
 
-static arm64_operand imm_operand(unsigned long value, int width) {
-    return arm64_operand(arm64_immediate_operand(value, width == 1 ? 8 : width));
+static operand imm_operand(unsigned long value, int width) {
+    return operand(immediate_operand(value, width == 1 ? 8 : width));
 }
 
-arm64_operand
+operand
 arm64_translation_context::guestreg_memory_operand(int width, int regoff,
                                                    bool pre, bool post)
 {
     // FIXME: handle width
-    arm64_memory_operand mem;
+    memory_operand mem;
     if (regoff > 255 || regoff < -256) {
         auto base_vreg = alloc_vreg();
         auto preg = context_block_reg;
         builder_.mov(virtreg_operand(base_vreg, width),
                      imm_operand(regoff, 16));
         builder_.add(virtreg_operand(base_vreg, width),
-                     arm64_operand(preg),
+                     operand(preg),
                      virtreg_operand(base_vreg, width));
-        mem = arm64_memory_operand(arm64_vreg_op(base_vreg, width), 0, pre, post);
+        mem = memory_operand(vreg_operand(base_vreg, width), 0, pre, post);
     } else {
         auto preg = context_block_reg;
-        mem = arm64_memory_operand(preg, regoff, pre, post);
+        mem = memory_operand(preg, regoff, pre, post);
     }
 
-	return arm64_operand(mem);
+	return operand(mem);
 }
 
-arm64_operand arm64_translation_context::vreg_operand_for_port(port &p, bool constant_fold) {
+operand arm64_translation_context::vreg_operand_for_port(port &p, bool constant_fold) {
     // TODO
 	if (constant_fold) {
 		if (p.owner()->kind() == node_kinds::read_pc) {
-			return arm64_operand(arm64_immediate_operand(this_pc_, 64));
+			return operand(immediate_operand(this_pc_, 64));
 		} else if (p.owner()->kind() == node_kinds::constant) {
-			return arm64_operand(arm64_immediate_operand(((constant_node *)p.owner())->const_val_i(), p.type().width()));
+			return operand(immediate_operand(((constant_node *)p.owner())->const_val_i(), p.type().width()));
 		}
 	}
 
@@ -96,7 +96,7 @@ arm64_operand arm64_translation_context::vreg_operand_for_port(port &p, bool con
 	return virtreg_operand(vreg_for_port(p), p.type().element_width());
 }
 
-arm64_operand arm64_translation_context::mov_immediate(uint64_t imm, uint8_t size) {
+operand arm64_translation_context::mov_immediate(uint64_t imm, uint8_t size) {
     int move_count = static_cast<int>(std::ceil(size / 16.0));
 
     int vreg = alloc_vreg();
@@ -110,11 +110,11 @@ arm64_operand arm64_translation_context::mov_immediate(uint64_t imm, uint8_t siz
     if (size <= 64) {
         builder_.movz(reg,
                       imm_operand(imm & 0xFFFF, 16),
-                      arm64_shift_operand("LSL", 0));
+                      shift_operand("LSL", 0));
         for (int i = 1; i < move_count; ++i) {
             builder_.movk(reg,
                           imm_operand(imm >> (i * 16) & 0xFFFF, 16),
-                          arm64_shift_operand("LSL", (i * 16)));
+                          shift_operand("LSL", (i * 16)));
         }
 
         return reg;
@@ -123,7 +123,7 @@ arm64_operand arm64_translation_context::mov_immediate(uint64_t imm, uint8_t siz
     throw std::runtime_error("Too large immediate");
 }
 
-static void func_push_args(arm64_instruction_builder *builder, const
+static void func_push_args(instruction_builder *builder, const
                            std::vector<port *> &args)
 {
     if (!builder)
@@ -140,7 +140,7 @@ static void func_push_args(arm64_instruction_builder *builder, const
 void arm64_translation_context::begin_block() {
     ret_ = 0;
     instr_cnt_ = 0;
-    builder_ = arm64_instruction_builder();
+    builder_ = instruction_builder();
     materialised_nodes_.clear();
 }
 
@@ -179,7 +179,7 @@ void arm64_translation_context::end_block() {
 	do_register_allocation();
 
     // Return value in x0 = 0;
-	builder_.mov(arm64_operand(arm64_physreg_op(arm64_physreg_op::x0)),
+	builder_.mov(operand(preg_operand(preg_operand::x0)),
                  imm_operand(ret_, 64));
 	builder_.ret();
 
@@ -281,7 +281,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
                                  + std::to_string(w));
 
     // TODO: deal with widths
-    arm64_operand reg;
+    operand reg;
     if (is_flag(n.value()) && is_flag_port(n.value())) {
         reg = virtreg_operand(flag_map.at(n.regoff()), 64);
     } else {
@@ -302,9 +302,9 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
                  vreg_operand_for_port(n.address()));
 
     // TODO: widths
-    auto mem = arm64_memory_operand(arm64_vreg_op(addr, w));
+    auto mem = memory_operand(vreg_operand(addr, w));
 	builder_.ldr(virtreg_operand(dest_vreg, w),
-                 arm64_operand(mem));
+                 operand(mem));
 }
 
 void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
@@ -318,9 +318,9 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
                  memory_base_reg,
                  addr_vreg);
 
-    auto mem = arm64_memory_operand(arm64_vreg_op(addr, w), 0, false, true);
+    auto mem = memory_operand(vreg_operand(addr, w), 0, false, true);
 	builder_.str(vreg_operand_for_port(n.value()),
-                 arm64_operand(mem));
+                 operand(mem));
 }
 
 void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
@@ -370,7 +370,7 @@ void arm64_translation_context::materialise_constant(const constant_node &n) {
     int actual_width = static_cast<int>(std::ceil(std::log2(value)));;
 
     // TODO: what if floating point?
-    arm64_operand op;
+    operand op;
     if (actual_width <= 16)
         op = imm_operand(value, w);
     else
@@ -398,7 +398,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             builder_.add(virtreg_operand(val_vreg, w),
                          vreg_operand_for_port(n.lhs()),
                          vreg_operand_for_port(n.rhs()),
-                         arm64_shift_operand(mod, 0, 64));
+                         shift_operand(mod, 0, 64));
         } else {
             builder_.add(virtreg_operand(val_vreg, w),
                          vreg_operand_for_port(n.lhs()),
@@ -410,7 +410,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             builder_.sub(virtreg_operand(val_vreg, w),
                          vreg_operand_for_port(n.lhs()),
                          vreg_operand_for_port(n.rhs()),
-                         arm64_shift_operand(mod, 0, 64));
+                         shift_operand(mod, 0, 64));
         } else {
             builder_.sub(virtreg_operand(val_vreg, w),
                          vreg_operand_for_port(n.lhs()),
@@ -496,13 +496,13 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 	case cast_op::zx:
 		builder_.movz(virtreg_operand(dst_vreg, n.val().type().element_width()),
                       vreg_operand_for_port(n.source_value()),
-                      arm64_shift_operand("LSL", 0, 64));
+                      shift_operand("LSL", 0, 64));
 		break;
 
 	case cast_op::sx:
 		builder_.movn(virtreg_operand(dst_vreg, n.val().type().element_width()),
                       vreg_operand_for_port(n.source_value(), false),
-                      arm64_shift_operand("LSL", 0, 64));
+                      shift_operand("LSL", 0, 64));
 		break;
 
 	case cast_op::bitcast:
@@ -531,7 +531,7 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
     builder_.csel(virtreg_operand(dst_vreg, w),
                   true_val,
                   false_val,
-                  arm64_label_operand("EQ"));
+                  label_operand("EQ"));
 }
 
 void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {

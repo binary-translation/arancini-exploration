@@ -22,8 +22,8 @@ public:
 
     virtual ~arm64_translation_context() { }
 private:
-	arm64_instruction_builder builder_;
     std::vector<std::shared_ptr<ir::action_node>> nodes_;
+	instruction_builder builder_;
 	std::set<const ir::node *> materialised_nodes_;
 	std::map<const ir::port *, int> port_to_vreg_;
 	std::map<unsigned long, off_t> instruction_index_to_guest_;
@@ -43,10 +43,10 @@ private:
 		return v;
 	}
 
-	arm64_operand vreg_operand_for_port(ir::port &p, bool constant_fold = false);
+	operand vreg_operand_for_port(ir::port &p, bool constant_fold = false);
 	int vreg_for_port(ir::port &p) const { return port_to_vreg_.at(&p); }
 
-    arm64_operand guestreg_memory_operand(int width, int regoff,
+    operand guestreg_memory_operand(int width, int regoff,
                                           bool pre = false,
                                           bool post = false);
 
@@ -70,7 +70,7 @@ private:
     void materialise_binary_arith(const ir::binary_arith_node &n);
     void materialise_internal_call(const ir::internal_call_node &n);
 
-    arm64_operand mov_immediate(uint64_t imm, uint8_t size);
+    operand mov_immediate(uint64_t imm, uint8_t size);
 };
 } // namespace arancini::output::dynamic::arm64
 
