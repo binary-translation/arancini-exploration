@@ -407,12 +407,12 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 		break;
 	case binary_arith_op::sub:
         if (w == 8 || w == 16) {
-            builder_.add(virtreg_operand(val_vreg, w),
+            builder_.sub(virtreg_operand(val_vreg, w),
                          vreg_operand_for_port(n.lhs()),
                          vreg_operand_for_port(n.rhs()),
                          arm64_shift_operand(mod, 0, 64));
         } else {
-            builder_.add(virtreg_operand(val_vreg, w),
+            builder_.sub(virtreg_operand(val_vreg, w),
                          vreg_operand_for_port(n.lhs()),
                          vreg_operand_for_port(n.rhs()));
         }
