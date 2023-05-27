@@ -496,12 +496,6 @@ struct instruction {
         opcount = 4;
 	}
 
-    static instruction add(const operand &dst,
-                                 const operand &src1,
-                                 const operand &src2) {
-        return instruction("add", def(dst), use(src1), use(src2));
-    }
-
 	void dump(std::ostream &os) const;
 	void kill() { opcode.clear(); }
 
