@@ -395,26 +395,26 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 	switch (n.op()) {
 	case binary_arith_op::add:
         if (w == 8 || w == 16) {
-            builder_.add(virtreg_operand(val_vreg, w),
-                         vreg_operand_for_port(n.lhs()),
-                         vreg_operand_for_port(n.rhs()),
-                         shift_operand(mod, 0, 64));
+            builder_.adds(virtreg_operand(val_vreg, w),
+                          vreg_operand_for_port(n.lhs()),
+                          vreg_operand_for_port(n.rhs()),
+                          shift_operand(mod, 0, 64));
         } else {
-            builder_.add(virtreg_operand(val_vreg, w),
-                         vreg_operand_for_port(n.lhs()),
-                         vreg_operand_for_port(n.rhs()));
+            builder_.adds(virtreg_operand(val_vreg, w),
+                          vreg_operand_for_port(n.lhs()),
+                          vreg_operand_for_port(n.rhs()));
         }
 		break;
 	case binary_arith_op::sub:
         if (w == 8 || w == 16) {
-            builder_.sub(virtreg_operand(val_vreg, w),
-                         vreg_operand_for_port(n.lhs()),
-                         vreg_operand_for_port(n.rhs()),
-                         shift_operand(mod, 0, 64));
+            builder_.subs(virtreg_operand(val_vreg, w),
+                          vreg_operand_for_port(n.lhs()),
+                          vreg_operand_for_port(n.rhs()),
+                          shift_operand(mod, 0, 64));
         } else {
-            builder_.sub(virtreg_operand(val_vreg, w),
-                         vreg_operand_for_port(n.lhs()),
-                         vreg_operand_for_port(n.rhs()));
+            builder_.subs(virtreg_operand(val_vreg, w),
+                          vreg_operand_for_port(n.lhs()),
+                          vreg_operand_for_port(n.rhs()));
         }
 		break;
 	case binary_arith_op::mul:
@@ -433,9 +433,9 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                       vreg_operand_for_port(n.rhs()));
 		break;
 	case binary_arith_op::bor:
-		builder_.or_(virtreg_operand(val_vreg, w),
-                     vreg_operand_for_port(n.lhs()),
-                     vreg_operand_for_port(n.rhs()));
+		builder_.orr_(virtreg_operand(val_vreg, w),
+                      vreg_operand_for_port(n.lhs()),
+                      vreg_operand_for_port(n.rhs()));
 		break;
 	case binary_arith_op::band:
 		builder_.and_(virtreg_operand(val_vreg, w),
@@ -443,7 +443,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                       vreg_operand_for_port(n.rhs()));
 		break;
 	case binary_arith_op::bxor:
-		builder_.xor_(virtreg_operand(val_vreg, w),
+		builder_.eor_(virtreg_operand(val_vreg, w),
                       vreg_operand_for_port(n.lhs()),
                       vreg_operand_for_port(n.rhs()));
 		break;
