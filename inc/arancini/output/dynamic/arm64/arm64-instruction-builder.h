@@ -136,9 +136,14 @@ public:
         append(instruction("bl", use(label_operand(name))));
     }
 
+    void cmp(const operand &src1,
+             const operand &src2) {
+        append(instruction("cmp", use(src1), use(src2)));
+    }
+
     void cmp(const operand &dst,
-                           const operand &src1,
-                           const operand &src2) {
+             const operand &src1,
+             const operand &src2) {
         append(instruction("cmp", def(dst), use(src1), use(src2)));
     }
 
@@ -206,11 +211,6 @@ public:
               const operand &src1,
               const operand &src2) {
         append(instruction("sdiv", def(dest), use(src1), use(src2)));
-    }
-
-    void cmp(const operand &src1,
-             const operand &src2) {
-        append(instruction("cmp", use(src1), use(src2)));
     }
 
     void ret() {
