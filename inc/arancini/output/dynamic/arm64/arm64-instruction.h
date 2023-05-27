@@ -419,6 +419,28 @@ struct operand {
 	void dump(std::ostream &os) const;
 };
 
+static operand def(const operand &o)
+{
+    operand r = o;
+    r.def = true;
+    return r;
+}
+
+static operand use(const operand &o)
+{
+    operand r = o;
+    r.use = true;
+    return r;
+}
+
+static operand usedef(const operand &o)
+{
+    operand r = o;
+    r.use = true;
+    r.def = true;
+    return r;
+}
+
 struct instruction {
 	static constexpr size_t nr_operands = 5;
 
@@ -474,214 +496,10 @@ struct instruction {
         opcount = 4;
 	}
 
-	static operand def(const operand &o)
-	{
-		operand r = o;
-		r.def = true;
-		return r;
-	}
-
-	static operand use(const operand &o)
-	{
-		operand r = o;
-		r.use = true;
-		return r;
-	}
-
-	static operand usedef(const operand &o)
-	{
-		operand r = o;
-		r.use = true;
-		r.def = true;
-		return r;
-	}
-
     static instruction add(const operand &dst,
                                  const operand &src1,
                                  const operand &src2) {
         return instruction("add", def(dst), use(src1), use(src2));
-    }
-
-    static instruction add(const operand &dst,
-                                 const operand &src1,
-                                 const operand &src2,
-                                 const operand &shift) {
-        return instruction("add", def(dst), use(src1), use(src2), use(shift));
-    }
-
-    static instruction sub(const operand &dst,
-                                 const operand &src1,
-                                 const operand &src2) {
-        return instruction("sub", def(dst), use(src1), use(src2));
-    }
-
-    static instruction sub(const operand &dst,
-                                 const operand &src1,
-                                 const operand &src2,
-                                 const operand &shift) {
-        return instruction("sub", def(dst), use(src1), use(src2), use(shift));
-    }
-
-    static instruction or_(const operand &dst,
-                                 const operand &src1,
-                                 const operand &src2) {
-        return instruction("orr", def(dst), use(src1), use(src2));
-    }
-
-    static instruction and_(const operand &dst,
-                                  const operand &src1,
-                                  const operand &src2) {
-        return instruction("and", def(dst), use(src1), use(src2));
-    }
-
-    static instruction xor_(const operand &dst,
-                                  const operand &src1,
-                                  const operand &src2) {
-        return instruction("eor", def(dst), use(src1), use(src2));
-    }
-
-    static instruction not_(const operand &dst, const operand &src) {
-        return instruction("mvn", def(dst), use(src));
-    }
-
-    static instruction moveq(const operand &dst, const immediate_operand &src) {
-        return instruction("moveq", def(dst), use(src));
-    }
-
-    static instruction movss(const operand &dst, const immediate_operand &src) {
-        return instruction("movss", def(dst), use(src));
-    }
-
-    // TODO: express dependency on flag reg
-    static instruction movvs(const operand &dst, const immediate_operand &src) {
-        return instruction("movvs", def(dst), use(src));
-    }
-
-    static instruction movcs(const operand &dst, const immediate_operand &src) {
-        return instruction("movcs", def(dst), use(src));
-    }
-
-    static instruction movn(const operand &dst,
-                                  const operand &src,
-                                  const operand &shift) {
-        return instruction("movn", def(dst), use(src), use(shift));
-    }
-
-    static instruction movz(const operand &dst,
-                                  const operand &src,
-                                  const operand &shift) {
-        return instruction("movz", def(dst), use(src), use(shift));
-    }
-
-    static instruction movk(const operand &dst,
-                                  const operand &src,
-                                  const operand &shift) {
-        return instruction("movk", def(dst), use(src), use(shift));
-    }
-
-    static instruction mov(const operand &dst, const operand &src) {
-        return instruction("mov", def(dst), use(src));
-    }
-
-    static instruction b(const std::string &src) {
-        return instruction("b", use(label_operand(src)));
-    }
-
-    static instruction beq(const std::string &src) {
-        return instruction("beq", use(label_operand(src)));
-    }
-
-    static instruction bl(const std::string &name) {
-        return instruction("bl", use(label_operand(name)));
-    }
-
-    static instruction cmp(const operand &dst,
-                                 const operand &src1,
-                                 const operand &src2) {
-        return instruction("cmp", def(dst), use(src1), use(src2));
-    }
-
-    static instruction lsl(const operand &dst,
-                                 const operand &src1,
-                                 const operand &src2) {
-        return instruction("lsl", def(dst), use(src1), use(src2));
-    }
-
-    static instruction lsr(const operand &dst,
-                                 const operand &src1,
-                                 const operand &src2) {
-        return instruction("lsr", def(dst), use(src1), use(src2));
-    }
-
-    static instruction asr(const operand &dst,
-                                 const operand &src1,
-                                 const operand &src2) {
-        return instruction("asr", def(dst), use(src1), use(src2));
-    }
-
-    static instruction csel(const operand &dst,
-                                  const operand &src1,
-                                  const operand &src2,
-                                  const operand &cond) {
-        return instruction("csel", def(dst), use(src1), use(src2), use(cond));
-    }
-
-    static instruction cset(const operand &dst,
-                                  const operand &cond) {
-        return instruction("cset", def(dst), use(cond));
-    }
-
-    static instruction ubfx(const operand &dst,
-                                  const operand &src1,
-                                  const operand &src2,
-                                  const operand &cond) {
-        return instruction("ubfx", def(dst), use(src1), use(src2), use(cond));
-    }
-
-    static instruction bfi(const operand &dst,
-                                 const operand &src1,
-                                 const operand &src2,
-                                 const operand &cond) {
-        return instruction("bfi", def(dst), use(src1), use(src2), use(cond));
-    }
-
-    static instruction ldr(const operand &dst,
-                                 const operand &base) {
-        return instruction("ldr", def(dst), use(base));
-    }
-
-    static instruction str(const operand &src,
-                                 const operand &base) {
-        return instruction("str", use(src), def(base));
-    }
-
-    static instruction mul(const operand &dest,
-                                 const operand &src1,
-                                 const operand &src2) {
-        return instruction("mul", def(dest), use(src1), use(src2));
-    }
-
-    static instruction sdiv(const operand &dest,
-                                  const operand &src1,
-                                  const operand &src2) {
-        return instruction("sdiv", def(dest), use(src1), use(src2));
-    }
-
-    static instruction cmp(const operand &src1,
-                                 const operand &src2) {
-        return instruction("cmp", use(src1), use(src2));
-    }
-
-    static instruction ret() {
-        return instruction("ret");
-    }
-
-    static instruction brk(const operand &imm) {
-        return instruction("brk", use(imm));
-    }
-
-    static instruction label(const std::string &label) {
-        return instruction(label + ":");
     }
 
 	void dump(std::ostream &os) const;
