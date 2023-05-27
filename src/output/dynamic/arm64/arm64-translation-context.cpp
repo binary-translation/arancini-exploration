@@ -167,14 +167,19 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
 
     builder_.insert_sep("S" + std::to_string(instr_cnt_) + labelify(disasm));
 
+    // TODO: enable debug mode
+    const auto& opcode = disasm.substr(0, 3);
+    /* if (opcode == "jnz" || opcode == "tes") { */
+    /*     std::cerr << "Adding BRK for instruction " << disasm << '\n'; */
+    /*     builder_.brk(imm_operand(instr_cnt_, 64)); */
+    /* } */
+
     nodes_.clear();
 }
 
 void arm64_translation_context::end_instruction() {
     for (const auto* node : nodes_)
         materialise(node);
-    // TODO: enable debug mode
-    // builder_.brk(imm_operand(instr_cnt_, 64));
 }
 
 void arm64_translation_context::end_block() {
@@ -205,57 +210,75 @@ void arm64_translation_context::materialise(const ir::node* n) {
 
     switch (n->kind()) {
     case node_kinds::read_reg:
+        //std::cerr << "Node: read register\n";
         materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));
         break;
     case node_kinds::write_reg:
+        //std::cerr << "Node: write register\n";
         materialise_write_reg(*reinterpret_cast<const write_reg_node*>(n));
         break;
     case node_kinds::read_mem:
+        //std::cerr << "Node: read memory\n";
         materialise_read_mem(*reinterpret_cast<const read_mem_node*>(n));
         break;
     case node_kinds::write_mem:
+        //std::cerr << "Node: write memory\n";
         materialise_write_mem(*reinterpret_cast<const write_mem_node*>(n));
         break;
 	case node_kinds::read_pc:
+        //std::cerr << "Node: read PC\n";
 		materialise_read_pc(*reinterpret_cast<const read_pc_node *>(n));
         break;
 	case node_kinds::write_pc:
+        //std::cerr << "Node: write PC\n";
 		materialise_write_pc(*reinterpret_cast<const write_pc_node *>(n));
         break;
     case node_kinds::label:
+        //std::cerr << "Node: label\n";
         materialise_label(*reinterpret_cast<const label_node *>(n));
         break;
     case node_kinds::br:
+        //std::cerr << "Node: branch\n";
         materialise_br(*reinterpret_cast<const br_node *>(n));
         break;
     case node_kinds::cond_br:
+        //std::cerr << "Node: cond branch\n";
         materialise_cond_br(*reinterpret_cast<const cond_br_node *>(n));
         break;
 	case node_kinds::cast:
+        //std::cerr << "Node: cast\n";
 		materialise_cast(*reinterpret_cast<const cast_node *>(n));
         break;
     case node_kinds::csel:
+        //std::cerr << "Node: csel\n";
 		materialise_csel(*reinterpret_cast<const csel_node *>(n));
         break;
     case node_kinds::bit_shift:
+        //std::cerr << "Node: bit shift\n";
 		materialise_bit_shift(*reinterpret_cast<const bit_shift_node *>(n));
         break;
     case node_kinds::bit_extract:
+        //std::cerr << "Node: bit extract\n";
 		materialise_bit_extract(*reinterpret_cast<const bit_extract_node *>(n));
         break;
     case node_kinds::bit_insert:
+        //std::cerr << "Node: bit insert\n";
 		materialise_bit_insert(*reinterpret_cast<const bit_insert_node *>(n));
         break;
     case node_kinds::constant:
+        //std::cerr << "Node: constant\n";
         materialise_constant(*reinterpret_cast<const constant_node*>(n));
         break;
 	case node_kinds::unary_arith:
+        //std::cerr << "Node: unary arithmetic\n";
         materialise_unary_arith(*reinterpret_cast<const unary_arith_node*>(n));
         break;
 	case node_kinds::binary_arith:
+        //std::cerr << "Node: binary arithmetic\n";
 		materialise_binary_arith(*reinterpret_cast<const binary_arith_node*>(n));
         break;
     case node_kinds::internal_call:
+        //std::cerr << "Node: internal call\n";
         materialise_internal_call(*reinterpret_cast<const internal_call_node*>(n));
         break;
     default:
@@ -285,6 +308,8 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     // TODO: deal with widths
     operand reg;
     if (is_flag(n.value()) && is_flag_port(n.value())) {
+        // TODO: register allocator cuts this
+        vreg_operand_for_port(n.value());
         reg = virtreg_operand(flag_map.at(n.regoff()), 64);
     } else {
         reg = vreg_operand_for_port(n.value());
@@ -345,17 +370,14 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
 void arm64_translation_context::materialise_label(const label_node &n) {
     if (!builder_.has_label(n.name() + ":"))
         builder_.label(n.name());
+    std::cerr << "Label: " << n.name() << '\n';
 }
 
 void arm64_translation_context::materialise_br(const br_node &n) {
-    materialise(n.target());
-
     builder_.b(n.target()->name());
 }
 
 void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
-    materialise(n.target());
-
     // TODO: width
     builder_.cmp(vreg_operand_for_port(n.cond()),
                  imm_operand(0, 64));
@@ -440,7 +462,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                       vreg_operand_for_port(n.rhs()));
 		break;
 	case binary_arith_op::band:
-		builder_.and_(virtreg_operand(val_vreg, w),
+		builder_.ands(virtreg_operand(val_vreg, w),
                       vreg_operand_for_port(n.lhs()),
                       vreg_operand_for_port(n.rhs()));
 		break;
@@ -455,13 +477,19 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 		break;
 	case binary_arith_op::cmpeq:
         // NOTE: set*() will modify the flags
-        builder_.cmp(vreg_operand_for_port(n.lhs()), vreg_operand_for_port(n.rhs()));
+        builder_.subs(virtreg_operand(val_vreg, w),
+                     vreg_operand_for_port(n.lhs()),
+                     vreg_operand_for_port(n.rhs()));
 		break;
 	case binary_arith_op::cmpne:
-        builder_.cmp(vreg_operand_for_port(n.lhs()), vreg_operand_for_port(n.rhs()));
+        builder_.subs(virtreg_operand(val_vreg, w),
+                     vreg_operand_for_port(n.lhs()),
+                     vreg_operand_for_port(n.rhs()));
 		break;
 	case binary_arith_op::cmpgt:
-        builder_.cmp(vreg_operand_for_port(n.lhs()), vreg_operand_for_port(n.rhs()));
+        builder_.subs(virtreg_operand(val_vreg, w),
+                     vreg_operand_for_port(n.lhs()),
+                     vreg_operand_for_port(n.rhs()));
 		break;
 	default:
 		throw std::runtime_error("unsupported binary arithmetic operation " + std::to_string((int)n.op()));

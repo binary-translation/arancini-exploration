@@ -7,7 +7,7 @@
 
 using namespace arancini::output::dynamic::arm64;
 
-// #define DEBUG_REGALLOC
+/* #define DEBUG_REGALLOC */
 #define DEBUG_STREAM std::cerr
 
 void instruction_builder::spill() {
@@ -75,9 +75,14 @@ void instruction_builder::allocate() {
 		DEBUG_STREAM << '\n';
 #endif
 
+        bool has_usedef = false;
+        std::array<size_t, instruction::nr_operands> allocs;
+
 		// kill defs first
 		for (size_t i = 0; i < insn.opcount; i++) {
 			auto &o = insn.get_operand(i);
+
+            has_usedef = o.is_def() && o.is_use();
 
 			// Only regs can be /real/ defs
 			if (o.is_def() && o.is_vreg() && !o.is_use()) {
@@ -120,7 +125,6 @@ void instruction_builder::allocate() {
 		}
 
 		// alloc uses next
-        std::array<unsigned int, instruction::nr_operands> alloced;
 		for (size_t i = 0; i < insn.opcount; i++) {
 			auto &o = insn.get_operand(i);
 
@@ -145,7 +149,7 @@ void instruction_builder::allocate() {
 
 					o.allocate(allocation, 64);
 
-                    alloced[i] = allocation;
+                    allocs[i] = allocation;
 #ifdef DEBUG_REGALLOC
 					DEBUG_STREAM << " allocating vreg to ";
 					o.dump(DEBUG_STREAM);
@@ -171,19 +175,6 @@ void instruction_builder::allocate() {
 					if (!vreg_to_preg.count(vri)) {
 						auto allocation = avail_physregs._Find_first();
 
-                        // TODO: register spilling
-                        if (allocation == 30) {
-                            allocation = 1; // set to x1
-                            for (auto alloc : alloced) {
-                                if (alloc == allocation) {
-                                    allocation++;
-                                    break;
-                                }
-                            }
-
-                            std::cerr << "Run out of registers for block\n";
-                        }
-
 						avail_physregs.flip(allocation);
 
 						vreg_to_preg[vri] = allocation;
@@ -192,6 +183,7 @@ void instruction_builder::allocate() {
 						o.memory.pbase = preg_operand(allocation, 64);
 						o.allocate_base(allocation, 64);
 
+                        allocs[i] = allocation;
 #ifdef DEBUG_REGALLOC
 						DEBUG_STREAM << " allocating vreg to ";
 						o.dump(DEBUG_STREAM);
@@ -211,6 +203,15 @@ void instruction_builder::allocate() {
         if (insn.opcode.find("mov") != std::string::npos) {
             if (insn.operands[0].preg.get() == insn.operands[1].preg.get()) {
                 insn.kill();
+            }
+        }
+
+        if (has_usedef) {
+            for (size_t i = 0; i < insn.opcount; i++) {
+                const auto &op = insn.get_operand(i);
+                if (op.is_use() && op.is_def()) {
+                    avail_physregs.flip(allocs[i]);
+                }
             }
         }
 	}

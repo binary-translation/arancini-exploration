@@ -34,7 +34,7 @@ public:
               const operand &src1,
               const operand &src2,
               const operand &shift) {
-        append(instruction("adds", def(dst), use(src1), use(src2), use(shift)));
+        append(instruction("adds", usedef(dst), use(src1), use(src2), use(shift)));
     }
 
     void sub(const operand &dst,
@@ -53,14 +53,14 @@ public:
     void subs(const operand &dst,
              const operand &src1,
              const operand &src2) {
-        append(instruction("subs", def(dst), use(src1), use(src2)));
+        append(instruction("subs", usedef(dst), use(src1), use(src2)));
     }
 
     void subs(const operand &dst,
              const operand &src1,
              const operand &src2,
              const operand &shift) {
-        append(instruction("subs", def(dst), use(src1), use(src2), use(shift)));
+        append(instruction("subs", usedef(dst), use(src1), use(src2), use(shift)));
     }
 
     void orr_(const operand &dst,
@@ -72,7 +72,13 @@ public:
     void and_(const operand &dst,
               const operand &src1,
               const operand &src2) {
-        append(instruction("and", def(dst), use(src1), use(src2)));
+        append(instruction("and", usedef(dst), use(src1), use(src2)));
+    }
+
+    void ands(const operand &dst,
+              const operand &src1,
+              const operand &src2) {
+        append(instruction("ands", usedef(dst), use(src1), use(src2)));
     }
 
     void eor_(const operand &dst,
