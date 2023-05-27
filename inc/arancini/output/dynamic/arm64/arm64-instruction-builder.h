@@ -18,40 +18,66 @@ public:
     }
 
     void add(const operand &dst,
-                           const operand &src1,
-                           const operand &src2,
-                           const operand &shift) {
+             const operand &src1,
+             const operand &src2,
+             const operand &shift) {
         append(instruction("add", def(dst), use(src1), use(src2), use(shift)));
     }
 
+	void adds(const operand &dst,
+              const operand &src1,
+              const operand &src2) {
+        append(instruction("adds", def(dst), use(src1), use(src2)));
+    }
+
+    void adds(const operand &dst,
+              const operand &src1,
+              const operand &src2,
+              const operand &shift) {
+        append(instruction("adds", def(dst), use(src1), use(src2), use(shift)));
+    }
+
     void sub(const operand &dst,
-                           const operand &src1,
-                           const operand &src2) {
+             const operand &src1,
+             const operand &src2) {
         append(instruction("sub", def(dst), use(src1), use(src2)));
     }
 
     void sub(const operand &dst,
-                           const operand &src1,
-                           const operand &src2,
-                           const operand &shift) {
+             const operand &src1,
+             const operand &src2,
+             const operand &shift) {
         append(instruction("sub", def(dst), use(src1), use(src2), use(shift)));
     }
 
-    void or_(const operand &dst,
-                           const operand &src1,
-                           const operand &src2) {
+    void subs(const operand &dst,
+             const operand &src1,
+             const operand &src2) {
+        append(instruction("subs", def(dst), use(src1), use(src2)));
+    }
+
+    void subs(const operand &dst,
+             const operand &src1,
+             const operand &src2,
+             const operand &shift) {
+        append(instruction("subs", def(dst), use(src1), use(src2), use(shift)));
+    }
+
+    void orr_(const operand &dst,
+              const operand &src1,
+              const operand &src2) {
         append(instruction("orr", def(dst), use(src1), use(src2)));
     }
 
     void and_(const operand &dst,
-                            const operand &src1,
-                            const operand &src2) {
+              const operand &src1,
+              const operand &src2) {
         append(instruction("and", def(dst), use(src1), use(src2)));
     }
 
-    void xor_(const operand &dst,
-                            const operand &src1,
-                            const operand &src2) {
+    void eor_(const operand &dst,
+              const operand &src1,
+              const operand &src2) {
         append(instruction("eor", def(dst), use(src1), use(src2)));
     }
 
