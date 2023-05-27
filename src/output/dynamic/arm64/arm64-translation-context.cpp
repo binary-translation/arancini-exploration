@@ -446,6 +446,10 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 		builder_.eor_(virtreg_operand(val_vreg, w),
                       vreg_operand_for_port(n.lhs()),
                       vreg_operand_for_port(n.rhs()));
+        // EOR does not set flags
+        // CMP is used to set the flags
+		builder_.cmp(virtreg_operand(val_vreg, w),
+                     imm_operand(0, 64));
 		break;
 	case binary_arith_op::cmpeq:
         // NOTE: set*() will modify the flags
