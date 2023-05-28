@@ -204,10 +204,16 @@ void instruction_builder::allocate() {
         if (insn.opcode.find("mov") != std::string::npos) {
             operand op1 = insn.operands[0];
             operand op2 = insn.operands[1];
+
+            auto get_preg = [](const operand &op) -> preg_operand {
+                if (op.is_mem()) return op.memory().preg_base();
+                return op.preg();
+            };
+
             if ((op1.is_mem() || op1.is_preg()) &&
                 (op2.is_mem() || op2.is_preg())) {
-                preg_operand reg1 = preg_or_membase(insn.operands[0]);
-                preg_operand reg2 = preg_or_membase(insn.operands[1]);
+                preg_operand reg1 = get_preg(op1);
+                preg_operand reg2 = get_preg(op2);
 
                 if (reg1.get() == reg2.get()) {
                     insn.kill();
