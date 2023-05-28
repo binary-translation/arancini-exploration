@@ -5,6 +5,7 @@
 #include <arancini/output/dynamic/machine-code-writer.h>
 
 #include <vector>
+#include <variant>
 #include <sstream>
 #include <iostream>
 #include <stdexcept>
@@ -35,17 +36,33 @@ private:
 
 static assembler asm_;
 
-struct vreg_operand {
-    size_t width;
-	unsigned int index;
-
+class vreg_operand {
+public:
     vreg_operand() = default;
 
 	vreg_operand(unsigned int i, size_t width)
-		: width(width)
-        , index(i)
+		: width_(width)
+        , index_(i)
 	{
 	}
+
+    vreg_operand(const vreg_operand &o)
+        : width_(o.width_)
+        , index_(o.index_)
+    {
+    }
+
+    vreg_operand &operator=(const vreg_operand &o) {
+        width_ = o.width_;
+        index_ = o.index_;
+    }
+
+    size_t width() const { return width_; }
+
+    unsigned int index() const { return index_; }
+private:
+    size_t width_;
+	unsigned int index_;
 };
 
 class preg_operand {
@@ -68,26 +85,29 @@ public:
 
     preg_operand() = default;
 
-    explicit preg_operand(regname32 reg): reg_(reg), width_(32) { }
+    explicit preg_operand(regname32 reg): width_(32), reg_(reg) { }
 
-    explicit preg_operand(regname64 reg): reg_(reg), width_(64) { }
+    explicit preg_operand(regname64 reg): width_(64), reg_(reg) { }
 
     explicit preg_operand(size_t index, size_t width) {
         width_ = width;
         if (index > static_cast<size_t>(xzr_sp) + 1)
             throw std::runtime_error("Allocating unavailable register at index: "
                                      + std::to_string(index));
-        if (width == 64)
+        if (width_ == 64)
             reg_ = static_cast<regname64>(index + 1);
-        else if (width == 32)
+        else if (width_ == 32)
             reg_ = static_cast<regname32>(index + 1);
-        else if (width == 8)
+        else if (width_ == 8)
             (void)0; // FIXME
         else
             throw std::runtime_error("Physical registers are specified as 32-bit or 64-bit only");
     }
 
-    preg_operand(const preg_operand& r): reg_(r.reg_), width_(r.width_) { }
+    preg_operand(const preg_operand& r)
+        : width_(r.width_)
+        , reg_(r.reg_)
+    { }
 
     preg_operand& operator=(const preg_operand& r) {
         reg_ = r.reg_;
@@ -95,349 +115,319 @@ public:
         return *this;
     }
 
-    regname get() const { return reg_; }
-
     size_t width() const { return width_; }
+
+    regname get() const { return reg_; }
 
     const char* to_string() const;
 private:
+    size_t width_;
     regname reg_;
-    size_t width_ = 0;
 };
 
-struct memory_operand {
-	bool virt_base;
-
-    // TODO: add as union
-    vreg_operand vbase;
-    preg_operand pbase;
-
-	int offset;
-    bool pre_index = false;
-    bool post_index = false;
-
+class memory_operand {
+public:
     memory_operand() = default;
 
-	explicit memory_operand(const preg_operand &base, int offset = 0,
-                                  bool pre_index = false, bool post_index = false)
-		: virt_base(false)
-		, pbase(base)
-		, offset(offset)
-        , pre_index(pre_index)
-        , post_index(post_index)
+    template<typename T>
+	memory_operand(const T &base,
+                   int offset = 0,
+                   bool pre_index = false,
+                   bool post_index = false)
+        : reg_base_(base)
+		, offset_(offset)
+        , pre_index_(pre_index)
+        , post_index_(post_index)
 	{
-        if (pre_index == post_index && pre_index)
-            throw std::runtime_error("Both pre- and post-index passed to ARM DBT");
-    }
-
-	explicit memory_operand(const vreg_operand &virt_base, int offset = 0,
-                         bool pre_index = false, bool post_index = false)
-		: virt_base(true)
-		, vbase(virt_base)
-		, offset(offset)
-        , pre_index(pre_index)
-        , post_index(post_index)
-    {
         if (pre_index == post_index && pre_index)
             throw std::runtime_error("Both pre- and post-index passed to ARM DBT");
     }
 
     memory_operand(const memory_operand& m)
-        : virt_base(m.virt_base)
-        , offset(m.offset)
-        , pre_index(m.pre_index)
-        , post_index(m.post_index)
+        : reg_base_(m.reg_base_)
+        , offset_(m.offset_)
+        , pre_index_(m.pre_index_)
+        , post_index_(m.post_index_)
     {
-        if (m.virt_base) vbase = m.vbase;
-        else pbase = m.pbase;
     }
 
-    memory_operand& operator=(const memory_operand& m)
-    {
-        virt_base = m.virt_base;
-        offset = m.offset;
-        pre_index = m.pre_index;
-        post_index = m.post_index;
-        if (m.virt_base) vbase = m.vbase;
-        else pbase = m.pbase;
+    memory_operand& operator=(const memory_operand& m) {
+        reg_base_ = m.reg_base_;
+        offset_ = m.offset_;
+        pre_index_ = m.pre_index_;
+        post_index_ = m.post_index_;
 
         return *this;
     }
 
+    bool is_virtual() const { return reg_base_.index() == 0; }
+    bool is_physical() const { return !is_virtual(); }
+
+    vreg_operand &vreg_base() { return std::get<vreg_operand>(reg_base_); }
+    const vreg_operand &vreg_base() const { return std::get<vreg_operand>(reg_base_); }
+
+    preg_operand &preg_base() { return std::get<preg_operand>(reg_base_); }
+    const preg_operand &preg_base() const { return std::get<preg_operand>(reg_base_); }
+
     size_t base_width() const {
-        if (virt_base) return vbase.width;
-        return pbase.width();
+        if (is_virtual())
+            return std::get<vreg_operand>(reg_base_).width();
+        return std::get<preg_operand>(reg_base_).width();
+        return 0;
     }
+
+    bool offset() const { return offset_; }
+    bool pre_index() const { return pre_index_; }
+    bool post_index() const { return post_index_; }
+private:
+    std::variant<vreg_operand, preg_operand> reg_base_;
+
+	int offset_ = 0;
+    bool pre_index_ = false;
+    bool post_index_ = false;
+
 };
 
 // TODO: how are immediates represented in arm
 // TODO: fix this
-struct immediate_operand {
-	union {
-		unsigned long int u64;
-		signed long int s64;
-	};
-    bool sign = 0;
-    uint8_t width = 0;
-
+class immediate_operand {
+public:
     immediate_operand() = default;
 
-	immediate_operand(unsigned long int v, uint8_t width)
-		: u64(v)
-        , sign(false)
-        , width(width)
+    template <typename T, typename std::enable_if<std::is_unsigned_v<T>>::type* = nullptr>
+	immediate_operand(T v, uint8_t width)
+		: u64_(v)
+        , sign_(false)
+        , width_(width)
 	{
-        if (width && !fits(v, width))
+        if (width_ && !fits(v, width_))
             throw std::runtime_error("Specified immediate does not fit in width: " +
-                                     std::to_string(width) + " " + std::to_string(v));
+                                     std::to_string(width_) + " " + std::to_string(v));
 	}
 
-	immediate_operand(signed long int v, uint8_t width)
-		: s64(v)
-        , sign(true)
-        , width(width)
+    template <typename T, typename std::enable_if<std::is_signed_v<T>>::type* = nullptr>
+	immediate_operand(T v, uint8_t width)
+		: s64_(v)
+        , sign_(true)
+        , width_(width)
 	{
-        if (width && !fits(v, width))
+        if (width_ && !fits(v, width_))
             throw std::runtime_error("Specified immediate does not fit in width: " +
-                                     std::to_string(width) + " " + std::to_string(v));
+                                     std::to_string(width_) + " " + std::to_string(v));
 	}
 
     static bool fits(uint64_t v, uint8_t width) {
         return width == 64 || (v & ((1llu << width) - 1)) == v;
     }
+
+    size_t width() const { return width_; }
+
+    size_t u64() const { return u64_; }
+    size_t s64() const { return s64_; }
+private:
+	union {
+		unsigned long int u64_;
+		signed long int s64_;
+	};
+
+    bool sign_ = 0;
+    size_t width_;
+
 };
 
-struct shift_operand : public immediate_operand {
+class shift_operand : public immediate_operand {
+public:
     // TODO: check fit in 48-bit shift specifier
-    std::string modifier;
-
     shift_operand() = default;
 
     shift_operand(const std::string &modifier,
                         size_t amount = 0, size_t width = 64)
         : immediate_operand(amount, width)
     {
-        this->modifier = modifier;
+        modifier_ = modifier;
     }
+
+    std::string& modifier() { return modifier_; }
+    const std::string& modifier() const { return modifier_; }
+private:
+    std::string modifier_;
 };
 
-struct label_operand {
+class label_operand {
+public:
     label_operand() = default;
 
-    label_operand(const std::string &label): name(label)
+    label_operand(const std::string &label):
+        name_(label)
     {
     }
 
-    std::string name;
+
+    std::string& name() { return name_; }
+    const std::string& name() const { return name_; }
+private:
+    std::string name_;
 };
 
-struct cond_operand {
+class cond_operand {
+public:
     cond_operand() = default;
 
-    cond_operand(const std::string &cond): cond(cond)
+    cond_operand(const std::string &cond): cond_(cond)
     {
     }
 
-    std::string cond;
+    cond_operand(const cond_operand &c): cond_(c.cond_) { }
+
+    std::string& condition() { return cond_; }
+    const std::string& condition() const { return cond_; }
+private:
+    std::string cond_;
 };
 
-enum class operand_type { invalid, preg, vreg, mem, imm, shift, label, cond};
+enum class operand_type : uint8_t { invalid, preg, vreg, mem, imm, shift, label, cond};
 
 struct operand {
-	operand_type type;
-	union {
-		preg_operand preg;
-		vreg_operand vreg;
-		memory_operand memory;
-		immediate_operand immediate;
-	};
+    using operand_variant = std::variant<std::monostate,
+                                         preg_operand,
+                                         vreg_operand,
+                                         memory_operand,
+                                         immediate_operand,
+                                         shift_operand,
+                                         label_operand,
+                                         cond_operand>;
 
-    shift_operand shift;
-    label_operand label;
-    cond_operand condition;
+    operand() = default;
 
-	bool use, def;
-
-	operand()
-		: type(operand_type::invalid)
-		, use(false)
-		, def(false)
-	{
-	}
-
-	operand(const preg_operand &o)
-		: type(operand_type::preg)
-		, preg(o)
-		, use(false)
-		, def(false)
-	{
-	}
-
-	operand(const vreg_operand &o)
-		: type(operand_type::vreg)
-		, vreg(o)
-		, use(false)
-		, def(false)
-	{
-	}
-
-	operand(const memory_operand &o)
-		: type(operand_type::mem)
-		, memory(o)
-		, use(false)
-		, def(false)
-	{
-	}
-
-	operand(const immediate_operand &o)
-		: type(operand_type::imm)
-		, immediate(o)
-		, use(false)
-		, def(false)
-	{
-	}
-
-	operand(const shift_operand &o)
-		: type(operand_type::shift)
-		, shift(o)
-		, use(false)
-		, def(false)
-	{
-	}
-
-	operand(const label_operand &o)
-		: type(operand_type::label)
-		, label(o)
-		, use(false)
-		, def(false)
-	{
-	}
-
-	operand(const cond_operand &o)
-		: type(operand_type::cond)
-		, condition(o)
-		, use(false)
-		, def(false)
-	{
-        // TODO: check cond
-	}
+    template <typename T>
+    operand (const T &o)
+          : op_(o)
+          , use_(false)
+          , def_(false)
+    {
+    }
 
     operand(const operand &o)
-        : type(o.type),
-          use(o.use),
-          def(o.def)
+         : op_(o.op_)
+         , use_(o.use_)
+         , def_(o.def_)
     {
-        if (type == operand_type::preg)
-            preg = o.preg;
-        if (type == operand_type::vreg)
-            vreg = o.vreg;
-        if (type == operand_type::mem)
-            memory = o.memory;
-        if (type == operand_type::imm)
-            immediate = o.immediate;
-        if (type == operand_type::shift)
-            shift = o.shift;
-        if (type == operand_type::cond)
-            condition = o.condition;
-        if (type == operand_type::label)
-            label = o.label;
     }
 
     operand& operator=(const operand &o) {
-        type = o.type;
-        use = o.use;
-        def = o.def;
-
-        if (type == operand_type::preg)
-            preg = o.preg;
-        if (type == operand_type::vreg)
-            vreg = o.vreg;
-        if (type == operand_type::mem)
-            memory = o.memory;
-        if (type == operand_type::imm)
-            immediate = o.immediate;
-        if (type == operand_type::shift)
-            shift = o.shift;
-        if (type == operand_type::cond)
-            condition = o.condition;
-        if (type == operand_type::label)
-            label = o.label;
+        op_ = o.op_;
+        use_ = o.use_;
+        def_ = o.def_;
 
         return *this;
     }
 
-	bool is_preg() const { return type == operand_type::preg; }
-	bool is_vreg() const { return type == operand_type::vreg; }
-	bool is_mem() const { return type == operand_type::mem; }
-	bool is_imm() const { return type == operand_type::imm; }
-    bool is_shift() const { return type == operand_type::shift; }
-    bool is_cond() const { return type == operand_type::cond; }
-    bool is_label() const { return type == operand_type::label; }
+    operand_type type() const {
+        return static_cast<operand_type>(op_.index());
+    }
 
-	bool is_use() const { return use; }
-	bool is_def() const { return def; }
-	bool is_usedef() const { return use && def; }
+	bool is_preg() const { return type() == operand_type::preg; }
+	bool is_vreg() const { return type() == operand_type::vreg; }
+	bool is_mem() const { return type() == operand_type::mem; }
+	bool is_imm() const { return type() == operand_type::imm; }
+    bool is_shift() const { return type() == operand_type::shift; }
+    bool is_cond() const { return type() == operand_type::cond; }
+    bool is_label() const { return type() == operand_type::label; }
+
+    preg_operand &preg() { return std::get<preg_operand>(op_); }
+    const preg_operand &preg() const { return std::get<preg_operand>(op_); }
+
+    vreg_operand &vreg() { return std::get<vreg_operand>(op_); }
+    const vreg_operand &vreg() const { return std::get<vreg_operand>(op_); }
+
+    memory_operand &memory() { return std::get<memory_operand>(op_); }
+    const memory_operand &memory() const { return std::get<memory_operand>(op_); }
+
+    immediate_operand &immediate() { return std::get<immediate_operand>(op_); }
+    const immediate_operand &immediate() const { return std::get<immediate_operand>(op_); }
+
+    shift_operand &shift() { return std::get<shift_operand>(op_); }
+    const shift_operand &shift() const { return std::get<shift_operand>(op_); }
+
+    cond_operand &cond() { return std::get<cond_operand>(op_); }
+    const cond_operand &cond() const { return std::get<cond_operand>(op_); }
+
+    label_operand &label() { return std::get<label_operand>(op_); }
+    const label_operand &label() const { return std::get<label_operand>(op_); }
+
+	bool is_use() const { return use_; }
+	bool is_def() const { return def_; }
+	bool is_usedef() const { return use_ && def_; }
+
+    void set_use() { use_ = true; }
+    void set_def() { def_ = true; }
+    void set_usedef() { set_use(); set_def(); }
 
     size_t width() const {
-        switch (type) {
+        switch (type()) {
         case operand_type::preg:
-            return preg.width();
+            return preg().width();
         case operand_type::vreg:
-            return vreg.width;
+            return vreg().width();
         case operand_type::mem:
-            return memory.base_width();
+            return memory().base_width();
         case operand_type::imm:
-            return immediate.width;
+            return immediate().width();
         default:
             return 0;
         }
     }
 
 	void allocate(int index, size_t width) {
-		if (type != operand_type::vreg)
+		if (type() != operand_type::vreg)
 			throw std::runtime_error("trying to allocate non-vreg");
 
-		type = operand_type::preg;
-
-        // TODO: change
-		preg = preg_operand(index, width);
+		op_ = preg_operand(index, width);
 	}
 
 	void allocate_base(int index, size_t width) {
-		if (type != operand_type::mem)
+		if (type() != operand_type::mem)
 			throw std::runtime_error("trying to allocate non-mem");
 
-		if (!memory.virt_base)
+        auto &memory = std::get<memory_operand>(op_);
+		if (!memory.is_virtual())
 			throw std::runtime_error("trying to allocate non-virtual membase ");
 
-		memory.virt_base = false;
-
         // TODO: change
-		memory.pbase = preg_operand(index, width);
+		memory = preg_operand(index, width);
 	}
 
 	void dump(std::ostream &os) const;
+protected:
+    operand_variant op_;
+	bool use_, def_;
 };
+
+static preg_operand preg_or_membase(const operand &o) {
+    if (o.is_mem())
+        return o.memory().preg_base();
+    else
+        return o.preg();
+}
 
 static operand def(const operand &o)
 {
     operand r = o;
-    r.def = true;
+    r.set_def();
     return r;
 }
 
 static operand use(const operand &o)
 {
     operand r = o;
-    r.use = true;
+    r.set_use();
     return r;
 }
 
 static operand usedef(const operand &o)
 {
     operand r = o;
-    r.use = true;
-    r.def = true;
+    r.set_usedef();
     return r;
 }
 
