@@ -22,17 +22,17 @@ add_library(arancini-runtime-static
 if (TARGET arancini-output-x86)
     add_library(arancini-trampoline OBJECT dbt/trampoline.x86_64.S)
     target_link_libraries(arancini-runtime
-                          PRIVATE
+                          PUBLIC
                           arancini-output-x86)
 elseif (TARGET arancini-output-arm64)
     add_library(arancini-trampoline OBJECT dbt/trampoline.arm64.S)
     target_link_libraries(arancini-runtime
-                          PRIVATE
+                          PUBLIC
                           arancini-output-arm64)
 elseif (TARGET arancini-output-riscv64)
     add_library(arancini-trampoline OBJECT dbt/trampoline.riscv64.S)
     target_link_libraries(arancini-runtime
-                          PRIVATE
+                          PUBLIC
                           arancini-output-riscv64)
     target_link_libraries(arancini-runtime-static
                           PRIVATE
