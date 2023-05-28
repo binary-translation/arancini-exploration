@@ -509,7 +509,13 @@ void arm64_translation_context::materialise_unary_arith(const unary_arith_node &
 
     switch (n.op()) {
     case unary_arith_op::bnot:
-        builder_.not_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.lhs()));
+        /* builder_.brk(imm_operand(100, 64)); */
+        if (is_flag(n.val()))
+            builder_.eor_(virtreg_operand(val_vreg, w),
+                          vreg_operand_for_port(n.lhs()),
+                          immediate_operand(1, 64));
+        else
+            builder_.not_(virtreg_operand(val_vreg, w), vreg_operand_for_port(n.lhs()));
         break;
     case unary_arith_op::neg:
         // neg: ~reg + 1 for complement-of-2
@@ -525,27 +531,38 @@ void arm64_translation_context::materialise_unary_arith(const unary_arith_node &
 
 void arm64_translation_context::materialise_cast(const cast_node &n) {
 	int dst_vreg = alloc_vreg_for_port(n.val());
+    auto width = n.val().type().width();
 
 	switch (n.op()) {
 	case cast_op::zx:
-		builder_.movz(virtreg_operand(dst_vreg, n.val().type().element_width()),
+		builder_.movz(virtreg_operand(dst_vreg, width),
                       vreg_operand_for_port(n.source_value()),
                       shift_operand("LSL", 0, 64));
 		break;
-
 	case cast_op::sx:
-		builder_.movn(virtreg_operand(dst_vreg, n.val().type().element_width()),
-                      vreg_operand_for_port(n.source_value(), false),
+		builder_.movn(virtreg_operand(dst_vreg, width),
+                      vreg_operand_for_port(n.source_value()),
                       shift_operand("LSL", 0, 64));
 		break;
-
 	case cast_op::bitcast:
-		builder_.mov(virtreg_operand(dst_vreg, n.val().type().element_width()),
+		builder_.mov(virtreg_operand(dst_vreg, width),
                      vreg_operand_for_port(n.source_value()));
 		break;
+    case cast_op::trunc:
+        if (width == 64) return;
 
+        /* if (is_flag()) { */
+
+        /* } else if () { */
+        /*     /1* builder_.sxtw(virtreg_operand(dst_vreg, width), *1/ */
+        /*     /1*               vreg_operand_for_port(n.source_value())); *1/ */
+        /* } else { */
+
+        /* } */
+        break;
 	default:
-		throw std::runtime_error("unsupported cast operation");
+		throw std::runtime_error("unsupported cast operation: "
+                                 + to_string(n.op()));
 	}
 }
 
@@ -558,14 +575,13 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
     auto true_val = vreg_operand_for_port(n.trueval());
     auto false_val = vreg_operand_for_port(n.falseval());
 
-    std::string unique = std::to_string(*reinterpret_cast<const size_t*>(&n));
-
+    /* builder_.brk(imm_operand(100, 64)); */
     builder_.cmp(cond,
                  imm_operand(0, 64));
     builder_.csel(virtreg_operand(dst_vreg, w),
                   true_val,
                   false_val,
-                  label_operand("EQ"));
+                  cond_operand("NE"));
 }
 
 void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
