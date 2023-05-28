@@ -99,7 +99,6 @@ public:
         append(instruction("movss", def(dst), use(src)));
     }
 
-    // TODO: express dependency on flag reg
     void movvs(const operand &dst, const immediate_operand &src) {
         append(instruction("movvs", def(dst), use(src)));
     }
@@ -154,20 +153,20 @@ public:
     }
 
     void lsl(const operand &dst,
-                           const operand &src1,
-                           const operand &src2) {
+             const operand &src1,
+             const operand &src2) {
         append(instruction("lsl", def(dst), use(src1), use(src2)));
     }
 
     void lsr(const operand &dst,
-                           const operand &src1,
-                           const operand &src2) {
+             const operand &src1,
+             const operand &src2) {
         append(instruction("lsr", def(dst), use(src1), use(src2)));
     }
 
     void asr(const operand &dst,
-                           const operand &src1,
-                           const operand &src2) {
+             const operand &src1,
+             const operand &src2) {
         append(instruction("asr", def(dst), use(src1), use(src2)));
     }
 
@@ -247,7 +246,7 @@ public:
         append(instruction("cset", def(dst), cond_operand("vs")));
     }
 
-    void sxtw(const vreg_operand &dst, const vreg_operand &src) {
+    void sxtw(const operand &dst, const operand &src) {
         append(instruction("sxtw", def(dst), use(src)));
     }
 
