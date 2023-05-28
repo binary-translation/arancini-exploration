@@ -247,6 +247,10 @@ public:
         append(instruction("cset", def(dst), cond_operand("vs")));
     }
 
+    void sxtw(const vreg_operand &dst, const vreg_operand &src) {
+        append(instruction("sxtw", def(dst), use(src)));
+    }
+
     // TODO: insert separators before/after instructions
     void insert_sep(const std::string &sep) { label(sep); }
 
