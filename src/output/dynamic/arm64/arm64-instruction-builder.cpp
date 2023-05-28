@@ -28,9 +28,9 @@ void instruction_builder::emit(machine_code_writer &writer) {
 
         for (size_t i = 0; i < insn.opcount; ++i) {
             const auto &op = operands[i];
-            if (op.type == operand_type::invalid ||
-                op.type == operand_type::vreg ||
-                (op.type == operand_type::mem && op.memory.virt_base)) {
+            if (op.type() == operand_type::invalid ||
+                op.type() == operand_type::vreg ||
+                (op.type() == operand_type::mem && op.memory().is_virtual())) {
                 throw std::runtime_error("Virtual register after register allocation");
             }
         }
@@ -91,7 +91,7 @@ void instruction_builder::allocate() {
 				o.dump(DEBUG_STREAM);
 #endif
 
-				unsigned int vri = o.vreg.index;
+				unsigned int vri = o.vreg().index();
 
 				auto alloc = vreg_to_preg.find(vri);
 
@@ -136,7 +136,7 @@ void instruction_builder::allocate() {
                 DEBUG_STREAM << '\n';
 #endif
 
-				unsigned int vri = o.vreg.index;
+				unsigned int vri = o.vreg().index();
 
 				if (!vreg_to_preg.count(vri)) {
 					auto allocation = avail_physregs._Find_first();
@@ -169,8 +169,8 @@ void instruction_builder::allocate() {
 				DEBUG_STREAM << std::endl;
 #endif
 
-				if (o.memory.virt_base) {
-					unsigned int vri = o.memory.vbase.index;
+				if (o.memory().is_virtual()) {
+					unsigned int vri = o.memory().vreg_base().index();
 
 					if (!vreg_to_preg.count(vri)) {
 						auto allocation = avail_physregs._Find_first();
@@ -180,7 +180,7 @@ void instruction_builder::allocate() {
 						vreg_to_preg[vri] = allocation;
 
                         // TODO size
-						o.memory.pbase = preg_operand(allocation, 64);
+						/* o.memory() = preg_operand(allocation, 64); */
 						o.allocate_base(allocation, 64);
 
                         allocs[i] = allocation;
@@ -200,9 +200,18 @@ void instruction_builder::allocate() {
 		// get defs, make free
 
 		// Kill MOVs
+        // TODO: refactor
         if (insn.opcode.find("mov") != std::string::npos) {
-            if (insn.operands[0].preg.get() == insn.operands[1].preg.get()) {
-                insn.kill();
+            operand op1 = insn.operands[0];
+            operand op2 = insn.operands[1];
+            if ((op1.is_mem() || op1.is_preg()) &&
+                (op2.is_mem() || op2.is_preg())) {
+                preg_operand reg1 = preg_or_membase(insn.operands[0]);
+                preg_operand reg2 = preg_or_membase(insn.operands[1]);
+
+                if (reg1.get() == reg2.get()) {
+                    insn.kill();
+                }
             }
         }
 
