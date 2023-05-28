@@ -55,6 +55,8 @@ public:
     vreg_operand &operator=(const vreg_operand &o) {
         width_ = o.width_;
         index_ = o.index_;
+
+        return *this;
     }
 
     size_t width() const { return width_; }
@@ -118,12 +120,12 @@ public:
     size_t width() const { return width_; }
 
     regname get() const { return reg_; }
-
-    const char* to_string() const;
 private:
     size_t width_;
     regname reg_;
 };
+
+const char* to_string(const preg_operand&);
 
 class memory_operand {
 public:
@@ -160,6 +162,9 @@ public:
         return *this;
     }
 
+    template <typename T>
+    void set_base_reg(const T &op) { reg_base_ = op; }
+
     bool is_virtual() const { return reg_base_.index() == 0; }
     bool is_physical() const { return !is_virtual(); }
 
@@ -173,10 +178,9 @@ public:
         if (is_virtual())
             return std::get<vreg_operand>(reg_base_).width();
         return std::get<preg_operand>(reg_base_).width();
-        return 0;
     }
 
-    bool offset() const { return offset_; }
+    int offset() const { return offset_; }
     bool pre_index() const { return pre_index_; }
     bool post_index() const { return post_index_; }
 private:
@@ -393,8 +397,7 @@ struct operand {
 		if (!memory.is_virtual())
 			throw std::runtime_error("trying to allocate non-virtual membase ");
 
-        // TODO: change
-		memory = preg_operand(index, width);
+        memory.set_base_reg(preg_operand(index, width));
 	}
 
 	void dump(std::ostream &os) const;
@@ -402,13 +405,6 @@ protected:
     operand_variant op_;
 	bool use_, def_;
 };
-
-static preg_operand preg_or_membase(const operand &o) {
-    if (o.is_mem())
-        return o.memory().preg_base();
-    else
-        return o.preg();
-}
 
 static operand def(const operand &o)
 {
@@ -440,8 +436,8 @@ struct instruction {
     operand operands[nr_operands];
 
     instruction(const std::string& opc)
-        : opcode(opc)
-        , opcount(0)
+        : opcount(0)
+        , opcode(opc)
 	{
 	}
 
