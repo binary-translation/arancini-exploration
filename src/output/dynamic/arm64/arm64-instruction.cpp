@@ -1,3 +1,4 @@
+#include "arancini/ir/node.h"
 #include <arancini/output/dynamic/arm64/arm64-instruction.h>
 
 #include <cstdint>
@@ -55,53 +56,55 @@ void instruction::dump(std::ostream &os) const {
 
 // TODO: adapt all
 void operand::dump(std::ostream &os) const {
-	switch (type) {
+	switch (type()) {
     case operand_type::cond:
-        os << condition.cond;
+        // TODO: rename
+        os << cond().condition();
         break;
     case operand_type::label:
-        os << label.name;
+        os << label().name();
         break;
     case operand_type::shift:
-        if (!shift.modifier.empty())
-            os << shift.modifier << ' ';
-        os << "#0x" << std::hex << shift.u64;
+        if (!shift().modifier().empty())
+            os << shift().modifier() << ' ';
+        os << "#0x" << std::hex << shift().u64();
         break;
 	case operand_type::imm:
-		os << "#0x" << std::hex << immediate.u64;
+		os << "#0x" << std::hex << immediate().u64();
 		break;
 
 	case operand_type::mem:
 		os << "[";
 
-		if (memory.virt_base)
-			os << "%V" << memory.vbase.width << "_" << std::dec << memory.vbase.index;
+		if (memory().is_virtual())
+			os << "%V" << memory().vreg_base().width()
+               << "_" << std::dec << memory().vreg_base().index();
 		else
-			os << memory.pbase.to_string();
+			os << memory().preg_base().to_string();
 
 
-        if (!memory.post_index)
-            os << ", #0x" << std::hex << memory.offset << ']';
-        else if (memory.pre_index)
+        if (!memory().post_index())
+            os << ", #0x" << std::hex << memory().offset() << ']';
+        else if (memory().pre_index())
             os << '!';
 
-        if (memory.post_index)
-            os << "], #0x" << std::hex << memory.offset;
+        if (memory().post_index())
+            os << "], #0x" << std::hex << memory().offset();
 
 
         // TODO: register indirect with index
 		break;
 
 	case operand_type::preg:
-		os << preg.to_string();
+		os << preg().to_string();
 		break;
 
 	case operand_type::vreg:
-		os << "%V" << std::dec << vreg.index;
+		os << "%V" << std::dec << vreg().index();
 		break;
     default:
         throw std::runtime_error("operand::dump() encountered invalid operand type: "
-                                 + std::to_string(static_cast<unsigned>(type)));
+                                 + std::to_string(op_.index()));
 	}
 }
 
