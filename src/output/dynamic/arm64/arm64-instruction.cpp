@@ -6,7 +6,7 @@
 
 using namespace arancini::output::dynamic::arm64;
 
-const char* preg_operand::to_string() const {
+const char* arancini::output::dynamic::arm64::to_string(const preg_operand &op) {
     static const char* name64[] = {
         "",
         "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
@@ -23,8 +23,8 @@ const char* preg_operand::to_string() const {
         "sp"
     };
 
-    uint8_t reg_idx = static_cast<uint8_t>(reg_);
-    if (width() == 32)
+    uint8_t reg_idx = static_cast<uint8_t>(op.get());
+    if (op.width() == 32)
         return name32[reg_idx];
     return name64[reg_idx];
 }
@@ -80,7 +80,7 @@ void operand::dump(std::ostream &os) const {
 			os << "%V" << memory().vreg_base().width()
                << "_" << std::dec << memory().vreg_base().index();
 		else
-			os << memory().preg_base().to_string();
+			os << to_string(memory().preg_base());
 
 
         if (!memory().post_index())
@@ -96,7 +96,7 @@ void operand::dump(std::ostream &os) const {
 		break;
 
 	case operand_type::preg:
-		os << preg().to_string();
+		os << to_string(preg());
 		break;
 
 	case operand_type::vreg:
