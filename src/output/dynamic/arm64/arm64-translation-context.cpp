@@ -88,6 +88,13 @@ vreg_operand arm64_translation_context::vreg_operand_for_port(port &p, bool cons
 	return vreg_operand(vreg_for_port(p), p.type().element_width());
 }
 
+vreg_operand arm64_translation_context::add_membase(const vreg_operand &addr) {
+    auto mem_addr_vreg = vreg_operand(alloc_vreg(), 64);
+    builder_.add(mem_addr_vreg, memory_base_reg, addr);
+
+    return mem_addr_vreg;
+}
+
 vreg_operand arm64_translation_context::mov_immediate(uint64_t imm, size_t size) {
     size_t actual_size = static_cast<size_t>(std::ceil(std::log2(imm)));
     size_t move_count = static_cast<size_t>(std::ceil(actual_size / 16.0));
@@ -310,32 +317,22 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
 }
 
 void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
-	int dest_vreg = alloc_vreg_for_port(n.val());
 	int w = n.val().type().element_width();
+	auto dest_vreg = vreg_operand(alloc_vreg_for_port(n.val()), w);
 
-    // Add base to addr_vreg
-    int addr = alloc_vreg();
-    builder_.add(vreg_operand(addr, 64),
-                 memory_base_reg,
-                 vreg_operand_for_port(n.address()));
+	auto addr_vreg = vreg_operand_for_port(n.address());
+    addr_vreg = add_membase(addr_vreg);
 
     // TODO: widths
-    auto mem = memory_operand(vreg_operand(addr, w));
-	builder_.ldr(vreg_operand(dest_vreg, w), mem);
+    auto mem = memory_operand(addr_vreg);
+	builder_.ldr(dest_vreg, mem);
 }
 
 void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
-	int w = n.value().type().element_width();
-
 	auto addr_vreg = vreg_operand_for_port(n.address());
+    addr_vreg = add_membase(addr_vreg);
 
-    // TODO: separate to function
-    int addr = alloc_vreg();
-    builder_.add(vreg_operand(addr, 64),
-                 memory_base_reg,
-                 addr_vreg);
-
-    auto mem = memory_operand(vreg_operand(addr, w), 0, false, true);
+    auto mem = memory_operand(addr_vreg, 0, false, true);
 	builder_.str(vreg_operand_for_port(n.value()), mem);
 }
 
