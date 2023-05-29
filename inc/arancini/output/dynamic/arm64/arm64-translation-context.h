@@ -70,6 +70,7 @@ private:
     void materialise_binary_arith(const ir::binary_arith_node &n);
     void materialise_internal_call(const ir::internal_call_node &n);
 
+    vreg_operand add_membase(const vreg_operand &addr);
     vreg_operand mov_immediate(uint64_t imm, size_t size);
 };
 } // namespace arancini::output::dynamic::arm64
