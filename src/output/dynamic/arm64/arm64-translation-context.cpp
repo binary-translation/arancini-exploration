@@ -381,91 +381,65 @@ void arm64_translation_context::materialise_constant(const constant_node &n) {
 }
 
 void arm64_translation_context::materialise_binary_arith(const binary_arith_node &n) {
-	int val_vreg = alloc_vreg_for_port(n.val());
+	int w = n.val().type().element_width();
+	auto dest_vreg = vreg_operand(alloc_vreg_for_port(n.val()), w);
+
+    auto lhs = vreg_operand_for_port(n.lhs());
+    auto rhs = vreg_operand_for_port(n.rhs());
 
     flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg_for_port(n.zero());
     flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg_for_port(n.negative());
     flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg_for_port(n.overflow());
     flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg_for_port(n.carry());
 
-	int w = n.val().type().element_width();
-
     // TODO: check
     const char* mod = (w == 16 ? "UXTX" : "UXTX");
 	switch (n.op()) {
 	case binary_arith_op::add:
-        if (w == 8 || w == 16) {
-            builder_.adds(vreg_operand(val_vreg, w),
-                          vreg_operand_for_port(n.lhs()),
-                          vreg_operand_for_port(n.rhs()),
-                          shift_operand(mod, 0, 64));
-        } else {
-            builder_.adds(vreg_operand(val_vreg, w),
-                          vreg_operand_for_port(n.lhs()),
-                          vreg_operand_for_port(n.rhs()));
-        }
+        if (w == 8 || w == 16)
+            builder_.adds(dest_vreg, lhs, rhs, shift_operand(mod, 0, 64));
+        else
+            builder_.adds(dest_vreg, lhs, rhs);
 		break;
 	case binary_arith_op::sub:
-        if (w == 8 || w == 16) {
-            builder_.subs(vreg_operand(val_vreg, w),
-                          vreg_operand_for_port(n.lhs()),
-                          vreg_operand_for_port(n.rhs()),
-                          shift_operand(mod, 0, 64));
-        } else {
-            builder_.subs(vreg_operand(val_vreg, w),
-                          vreg_operand_for_port(n.lhs()),
-                          vreg_operand_for_port(n.rhs()));
-        }
+        if (w == 8 || w == 16)
+            builder_.subs(dest_vreg, lhs, rhs, shift_operand(mod, 0, 64));
+        else
+            builder_.subs(dest_vreg, lhs, rhs);
 		break;
 	case binary_arith_op::mul:
-		builder_.mul(vreg_operand(val_vreg, w),
-                     vreg_operand_for_port(n.lhs()),
-                     vreg_operand_for_port(n.rhs()));
+        builder_.mul(dest_vreg, lhs, rhs);
 		break;
 	case binary_arith_op::div:
-		builder_.sdiv(vreg_operand(val_vreg, w),
-                      vreg_operand_for_port(n.lhs()),
-                      vreg_operand_for_port(n.rhs()));
+        builder_.sdiv(dest_vreg, lhs, rhs);
 		break;
 	case binary_arith_op::mod:
-		builder_.and_(vreg_operand(val_vreg, w),
-                      vreg_operand_for_port(n.lhs()),
-                      vreg_operand_for_port(n.rhs()));
+        builder_.and_(dest_vreg, lhs, rhs);
 		break;
 	case binary_arith_op::bor:
-		builder_.orr_(vreg_operand(val_vreg, w),
-                      vreg_operand_for_port(n.lhs()),
-                      vreg_operand_for_port(n.rhs()));
+        builder_.orr_(dest_vreg, lhs, rhs);
 		break;
 	case binary_arith_op::band:
-		builder_.ands(vreg_operand(val_vreg, w),
-                      vreg_operand_for_port(n.lhs()),
-                      vreg_operand_for_port(n.rhs()));
+        builder_.ands(dest_vreg, lhs, rhs);
 		break;
 	case binary_arith_op::bxor:
-		builder_.eor_(vreg_operand(val_vreg, w),
-                      vreg_operand_for_port(n.lhs()),
-                      vreg_operand_for_port(n.rhs()));
+        builder_.eor_(dest_vreg, lhs, rhs);
         // EOR does not set flags
         // CMP is used to set the flags
-		builder_.cmp(vreg_operand(val_vreg, w),
+		builder_.cmp(dest_vreg,
                      immediate_operand(0, 64));
 		break;
 	case binary_arith_op::cmpeq:
-        // NOTE: set*() will modify the flags
-        builder_.subs(vreg_operand(val_vreg, w),
-                     vreg_operand_for_port(n.lhs()),
-                     vreg_operand_for_port(n.rhs()));
+        builder_.cmp(lhs, rhs);
+        builder_.cset(dest_vreg, cond_operand("eq"));
 		break;
 	case binary_arith_op::cmpne:
-        builder_.subs(vreg_operand(val_vreg, w),
-                     vreg_operand_for_port(n.lhs()),
-                     vreg_operand_for_port(n.rhs()));
+        builder_.cmp(lhs, rhs);
+        builder_.cset(dest_vreg, cond_operand("ne"));
 		break;
 	case binary_arith_op::cmpgt:
-        builder_.subs(vreg_operand(val_vreg, w),
-                     vreg_operand_for_port(n.lhs()),
-                     vreg_operand_for_port(n.rhs()));
+        builder_.cmp(lhs, rhs);
+        builder_.cset(dest_vreg, cond_operand("gt"));
 		break;
 	default:
 		throw std::runtime_error("unsupported binary arithmetic operation " + std::to_string((int)n.op()));

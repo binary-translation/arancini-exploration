@@ -192,18 +192,16 @@ public:
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg_or_immediate<T2> = 0>
-    void cmp(const T1 &src1,
-             const T2 &src2) {
-        append(instruction("cmp", use(src1), use(src2)));
+    void cmn(const T1 &dst,
+             const T2 &src) {
+        append(instruction("cmn", usedef(dst), use(src)));
     }
 
-    // TODO: invalid
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg_or_immediate<T2> = 0>
     void cmp(const T1 &dst,
-             const T2 &src1,
-             const operand &src2) {
-        append(instruction("cmp", def(dst), use(src1), use(src2)));
+             const T2 &src) {
+        append(instruction("cmp", usedef(dst), use(src)));
     }
 
     template <typename T1, typename T2, typename T3,
