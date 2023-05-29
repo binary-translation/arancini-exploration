@@ -24,14 +24,15 @@ void instruction_builder::emit(machine_code_writer &writer) {
         if (insn.is_dead())
             continue;
 
-        const auto &operands = insn.get_operands();
+        const auto &operands = insn.operands();
 
-        for (size_t i = 0; i < insn.opcount; ++i) {
+        for (size_t i = 0; i < insn.operand_count(); ++i) {
             const auto &op = operands[i];
             if (op.type() == operand_type::invalid ||
                 op.type() == operand_type::vreg ||
                 (op.type() == operand_type::mem && op.memory().is_virtual())) {
-                throw std::runtime_error("Virtual register after register allocation");
+                throw std::runtime_error("Virtual register after register allocation"
+                                         + insn.dump());
             }
         }
     }
@@ -76,11 +77,13 @@ void instruction_builder::allocate() {
 #endif
 
         bool has_usedef = false;
-        std::array<size_t, instruction::nr_operands> allocs;
+
+        // TODO: refactor
+        std::array<size_t, 5> allocs;
 
 		// kill defs first
-		for (size_t i = 0; i < insn.opcount; i++) {
-			auto &o = insn.get_operand(i);
+		for (size_t i = 0; i < insn.operand_count(); i++) {
+			auto &o = insn.operands()[i];
 
             has_usedef = o.is_def() && o.is_use();
 
@@ -125,8 +128,8 @@ void instruction_builder::allocate() {
 		}
 
 		// alloc uses next
-		for (size_t i = 0; i < insn.opcount; i++) {
-			auto &o = insn.get_operand(i);
+		for (size_t i = 0; i < insn.operand_count(); i++) {
+			auto &o = insn.operands()[i];
 
 			// We only care about REG uses - but we also need to consider REGs used in MEM expressions
 			if (o.is_use() && o.is_vreg()) {
@@ -201,9 +204,9 @@ void instruction_builder::allocate() {
 
 		// Kill MOVs
         // TODO: refactor
-        if (insn.opcode.find("mov") != std::string::npos) {
-            operand op1 = insn.operands[0];
-            operand op2 = insn.operands[1];
+        if (insn.opcode().find("mov") != std::string::npos) {
+            operand op1 = insn.operands()[0];
+            operand op2 = insn.operands()[1];
 
             auto get_preg = [](const operand &op) -> preg_operand {
                 if (op.is_mem()) return op.memory().preg_base();
@@ -222,8 +225,8 @@ void instruction_builder::allocate() {
         }
 
         if (has_usedef) {
-            for (size_t i = 0; i < insn.opcount; i++) {
-                const auto &op = insn.get_operand(i);
+            for (size_t i = 0; i < insn.operand_count(); i++) {
+                const auto &op = insn.operands()[i];
                 if (op.is_use() && op.is_def()) {
                     avail_physregs.flip(allocs[i]);
                 }
