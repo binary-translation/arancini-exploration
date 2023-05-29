@@ -339,7 +339,7 @@ public:
         auto insn = instructions_;
         return std::any_of(insn.rbegin(), insn.rend(),
                             [&](const instruction &i) {
-                                return i.opcode == label;
+                                return i.opcode() == label;
                             });
     }
 
