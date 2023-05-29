@@ -1,9 +1,11 @@
 #pragma once
 
+#include <initializer_list>
 #include <keystone/keystone.h>
 
 #include <arancini/output/dynamic/machine-code-writer.h>
 
+#include <type_traits>
 #include <vector>
 #include <variant>
 #include <sstream>
@@ -430,71 +432,38 @@ static operand usedef(const T &o)
     return r;
 }
 
-struct instruction {
-	static constexpr size_t nr_operands = 5;
+class instruction {
+public:
+    typedef std::array<operand, 5> operand_array;
 
-    size_t opcount;
-    std::string opcode;
-
-    operand operands[nr_operands];
-
-    instruction(const std::string& opc)
-        : opcount(0)
-        , opcode(opc)
-	{
-	}
-
-	instruction(const std::string &opc, const operand &o1)
-		: opcode(opc)
-	{
-		operands[0] = o1;
-        opcount = 1;
-	}
-
-	instruction(const std::string &opc, const operand &o1, const operand &o2)
-		: opcode(opc)
-	{
-		operands[0] = o1;
-		operands[1] = o2;
-        opcount = 2;
-	}
-
-	instruction(const std::string &opc,
-                      const operand &o1,
-                      const operand &o2,
-                      const operand &o3)
-		: opcode(opc)
-	{
-		operands[0] = o1;
-		operands[1] = o2;
-		operands[2] = o3;
-        opcount = 3;
-	}
-
-	instruction(const std::string &opc,
-                      const operand &o1,
-                      const operand &o2,
-                      const operand &o3,
-                      const operand &o4)
-		: opcode(opc)
-	{
-		operands[0] = o1;
-		operands[1] = o2;
-		operands[2] = o3;
-		operands[3] = o4;
-        opcount = 4;
-	}
+    template <typename... Args>
+    instruction(const std::string& opc, Args&&... args)
+        : opcode_(opc)
+    {
+        static_assert(sizeof...(Args) <= 5,
+                      "aarch64 instructions accept at most 5 operands");
+        opcount_ = sizeof...(Args);
+        operands_ = {std::forward<Args>(args)...};
+    }
 
 	void dump(std::ostream &os) const;
-	void kill() { opcode.clear(); }
+    std::string dump() const;
+	void kill() { opcode_.clear(); }
 
-	bool is_dead() const { return opcode.empty(); }
+	bool is_dead() const { return opcode_.empty(); }
 
-	operand &get_operand(int index) { return operands[index]; }
-	const operand &get_operand(int index) const { return operands[index]; }
+    std::string& opcode() { return opcode_; }
+    const std::string& opcode() const { return opcode_; }
 
-	decltype(operands) &get_operands() { return operands; }
-	const decltype(operands) &get_operands() const { return operands; }
+    size_t operand_count() const { return opcount_; }
+
+	operand_array &operands() { return operands_; }
+	const operand_array &operands() const { return operands_; }
+private:
+    std::string opcode_;
+
+    size_t opcount_;
+    operand_array operands_;
 };
 
 } // namespace arancini::output::dynamic::arm64
