@@ -43,12 +43,12 @@ private:
 		return v;
 	}
 
-	operand vreg_operand_for_port(ir::port &p, bool constant_fold = false);
+	vreg_operand vreg_operand_for_port(ir::port &p, bool constant_fold = false);
 	int vreg_for_port(ir::port &p) const { return port_to_vreg_.at(&p); }
 
-    operand guestreg_memory_operand(int width, int regoff,
-                                          bool pre = false,
-                                          bool post = false);
+    memory_operand guestreg_memory_operand(int width, int regoff,
+                                           bool pre = false,
+                                           bool post = false);
 
     void materialise(const ir::node *n);
     void materialise_read_reg(const ir::read_reg_node &n);
@@ -70,7 +70,7 @@ private:
     void materialise_binary_arith(const ir::binary_arith_node &n);
     void materialise_internal_call(const ir::internal_call_node &n);
 
-    operand mov_immediate(uint64_t imm, uint8_t size);
+    vreg_operand mov_immediate(uint64_t imm, size_t size);
 };
 } // namespace arancini::output::dynamic::arm64
 
