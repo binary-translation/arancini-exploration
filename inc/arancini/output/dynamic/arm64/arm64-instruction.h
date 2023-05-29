@@ -406,21 +406,24 @@ protected:
 	bool use_, def_;
 };
 
-static operand def(const operand &o)
+template <typename T>
+static operand def(const T &o)
 {
     operand r = o;
     r.set_def();
     return r;
 }
 
-static operand use(const operand &o)
+template <typename T>
+static operand use(const T &o)
 {
     operand r = o;
     r.set_use();
     return r;
 }
 
-static operand usedef(const operand &o)
+template <typename T>
+static operand usedef(const T &o)
 {
     operand r = o;
     r.set_usedef();
