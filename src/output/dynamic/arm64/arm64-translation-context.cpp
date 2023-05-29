@@ -509,41 +509,35 @@ void arm64_translation_context::materialise_unary_arith(const unary_arith_node &
 }
 
 void arm64_translation_context::materialise_cast(const cast_node &n) {
-	int dst_vreg = alloc_vreg_for_port(n.val());
     auto width = n.val().type().width();
 
+	auto dst_vreg = vreg_operand(alloc_vreg_for_port(n.val()), width);
+    auto src_vreg = vreg_operand_for_port(n.source_value());
+
 	switch (n.op()) {
-	case cast_op::zx:
-        // TODO
-		builder_.mov(vreg_operand(dst_vreg, width),
-                      vreg_operand_for_port(n.source_value()));
-		break;
 	case cast_op::sx:
-        // TODO
-		builder_.mov(vreg_operand(dst_vreg, width),
+	case cast_op::bitcast:
+		builder_.mov(dst_vreg,
                      vreg_operand_for_port(n.source_value()));
 		break;
-	case cast_op::bitcast:
-		builder_.mov(vreg_operand(dst_vreg, width),
-                     vreg_operand_for_port(n.source_value()));
+	case cast_op::zx:
+        if (width == 8) {
+            builder_.and_(dst_vreg, src_vreg, immediate_operand(64 - width, 64));
+        } else {
+            builder_.lsl(dst_vreg, src_vreg, immediate_operand(64 - width, 64));
+            builder_.lsr(dst_vreg, dst_vreg, immediate_operand(64 - width, 64));
+        }
 		break;
     case cast_op::trunc:
         if (width == 64) return;
 
         if (is_flag(n.val())) {
-            builder_.and_(vreg_operand(dst_vreg, width),
-                          vreg_operand_for_port(n.source_value()),
-                          immediate_operand(1, 1));
+            builder_.and_(dst_vreg, src_vreg, immediate_operand(1, 1));
         } else if (width == 32) {
-            builder_.sxtw(vreg_operand(dst_vreg, width),
-                          vreg_operand_for_port(n.source_value()));
+            builder_.sxtw(dst_vreg, src_vreg);
         } else {
-            builder_.lsl(vreg_operand(dst_vreg, width),
-                         vreg_operand_for_port(n.source_value()),
-                         immediate_operand(64 - width, 64));
-            builder_.asr(vreg_operand(dst_vreg, width),
-                         vreg_operand(dst_vreg, width),
-                         immediate_operand(64 - width, 64));
+            builder_.lsl(dst_vreg, src_vreg, immediate_operand(64 - width, 64));
+            builder_.asr(dst_vreg, dst_vreg, immediate_operand(64 - width, 64));
         }
         break;
 	default:
