@@ -332,7 +332,6 @@ public:
         append(instruction("sxtw", def(dst), use(src)));
     }
 
-    // TODO: insert separators before/after instructions
     void insert_sep(const std::string &sep) { label(sep); }
 
     bool has_label(const std::string &label) {
