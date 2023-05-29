@@ -2,6 +2,8 @@
 #include <arancini/output/dynamic/arm64/arm64-instruction.h>
 
 #include <cstdint>
+#include <ostream>
+#include <sstream>
 #include <unordered_set>
 
 using namespace arancini::output::dynamic::arm64;
@@ -40,18 +42,24 @@ size_t assembler::assemble(const char *code, unsigned char **out) {
     return size;
 }
 
-void instruction::dump(std::ostream &os) const {
-    os << opcode;
+std::string instruction::dump() const {
+    std::ostringstream ss;
+    dump(ss);
+    return ss.str();
+}
 
-    if (opcount == 0) return;
-	for (size_t i = 0; i < opcount - 1; ++i) {
+void instruction::dump(std::ostream &os) const {
+    os << opcode_;
+
+    if (opcount_ == 0) return;
+	for (size_t i = 0; i < opcount_ - 1; ++i) {
         os << ' ';
-        operands[i].dump(os);
+        operands_[i].dump(os);
         os << ',';
 	}
 
     os << ' ';
-    operands[opcount - 1].dump(os);
+    operands_[opcount_ - 1].dump(os);
 }
 
 // TODO: adapt all
