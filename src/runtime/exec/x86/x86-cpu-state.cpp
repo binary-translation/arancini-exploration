@@ -12,10 +12,10 @@ std::ostream &operator<<(std::ostream &os, const x86_cpu_state &s) {
     os << "RBX:             0x" << s.RBX << '\n';
     os << "RCX:             0x" << s.RCX << '\n';
     os << "RDX:             0x" << s.RDX << '\n';
-    os << "RSP:             0x" << s.RSP << '\n';
-    os << "RBP:             0x" << s.RBP << '\n';
     os << "RSI:             0x" << s.RSI << '\n';
     os << "RDI:             0x" << s.RDI << '\n';
+    os << "RBP:             0x" << s.RBP << '\n';
+    os << "RSP:             0x" << s.RSP << '\n';
     os << "R8:              0x" << s.R8 << '\n';
     os << "R9:              0x" << s.R9 << '\n';
     os << "R10:             0x" << s.R10 << '\n';
@@ -30,6 +30,8 @@ std::ostream &operator<<(std::ostream &os, const x86_cpu_state &s) {
     os << "flag SF:         0x" << static_cast<unsigned>(s.SF) << '\n';
     os << "flag PF:         0x" << static_cast<unsigned>(s.PF) << '\n';
     os << "flag DF:         0x" << static_cast<unsigned>(s.DF) << '\n';
+
+    return os;
 }
 
 std::ostream &print_stack(std::ostream &os,
@@ -38,8 +40,9 @@ std::ostream &print_stack(std::ostream &os,
     if (byte_count == 0) return os;
 
     os << std::hex;
-    for (std::size_t i = 0; i < byte_count; ++i) {
-        os << *(rsp + i) << '\n';
+    os << "0x" << *rsp << "\t <- rsp\n";
+    for (std::size_t i = 1; i < byte_count; ++i) {
+        os << "0x" << *(rsp + i) << '\n';
     }
 
     return os;
