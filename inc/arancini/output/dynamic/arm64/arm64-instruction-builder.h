@@ -128,26 +128,6 @@ public:
         append(instruction("mvn", def(dst), use(src)));
     }
 
-    // TODO: invalid opcode
-    void moveq(const operand &dst, const immediate_operand &src) {
-        append(instruction("moveq", def(dst), use(src)));
-    }
-
-    // TODO: invalid opcode
-    void movss(const operand &dst, const immediate_operand &src) {
-        append(instruction("movss", def(dst), use(src)));
-    }
-
-    // TODO: invalid opcode
-    void movvs(const operand &dst, const immediate_operand &src) {
-        append(instruction("movvs", def(dst), use(src)));
-    }
-
-    // TODO: invalid opcode
-    void movcs(const operand &dst, const immediate_operand &src) {
-        append(instruction("movcs", def(dst), use(src)));
-    }
-
     template <typename T1,
               is_reg<T1> = 0>
     void movn(const T1 &dst,
