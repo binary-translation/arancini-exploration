@@ -289,10 +289,10 @@ void arm64_translation_context::materialise(const ir::node* n) {
 
 void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
     // TODO: deal with widths
-	int dest_vreg = alloc_vreg_for_port(n.val());
 	int w = n.val().type().element_width() == 1 ? 8 : n.val().type().element_width();
+	auto dst_vreg = vreg_operand(alloc_vreg_for_port(n.val()), w);
 
-	builder_.ldr(vreg_operand(dest_vreg, w),
+	builder_.ldr(dst_vreg,
                  guestreg_memory_operand(w, n.regoff()));
 }
 
@@ -337,12 +337,11 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
 }
 
 void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
-	int dst_vreg = alloc_vreg_for_port(n.val());
     int w = n.val().type().element_width();
+	auto dst_vreg = vreg_operand(alloc_vreg_for_port(n.val()), w);
 
     // TODO: check out immediate size
-	builder_.mov(vreg_operand(dst_vreg, w),
-                 mov_immediate(this_pc_, 64));
+    builder_.mov(dst_vreg, mov_immediate(this_pc_, 64));
 }
 
 void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
@@ -488,8 +487,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 	switch (n.op()) {
 	case cast_op::sx:
 	case cast_op::bitcast:
-		builder_.mov(dst_vreg,
-                     vreg_operand_for_port(n.source_value()));
+		builder_.mov(dst_vreg, src_vreg);
 		break;
 	case cast_op::zx:
         if (width == 8) {
@@ -518,8 +516,8 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 }
 
 void arm64_translation_context::materialise_csel(const csel_node &n) {
-    int dst_vreg = alloc_vreg_for_port(n.val());
     int w = n.val().type().element_width();
+    auto dst_vreg = vreg_operand(alloc_vreg_for_port(n.val()), w);
 
     auto cond = vreg_operand_for_port(n.condition());
 
@@ -527,32 +525,26 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
     auto false_val = vreg_operand_for_port(n.falseval());
 
     /* builder_.brk(immediate_operand(100, 64)); */
-    builder_.cmp(cond,
-                 immediate_operand(0, 64));
-    builder_.csel(vreg_operand(dst_vreg, w),
-                  true_val,
-                  false_val,
-                  cond_operand("NE"));
+    builder_.cmp(cond, immediate_operand(0, 64));
+    builder_.csel(dst_vreg, true_val, false_val, cond_operand("NE"));
 }
 
 void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
-    int dst_vreg = alloc_vreg_for_port(n.val());
+    int w = n.val().type().element_width();
+    auto dst_vreg = vreg_operand(alloc_vreg_for_port(n.val()), w);
+
+    auto input = vreg_operand_for_port(n.input());
+    auto amount = vreg_operand_for_port(n.amount());
 
     switch (n.op()) {
     case shift_op::lsl:
-        builder_.lsl(vreg_operand(dst_vreg, n.val().type().element_width()),
-                     vreg_operand_for_port(n.input()),
-                     vreg_operand_for_port(n.amount()));
+        builder_.lsl(dst_vreg, input, amount);
         break;
     case shift_op::lsr:
-        builder_.lsr(vreg_operand(dst_vreg, n.val().type().element_width()),
-                     vreg_operand_for_port(n.input()),
-                     vreg_operand_for_port(n.amount()));
+        builder_.lsr(dst_vreg, input, amount);
         break;
     case shift_op::asr:
-        builder_.asr(vreg_operand(dst_vreg, n.val().type().element_width()),
-                     vreg_operand_for_port(n.input()),
-                     vreg_operand_for_port(n.amount()));
+        builder_.asr(dst_vreg, input, amount);
         break;
     default:
         throw std::runtime_error("unsupported shift operation: " +
@@ -561,21 +553,24 @@ void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
 }
 
 void arm64_translation_context::materialise_bit_extract(const bit_extract_node &n) {
-    int dst_vreg = alloc_vreg_for_port(n.val());
+    int w = n.val().type().element_width();
+    auto dst_vreg = vreg_operand(alloc_vreg_for_port(n.val()), w);
+
+    auto src_vreg = vreg_operand_for_port(n.source_value());
 
     // TODO: maybe immediate_operand is not good
-    builder_.ubfx(vreg_operand(dst_vreg, n.val().type().element_width()),
-                  vreg_operand_for_port(n.source_value(), false),
+    builder_.ubfx(dst_vreg, src_vreg,
                   immediate_operand(n.from(), 64),
                   immediate_operand(n.length(), 64));
 }
 
 void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n) {
-    int dst_vreg = alloc_vreg_for_port(n.val());
+    int w = n.val().type().element_width();
+    auto dst_vreg = vreg_operand(alloc_vreg_for_port(n.val()), w);
 
+    auto bits_vreg = vreg_operand_for_port(n.bits(), false);
     // TODO
-    builder_.bfi(vreg_operand(dst_vreg, n.val().type().element_width()),
-                 vreg_operand_for_port(n.bits(), false),
+    builder_.bfi(dst_vreg, bits_vreg,
                  immediate_operand(n.to(), 64),
                  immediate_operand(n.length(), 64));
 }
