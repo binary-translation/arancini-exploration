@@ -32,5 +32,18 @@ std::ostream &operator<<(std::ostream &os, const x86_cpu_state &s) {
     os << "flag DF:         0x" << static_cast<unsigned>(s.DF) << '\n';
 }
 
+std::ostream &print_stack(std::ostream &os,
+                          const uint64_t *rsp,
+                          size_t byte_count) {
+    if (byte_count == 0) return os;
+
+    os << std::hex;
+    for (std::size_t i = 0; i < byte_count; ++i) {
+        os << *(rsp + i) << '\n';
+    }
+
+    return os;
+}
+
 } // namespace arancini::runtime::exec::x86
 
