@@ -224,18 +224,22 @@ public:
         append(instruction("cset", def(dst), use(cond)));
     }
 
-    void ubfx(const operand &dst,
-              const operand &src1,
-              const operand &src2,
-              const operand &cond) {
-        append(instruction("ubfx", def(dst), use(src1), use(src2), use(cond)));
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
+    void bfm(const T1 &dst,
+             const T2 &src1,
+             const immediate_operand &immr,
+             const immediate_operand &imms) {
+        append(instruction("bfm", def(dst), use(src1), use(immr), use(imms)));
     }
 
-    void bfi(const operand &dst,
-             const operand &src1,
-             const operand &src2,
-             const operand &cond) {
-        append(instruction("bfi", def(dst), use(src1), use(src2), use(cond)));
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
+    void bfi(const T1 &dst,
+             const T2 &src1,
+             const immediate_operand &immr,
+             const immediate_operand &imms) {
+        append(instruction("bfi", def(dst), use(src1), use(immr), use(imms)));
     }
 
     template <typename T1,
