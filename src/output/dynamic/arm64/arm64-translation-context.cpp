@@ -558,8 +558,7 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
 
     auto src_vreg = vreg_operand_for_port(n.source_value());
 
-    // TODO: maybe immediate_operand is not good
-    builder_.ubfx(dst_vreg, src_vreg,
+    builder_.bfm(dst_vreg, src_vreg,
                   immediate_operand(n.from(), 64),
                   immediate_operand(n.length(), 64));
 }
@@ -569,7 +568,6 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
     auto dst_vreg = vreg_operand(alloc_vreg_for_port(n.val()), w);
 
     auto bits_vreg = vreg_operand_for_port(n.bits(), false);
-    // TODO
     builder_.bfi(dst_vreg, bits_vreg,
                  immediate_operand(n.to(), 64),
                  immediate_operand(n.length(), 64));
