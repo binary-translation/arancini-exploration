@@ -44,7 +44,7 @@ public:
 	void adds(const T1 &dst,
               const T2 &src1,
               const T3 &src2) {
-        append(instruction("adds", def(dst), use(src1), use(src2)));
+        append(instruction("adds", def(keep(dst)), use(src1), use(src2)));
     }
 
     template <typename T1, typename T2, typename T3,
@@ -53,7 +53,7 @@ public:
               const T2 &src1,
               const T3 &src2,
               const shift_operand &shift) {
-        append(instruction("adds", usedef(dst), use(src1), use(src2), use(shift)));
+        append(instruction("adds", def(keep(dst)), use(src1), use(src2), use(shift)));
     }
 
     template <typename T1, typename T2, typename T3,
@@ -78,7 +78,7 @@ public:
     void subs(const T1 &dst,
               const T2 &src1,
               const T3 &src2) {
-        append(instruction("subs", usedef(dst), use(src1), use(src2)));
+        append(instruction("subs", def(keep(dst)), use(src1), use(src2)));
     }
 
     template <typename T1, typename T2, typename T3,
@@ -87,7 +87,7 @@ public:
               const T2 &src1,
               const T3 &src2,
               const shift_operand &shift) {
-        append(instruction("subs", usedef(dst), use(src1), use(src2), use(shift)));
+        append(instruction("subs", def(keep(dst)), use(src1), use(src2), use(shift)));
     }
 
     template <typename T1, typename T2, typename T3,
@@ -103,7 +103,7 @@ public:
     void and_(const T1 &dst,
               const T2 &src1,
               const T3 &src2) {
-        append(instruction("and", usedef(dst), use(src1), use(src2)));
+        append(instruction("and", def(keep(dst)), use(src1), use(src2)));
     }
 
     template <typename T1, typename T2, typename T3,
@@ -111,7 +111,7 @@ public:
     void ands(const T1 &dst,
               const T2 &src1,
               const T3 &src2) {
-        append(instruction("ands", usedef(dst), use(src1), use(src2)));
+        append(instruction("ands", def(keep(dst)), use(src1), use(src2)));
     }
 
     template <typename T1, typename T2, typename T3,
@@ -141,7 +141,7 @@ public:
     void movz(const T1 &dst,
               const immediate_operand &src,
               const shift_operand &shift) {
-        append(instruction("movz", usedef(dst), use(src), use(shift)));
+        append(instruction("movz", def(dst), use(src), use(shift)));
     }
 
     template <typename T1,
