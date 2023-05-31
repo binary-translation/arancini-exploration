@@ -310,22 +310,8 @@ struct operand {
           : op_(o)
           , use_(false)
           , def_(false)
+          , keep_(false)
     {
-    }
-
-    operand(const operand &o)
-         : op_(o.op_)
-         , use_(o.use_)
-         , def_(o.def_)
-    {
-    }
-
-    operand& operator=(const operand &o) {
-        op_ = o.op_;
-        use_ = o.use_;
-        def_ = o.def_;
-
-        return *this;
     }
 
     operand_type type() const {
@@ -363,10 +349,12 @@ struct operand {
 
 	bool is_use() const { return use_; }
 	bool is_def() const { return def_; }
+    bool is_keep() const { return keep_; }
 	bool is_usedef() const { return use_ && def_; }
 
     void set_use() { use_ = true; }
     void set_def() { def_ = true; }
+    void set_keep() { keep_ = true; }
     void set_usedef() { set_use(); set_def(); }
 
     size_t width() const {
@@ -405,7 +393,7 @@ struct operand {
 	void dump(std::ostream &os) const;
 protected:
     operand_variant op_;
-	bool use_, def_;
+	bool use_, def_, keep_;
 };
 
 template <typename T>
@@ -421,6 +409,14 @@ static operand use(const T &o)
 {
     operand r = o;
     r.set_use();
+    return r;
+}
+
+template <typename T>
+static operand keep(const T &o)
+{
+    operand r = o;
+    r.set_keep();
     return r;
 }
 

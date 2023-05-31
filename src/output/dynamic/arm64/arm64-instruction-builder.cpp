@@ -1,9 +1,11 @@
 #include "arancini/output/dynamic/arm64/arm64-instruction.h"
 #include <arancini/output/dynamic/arm64/arm64-instruction-builder.h>
+
+#include <array>
 #include <bitset>
+#include <utility>
 #include <stdexcept>
 #include <unordered_map>
-#include <array>
 
 using namespace arancini::output::dynamic::arm64;
 
@@ -76,16 +78,40 @@ void instruction_builder::allocate() {
 		DEBUG_STREAM << '\n';
 #endif
 
-        bool has_usedef = false;
+        std::array<std::pair<size_t, size_t>, 5> allocs;
+        bool has_unused_keep = false;
 
-        // TODO: refactor
-        std::array<size_t, 5> allocs;
+        auto allocate = [&allocs, &avail_physregs, &vreg_to_preg]
+                                  (operand &o, size_t idx) -> void
+        {
+                unsigned int vri;
+
+                if (o.is_vreg())
+                    vri = o.vreg().index();
+                else if (o.is_mem())
+                    vri = o.memory().vreg_base().index();
+                else
+                    throw std::runtime_error("Trying to allocate non-virtual register operand");
+
+                auto allocation = avail_physregs._Find_first();
+
+                // TODO: register spilling
+
+                avail_physregs.flip(allocation);
+
+                vreg_to_preg[vri] = allocation;
+
+                if (o.is_mem())
+                    o.allocate_base(allocation, 64);
+                else
+                    o.allocate(allocation, 64);
+
+                allocs[idx] = std::make_pair(vri, allocation);
+        };
 
 		// kill defs first
 		for (size_t i = 0; i < insn.operand_count(); i++) {
 			auto &o = insn.operands()[i];
-
-            has_usedef = o.is_def() && o.is_use();
 
 			// Only regs can be /real/ defs
 			if (o.is_def() && o.is_vreg() && !o.is_use()) {
@@ -109,6 +135,10 @@ void instruction_builder::allocate() {
 					o.dump(DEBUG_STREAM);
 					DEBUG_STREAM << " -- releasing\n";
 #endif
+                } else if (o.is_keep()) {
+                    has_unused_keep = true;
+
+                    allocate(o, i);
 				} else {
 #ifdef DEBUG_REGALLOC
 					DEBUG_STREAM << " not allocated - killing instruction" << std::endl;
@@ -139,20 +169,9 @@ void instruction_builder::allocate() {
                 DEBUG_STREAM << '\n';
 #endif
 
-				unsigned int vri = o.vreg().index();
-
+                unsigned int vri = o.vreg().index();
 				if (!vreg_to_preg.count(vri)) {
-					auto allocation = avail_physregs._Find_first();
-
-                    // TODO: register spilling
-
-					avail_physregs.flip(allocation);
-
-					vreg_to_preg[vri] = allocation;
-
-					o.allocate(allocation, 64);
-
-                    allocs[i] = allocation;
+                    allocate(o, i);
 #ifdef DEBUG_REGALLOC
 					DEBUG_STREAM << " allocating vreg to ";
 					o.dump(DEBUG_STREAM);
@@ -173,20 +192,10 @@ void instruction_builder::allocate() {
 #endif
 
 				if (o.memory().is_virtual()) {
-					unsigned int vri = o.memory().vreg_base().index();
+                    unsigned int vri = o.memory().vreg_base().index();
 
 					if (!vreg_to_preg.count(vri)) {
-						auto allocation = avail_physregs._Find_first();
-
-						avail_physregs.flip(allocation);
-
-						vreg_to_preg[vri] = allocation;
-
-                        // TODO size
-						/* o.memory() = preg_operand(allocation, 64); */
-						o.allocate_base(allocation, 64);
-
-                        allocs[i] = allocation;
+                        allocate(o, i);
 #ifdef DEBUG_REGALLOC
 						DEBUG_STREAM << " allocating vreg to ";
 						o.dump(DEBUG_STREAM);
@@ -199,8 +208,15 @@ void instruction_builder::allocate() {
 			}
 		}
 
-		// get uses, allocate and make live
-		// get defs, make free
+        if (has_unused_keep) {
+            for (size_t i = 0; i < insn.operand_count(); i++) {
+                const auto &op = insn.operands()[i];
+                if (op.is_keep()) {
+                    vreg_to_preg.erase(allocs[i].first);
+                    avail_physregs.flip(allocs[i].second);
+                }
+            }
+        }
 
 		// Kill MOVs
         // TODO: refactor
@@ -220,15 +236,6 @@ void instruction_builder::allocate() {
 
                 if (reg1.get() == reg2.get()) {
                     insn.kill();
-                }
-            }
-        }
-
-        if (has_usedef) {
-            for (size_t i = 0; i < insn.operand_count(); i++) {
-                const auto &op = insn.operands()[i];
-                if (op.is_use() && op.is_def()) {
-                    avail_physregs.flip(allocs[i]);
                 }
             }
         }
