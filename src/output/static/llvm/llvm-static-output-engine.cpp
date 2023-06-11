@@ -34,6 +34,7 @@ llvm_static_output_engine_impl::llvm_static_output_engine_impl(const llvm_static
 	, chunks_(chunks)
 	, llvm_context_(std::make_unique<LLVMContext>())
 	, module_(std::make_unique<Module>("generated", *llvm_context_))
+	, in_br(false)
 {
 }
 
@@ -663,7 +664,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		auto tv = lower_port(builder, state_arg, pkt, cn->trueval());
 		auto fv = lower_port(builder, state_arg, pkt, cn->falseval());
 
-		return builder.CreateSelect(cond, tv, fv);
+		return builder.CreateSelect(cond, tv, fv, "csel");
 	}
 
 	case node_kinds::unary_arith: {
@@ -850,12 +851,17 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 {
 	switch (a->kind()) {
 	case node_kinds::label: {
+		auto ln = (label_node *)a;
 		auto current_block = builder.GetInsertBlock();
-		auto intermediate_block = BasicBlock::Create(*llvm_context_, "IB", current_block->getParent());
-		builder.CreateBr(intermediate_block);
-		builder.SetInsertPoint(intermediate_block);
+		auto intermediate_block = label_nodes_to_llvm_blocks_[ln];
+		if (!intermediate_block)
+			intermediate_block = BasicBlock::Create(*llvm_context_, "LABEL-"+ln->name(), current_block->getParent());
+		if (!in_br) {
+			builder.CreateBr(intermediate_block);
+			builder.SetInsertPoint(intermediate_block);
+		}
 
-		label_nodes_to_llvm_blocks_[(label_node *)a] = intermediate_block;
+		label_nodes_to_llvm_blocks_[ln] = intermediate_block;
 		return nullptr;
 	}
 
@@ -916,10 +922,12 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto cbn = (cond_br_node *)a;
 
 		auto current_block = builder.GetInsertBlock();
-		auto intermediate_block = BasicBlock::Create(*llvm_context_, "IB", current_block->getParent());
+		auto intermediate_block = BasicBlock::Create(*llvm_context_, "Cond not taken", current_block->getParent());
 
 		auto cond = lower_port(builder, state_arg, pkt, cbn->cond());
+		in_br = true;
 		lower_node(builder, state_arg, pkt, cbn->target());
+		in_br = false;
 
 		auto br = builder.CreateCondBr(cond, label_nodes_to_llvm_blocks_[cbn->target()], intermediate_block);
 
@@ -933,9 +941,10 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 			auto current_block = builder.GetInsertBlock();
 			auto intermediate_block = BasicBlock::Create(*llvm_context_, "IB", current_block->getParent());
 
+			in_br = true;
 			lower_node(builder, state_arg, pkt, bn->target());
-
-			auto br = builder.CreateBr(intermediate_block);
+			in_br = false;
+			auto br = builder.CreateBr(label_nodes_to_llvm_blocks_[bn->target()]);
 
 			builder.SetInsertPoint(intermediate_block);
 
