@@ -53,6 +53,7 @@ private:
 	const std::vector<std::shared_ptr<ir::chunk>> &chunks_;
 	std::unique_ptr<::llvm::LLVMContext> llvm_context_;
 	std::unique_ptr<::llvm::Module> module_;
+	bool in_br;
 
 	struct {
 		::llvm::Type *vd;
