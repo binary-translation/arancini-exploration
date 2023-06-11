@@ -61,11 +61,29 @@ public:
 		, shidx_(shidx)
 		, info_(info)
 	{
-		//HACK: for hello-world
+#ifdef ARCH_X86_64
+		//HACK: for hello-world on x86
+		if (name == "__set_thread_area") {
+		     info_ = 2;
+		     size_ = 16;
+		}
+		if (name == "memcpy") {
+		     info_ = 2;
+		     size_ = 50;
+		}
 		if (name == "_start") {
 		     info_ = 2;
 		     size_ = 22;
 		}
+		if (name == "_start_c") {
+		     info_ = 2;
+		     size_ = 241;
+		}
+		if (name == "_init") {
+		     info_ = 2;
+		     size_ = 3;
+		}
+#endif
 	}
 
 	const std::string &name() const { return name_; }
