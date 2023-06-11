@@ -38,3 +38,4 @@ target_link_libraries(arancini-runtime
                       arancini-input-x86
                       arancini-trampoline)
 
+install(TARGETS arancini-runtime LIBRARY)
