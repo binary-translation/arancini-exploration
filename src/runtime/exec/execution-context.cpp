@@ -110,6 +110,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 	std::cerr << "Executing internal call via TEMPORARY interface" << std::endl;
 	if (call == 1) { // syscall
 		auto x86_state = (x86::x86_cpu_state *)cpu_state;
+		std::cerr << "Syscall No " << std::dec << x86_state->RAX << std::endl;
 		switch (x86_state->RAX) {
 		case 2: // open
 		{
@@ -347,6 +348,10 @@ int execution_context::internal_call(void *cpu_state, int call)
 		{
 			x86_state->RAX = native_syscall(__NR_clock_gettime, x86_state->RDI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RSI));
 			break;
+		}
+		case 60: //exit
+		{
+			native_syscall(__NR_exit, x86_state->RDI);
 		}
 		default:
 			std::cerr << "Unsupported syscall id " << std::dec << x86_state->RAX << std::endl;
