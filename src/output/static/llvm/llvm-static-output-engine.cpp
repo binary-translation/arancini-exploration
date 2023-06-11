@@ -88,7 +88,7 @@ void llvm_static_output_engine_impl::initialise_types()
 #undef DEFREG
 	});
 
-	types.cpu_state = StructType::get(*llvm_context_, state_elements, false);
+	types.cpu_state = StructType::get(*llvm_context_, state_elements,true);
 	if (!types.cpu_state->isLiteral())
 		types.cpu_state->setName("cpu_state_struct");
 	types.cpu_state_ptr = PointerType::get(types.cpu_state, 0);
@@ -314,9 +314,11 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		switch (rrn->val().type().width()) {
 		case 1:
 			ty = types.i1;
+			align = Align(8);
 			break;
 		case 8:
 			ty = types.i8;
+			align = Align(8);
 			break;
 		case 16:
 			ty = types.i16;
@@ -421,16 +423,51 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 				throw std::runtime_error("unsupported binary operator " + std::to_string((int)ban->op()));
 			}
 		} else if (p.kind() == port_kinds::zero) {
-			auto value_port = lower_port(builder, state_arg, pkt, n->val());
-			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
+			switch (ban->op()) {
+			case binary_arith_op::band:
+			case binary_arith_op::mod:
+			case binary_arith_op::bor:
+			case binary_arith_op::bxor:
+			case binary_arith_op::sub:
+			case binary_arith_op::add: {
+				auto value_port = lower_port(builder, state_arg, pkt, n->val());
+				return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
+			}
+			case binary_arith_op::cmpeq: {
+				auto value_port = lower_port(builder, state_arg, pkt, n->val());
+				return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, value_port, ConstantInt::get(value_port->getType(), 1)), types.i8);
+			}
+			default:
+				throw std::runtime_error("unsupported binary operator for zero flag: " + std::to_string((int)ban->op()));
+			}
 		} else if (p.kind() == port_kinds::negative) {
 			auto value_port = lower_port(builder, state_arg, pkt, n->val());
 			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_SLT, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
 		} else if (p.kind() == port_kinds::carry) {
-			return builder.CreateZExt(builder.CreateICmpUGT(lhs, rhs, "borrow"), types.i8);
+			auto value_port = lower_port(builder, state_arg, pkt, n->val());
+			switch (ban->op()) {
+			case binary_arith_op::sub: return builder.CreateZExt(builder.CreateICmpULT(lhs, rhs, "borrow"), types.i8);
+			case binary_arith_op::add: return builder.CreateZExt(builder.CreateICmpUGT(lhs, value_port, "carry"), types.i8);
+			default: return ConstantInt::get(types.i8, 0);
+			}
 		} else if (p.kind() == port_kinds::overflow) {
 			auto value_port = lower_port(builder, state_arg, pkt, n->val());
-			return builder.CreateZExt(builder.CreateICmpNE(builder.CreateAdd(lhs, builder.CreateNeg(rhs)), value_port, "overflow"), types.i8);
+			switch (ban->op()) {
+			case binary_arith_op::sub: {
+				auto z = ConstantInt::get(value_port->getType(), 0);
+				auto sum = builder.CreateAdd(lhs, builder.CreateNeg(rhs));
+				auto pos_args = builder.CreateAnd(builder.CreateICmpSGT(lhs, z), builder.CreateAnd(builder.CreateICmpSGT(rhs, z), builder.CreateICmpSLT(sum, z)));
+				auto neg_args = builder.CreateAnd(builder.CreateICmpSLT(lhs, z), builder.CreateAnd(builder.CreateICmpSLT(rhs, z), builder.CreateICmpSGE(sum, z)));
+				return builder.CreateZExt(builder.CreateOr(pos_args, neg_args, "overflow"), types.i8);
+			}
+			case binary_arith_op::add: {
+				auto z = ConstantInt::get(value_port->getType(), 0);
+				auto pos_args = builder.CreateAnd(builder.CreateICmpSGT(lhs, z), builder.CreateAnd(builder.CreateICmpSGT(rhs, z), builder.CreateICmpSLT(value_port, z)));
+				auto neg_args = builder.CreateAnd(builder.CreateICmpSLT(lhs, z), builder.CreateAnd(builder.CreateICmpSLT(rhs, z), builder.CreateICmpSGE(value_port, z)));
+				return builder.CreateZExt(builder.CreateOr(pos_args, neg_args, "overflow"), types.i8);
+			}
+			default: return ConstantInt::get(types.i8, 0);
+			}
 		} else {
 			throw std::runtime_error("unsupported port kind");
 		}
@@ -645,18 +682,17 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			}
 		}
 		case port_kinds::zero: return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, v, ConstantInt::get(v->getType(), 0)), types.i8);
-		case port_kinds::negative: return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_SGT, v, ConstantInt::get(v->getType(), 0)), types.i8);
+		case port_kinds::negative: return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_SLT, v, ConstantInt::get(v->getType(), 0)), types.i8);
 		default: return ConstantInt::get(types.i8, 0);
 		}
 	}
 
 	case node_kinds::bit_shift: {
 		auto bsn = (bit_shift_node *)n;
+		auto input = lower_port(builder, state_arg, pkt, bsn->input());
+		auto amount = lower_port(builder, state_arg, pkt, bsn->amount());
 
 		if (p.kind() == port_kinds::value) {
-			auto input = lower_port(builder, state_arg, pkt, bsn->input());
-			auto amount = lower_port(builder, state_arg, pkt, bsn->amount());
-
 			amount = builder.CreateZExt(amount, input->getType());
 
 			switch (bsn->op()) {
@@ -670,9 +706,34 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			default:
 				throw std::runtime_error("unsupported shift op");
 			}
-		} else {
-			// TODO: Flags
-			return ConstantInt::get(types.i8, 0);
+		} else if (p.kind() == port_kinds::zero) {
+			auto value_port = lower_port(builder, state_arg, pkt, n->val());
+			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
+		} else if (p.kind() == port_kinds::negative) {
+			auto value_port = lower_port(builder, state_arg, pkt, n->val());
+			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_SLT, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
+		} else if (p.kind() == port_kinds::carry) {
+			auto input_bits = builder.CreateBitCast(input, VectorType::get(types.i1, input->getType()->getIntegerBitWidth(), false));
+			switch (bsn->op()) {
+				case shift_op::asr:
+				case shift_op::lsr: {
+					return builder.CreateZExt(builder.CreateExtractVector(types.i1, input_bits, builder.CreateSub(amount, ConstantInt::get(amount->getType(), 1))), types.i8);
+				}
+				case shift_op::lsl: {
+					return builder.CreateZExt(builder.CreateExtractVector(types.i1, input_bits, builder.CreateSub(ConstantInt::get(amount->getType(), input->getType()->getIntegerBitWidth()), amount)), types.i8);
+				}
+			}
+		} else if (p.kind() == port_kinds::overflow) {
+			// asusming there are no 0 shifts
+			auto input_bits = builder.CreateBitCast(input, VectorType::get(types.i1, input->getType()->getIntegerBitWidth(), false));
+			auto msb = builder.CreateExtractVector(types.i1, input_bits, builder.CreateSub(ConstantInt::get(types.i64, input->getType()->getIntegerBitWidth()), ConstantInt::get(types.i64, 1)));
+			auto smsb = builder.CreateExtractVector(types.i1, input_bits, builder.CreateSub(ConstantInt::get(types.i64, input->getType()->getIntegerBitWidth()), ConstantInt::get(types.i64, 2)));
+			auto undefined_or_cleared =  ConstantInt::get(types.i8, 0);
+			switch(bsn->op()) {
+				case shift_op::lsl: return builder.CreateZExt(builder.CreateXor(msb, smsb), types.i8);
+				case shift_op::lsr: return builder.CreateZExt(msb, types.i8);
+				default: return undefined_or_cleared;
+			}
 		}
 	}
 
@@ -821,8 +882,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		//other casting operations.
 		auto reg_val = builder.CreateZExtOrBitCast(val, reg_type);
 
-		// TODO: ALign vector registers to 512
-		return builder.CreateAlignedStore(reg_val, dest_reg, Align(64));
+		return builder.CreateStore(reg_val, dest_reg);
 	}
 
 	case node_kinds::write_mem: {
@@ -947,7 +1007,6 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
                 case 80: ty = types.f80; break;
                 default: throw std::runtime_error("unsupported alloca width");
         }
-        // HACK: there is at least one case where the wln has an invalid type
         auto var_ptr = builder.CreateAlloca(ty, nullptr, "local var");
         local_var_to_llvm_addr_[wln->local()] = var_ptr;
 
