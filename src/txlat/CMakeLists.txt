@@ -22,3 +22,5 @@ target_link_libraries(txlat
                       arancini-output-llvm
                       Boost::program_options)
 
+install(TARGETS arancini-core arancini-ir arancini-input-x86 arancini-output-llvm LIBRARY)
+install(TARGETS txlat RUNTIME)
