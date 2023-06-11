@@ -72,7 +72,7 @@ add_subdirectory(src/runtime)
 #
 # NOTE: txlat requires the path because it invokes the compiler internally and must
 # specify for linkage.
-if(DEFINED ENV{NIX_CFLAGS_COMPILE_FOR_TARGET})
+if(DEFINED ENV{NIX_CFLAGS_COMPILE_FOR_TARGET} AND NOT DEFINED ENV{IN_NIX_SHELL})
 	add_compile_definitions(ARANCINI_LIBPATH="${CMAKE_INSTALL_PREFIX}/lib/$<TARGET_FILE_NAME:arancini-runtime>")
 else ()
 	add_compile_definitions(ARANCINI_LIBPATH="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:arancini-runtime>")
