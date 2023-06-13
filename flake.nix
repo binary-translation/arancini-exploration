@@ -11,11 +11,22 @@
 	outputs = { self, nixpkgs, flake-utils, ... }:
 	flake-utils.lib.eachDefaultSystem (system:
 	let
-		pkgs = nixpkgs.legacyPackages.${system};
+		pkgs =
+			if system == "aarch64-linux" then
+				import nixpkgs { inherit system; overlays = [
+					(final: prev: { xed = prev.xed.overrideAttrs (oldAttr: rec {
+						buildPhase = ''
+							patchShebangs mfile.py
+							# this will build, NOT test and install
+							./mfile.py --prefix $out
+						''; });
+					})];}
+			else
+				import nixpkgs { inherit system; };
 	in
 	{
 		defaultPackage =
-			with import nixpkgs { system = "x86_64-linux"; };
+			with pkgs;
 			stdenv.mkDerivation {
 				name = "arancini";
 				src = self;
