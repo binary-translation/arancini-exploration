@@ -5,27 +5,63 @@
 	inputs = {
 		nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 		flake-utils.url = "github:numtide/flake-utils";
+		xed-src = {
+			url = "github:intelxed/xed";
+			flake = false;
+		};
+		mbuild-src = {
+			url = "github:intelxed/mbuild";
+			flake = false;
+		};
+		fadec-src = {
+			url = "github:aengelke/fadec";
+			flake = false;
+		};
 	};
 
 	# output format guide https://nixos.wiki/wiki/Flakes#Output_schema
-	outputs = { self, nixpkgs, flake-utils, ... }:
+	outputs = { self, nixpkgs, flake-utils, xed-src, mbuild-src, fadec-src, ... }:
 	flake-utils.lib.eachSystem ["x86_64-linux" "aarch64-linux" "riscv64-linux" ] (system:
 	let
+		my-mbuild = 
+			with pkgs;
+			python3Packages.buildPythonPackage rec {
+				pname = "mbuild";
+				version = "2022.07.28";
+
+				src = mbuild-src;
+				patches = [ ./mbuild-riscv.patch ];
+			};
+		patched-xed = 
+			with pkgs;
+			stdenv.mkDerivation {
+				name = "patched-xed";
+				version = "2022.08.11";
+
+				src = xed-src;
+				nativeBuildInputs = [ my-mbuild ];
+
+				buildPhase = ''
+				    patchShebangs mfile.py
+
+					# this will build, test and install
+				    ./mfile.py --prefix $out
+				'';
+
+				dontInstall = true; # already installed during buildPhase
+			};
+		fadec =
+			with pkgs;
+			stdenv.mkDerivation {
+				name = "fadec";
+				src = fadec-src;
+				nativeBuildInputs = [ meson ninja ];
+			};
 		all_pkgs =
-			if system == "aarch64-linux" then
-				import nixpkgs { inherit system; overlays = [
-					(final: prev: { xed = prev.xed.overrideAttrs (oldAttr: rec {
-						buildPhase = ''
-							patchShebangs mfile.py
-							# this will build, NOT test and install
-							./mfile.py --prefix $out
-						''; });
-					})];}
-			else
 				import nixpkgs { inherit system; };
 		pkgs =
 			if system == "riscv64-linux" then
-				nixpkgs.legacyPackages.x86_64-linux.pkgsCross.riscv64
+				all_pkgs.pkgsCross.riscv64
 			else
 				all_pkgs;
 	in
@@ -38,13 +74,13 @@
 				nativeBuildInputs = [
 					zlib
 					boost
-					xed
+					patched-xed
 					libffi
 					graphviz
 					gdb
 					libxml2
-					bear
-					python3	
+					python3
+					fadec
 				];
 				buildInputs = [
 					cmake
