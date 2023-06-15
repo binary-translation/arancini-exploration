@@ -25,7 +25,7 @@
 				import nixpkgs { inherit system; };
 		pkgs =
 			if system == "riscv64-linux" then
-				all_pkgs.pkgsCross.riscv64
+				nixpkgs.legacyPackages.x86_64-linux.pkgsCross.riscv64
 			else
 				all_pkgs;
 	in
