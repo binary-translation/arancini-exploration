@@ -1,5 +1,21 @@
 {
   "nodes": {
+    "fadec-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1683630338,
+        "narHash": "sha256-NgBcr/PMDwsp1wcEwbWe70id0q9P9ipR6YA4rW5qBOg=",
+        "owner": "aengelke",
+        "repo": "fadec",
+        "rev": "f9ccffce4d3a319c8d654d36fe7ceddbfc4447fe",
+        "type": "github"
+      },
+      "original": {
+        "owner": "aengelke",
+        "repo": "fadec",
+        "type": "github"
+      }
+    },
     "flake-utils": {
       "inputs": {
         "systems": "systems"
@@ -18,13 +34,29 @@
         "type": "github"
       }
     },
+    "mbuild-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1659030943,
+        "narHash": "sha256-nVHHiaPbf+b+RntjUGjLLGS53e6c+seXIBx7AcTtiWU=",
+        "owner": "intelxed",
+        "repo": "mbuild",
+        "rev": "75cb46e6536758f1a3cdb3d6bd83a4a9fd0338bb",
+        "type": "github"
+      },
+      "original": {
+        "owner": "intelxed",
+        "repo": "mbuild",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1686216246,
-        "narHash": "sha256-SNW+GUseRSSbHrI8Mv1cQBlTfNxCaAgEH08QufRC2P0=",
+        "lastModified": 1686737040,
+        "narHash": "sha256-R+JicNaI9mcxodtHkci894txjt4IMsfOnlAarA/r0xQ=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "9bb3c53168cb8a80fd6e0fc184712bafb018b57a",
+        "rev": "6d1d80a232a355a65dc4d3bfea1f108e8dac1340",
         "type": "github"
       },
       "original": {
@@ -36,8 +68,11 @@
     },
     "root": {
       "inputs": {
+        "fadec-src": "fadec-src",
         "flake-utils": "flake-utils",
-        "nixpkgs": "nixpkgs"
+        "mbuild-src": "mbuild-src",
+        "nixpkgs": "nixpkgs",
+        "xed-src": "xed-src"
       }
     },
     "systems": {
@@ -52,6 +87,22 @@
       "original": {
         "owner": "nix-systems",
         "repo": "default",
+        "type": "github"
+      }
+    },
+    "xed-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1686143699,
+        "narHash": "sha256-Gv8zQDdUC8ICpFEEyMPVHpMcQEmmVimmk/9dQQ2CRI0=",
+        "owner": "intelxed",
+        "repo": "xed",
+        "rev": "4dc77137f651def2ece4ac0416607b215c18e6e4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "intelxed",
+        "repo": "xed",
         "type": "github"
       }
     }
