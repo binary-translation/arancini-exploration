@@ -45,8 +45,8 @@ if(NOT DEFINED ENV{NIX_CFLAGS_COMPILE_FOR_TARGET})
 	    include(cmake/getXED.cmake)
 	    get_xed()
 	endif ()
+	include(cmake/fadec.cmake)
 endif () #NIX
-include(cmake/fadec.cmake)
 
 # Build core
 add_subdirectory(src/core)
