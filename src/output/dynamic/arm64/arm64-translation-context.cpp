@@ -307,7 +307,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     vreg_operand reg;
     if (is_flag(n.value()) && is_flag_port(n.value())) {
         // TODO: register allocator cuts this
-        vreg_operand_for_port(n.value());
+        materialise(reinterpret_cast<ir::node*>(n.value().owner()));
         reg = vreg_operand(flag_map.at(n.regoff()), 64);
     } else {
         reg = vreg_operand_for_port(n.value());
@@ -355,7 +355,6 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
 void arm64_translation_context::materialise_label(const label_node &n) {
     if (!builder_.has_label(n.name() + ":"))
         builder_.label(n.name());
-    std::cerr << "Label: " << n.name() << '\n';
 }
 
 void arm64_translation_context::materialise_br(const br_node &n) {
@@ -401,10 +400,16 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             builder_.adds(dest_vreg, lhs, rhs);
 		break;
 	case binary_arith_op::sub:
-        if (w == 8 || w == 16)
+        if (w == 8 || w == 16) {
             builder_.subs(dest_vreg, lhs, rhs, shift_operand(mod, 0, 64));
-        else
+            builder_.setcc(vreg_operand(flag_map[(unsigned long)reg_offsets::CF], 64));
+        } else {
+            /* builder_.neg(dest_vreg, rhs); */
+            /* builder_.adds(dest_vreg, lhs, dest_vreg); */
             builder_.subs(dest_vreg, lhs, rhs);
+            builder_.setcc(vreg_operand(flag_map[(unsigned long)reg_offsets::CF], 64));
+            /* builder_.brk(immediate_operand(100, 64)); */
+        }
 		break;
 	case binary_arith_op::mul:
         builder_.mul(dest_vreg, lhs, rhs);
@@ -448,7 +453,9 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 	builder_.setz(vreg_operand(flag_map[(unsigned long)reg_offsets::ZF], 64));
 	builder_.sets(vreg_operand(flag_map[(unsigned long)reg_offsets::SF], 64));
 	builder_.seto(vreg_operand(flag_map[(unsigned long)reg_offsets::OF], 64));
-	builder_.setc(vreg_operand(flag_map[(unsigned long)reg_offsets::CF], 64));
+
+    if (n.op() != binary_arith_op::sub)
+        builder_.setc(vreg_operand(flag_map[(unsigned long)reg_offsets::CF], 64));
 }
 
 void arm64_translation_context::materialise_unary_arith(const unary_arith_node &n) {
