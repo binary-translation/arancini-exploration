@@ -78,6 +78,7 @@
 			with pkgs;
 			stdenv.mkDerivation {
 				name = "arancini";
+				pname = "txlat";
 				src = self;
 				nativeBuildInputs = [
 					zlib
@@ -103,6 +104,7 @@
 					export FLAKE_BUILD=1
 					cmakeConfigurePhase
 				'';
+				cmakeFlags = [ "-DBUILD_TESTS=1" ];
 			};
 	});
 }
