@@ -7,10 +7,12 @@
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
 #include <iostream>
 #include <llvm/ADT/FloatingPointMode.h>
+#include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Intrinsics.h>
 #include <map>
 #include <memory>
+#include <ostream>
 #include <sstream>
 #include <string>
 
@@ -770,22 +772,34 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 	case node_kinds::bit_extract: {
 		auto uncle = (bit_extract_node *)n;
 		auto val = lower_port(builder, state_arg, pkt, uncle->source_value());
-
+/*
 		auto val_bit = builder.CreateBitCast(val, VectorType::get(types.i1, val->getType()->getIntegerBitWidth(), false));
 
 		auto result = builder.CreateExtractVector(VectorType::get(types.i1, uncle->length(), false), val_bit, ConstantInt::get( types.i64, uncle->from()));
 		return builder.CreateBitCast(result, Type::getIntNTy(*llvm_context_, uncle->length()));
+*/
+		auto tmp = builder.CreateShl(val, ConstantInt::get(val->getType(), val->getType()->getPrimitiveSizeInBits() - (uncle->from()+uncle->length()) ));
+		tmp = builder.CreateAShr(tmp, ConstantInt::get(val->getType(), val->getType()->getPrimitiveSizeInBits() - uncle->length()) );
+		return builder.CreateTruncOrBitCast(tmp, IntegerType::getIntNTy(*llvm_context_, uncle->length()));
 	}
 	case node_kinds::bit_insert: {
 		auto bin = (bit_insert_node *)n;
 		auto dst = lower_port(builder, state_arg, pkt, bin->source_value());
 		auto val = lower_port(builder, state_arg, pkt, bin->bits());
-
-		auto dst_bit = builder.CreateBitCast(dst, VectorType::get(types.i1, dst->getType()->getIntegerBitWidth(), false));
-		auto val_bit = builder.CreateBitCast(val, VectorType::get(types.i1, val->getType()->getIntegerBitWidth(), false));
+/*
+		auto dst_bit = builder.CreateBitCast(dst, VectorType::get(types.i1, dst->getType()->getPrimitiveSizeInBits(), false));
+		auto val_bit = builder.CreateBitCast(val, VectorType::get(types.i1, val->getType()->getPrimitiveSizeInBits(), false));
 
 		auto result = builder.CreateInsertVector(dst_bit->getType(), dst_bit, val_bit, ConstantInt::get( types.i64, bin->to()));
 		return builder.CreateBitCast(result, dst->getType());
+*/
+		auto tmp = ConstantInt::get(dst->getType(), (1<<bin->length())-1);
+		auto mask = builder.CreateShl(tmp, ConstantInt::get(tmp->getType(), bin->to()));
+		auto inv_mask = builder.CreateNeg(mask);
+
+		auto insert = builder.CreateAnd(builder.CreateShl(builder.CreateZExtOrTrunc(builder.CreateBitCast(val, IntegerType::getIntNTy(*llvm_context_, val->getType()->getPrimitiveSizeInBits())), dst->getType()), ConstantInt::get(dst->getType(), bin->to())), mask);
+		auto out = builder.CreateAnd(dst, inv_mask);
+		return builder.CreateOr(out, insert);
 	}
 
         case node_kinds::vector_insert: {
@@ -810,10 +824,55 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
         }
 
 	case node_kinds::binary_atomic: {
+		auto ban = (binary_atomic_node *)n;
+		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
+		auto lhs = builder.CreateLoad(rhs->getType(), lower_port(builder, state_arg, pkt, ban->lhs()));
+		
 		if (p.kind() == port_kinds::value)
 			return lower_node(builder, state_arg, pkt, n);
-		// TODO: Flags
+		
+		if (p.kind() == port_kinds::zero) {
+			auto value_port = lower_node(builder, state_arg, pkt, n);
+			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
+		} else if (p.kind() == port_kinds::negative) {
+			auto value_port = lower_node(builder, state_arg, pkt, n);
+			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_SLT, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
+		} else if (p.kind() == port_kinds::carry) {
+			auto value_port = lower_node(builder, state_arg, pkt, n);
+			std::cout << "Val: " << std::endl;
+			value_port->print(outs(), true);
+			std::cout << "\nLhs: " << std::endl;
+			lhs->print(outs(), true);
+			std::cout << "\nRhs: " << std::endl;
+			rhs->print(outs(), true);
+			std::cout << std::endl;
+			switch (ban->op()) {
+			case binary_atomic_op::sub: return builder.CreateZExt(builder.CreateICmpULT(lhs, rhs, "borrow"), types.i8);
+			case binary_atomic_op::xadd:
+			case binary_atomic_op::add: return builder.CreateZExt(builder.CreateICmpUGT(lhs, value_port, "carry"), types.i8);
+			default: return ConstantInt::get(types.i8, 0);
+			}
+		} else if (p.kind() == port_kinds::overflow) {
+			auto value_port = lower_node(builder, state_arg, pkt, n);
+			switch (ban->op()) {
+			case binary_atomic_op::sub: {
+				auto z = ConstantInt::get(value_port->getType(), 0);
+				auto sum = builder.CreateAdd(lhs, builder.CreateNeg(rhs));
+				auto pos_args = builder.CreateAnd(builder.CreateICmpSGT(lhs, z), builder.CreateAnd(builder.CreateICmpSGT(rhs, z), builder.CreateICmpSLT(sum, z)));
+				auto neg_args = builder.CreateAnd(builder.CreateICmpSLT(lhs, z), builder.CreateAnd(builder.CreateICmpSLT(rhs, z), builder.CreateICmpSGE(sum, z)));
+				return builder.CreateZExt(builder.CreateOr(pos_args, neg_args, "overflow"), types.i8);
+			}
+			case binary_atomic_op::xadd:
+			case binary_atomic_op::add: {
+				auto z = ConstantInt::get(value_port->getType(), 0);
+				auto pos_args = builder.CreateAnd(builder.CreateICmpSGT(lhs, z), builder.CreateAnd(builder.CreateICmpSGT(rhs, z), builder.CreateICmpSLT(value_port, z)));
+				auto neg_args = builder.CreateAnd(builder.CreateICmpSLT(lhs, z), builder.CreateAnd(builder.CreateICmpSLT(rhs, z), builder.CreateICmpSGE(value_port, z)));
+				return builder.CreateZExt(builder.CreateOr(pos_args, neg_args, "overflow"), types.i8);
+			}
+			default: return ConstantInt::get(types.i8, 0);
+			}
 		return ConstantInt::get(types.i8, 0);
+		}
 	}
 	case node_kinds::ternary_atomic: {
 		if (p.kind() == port_kinds::value)
@@ -983,12 +1042,16 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 		AtomicRMWInst *out = nullptr;
 		switch(ban->op()) {
-			case binary_atomic_op::xadd: builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
+			case binary_atomic_op::add: builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
+			case binary_atomic_op::sub: builder.CreateAtomicRMW(AtomicRMWInst::Sub, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
+			case binary_atomic_op::xadd: out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
 			case binary_atomic_op::bor: out = builder.CreateAtomicRMW(AtomicRMWInst::Or, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
 			case binary_atomic_op::xchg: out = builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
 			default: throw std::runtime_error("unsupported bin atomic operation " + std::to_string((int)ban->op()));
 		}
-		return out;
+		if (out)
+			return out;
+		return builder.CreateLoad(rhs->getType(), lhs, "Atomic result");
 	}
 	case node_kinds::ternary_atomic: {
 		auto tan = (ternary_atomic_node *)a;
