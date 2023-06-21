@@ -34,7 +34,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/out/${CMAKE_BUILD
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/out/${CMAKE_BUILD_TYPE})
 
 # Get XED (if not found)
-if(NOT DEFINED ENV{NIX_CFLAGS_COMPILE_FOR_TARGET})
+if(NOT DEFINED ENV{FLAKE_BUILD})
 	# Nix takes care of fetching the dependencies, this check will still fail though
 	list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/lib)
 	find_package(XED GLOBAL)
@@ -72,7 +72,7 @@ add_subdirectory(src/runtime)
 #
 # NOTE: txlat requires the path because it invokes the compiler internally and must
 # specify for linkage.
-if(DEFINED ENV{NIX_CFLAGS_COMPILE_FOR_TARGET} AND NOT DEFINED ENV{IN_NIX_SHELL})
+if(DEFINED ENV{FLAKE_BUILD})
 	add_compile_definitions(ARANCINI_LIBPATH="${CMAKE_INSTALL_PREFIX}/lib/$<TARGET_FILE_NAME:arancini-runtime>")
 else ()
 	add_compile_definitions(ARANCINI_LIBPATH="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:arancini-runtime>")
