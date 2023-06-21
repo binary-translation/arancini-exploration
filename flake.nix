@@ -19,6 +19,14 @@
 		};
 	};
 
+	nixConfig.extra-substituters = [
+		"https://cache.garnix.io"
+		"https://tum-dse.cachix.org"
+	];
+	nixConfig.extra-trusted-public-keys = [
+		"cache.garnix.io:CTFPyKSLcx5RMJKfLo5EEPUObbA78b0YQ2DTCJXqr9g="
+	];
+
 	# output format guide https://nixos.wiki/wiki/Flakes#Output_schema
 	outputs = { self, nixpkgs, flake-utils, xed-src, mbuild-src, fadec-src, ... }:
 	flake-utils.lib.eachSystem ["x86_64-linux" "aarch64-linux" "riscv64-linux" ] (system:
@@ -35,7 +43,7 @@
 		patched-xed = 
 			with pkgs;
 			stdenv.mkDerivation {
-				name = "patched-xed";
+				pname = "xed";
 				version = "2022.08.11";
 
 				src = xed-src;
@@ -61,7 +69,7 @@
 				import nixpkgs { inherit system; };
 		pkgs =
 			if system == "riscv64-linux" then
-				all_pkgs.pkgsCross.riscv64
+				(import nixpkgs { inherit system; crossSystem.config = "riscv64-unknown-linux-gnu"; }).pkgsCross.riscv64
 			else
 				all_pkgs;
 	in
@@ -91,6 +99,10 @@
 					clang_14
 					git
 				];
+				configurePhase = ''
+					export FLAKE_BUILD=1
+					cmakeConfigurePhase
+				'';
 			};
 	});
 }
