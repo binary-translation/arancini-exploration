@@ -10,7 +10,7 @@ on:
 
 jobs:
   build-x86_64:
-    runs-on: [ self-hosted, NIX, X86]
+    runs-on: [ self-hosted, NIX, X64]
 
     steps:
       - uses: actions/checkout@v3
@@ -18,7 +18,7 @@ jobs:
         run: nix build
 
   build-x86_64-cross-riscv64:
-    runs-on: [ self-hosted, NIX, X86]
+    runs-on: [ self-hosted, NIX, X64]
 
     steps:
       - uses: actions/checkout@v3
