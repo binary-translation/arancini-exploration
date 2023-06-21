@@ -62,7 +62,7 @@ public:
 		, info_(info)
 	{
 #ifdef ARCH_X86_64
-		//HACK: for hello-world on x86
+		//HACK: for hello-world/histogram on x86
 		if (name == "__set_thread_area") {
 		     info_ = 2;
 		     size_ = 16;
@@ -77,7 +77,8 @@ public:
 		}
 		if (name == "_start_c") {
 		     info_ = 2;
-		     size_ = 241;
+		     // hello-world: size_ = 241;
+		     size_ = 249;
 		}
 		if (name == "_init") {
 		     info_ = 2;
