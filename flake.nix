@@ -47,7 +47,7 @@
 				version = "2022.08.11";
 
 				src = xed-src;
-				nativeBuildInputs = [ my-mbuild ];
+				nativeBuildInputs = [ my-mbuild gcc ];
 
 				buildPhase = ''
 				    patchShebangs mfile.py
