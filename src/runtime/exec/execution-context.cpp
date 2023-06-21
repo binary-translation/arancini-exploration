@@ -460,6 +460,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 			default:
 				x86_state->RAX = -EINVAL;
 			}
+            x86_state->R11=0x246;
 			break;
 		case 200: // tkill
             util::global_logger.debug("System call: kill()\n");
