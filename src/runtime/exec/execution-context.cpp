@@ -428,6 +428,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 			default:
 				x86_state->RAX = -EINVAL;
 			}
+            x86_state->R11=0x246;
 			break;
 		}
 		case 200: // tkill
@@ -461,7 +462,6 @@ int execution_context::internal_call(void *cpu_state, int call)
 			x86_state->RAX = gettid();
 			break;
 		}
-        case 60:
 		case 231:
 		{
 			std::cerr << "Exiting from emulated process with exit code " << std::dec << x86_state->RDI << std::endl;
