@@ -128,6 +128,12 @@ public:
         append(instruction("mvn", def(dst), use(src)));
     }
 
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
+    void neg(const T1 &dst, const T2 &src) {
+        append(instruction("neg", def(dst), use(src)));
+    }
+
     template <typename T1,
               is_reg<T1> = 0>
     void movn(const T1 &dst,
@@ -300,6 +306,12 @@ public:
               is_reg<T1> = 0>
 	void setc(const T1 &dst) {
         append(instruction("cset", def(dst), cond_operand("cs")));
+    }
+
+    template <typename T1,
+              is_reg<T1> = 0>
+	void setcc(const T1 &dst) {
+        append(instruction("cset", def(dst), cond_operand("cc")));
     }
 
     template <typename T1,
