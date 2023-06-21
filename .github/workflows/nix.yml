@@ -10,7 +10,7 @@ on:
 
 jobs:
   build-x86_64:
-    runs-on: [ self-hosted, NIX ]
+    runs-on: [ self-hosted, NIX, X86]
 
     steps:
       - uses: actions/checkout@v3
@@ -18,9 +18,17 @@ jobs:
         run: nix build
 
   build-x86_64-cross-riscv64:
-    runs-on: [ self-hosted, X64_64 ]
+    runs-on: [ self-hosted, NIX, X86]
 
     steps:
       - uses: actions/checkout@v3
       - name: nix build
         run: nix build .#defaultPackage.riscv64-linux
+
+  build-aarch64:
+    runs-on: [ self-hosted, NIX, ARM64]
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: nix build
+        run: nix build .#defaultPackage.aarch64-linux
