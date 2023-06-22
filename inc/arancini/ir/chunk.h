@@ -23,6 +23,8 @@ public:
 
 	const std::vector<std::shared_ptr<packet>> packets() const { return packets_; }
 
+  off_t address(void) { return address_; }
+
 	void accept(visitor &v) { v.visit_chunk(*this); }
 
 private:
