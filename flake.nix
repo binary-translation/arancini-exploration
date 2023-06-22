@@ -69,7 +69,7 @@
 				import nixpkgs { inherit system; };
 		pkgs =
 			if system == "riscv64-linux" then
-				(import nixpkgs { inherit system; crossSystem.config = "riscv64-unknown-linux-gnu"; }).pkgsCross.riscv64
+				(import nixpkgs { system = "x86_64-linux"; crossSystem.config = "riscv64-unknown-linux-gnu"; }).pkgsCross.riscv64
 			else
 				all_pkgs;
 	in
