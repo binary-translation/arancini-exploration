@@ -830,9 +830,12 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		auto result = builder.CreateInsertVector(dst_bit->getType(), dst_bit, val_bit, ConstantInt::get( types.i64, bin->to()));
 		return builder.CreateBitCast(result, dst->getType());
 */
+		auto dst_ty = dst->getType();
+		if (dst_ty->isFloatingPointTy())
+			dst = builder.CreateBitCast(dst, IntegerType::get(*llvm_context_, dst_ty->getPrimitiveSizeInBits()));
 		auto tmp = ConstantInt::get(dst->getType(), (1<<bin->length())-1);
 		auto mask = builder.CreateShl(tmp, ConstantInt::get(tmp->getType(), bin->to()));
-		auto inv_mask = builder.CreateNeg(mask, "Neg mask");
+		auto inv_mask = builder.CreateXor(mask, ConstantInt::get(mask->getType(), -1), "Neg mask");
 
 		auto insert = builder.CreateAnd(
 			builder.CreateShl(
@@ -842,7 +845,10 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 				ConstantInt::get(dst->getType(), bin->to())),
 			mask);
 		auto out = builder.CreateAnd(dst, inv_mask);
-		return builder.CreateOr(out, insert);
+		out = builder.CreateOr(out, insert);
+		if (dst_ty->isFloatingPointTy())
+			return builder.CreateBitCast(out, dst_ty);
+		return out;
 	}
 
         case node_kinds::vector_insert: {
