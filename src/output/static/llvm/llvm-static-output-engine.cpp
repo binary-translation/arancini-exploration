@@ -9,7 +9,9 @@
 #include <llvm/ADT/FloatingPointMode.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
+#include <llvm/Support/TimeProfiler.h>
 #include <map>
 #include <memory>
 #include <ostream>
@@ -243,6 +245,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		auto cn = (constant_node *)n;
 
 		::llvm::Type *ty;
+		auto is_f = cn->val().type().is_floating_point();
 		switch (cn->val().type().width()) {
 		case 1:
 		// TODO: check if that makes sense
@@ -253,18 +256,26 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		case 16:
 			ty = types.i16;
 			break;
-		case 32:
+		case 32: {
 			ty = types.i32;
+			if (is_f)
+				ty = types.f32;
 			break;
-		case 64:
+		}
+		case 64: {
 			ty = types.i64;
+			if (is_f)
+				ty = types.f64;
 			break;
+		}
 		case 80:
 			ty = types.f80;
 			break;
 		default:
 			throw std::runtime_error("unsupported constant width: " + std::to_string(cn->val().type().width()));
 		}
+		if (is_f)
+			return ConstantFP::get(ty, cn->const_val_f());
 		return ConstantInt::get(ty, cn->const_val_i());
 	}
 
@@ -370,6 +381,27 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 				if (lhs->getType()->getIntegerBitWidth() < rhs->getType()->getIntegerBitWidth())
 					lhs = builder.CreateSExt(lhs, rhs->getType());
+			}
+
+			if (lhs->getType()->isFloatingPointTy()) {
+				switch (ban->op()) {
+					case binary_arith_op::bxor:
+					case binary_arith_op::band:
+					case binary_arith_op::bor: {
+						lhs = builder.CreateBitCast(lhs, IntegerType::get(*llvm_context_, lhs->getType()->getPrimitiveSizeInBits())); break;
+					default: break;
+					}
+				}
+			}
+			if (rhs->getType()->isFloatingPointTy()) {
+				switch (ban->op()) {
+					case binary_arith_op::bxor:
+					case binary_arith_op::band:
+					case binary_arith_op::bor: {
+						rhs = builder.CreateBitCast(lhs, IntegerType::get(*llvm_context_, rhs->getType()->getPrimitiveSizeInBits())); break;
+					default: break;
+					}
+				}
 			}
 
 			switch (ban->op()) {
@@ -496,7 +528,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		::llvm::Type *ty;
 		switch (cn->op()) {
 		case cast_op::zx:
-			switch (cn->val().type().width()) {
+			switch (cn->target_type().width()) {
 			case 8:
 				ty = types.i8;
 				break;
@@ -522,7 +554,8 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			default:
 				throw std::runtime_error("unsupported zx width " + std::to_string(cn->val().type().width()));
 			}
-			return builder.CreateZExt(val, ty);
+			// Truncating is correct if we come from a MOVD xmm -> m32, no need for bit extracts in the IR
+			return builder.CreateZExtOrTrunc(val, ty, "zx");
 
 		case cast_op::sx:
 			switch (cn->val().type().width()) {
@@ -643,9 +676,16 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 					case 64: ty = types.f64; break;
 					case 80: ty = types.f80; break;
 				}
+				if (val->getType()->isFloatingPointTy()) {
+					if (val->getType()->getPrimitiveSizeInBits() > ty->getPrimitiveSizeInBits())
+						return builder.CreateFPTrunc(val, ty);
+					return builder.CreateFPExt(val, ty);
+				}
+
+				//TODO: Valid rounding mode!
 				if (((IntegerType *)val->getType())->getSignBit())
-					return builder.CreateConstrainedFPCast(Intrinsic::experimental_constrained_sitofp, val, ty, nullptr, "", nullptr, rm);
-				return builder.CreateConstrainedFPCast(Intrinsic::experimental_constrained_uitofp, val, ty, nullptr, "", nullptr, rm);
+					return builder.CreateConstrainedFPCast(Intrinsic::experimental_constrained_sitofp, val, ty);
+				return builder.CreateConstrainedFPCast(Intrinsic::experimental_constrained_uitofp, val, ty);
 			}
 			switch (cn->target_type().width()) {
 				case 1: ty = types.i1; break;
@@ -678,6 +718,8 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		auto un = (unary_arith_node *)n;
 
 		auto v = lower_port(builder, state_arg, pkt, un->lhs());
+		if (v->getType()->isFloatingPointTy())
+			v = builder.CreateBitCast(v, IntegerType::getIntNTy(*llvm_context_, v->getType()->getPrimitiveSizeInBits()));
 
 		switch (p.kind()) {
 		case port_kinds::value: {
@@ -795,38 +837,32 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 */
 		auto tmp = ConstantInt::get(dst->getType(), (1<<bin->length())-1);
 		auto mask = builder.CreateShl(tmp, ConstantInt::get(tmp->getType(), bin->to()));
-		auto inv_mask = builder.CreateNeg(mask);
+		auto inv_mask = builder.CreateNeg(mask, "Neg mask");
 
-		auto insert = builder.CreateAnd(builder.CreateShl(builder.CreateZExtOrTrunc(builder.CreateBitCast(val, IntegerType::getIntNTy(*llvm_context_, val->getType()->getPrimitiveSizeInBits())), dst->getType()), ConstantInt::get(dst->getType(), bin->to())), mask);
+		auto insert = builder.CreateAnd(
+			builder.CreateShl(
+				builder.CreateZExtOrTrunc(
+					builder.CreateBitCast(val, IntegerType::getIntNTy(*llvm_context_, val->getType()->getPrimitiveSizeInBits())),
+					IntegerType::getIntNTy(*llvm_context_, dst->getType()->getPrimitiveSizeInBits())),
+				ConstantInt::get(dst->getType(), bin->to())),
+			mask);
 		auto out = builder.CreateAnd(dst, inv_mask);
 		return builder.CreateOr(out, insert);
 	}
 
         case node_kinds::vector_insert: {
-                auto vin = (vector_insert_node *)n;
-
-                auto vec = lower_port(builder, state_arg, pkt, vin->source_vector());
-                auto val = lower_port(builder, state_arg, pkt, vin->insert_value());
-
-                auto insert = builder.CreateInsertElement(vec, val, vin->index(), "vector_insert");
-
-                return insert;
+			return lower_node(builder, state_arg, pkt, n);
         }
 
         case node_kinds::vector_extract: {
-                auto ven = (vector_extract_node *)n;
-
-                auto vec = lower_port(builder, state_arg, pkt, ven->source_vector());
-
-                auto extract = builder.CreateExtractElement(vec, ven->index(), "vector_extract");
-
-                return extract;
+			return lower_node(builder, state_arg, pkt, n);
         }
 
 	case node_kinds::binary_atomic: {
 		auto ban = (binary_atomic_node *)n;
 		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
-		auto lhs = builder.CreateLoad(rhs->getType(), lower_port(builder, state_arg, pkt, ban->lhs()));
+		auto lhs = lower_port(builder, state_arg, pkt, ban->lhs());
+		lhs = builder.CreateLoad(rhs->getType(), builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256)), "Atomic LHS");
 		
 		if (p.kind() == port_kinds::value)
 			return lower_node(builder, state_arg, pkt, n);
@@ -839,13 +875,6 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_SLT, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
 		} else if (p.kind() == port_kinds::carry) {
 			auto value_port = lower_node(builder, state_arg, pkt, n);
-			std::cout << "Val: " << std::endl;
-			value_port->print(outs(), true);
-			std::cout << "\nLhs: " << std::endl;
-			lhs->print(outs(), true);
-			std::cout << "\nRhs: " << std::endl;
-			rhs->print(outs(), true);
-			std::cout << std::endl;
 			switch (ban->op()) {
 			case binary_atomic_op::sub: return builder.CreateZExt(builder.CreateICmpULT(lhs, rhs, "borrow"), types.i8);
 			case binary_atomic_op::xadd:
@@ -917,15 +946,17 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 	case node_kinds::label: {
 		auto ln = (label_node *)a;
 		auto current_block = builder.GetInsertBlock();
+
 		auto intermediate_block = label_nodes_to_llvm_blocks_[ln];
-		if (!intermediate_block)
+		if (!intermediate_block) {
 			intermediate_block = BasicBlock::Create(*llvm_context_, "LABEL-"+ln->name(), current_block->getParent());
+			label_nodes_to_llvm_blocks_[ln] = intermediate_block;
+		}
 		if (!in_br) {
 			builder.CreateBr(intermediate_block);
 			builder.SetInsertPoint(intermediate_block);
 		}
 
-		label_nodes_to_llvm_blocks_[ln] = intermediate_block;
 		return nullptr;
 	}
 
@@ -1003,7 +1034,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 	        auto bn = (br_node *)a;
 
 			auto current_block = builder.GetInsertBlock();
-			auto intermediate_block = BasicBlock::Create(*llvm_context_, "IB", current_block->getParent());
+			auto intermediate_block = BasicBlock::Create(*llvm_context_, "br next", current_block->getParent());
 
 			in_br = true;
 			lower_node(builder, state_arg, pkt, bn->target());
@@ -1019,6 +1050,20 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
                 auto vec = lower_port(builder, state_arg, pkt, vin->source_vector());
                 auto val = lower_port(builder, state_arg, pkt, vin->insert_value());
+
+				if (!vec->getType()->isVectorTy()) {
+					auto v_len = vec->getType()->getPrimitiveSizeInBits();
+					vec = builder.CreateBitCast(vec, VectorType::get(val->getType(), v_len/val->getType()->getPrimitiveSizeInBits(), false));
+				}
+
+				auto ve_type = ((VectorType *)(vec->getType()))->getElementType();
+				if (ve_type->isFloatingPointTy() && !val->getType()->isFloatingPointTy()) {
+					switch(ve_type->getPrimitiveSizeInBits()) {
+						case 32: val = builder.CreateBitCast(val, types.f32); break;
+						case 64: val = builder.CreateBitCast(val, types.f64); break;
+						case 80: val = builder.CreateBitCast(val, types.f80); break;
+					}
+				}
 
                 auto insert = builder.CreateInsertElement(vec, val, vin->index(), "vector_insert");
 
@@ -1051,7 +1096,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		}
 		if (out)
 			return out;
-		return builder.CreateLoad(rhs->getType(), lhs, "Atomic result");
+		return builder.CreateLoad(rhs->getType(), builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256)), "Atomic result");
 	}
 	case node_kinds::ternary_atomic: {
 		auto tan = (ternary_atomic_node *)a;
