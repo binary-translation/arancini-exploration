@@ -490,9 +490,10 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			switch (ban->op()) {
 			case binary_arith_op::sub: {
 				auto z = ConstantInt::get(value_port->getType(), 0);
-				auto sum = builder.CreateAdd(lhs, builder.CreateNeg(rhs));
-				auto pos_args = builder.CreateAnd(builder.CreateICmpSGT(lhs, z), builder.CreateAnd(builder.CreateICmpSGT(rhs, z), builder.CreateICmpSLT(sum, z)));
-				auto neg_args = builder.CreateAnd(builder.CreateICmpSLT(lhs, z), builder.CreateAnd(builder.CreateICmpSLT(rhs, z), builder.CreateICmpSGE(sum, z)));
+				rhs = builder.CreateNeg(rhs);
+				auto sum = builder.CreateAdd(lhs, rhs);
+				auto pos_args = builder.CreateAnd(builder.CreateICmpSGE(lhs, z, "LHS pos"), builder.CreateAnd(builder.CreateICmpSGE(rhs, z, "RHS pos"), builder.CreateICmpSLT(sum, z, "SUM neg")));
+				auto neg_args = builder.CreateAnd(builder.CreateICmpSLT(lhs, z, "LHS neg"), builder.CreateAnd(builder.CreateICmpSLT(rhs, z, "RHS neg"), builder.CreateICmpSGE(sum, z, "SUM pos")));
 				return builder.CreateZExt(builder.CreateOr(pos_args, neg_args, "overflow"), types.i8);
 			}
 			case binary_arith_op::add: {
