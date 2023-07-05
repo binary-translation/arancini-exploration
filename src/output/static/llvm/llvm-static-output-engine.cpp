@@ -1092,6 +1092,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto lhs = lower_port(builder, state_arg, pkt, ban->lhs());
 		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
 
+		lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
 		AtomicRMWInst *out = nullptr;
 		switch(ban->op()) {
 			case binary_atomic_op::add: builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
@@ -1113,9 +1114,11 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 		Value *out;
 		switch(tan->op()) {
-			case ternary_atomic_op::cmpxchg:
-			  out = builder.CreateAtomicCmpXchg(lhs, rhs, top, Align(64), AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
-			  break;
+			case ternary_atomic_op::cmpxchg: {
+				lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
+				auto instr = builder.CreateAtomicCmpXchg(lhs, rhs, top, Align(64), AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
+				return instr;
+			}
 			default: throw std::runtime_error("unsupported tern atomic operation " + std::to_string((int)tan->op()));
 		}
 		return out;

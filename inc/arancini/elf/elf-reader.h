@@ -84,6 +84,14 @@ public:
 		     info_ = 2;
 		     size_ = 3;
 		}
+		if (name == "__syscall_cp_asm") {
+		     info_ = 2;
+		     size_ = 42;
+		}
+		if (name == "memset") {
+		     info_ = 2;
+		     size_ = 196;
+		}
 #endif
 	}
 
