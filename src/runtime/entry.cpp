@@ -5,6 +5,7 @@
 #include <iostream>
 
 #include <signal.h>
+#include <sys/mman.h>
 #include <unistd.h>
 
 #if defined(ARCH_X86_64)
@@ -238,7 +239,7 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	x86_state->PC = entry_point;
 
 	x86_state->RSP = setup_guest_stack(argc, argv, 0x100000000, ctx_, start);
-
+	x86_state->X87_STACK_BASE = (intptr_t)mmap(NULL, 80, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0) - (intptr_t)ctx_->get_memory_ptr(0);
 	// Report on various information for useful debugging purposes.
 	std::cerr << "state @ " << (void *)x86_state << ", pc @ " << std::hex << x86_state->PC << ", stack @ " << std::hex << x86_state->RSP << std::endl;
 

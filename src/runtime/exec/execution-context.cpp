@@ -3,6 +3,7 @@
 #include <arancini/runtime/exec/execution-thread.h>
 #include <arancini/runtime/exec/native_syscall.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
+#include <cstdint>
 
 #if defined(ARCH_X86_64)
 #include <asm/prctl.h>
@@ -328,6 +329,11 @@ int execution_context::internal_call(void *cpu_state, int call)
 			default:
 				x86_state->RAX = -EINVAL;
 			}
+			break;
+		}
+		case 204: // sched_get_affinity
+		{
+			native_syscall(__NR_sched_getaffinity, x86_state->RDI, x86_state->RSI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RDX));
 			break;
 		}
 		case 218: // set_tid_address
