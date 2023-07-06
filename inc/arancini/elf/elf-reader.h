@@ -92,6 +92,10 @@ public:
 		     info_ = 2;
 		     size_ = 196;
 		}
+		if (name == "__clone") {
+		     info_ = 2;
+		     size_ = 57;
+		}
 #endif
 	}
 
