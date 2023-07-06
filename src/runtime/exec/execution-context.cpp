@@ -204,6 +204,16 @@ int execution_context::internal_call(void *cpu_state, int call)
 
 			break;
 		}
+		case 10: // mprotect
+		{
+			auto addr = (uintptr_t)get_memory_ptr((int64_t)x86_state->RDI);
+			uint64_t length = x86_state->RSI;
+			uint64_t prot = x86_state->RDX;
+
+			auto ret = native_syscall(__NR_mprotect, addr, length, prot);
+			x86_state->RAX = ret;
+			break;
+		}
 		case 11: // munmap
 		{
 			auto addr = (uintptr_t)get_memory_ptr((int64_t)x86_state->RDI);
@@ -238,6 +248,16 @@ int execution_context::internal_call(void *cpu_state, int call)
 			} else {
 				x86_state->RAX = brk_ - (uintptr_t)get_memory_ptr(0);
 			}
+			break;
+		}
+		case 14: // rt_sigprocmask
+		{
+			// Not sure if we should allow that
+			auto set = (uintptr_t)get_memory_ptr(x86_state->RSI);
+			auto oldset = (uintptr_t)get_memory_ptr(x86_state->RDX);
+
+			auto ret = native_syscall(__NR_rt_sigprocmask, x86_state->RDI, set, oldset);
+			x86_state->RAX = ret;
 			break;
 		}
 		case 16: // ioctl
@@ -276,6 +296,19 @@ int execution_context::internal_call(void *cpu_state, int call)
 			}
 
 			x86_state->RAX = native_syscall(__NR_writev, x86_state->RDI, (uintptr_t)iovec_new, iocnt);
+			break;
+		}
+		case 56: // clone
+		{
+			auto flags = x86_state->RDI;
+			auto stack_ptr = (uintptr_t)get_memory_ptr(x86_state->RSI);
+			auto ptid_ptr = (uintptr_t)get_memory_ptr(x86_state->RDX);
+			auto ctid_ptr = (uintptr_t)get_memory_ptr(x86_state->R10);
+			auto tls_ptr = (uintptr_t)get_memory_ptr(x86_state->R8);
+
+			std::cout << "Call from thread: " << gettid() << std::endl;
+			x86_state->RAX = native_syscall(__NR_clone, flags, stack_ptr, ptid_ptr, ctid_ptr, tls_ptr);
+			std::cout << "Hello from thread: " << gettid() << std::endl;
 			break;
 		}
 		case 77: // ftruncate
@@ -329,6 +362,14 @@ int execution_context::internal_call(void *cpu_state, int call)
 			default:
 				x86_state->RAX = -EINVAL;
 			}
+			break;
+		}
+		case 202: // futex
+		{
+			auto addr = (uint64_t)get_memory_ptr(x86_state->RDI);
+			auto timespec = (uint64_t)get_memory_ptr(x86_state->R10);
+			auto addr2 = (uint64_t)get_memory_ptr(x86_state->R8);
+			x86_state->RAX = native_syscall(__NR_futex, addr, x86_state->RSI, x86_state->RDX, timespec, addr2, x86_state->R9);
 			break;
 		}
 		case 204: // sched_get_affinity
