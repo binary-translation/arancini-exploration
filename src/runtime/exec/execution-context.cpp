@@ -4,6 +4,7 @@
 #include <arancini/runtime/exec/native_syscall.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
 #include <cstdint>
+#include <cstring>
 
 #if defined(ARCH_X86_64)
 #include <asm/prctl.h>
@@ -301,13 +302,17 @@ int execution_context::internal_call(void *cpu_state, int call)
 		case 56: // clone
 		{
 			auto flags = x86_state->RDI;
-			auto stack_ptr = (uintptr_t)get_memory_ptr(x86_state->RSI);
+			auto stack_ptr = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);//(uintptr_t)get_memory_ptr(x86_state->RSI);
+			auto current_host_frame = __builtin_frame_address(0);
+			memcpy(stack_ptr, current_host_frame, 24);
+			//stack_ptr = (void*)((uintptr_t)stack_ptr + 24);
+
 			auto ptid_ptr = (uintptr_t)get_memory_ptr(x86_state->RDX);
 			auto ctid_ptr = (uintptr_t)get_memory_ptr(x86_state->R10);
 			auto tls_ptr = (uintptr_t)get_memory_ptr(x86_state->R8);
 
 			std::cout << "Call from thread: " << gettid() << std::endl;
-			x86_state->RAX = native_syscall(__NR_clone, flags, stack_ptr, ptid_ptr, ctid_ptr, tls_ptr);
+			x86_state->RAX = native_syscall(__NR_clone, flags, (uintptr_t)stack_ptr, ptid_ptr, ctid_ptr, tls_ptr);
 			std::cout << "Hello from thread: " << gettid() << std::endl;
 			break;
 		}
