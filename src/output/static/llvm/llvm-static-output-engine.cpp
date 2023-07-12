@@ -93,6 +93,7 @@ void llvm_static_output_engine_impl::initialise_types()
 	types.init_dbt = FunctionType::get(types.cpu_state_ptr, { types.i64, types.i32, PointerType::get(Type::getInt8PtrTy(*llvm_context_),0) }, false);
 	types.dbt_invoke = FunctionType::get(types.i32, { types.cpu_state_ptr }, false);
 	types.internal_call_handler = FunctionType::get(types.i32, { types.cpu_state_ptr, types.i32 }, false);
+	types.finalize = FunctionType::get(types.vd, {}, false);
 }
 
 void llvm_static_output_engine_impl::create_main_function(Function *loop_fn)
@@ -183,6 +184,10 @@ void llvm_static_output_engine_impl::build()
 
 
 	builder.SetInsertPoint(exit_block);
+
+	auto finalize_call_callee = module_->getOrInsertFunction("finalize", types.finalize);
+	builder.CreateCall(finalize_call_callee, {});
+
 	builder.CreateRetVoid();
 
 	if (e_.dbg_) {

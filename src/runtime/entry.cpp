@@ -24,7 +24,7 @@
 using namespace arancini::runtime::exec;
 using namespace arancini::runtime::exec::x86;
 
-static execution_context *ctx;
+static execution_context *ctx_;
 
 // TODO: this needs to depend on something, somehow.  Some kind of variable?
 static arancini::input::x86::x86_input_arch ia(true, arancini::input::x86::disassembly_syntax::intel);
@@ -53,7 +53,7 @@ static void segv_handler(int signo, siginfo_t *info, void *context)
 	std::cerr << "SEGMENTATION FAULT: code=" << std::hex << info->si_code << ", rip=" << std::hex << rip << ", host-virtual-address=" << std::hex
 			  << info->si_addr;
 
-	uintptr_t emulated_base = (uintptr_t)ctx->get_memory_ptr(0);
+	uintptr_t emulated_base = (uintptr_t)ctx_->get_memory_ptr(0);
 	if ((uintptr_t)info->si_addr >= emulated_base) {
 		std::cerr << ", guest-virtual-address=" << std::hex << ((uintptr_t)info->si_addr - emulated_base);
 	}
@@ -153,14 +153,14 @@ static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, exe
 		*(--stack) = (Elf64_auxv_t) { AT_EGID, { getauxval(AT_EGID) } };
 		*(--stack) = (Elf64_auxv_t) { AT_EUID, { getauxval(AT_EUID) } };
 		*(--stack) = (Elf64_auxv_t) { AT_CLKTCK, { getauxval(AT_CLKTCK) } };
-		*(--stack) = (Elf64_auxv_t) { AT_RANDOM, { getauxval(AT_RANDOM) - (uintptr_t)ctx->get_memory_ptr(0) } }; // TODO Copy/Generate new one?
+		*(--stack) = (Elf64_auxv_t) { AT_RANDOM, { getauxval(AT_RANDOM) - (uintptr_t)execution_context->get_memory_ptr(0) } }; // TODO Copy/Generate new one?
 		*(--stack) = (Elf64_auxv_t) { AT_SECURE, { 0 } };
 		*(--stack) = (Elf64_auxv_t) { AT_PAGESZ, { getauxval(AT_PAGESZ) } };
 		*(--stack) = (Elf64_auxv_t) { AT_HWCAP, { 0 } };
 		*(--stack) = (Elf64_auxv_t) { AT_HWCAP2, { 0 } };
 		//        *(--stack) = (Elf64_auxv_t) {AT_PLATFORM, {0}};
-		*(--stack) = (Elf64_auxv_t) { AT_EXECFN, { (uintptr_t)argv[0] - (uintptr_t)ctx->get_memory_ptr(0) } };
-		stack_top = (intptr_t)(stack) - (intptr_t)ctx->get_memory_ptr(0);
+		*(--stack) = (Elf64_auxv_t) { AT_EXECFN, { (uintptr_t)argv[0] - (uintptr_t)execution_context->get_memory_ptr(0) } };
+		stack_top = (intptr_t)(stack) - (intptr_t)execution_context->get_memory_ptr(0);
 	}
 	// Copy environ to guest stack
 	{
@@ -168,9 +168,9 @@ static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, exe
 		*(--stack) = nullptr;
 		// Zero terminated so environ[envc] will be zero and also needs to be copied
 		for (int i = envc - 1; i >= 0; i--) {
-			*(--stack) = (char *)(((uintptr_t)environ[i]) - (uintptr_t)ctx->get_memory_ptr(0));
+			*(--stack) = (char *)(((uintptr_t)environ[i]) - (uintptr_t)execution_context->get_memory_ptr(0));
 		}
-		stack_top = (intptr_t)stack - (intptr_t)ctx->get_memory_ptr(0);
+		stack_top = (intptr_t)stack - (intptr_t)execution_context->get_memory_ptr(0);
 	}
 	// Copy argv to guest stack
 	{
@@ -179,16 +179,16 @@ static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, exe
 		// Zero terminated so argv[argc] will be zero and also needs to be copied
 		*(--stack) = nullptr;
 		for (int i = argc - 1; i >= start; i--) {
-			*(--stack) = (char *)(((uintptr_t)argv[i]) - (uintptr_t)ctx->get_memory_ptr(0));
+			*(--stack) = (char *)(((uintptr_t)argv[i]) - (uintptr_t)execution_context->get_memory_ptr(0));
 		}
 		*(--stack) = (char *)(((uintptr_t)argv[0]) - (uintptr_t)execution_context->get_memory_ptr(0));
-		stack_top = (intptr_t)stack - (intptr_t)ctx->get_memory_ptr(0);
+		stack_top = (intptr_t)stack - (intptr_t)execution_context->get_memory_ptr(0);
 	}
 	// Copy argc to guest stack
 	{
 		long *stack = (long *)execution_context->get_memory_ptr(stack_top);
 		*(--stack) = argc - (start - 1);
-		stack_top = (intptr_t)stack - (intptr_t)ctx->get_memory_ptr(0);
+		stack_top = (intptr_t)stack - (intptr_t)execution_context->get_memory_ptr(0);
 	}
 
 	return (intptr_t)stack_top;
@@ -216,17 +216,17 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	init_signals();
 
 	// Create an execution context for the given input (guest) and output (host) architecture.
-	ctx = new execution_context(ia, oe, optimise);
+	ctx_ = new execution_context(ia, oe, optimise);
 
 	// Create a memory area for the stack.
 	unsigned long stack_size = 0x10000;
-	ctx->add_memory_region(0x100000000 - stack_size, stack_size, true);
+	ctx_->add_memory_region(0x100000000 - stack_size, stack_size, true);
 
 	// TODO: Load guest .text, .data, .bss sections via program headers
-	load_guest_program_headers(ctx);
+	load_guest_program_headers(ctx_);
 
 	// Create the main execution thread.
-	auto main_thread = ctx->create_execution_thread();
+	auto main_thread = ctx_->create_execution_thread();
 
 	// Initialise the CPU state structure with the PC set to the entry point of
 	// the guest program, and an emulated stack pointer at the top of the
@@ -234,7 +234,7 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	x86_cpu_state *x86_state = (x86_cpu_state *)main_thread->get_cpu_state();
 	x86_state->PC = entry_point;
 
-	x86_state->RSP = setup_guest_stack(argc, argv, 0x100000000, ctx, start);
+	x86_state->RSP = setup_guest_stack(argc, argv, 0x100000000, ctx_, start);
 
 	// Report on various information for useful debugging purposes.
 	std::cerr << "state @ " << (void *)x86_state << ", pc @ " << std::hex << x86_state->PC << ", stack @ " << std::hex << x86_state->RSP << std::endl;
@@ -248,10 +248,11 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
  * Entry point from /static/ code when the CPU jumps to an address that hasn't been
  * translated.
  */
-extern "C" int invoke_code(void *cpu_state) { return ctx->invoke(cpu_state); }
+extern "C" int invoke_code(void *cpu_state) { return ctx_->invoke(cpu_state); }
 
 /*
  * Entry point from /static/ code when internal call needs to be executed.
  */
-extern "C" int execute_internal_call(void *cpu_state, int call) { return ctx->internal_call(cpu_state, call); }
+extern "C" int execute_internal_call(void *cpu_state, int call) { return ctx_->internal_call(cpu_state, call); }
 
+extern "C" void finalize() { delete ctx_; }
