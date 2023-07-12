@@ -48,6 +48,12 @@ public:
 		std::cerr << "mc: finalise: ptr=" << std::hex << code_ptr_ << ", size=" << alloc_size_ << std::endl;
 	}
 
+	void reset()
+	{
+		code_ptr_ = nullptr;
+		alloc_size_ = code_size_ = 0;
+	}
+
 private:
 	void ensure_capacity(size_t extra)
 	{
