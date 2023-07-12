@@ -2,6 +2,7 @@
 #include <arancini/ir/chunk.h>
 #include <arancini/ir/default-ir-builder.h>
 #include <arancini/ir/dot-graph-generator.h>
+#include <arancini/ir/opt.h>
 #include <arancini/output/dynamic/dynamic-output-engine.h>
 #include <arancini/output/dynamic/machine-code-writer.h>
 #include <arancini/output/dynamic/translation-context.h>
@@ -91,6 +92,51 @@ private:
 	std::vector<local_var *> locals_;
 };
 
+class opt_dbt_ir_builder : public default_ir_builder {
+public:
+	opt_dbt_ir_builder(internal_function_resolver &ifr, std::shared_ptr<translation_context> tctx, deadflags_opt_visitor &deadflags, bool debug = false)
+		: default_ir_builder(ifr, debug)
+		, tctx_(std::move(tctx))
+		, deadflags_ { deadflags }
+	{
+	}
+	void end_chunk() override
+	{
+		default_ir_builder::end_chunk();
+
+		get_chunk()->accept(deadflags_);
+
+		tctx_->begin_block();
+
+		for (const auto &p : get_chunk()->packets()) {
+
+			tctx_->begin_instruction(p->address(), p->disassembly());
+
+			for (auto a : p->actions()) {
+				tctx_->lower(a);
+			}
+
+			tctx_->end_instruction();
+		}
+
+		tctx_->end_block();
+	}
+
+	translation *create_translation()
+	{
+		auto &writer = tctx_->writer();
+
+		writer.finalise();
+		auto *translation_p = new translation(writer.ptr(), writer.size());
+
+		return translation_p;
+	}
+
+private:
+	std::shared_ptr<translation_context> tctx_;
+	deadflags_opt_visitor &deadflags_;
+};
+
 translation *translation_engine::translate(unsigned long pc)
 {
 	void *code = ec_.get_memory_ptr(pc);
@@ -99,9 +145,14 @@ translation *translation_engine::translate(unsigned long pc)
 
 	machine_code_writer writer(alloc_);
 	auto ctx = oe_.create_translation_context(writer);
+	deadflags_opt_visitor deadflags;
 
-	dbt_ir_builder builder(ia_.get_internal_function_resolver(), ctx);
+	opt_dbt_ir_builder builder(ia_.get_internal_function_resolver(), ctx, deadflags);
 	ia_.translate_chunk(builder, pc, code, 0x1000, true);
-
 	return builder.create_translation();
+
+	//dbt_ir_builder builder(ia_.get_internal_function_resolver(), ctx_);
+	//ia_.translate_chunk(builder, pc, code, 0x1000, true);
+
+	//return builder.create_translation();
 }
