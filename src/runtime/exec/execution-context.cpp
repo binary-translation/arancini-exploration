@@ -24,12 +24,12 @@
 
 using namespace arancini::runtime::exec;
 
-execution_context::execution_context(input::input_arch &ia, output::dynamic::dynamic_output_engine &oe)
+execution_context::execution_context(input::input_arch &ia, output::dynamic::dynamic_output_engine &oe, bool optimise)
 	: memory_(nullptr)
 	, memory_size_(0x100000000ull)
 	, brk_ { 0 }
 	, brk_limit_ { UINTPTR_MAX }
-	, te_(*this, ia, oe)
+	, te_(*this, ia, oe, optimise)
 {
 	allocate_guest_memory();
 }

@@ -27,7 +27,7 @@ class translation;
 
 class translation_engine {
 public:
-	translation_engine(execution_context &ec, input::input_arch &ia, output::dynamic::dynamic_output_engine &oe)
+	translation_engine(execution_context &ec, input::input_arch &ia, output::dynamic::dynamic_output_engine &oe, bool optimise = true)
 		: ec_(ec)
 		, ia_(ia)
 		, oe_(oe)
@@ -36,6 +36,10 @@ public:
 		, writer_ { alloc_ }
 		, ctx_ { oe_.create_translation_context(writer_) }
 	{
+		// TODO properly add flag to disable
+		if (optimise) {
+			deadflags_ = std::make_unique<ir::deadflags_opt_visitor>();
+		}
 	}
 
 	translation *get_translation(unsigned long pc);
@@ -52,6 +56,6 @@ private:
 	output::dynamic::dynamic_output_engine &oe_;
 	std::shared_ptr<output::dynamic::translation_context> ctx_;
 
-	ir::deadflags_opt_visitor deadflags_;
+	std::unique_ptr<ir::deadflags_opt_visitor> deadflags_;
 };
 } // namespace arancini::runtime::dbt
