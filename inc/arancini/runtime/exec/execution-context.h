@@ -18,7 +18,7 @@ class execution_thread;
 
 class execution_context {
 public:
-	execution_context(input::input_arch &ia, output::dynamic::dynamic_output_engine &oe);
+	execution_context(input::input_arch &ia, output::dynamic::dynamic_output_engine &oe, bool optimise);
 	~execution_context();
 
 	void *add_memory_region(off_t base_address, size_t size, bool ignore_brk=false);
