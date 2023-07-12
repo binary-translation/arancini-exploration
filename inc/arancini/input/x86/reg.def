@@ -23,6 +23,20 @@ DEFREG(uint64_t, i64, R13)
 DEFREG(uint64_t, i64, R14)
 DEFREG(uint64_t, i64, R15)
 
+// Flags
+DEFREG(uint8_t, i8, ZF)
+DEFREG(uint8_t, i8, CF)
+DEFREG(uint8_t, i8, OF)
+DEFREG(uint8_t, i8, SF)
+DEFREG(uint8_t, i8, PF)
+DEFREG(uint8_t, i8, DF)
+DEFREG(uint8_t, i8, unused2)
+DEFREG(uint8_t, i8, unused3)
+
+// Seg
+DEFREG(uint64_t, i64, FS)
+DEFREG(uint64_t, i64, GS)
+
 // // XMMs
 // DEFREG(uint128_t, i128, XMM0)
 // DEFREG(uint128_t, i128, XMM1)
@@ -92,18 +106,6 @@ DEFREG(uint512_t, i512, ZMM28)
 DEFREG(uint512_t, i512, ZMM29)
 DEFREG(uint512_t, i512, ZMM30)
 DEFREG(uint512_t, i512, ZMM31)
-
-// Flags
-DEFREG(uint8_t, i8, ZF)
-DEFREG(uint8_t, i8, CF)
-DEFREG(uint8_t, i8, OF)
-DEFREG(uint8_t, i8, SF)
-DEFREG(uint8_t, i8, PF)
-DEFREG(uint8_t, i8, DF)
-
-// Seg
-DEFREG(uint64_t, i64, FS)
-DEFREG(uint64_t, i64, GS)
 
 // x87 FPU
 DEFREG(uint16_t, i16, X87_CTRL)
