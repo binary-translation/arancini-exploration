@@ -16,9 +16,13 @@ namespace arancini::ir {
       nr_flags_total_ = nr_flags_opt_total_ = 0;
     }
 
-    ~deadflags_opt_visitor(void) {
-      std::cout << "Dead flags opt pass stats: optimised " << nr_flags_opt_total_ << "/" << nr_flags_total_ << " (" << 100 * nr_flags_opt_total_ / nr_flags_total_ << "%)" << std::endl;
-    }
+	~deadflags_opt_visitor(void)
+	{
+		if (nr_flags_total_ != 0) {
+			std::cout << "Dead flags opt pass stats: optimised " << nr_flags_opt_total_ << "/" << nr_flags_total_ << " ("
+					  << 100 * nr_flags_opt_total_ / nr_flags_total_ << "%)" << std::endl;
+		}
+	}
 
 	  void visit_chunk(chunk & c) {
 		  nr_flags_ = nr_flags_opt_ = 0;
