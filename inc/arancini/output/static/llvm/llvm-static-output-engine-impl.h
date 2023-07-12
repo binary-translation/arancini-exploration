@@ -71,6 +71,7 @@ private:
 		::llvm::FunctionType *init_dbt;
 		::llvm::FunctionType *dbt_invoke;
 		::llvm::FunctionType *internal_call_handler;
+		::llvm::FunctionType *finalize;
 
 		::llvm::IntegerType *integer(unsigned width) {
 			switch(width) {
