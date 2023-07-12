@@ -769,7 +769,11 @@ class Assembler {
     *reinterpret_cast<uint32_t*>(reinterpret_cast<uword>(writer->ptr()) + position) =
         instruction;
   }
-  void Emit32(uint32_t instruction) { writer->emit32(instruction); }
+  void Emit32(uint32_t instruction)
+  {
+	instructions32++;
+	writer->emit32(instruction);
+  }
   uint16_t Read16(intptr_t position) {
     return *reinterpret_cast<uint16_t*>(reinterpret_cast<uword>(writer->ptr()) +
                                         position);
@@ -778,10 +782,17 @@ class Assembler {
     *reinterpret_cast<uint16_t*>(reinterpret_cast<uword>(writer->ptr()) + position) =
         instruction;
   }
-  void Emit16(uint16_t instruction) { writer->emit16(instruction); }
+  void Emit16(uint16_t instruction)
+  {
+	instructions16++;
+	writer->emit16(instruction);
+  }
 
   const ExtensionSet extensions_;
   arancini::output::dynamic::machine_code_writer* writer;
+
+  long instructions16, instructions32;
+
 };
 
 }  // namespace arancini::output::dynamic::riscv64

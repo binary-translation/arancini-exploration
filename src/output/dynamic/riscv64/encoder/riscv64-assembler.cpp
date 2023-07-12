@@ -15,7 +15,9 @@ Assembler::Assembler(arancini::output::dynamic::machine_code_writer *writer, Ext
 {
 }
 
-Assembler::~Assembler() = default;
+Assembler::~Assembler(){
+	std::cout << "Total RISC-V instructions emitted: "<<std::dec<<instructions32<<" full size, "<<instructions16<< " compressed"<<std::endl;
+}
 
 void Assembler::Bind(Label *label)
 {
