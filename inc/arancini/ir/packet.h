@@ -40,7 +40,7 @@ public:
 	bool updates_pc() const
 	{
 		for (action_node *a : actions_) {
-			if (a->kind() == node_kinds::write_pc) {
+			if (a->updates_pc()) {
 				return true;
 			}
 		}
