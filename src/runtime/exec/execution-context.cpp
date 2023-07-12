@@ -5,6 +5,7 @@
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
 #include <cstdint>
 #include <cstring>
+#include <pthread.h>
 
 #if defined(ARCH_X86_64)
 #include <asm/prctl.h>
@@ -301,19 +302,42 @@ int execution_context::internal_call(void *cpu_state, int call)
 		}
 		case 56: // clone
 		{
+			auto ret = x86_state->RAX;
 			auto flags = x86_state->RDI;
-			auto stack_ptr = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);//(uintptr_t)get_memory_ptr(x86_state->RSI);
-			auto current_host_frame = __builtin_frame_address(0);
-			memcpy(stack_ptr, current_host_frame, 24);
-			//stack_ptr = (void*)((uintptr_t)stack_ptr + 24);
+			pthread_attr_t attr;
+			if (pthread_getattr_np(pthread_self(), &attr) != 0)
+				throw std::runtime_error("Failed to get current thread attr\n");
+
+			auto current_frame = __builtin_frame_address(0);
+			void *current_stack;
+			size_t current_stack_size;
+			if (pthread_attr_getstack(&attr, &current_stack, &current_stack_size) != 0)
+				throw std::runtime_error("Failed to get current stack\n");
+			pthread_attr_destroy(&attr);
+
+			auto current_stack_end = (void *)0x7ffffffff000; // current_stack_size is wrong???
+			current_stack_size = (uintptr_t)current_stack_end - (uintptr_t)current_stack;
+
+			auto actual_size = (uintptr_t)current_stack + current_stack_size -(uintptr_t)current_frame -0x2b0;
+			auto stack_ptr = mmap(NULL, current_stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK | MAP_GROWSDOWN, -1, 0);//(uintptr_t)get_memory_ptr(x86_state->RSI);
+			if (!stack_ptr)
+				throw std::runtime_error("Failed to allocate new stack\n");
+
+			memcpy(stack_ptr, current_stack, current_stack_size);
+			stack_ptr = (void *)(((uintptr_t)stack_ptr + current_stack_size - actual_size));	
 
 			auto ptid_ptr = (uintptr_t)get_memory_ptr(x86_state->RDX);
-			auto ctid_ptr = (uintptr_t)get_memory_ptr(x86_state->R10);
-			auto tls_ptr = (uintptr_t)get_memory_ptr(x86_state->R8);
+
+			//auto new_ctx = 
 
 			std::cout << "Call from thread: " << gettid() << std::endl;
-			x86_state->RAX = native_syscall(__NR_clone, flags, (uintptr_t)stack_ptr, ptid_ptr, ctid_ptr, tls_ptr);
+			//register auto rbp __asm__("rbp") = (uintptr_t)stack_ptr+0x2b0;
+			register auto ctid_ptr __asm__("r10") = (uintptr_t)get_memory_ptr(x86_state->R10);
+			register auto tls_ptr __asm__("r8") = (uintptr_t)get_memory_ptr(x86_state->R8);
+			__asm__ volatile("mov %6, %%rbp\n" "syscall" : "+a"(ret) : "D"(flags), "S"((uint64_t)stack_ptr), "d"(ptid_ptr), "r"(ctid_ptr), "r"(tls_ptr), "r"((uintptr_t)stack_ptr+0x2b0) : "memory", "rcx", "r11");
 			std::cout << "Hello from thread: " << gettid() << std::endl;
+
+			x86_state->RAX = ret;
 			break;
 		}
 		case 77: // ftruncate
