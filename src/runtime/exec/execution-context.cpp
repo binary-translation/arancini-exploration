@@ -318,26 +318,40 @@ int execution_context::internal_call(void *cpu_state, int call)
 			auto current_stack_end = (void *)0x7ffffffff000; // current_stack_size is wrong???
 			current_stack_size = (uintptr_t)current_stack_end - (uintptr_t)current_stack;
 
-			auto actual_size = (uintptr_t)current_stack + current_stack_size -(uintptr_t)current_frame -0x2b0;
+			auto offset = ((uintptr_t)current_frame - 0x2b0) - (uintptr_t)current_stack;
 			auto stack_ptr = mmap(NULL, current_stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK | MAP_GROWSDOWN, -1, 0);//(uintptr_t)get_memory_ptr(x86_state->RSI);
 			if (!stack_ptr)
 				throw std::runtime_error("Failed to allocate new stack\n");
 
 			memcpy(stack_ptr, current_stack, current_stack_size);
-			stack_ptr = (void *)(((uintptr_t)stack_ptr + current_stack_size - actual_size));	
+			stack_ptr = (void *)((uintptr_t)stack_ptr + offset);	
 
 			auto ptid_ptr = (uintptr_t)get_memory_ptr(x86_state->RDX);
 
-			//auto new_ctx = 
+			auto new_x86_state = malloc(sizeof(*x86_state));
 
 			std::cout << "Call from thread: " << gettid() << std::endl;
 			//register auto rbp __asm__("rbp") = (uintptr_t)stack_ptr+0x2b0;
 			register auto ctid_ptr __asm__("r10") = (uintptr_t)get_memory_ptr(x86_state->R10);
 			register auto tls_ptr __asm__("r8") = (uintptr_t)get_memory_ptr(x86_state->R8);
-			__asm__ volatile("mov %6, %%rbp\n" "syscall" : "+a"(ret) : "D"(flags), "S"((uint64_t)stack_ptr), "d"(ptid_ptr), "r"(ctid_ptr), "r"(tls_ptr), "r"((uintptr_t)stack_ptr+0x2b0) : "memory", "rcx", "r11");
+			__asm__ volatile(
+					"syscall\n"
+					"test %%rax, %%rax\n"
+					"cmove %6, %%rbp\n"
+					: "+a"(ret)
+					: "D"(flags), "S"((uint64_t)stack_ptr), "d"(ptid_ptr), "r"(ctid_ptr), "r"(tls_ptr), "r"((uintptr_t)stack_ptr + 0x2b0)
+					: "memory", "rcx", "r11");
 			std::cout << "Hello from thread: " << gettid() << std::endl;
-
+			
 			x86_state->RAX = ret;
+			if (!ret) {
+				// In reverse order to overwrite local x86_state last
+				for (uint64_t i = (current_stack_size/8) -1; i >= 0; i--) {
+					if ( ((uint64_t *)stack_ptr)[i] == (uint64_t)cpu_state) {
+						((uint64_t *)stack_ptr)[i] = (uint64_t)new_x86_state;
+					}
+				}
+			}
 			break;
 		}
 		case 77: // ftruncate
