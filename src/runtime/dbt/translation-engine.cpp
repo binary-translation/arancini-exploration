@@ -65,7 +65,10 @@ public:
 		auto &writer = tctx_->writer();
 
 		writer.finalise();
-		return new translation(writer.ptr(), writer.size());
+		auto *translation_p = new translation(writer.ptr(), writer.size());
+		writer.reset();
+
+		return translation_p;
 	}
 
 	virtual local_var *alloc_local(const value_type &type) override
@@ -128,6 +131,7 @@ public:
 
 		writer.finalise();
 		auto *translation_p = new translation(writer.ptr(), writer.size());
+		writer.reset();
 
 		return translation_p;
 	}
@@ -143,11 +147,7 @@ translation *translation_engine::translate(unsigned long pc)
 
 	std::cerr << "translating pc=" << std::hex << pc << std::endl;
 
-	machine_code_writer writer(alloc_);
-	auto ctx = oe_.create_translation_context(writer);
-	deadflags_opt_visitor deadflags;
-
-	opt_dbt_ir_builder builder(ia_.get_internal_function_resolver(), ctx, deadflags);
+	opt_dbt_ir_builder builder(ia_.get_internal_function_resolver(), ctx_, deadflags_);
 	ia_.translate_chunk(builder, pc, code, 0x1000, true);
 	return builder.create_translation();
 
