@@ -130,7 +130,7 @@ static void load_guest_program_headers(execution_context *ctx)
 	}
 }
 
-static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, execution_context *execution_context)
+static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, execution_context *execution_context, int start)
 {
 	// Stack pointer always needs to be 16-Byte aligned per ABI convention
 	int envc = 0;
@@ -138,7 +138,7 @@ static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, exe
 		;
 
 	// auxv entries are always 16 Bytes
-	stack_top -= ((envc + argc) & 1) * 8;
+	stack_top -= ((envc + (argc - (start - 1))) & 1) * 8;
 
 	// Add auxv to guest stack
 	{
@@ -178,15 +178,16 @@ static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, exe
 
 		// Zero terminated so argv[argc] will be zero and also needs to be copied
 		*(--stack) = nullptr;
-		for (int i = argc - 1; i >= 0; i--) {
+		for (int i = argc - 1; i >= start; i--) {
 			*(--stack) = (char *)(((uintptr_t)argv[i]) - (uintptr_t)ctx->get_memory_ptr(0));
 		}
+		*(--stack) = (char *)(((uintptr_t)argv[0]) - (uintptr_t)execution_context->get_memory_ptr(0));
 		stack_top = (intptr_t)stack - (intptr_t)ctx->get_memory_ptr(0);
 	}
 	// Copy argc to guest stack
 	{
 		long *stack = (long *)execution_context->get_memory_ptr(stack_top);
-		*(--stack) = argc;
+		*(--stack) = argc - (start - 1);
 		stack_top = (intptr_t)stack - (intptr_t)ctx->get_memory_ptr(0);
 	}
 
@@ -200,11 +201,22 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 {
 	std::cerr << "arancini: dbt: initialise" << std::endl;
 
+	// Consume args until '--'
+	int start = 1;
+
+	for (int i = 1; i < argc; ++i) {
+		if (strcmp(argv[i], "--") == 0) {
+			start = i + 1;
+		}
+	}
+
+	bool optimise = start > 1;
+
 	// Capture interesting signals, such as SIGSEGV.
 	init_signals();
 
 	// Create an execution context for the given input (guest) and output (host) architecture.
-	ctx = new execution_context(ia, oe);
+	ctx = new execution_context(ia, oe, optimise);
 
 	// Create a memory area for the stack.
 	unsigned long stack_size = 0x10000;
@@ -222,7 +234,7 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	x86_cpu_state *x86_state = (x86_cpu_state *)main_thread->get_cpu_state();
 	x86_state->PC = entry_point;
 
-	x86_state->RSP = setup_guest_stack(argc, argv, 0x100000000, ctx);
+	x86_state->RSP = setup_guest_stack(argc, argv, 0x100000000, ctx, start);
 
 	// Report on various information for useful debugging purposes.
 	std::cerr << "state @ " << (void *)x86_state << ", pc @ " << std::hex << x86_state->PC << ", stack @ " << std::hex << x86_state->RSP << std::endl;
