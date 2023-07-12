@@ -4,10 +4,20 @@
 #include <arancini/ir/chunk.h>
 #include <arancini/ir/packet.h>
 #include <arancini/ir/default-visitor.h>
+#include <arancini/runtime/exec/x86/x86-cpu-state.h>
+
 #include <cstring>
 #include <iostream>
 #include <set>
 #include <algorithm>
+#include <unordered_map>
+
+#define X86_OFFSET_OF(reg) __builtin_offsetof(struct arancini::runtime::exec::x86::x86_cpu_state, reg)
+enum class reg_offsets : unsigned long {
+#define DEFREG(ctype, ltype, name) name = X86_OFFSET_OF(name),
+#include <arancini/input/x86/reg.def>
+#undef DEFREG
+};
 
 namespace arancini::ir {
   class deadflags_opt_visitor : public default_visitor {
@@ -24,10 +34,11 @@ namespace arancini::ir {
 		}
 	}
 
-	  void visit_chunk(chunk & c) {
-		  nr_flags_ = nr_flags_opt_ = 0;
-		  last_se_packet_ = nullptr;
-      live_flags_.clear();
+	void visit_chunk(chunk &c)
+	{
+		nr_flags_ = nr_flags_opt_ = 0;
+		last_se_packets_.clear();
+		live_flags_.clear();
 
 		  auto packets = c.packets();
 		  for (auto p = packets.rbegin(); p != packets.rend(); ++p) {
@@ -101,38 +112,41 @@ namespace arancini::ir {
 
 	  void visit_read_reg_node(read_reg_node & n)
 	  {
-		  if (!flag_regs_names_.count(n.regname()))
+		if (!flag_regs_offsets_.count(static_cast<reg_offsets>(n.regoff())))
 			  return;
 
-		  live_flags_.insert(n.regidx());
+		live_flags_.insert(n.regoff());
 	  }
 
 	  void visit_write_reg_node(write_reg_node & n)
 	  {
-		  if (!flag_regs_names_.count(n.regname()))
+		if (!flag_regs_offsets_.count(static_cast<reg_offsets>(n.regoff())))
 			  return;
 
-		  nr_flags_++;
-		  // if we are in the last packet modifying flags in the chunk, we cannot optimise out, even if the flag is not live,
-		  // since it can be used in a following chunk, e.g. basic block
-		  if (!last_se_packet_)
-			  last_se_packet_ = current_packet_;
-		  if (last_se_packet_ == current_packet_)
-			  return;
+		nr_flags_++;
+		// if we are in the last packet modifying flags in the chunk, we cannot optimise out, even if the flag is not live,
+		// since it can be used in a following chunk, e.g. basic block
+		if (!last_se_packets_.count(n.regoff())) {
+			last_se_packets_[n.regoff()] = current_packet_;
+			live_flags_.erase(n.regoff());
+			return;
+		}
 
 		  // if this flag is live, i.e. is read later, we keep the write reg node and mark it dead. Else, we delete it.
-		  if (live_flags_.count(n.regidx())) {
-			  live_flags_.erase(n.regidx());
+		if (live_flags_.count(n.regoff())) {
+			live_flags_.erase(n.regoff());
 		  } else {
 			  delete_.push_back((action_node *)&n);
 		  }
 	  }
 
-  private:
-    std::vector<action_node *> delete_;
-    std::set<unsigned long> live_flags_;
-    packet *current_packet_, *last_se_packet_; // last packet with side effects on flags in the current chunk
-    std::set<std::string> flag_regs_names_ = { "ZF", "CF", "OF", "SF", "PF", "AF" };
-    unsigned int nr_flags_, nr_flags_opt_, nr_flags_total_, nr_flags_opt_total_;
+private:
+	std::vector<action_node *> delete_;
+	std::set<unsigned long> live_flags_;
+	packet *current_packet_;
+	std::unordered_map<unsigned long, packet *> last_se_packets_; // last packet with side effects on each flag in the current chunk
+	std::set<enum reg_offsets> flag_regs_offsets_
+		= { reg_offsets::ZF, reg_offsets::CF, reg_offsets::OF, reg_offsets::SF, reg_offsets::PF /*, reg_offsets::AF FIXME not included in reg.def */ };
+	unsigned int nr_flags_, nr_flags_opt_, nr_flags_total_, nr_flags_opt_total_;
   };
 }
