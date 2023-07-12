@@ -22,6 +22,8 @@ public:
 	virtual void begin_packet(off_t address, const std::string &disassembly = "") = 0;
 	virtual packet_type end_packet() = 0;
 
+	virtual ~ir_builder() = default;
+
 	/* Nodes */
 
 	/// @brief Returns a node representing an integer constant.  Works for constants up to 64-bits in length.
