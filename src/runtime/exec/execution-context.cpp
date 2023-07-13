@@ -458,12 +458,22 @@ int execution_context::internal_call(void *cpu_state, int call)
 			}
 			break;
 		}
+		case 200: // tkill
+		{
+			x86_state->RAX = native_syscall(__NR_tkill, x86_state->RDI, x86_state->RSI);
+			break;
+		}
 		case 202: // futex
 		{
 			auto addr = (uint64_t)get_memory_ptr(x86_state->RDI);
 			auto timespec = (uint64_t)get_memory_ptr(x86_state->R10);
 			auto addr2 = (uint64_t)get_memory_ptr(x86_state->R8);
 			x86_state->RAX = native_syscall(__NR_futex, addr, x86_state->RSI, x86_state->RDX, timespec, addr2, x86_state->R9);
+			break;
+		}
+		case 203: // sched_set_affinity
+		{
+			native_syscall(__NR_sched_setaffinity, x86_state->RDI, x86_state->RSI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RDX));
 			break;
 		}
 		case 204: // sched_get_affinity
