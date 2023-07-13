@@ -3,8 +3,10 @@
 #include <arancini/runtime/exec/execution-thread.h>
 #include <arancini/runtime/exec/native_syscall.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <ostream>
 #include <pthread.h>
 
 #if defined(ARCH_X86_64)
@@ -25,7 +27,32 @@
 #include <sys/mman.h>
 #include <sys/uio.h>
 
+extern "C" int MainLoop(void *);
+
 using namespace arancini::runtime::exec;
+
+struct loop_args {
+	void *new_state;
+	void *parent_state;
+	pthread_mutex_t *lock;
+	pthread_cond_t *cond;
+};
+
+void *MainLoopWrapper(void *args) {
+	auto largs = (loop_args *)args;
+	auto x86_state = (x86::x86_cpu_state *)largs->new_state;
+	auto parent_state = (x86::x86_cpu_state *)largs->parent_state;
+
+	pthread_mutex_lock(largs->lock);
+	parent_state->RAX = gettid();
+	pthread_mutex_unlock(largs->lock);
+	pthread_cond_signal(largs->cond);
+
+	x86_state->RSP = x86_state->RSI;
+	
+	MainLoop(x86_state);
+	return NULL;
+};
 
 execution_context::execution_context(input::input_arch &ia, output::dynamic::dynamic_output_engine &oe, bool optimise)
 	: memory_(nullptr)
@@ -302,8 +329,29 @@ int execution_context::internal_call(void *cpu_state, int call)
 		}
 		case 56: // clone
 		{
-			auto ret = x86_state->RAX;
-			auto flags = x86_state->RDI;
+			auto et = create_execution_thread();
+			auto new_x86_state = (x86::x86_cpu_state *)et->get_cpu_state();
+			memcpy(new_x86_state, x86_state, sizeof(*x86_state));
+
+			new_x86_state->RAX = 0;
+
+			pthread_t child;
+			pthread_attr_t attr;
+			pthread_attr_init(&attr);
+			pthread_mutex_t rax_lock;
+			pthread_cond_t rax_cond;
+			pthread_mutex_init(&rax_lock, NULL);
+			pthread_cond_init(&rax_cond, NULL);
+
+			loop_args args = { new_x86_state, x86_state, &rax_lock, &rax_cond };
+			pthread_mutex_lock(&rax_lock);
+
+			pthread_create(&child, &attr, &MainLoopWrapper, &args);
+			pthread_cond_wait(&rax_cond, &rax_lock);
+			std::cerr << "Spawned thread " << x86_state->RAX << std::endl;
+
+			pthread_detach(child);
+			/*
 			pthread_attr_t attr;
 			if (pthread_getattr_np(pthread_self(), &attr) != 0)
 				throw std::runtime_error("Failed to get current thread attr\n");
@@ -315,7 +363,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 				throw std::runtime_error("Failed to get current stack\n");
 			pthread_attr_destroy(&attr);
 
-			auto current_stack_end = (void *)0x7ffffffff000; // current_stack_size is wrong???
+			auto current_stack_end = (void *)0x7ffffffff000;
 			current_stack_size = (uintptr_t)current_stack_end - (uintptr_t)current_stack;
 
 			auto offset = ((uintptr_t)current_frame - 0x2b0) - (uintptr_t)current_stack;
@@ -328,10 +376,12 @@ int execution_context::internal_call(void *cpu_state, int call)
 
 			auto ptid_ptr = (uintptr_t)get_memory_ptr(x86_state->RDX);
 
-			auto new_x86_state = malloc(sizeof(*x86_state));
+			auto et = create_execution_thread();
+			auto new_x86_state = et->get_cpu_state();
+			memcpy(new_x86_state, x86_state, sizeof(*x86_state));
 
 			std::cout << "Call from thread: " << gettid() << std::endl;
-			//register auto rbp __asm__("rbp") = (uintptr_t)stack_ptr+0x2b0;
+
 			register auto ctid_ptr __asm__("r10") = (uintptr_t)get_memory_ptr(x86_state->R10);
 			register auto tls_ptr __asm__("r8") = (uintptr_t)get_memory_ptr(x86_state->R8);
 			__asm__ volatile(
@@ -346,12 +396,13 @@ int execution_context::internal_call(void *cpu_state, int call)
 			x86_state->RAX = ret;
 			if (!ret) {
 				// In reverse order to overwrite local x86_state last
-				for (uint64_t i = (current_stack_size/8) -1; i >= 0; i--) {
+				for (int i = ((uint64_t)current_stack_size/8)-1; i >= 0; i--) {
 					if ( ((uint64_t *)stack_ptr)[i] == (uint64_t)cpu_state) {
 						((uint64_t *)stack_ptr)[i] = (uint64_t)new_x86_state;
 					}
 				}
 			}
+			*/
 			break;
 		}
 		case 77: // ftruncate
