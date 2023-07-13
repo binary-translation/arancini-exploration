@@ -18,8 +18,8 @@ translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_
 	case XED_ICLASS_HLT:
 	case XED_ICLASS_CPUID:
 	case XED_ICLASS_PREFETCHNTA:
-	case XED_ICLASS_PAUSE:
 		return translation_result::noop;
+	case XED_ICLASS_PAUSE:
 	case XED_ICLASS_NOP:
 		builder_.begin_packet(address, disasm);
 		return builder_.end_packet() == packet_type::end_of_block ? translation_result::end_of_block : translation_result::noop;
