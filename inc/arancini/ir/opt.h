@@ -56,67 +56,71 @@ namespace arancini::ir {
 			  (*a)->accept(*this);
 		  }
 
-		  // delete all write reg nodes marked for deletion
-		  if (!delete_.size())
-			  return;
-		  auto begin = actions.begin(), end = actions.end();
-		  for (auto n : delete_) {
-			  // unlink the write_reg node from the operation producing the flag change
-			  write_reg_node *wr_node = (write_reg_node *)n;
-			  node *op = wr_node->value().owner();
-			  switch (op->kind()) {
-			  case node_kinds::unary_arith:
-			  case node_kinds::binary_arith:
-			  case node_kinds::ternary_arith: {
-				  if (!strncmp(wr_node->regname(), "ZF", 2)) {
-					  ((arith_node *)op)->zero().remove_target(wr_node);
-				  } else if (!strncmp(wr_node->regname(), "CF", 2)) {
-					  ((arith_node *)op)->carry().remove_target(wr_node);
-				  } else if (!strncmp(wr_node->regname(), "OF", 2)) {
-					  ((arith_node *)op)->overflow().remove_target(wr_node);
-				  } else if (!strncmp(wr_node->regname(), "SF", 2)) {
-					  ((arith_node *)op)->negative().remove_target(wr_node);
-				  } else {
-					  throw std::runtime_error("unsupported flag for flag optimisation");
-				  }
-				  break;
-			  }
-			  case node_kinds::unary_atomic:
-			  case node_kinds::binary_atomic:
-			  case node_kinds::ternary_atomic: {
-				  if (!strncmp(wr_node->regname(), "ZF", 2)) {
-					  ((atomic_node *)op)->zero().remove_target(wr_node);
-				  } else if (!strncmp(wr_node->regname(), "CF", 2)) {
-					  ((atomic_node *)op)->carry().remove_target(wr_node);
-				  } else if (!strncmp(wr_node->regname(), "OF", 2)) {
-					  ((atomic_node *)op)->overflow().remove_target(wr_node);
-				  } else if (!strncmp(wr_node->regname(), "SF", 2)) {
-					  ((atomic_node *)op)->negative().remove_target(wr_node);
-				  } else {
-					  throw std::runtime_error("unsupported flag for flag optimisation");
-				  }
-          break;
-			  }
-			  default:
-				  break;
-			  }
+		// delete all write reg nodes marked for deletion
+		if (!delete_.empty()) {
+			auto begin = actions.begin(), end = actions.end();
+			for (auto n : delete_) {
+				// unlink the write_reg node from the operation producing the flag change
+				write_reg_node *wr_node = (write_reg_node *)n;
+				node *op = wr_node->value().owner();
+				switch (op->kind()) {
+				case node_kinds::unary_arith:
+				case node_kinds::binary_arith:
+				case node_kinds::ternary_arith: {
+					if (!strncmp(wr_node->regname(), "ZF", 2)) {
+						((arith_node *)op)->zero().remove_target(wr_node);
+					} else if (!strncmp(wr_node->regname(), "CF", 2)) {
+						((arith_node *)op)->carry().remove_target(wr_node);
+					} else if (!strncmp(wr_node->regname(), "OF", 2)) {
+						((arith_node *)op)->overflow().remove_target(wr_node);
+					} else if (!strncmp(wr_node->regname(), "SF", 2)) {
+						((arith_node *)op)->negative().remove_target(wr_node);
+					} else {
+						throw std::runtime_error("unsupported flag for flag optimisation");
+					}
+					break;
+				}
+				case node_kinds::unary_atomic:
+				case node_kinds::binary_atomic:
+				case node_kinds::ternary_atomic: {
+					if (!strncmp(wr_node->regname(), "ZF", 2)) {
+						((atomic_node *)op)->zero().remove_target(wr_node);
+					} else if (!strncmp(wr_node->regname(), "CF", 2)) {
+						((atomic_node *)op)->carry().remove_target(wr_node);
+					} else if (!strncmp(wr_node->regname(), "OF", 2)) {
+						((atomic_node *)op)->overflow().remove_target(wr_node);
+					} else if (!strncmp(wr_node->regname(), "SF", 2)) {
+						((atomic_node *)op)->negative().remove_target(wr_node);
+					} else {
+						throw std::runtime_error("unsupported flag for flag optimisation");
+					}
+					break;
+				}
+				default:
+					break;
+				}
 
-			  // remove node from the action_node list
-			  end = std::remove(begin, end, n);
-			  nr_flags_opt_++;
-		  }
-		  actions.erase(end, actions.end());
-		  p.set_actions(actions);
-		  delete_.clear();
-	  }
+				// remove node from the action_node list
+				end = std::remove(begin, end, n);
+				nr_flags_opt_++;
+			}
+			actions.erase(end, actions.end());
+			p.set_actions(actions);
+			delete_.clear();
+
+		}
+		live_flags_.insert(new_live_flags.begin(), new_live_flags.end());
+		new_live_flags.clear();
+	}
 
 	  void visit_read_reg_node(read_reg_node & n)
 	  {
 		if (!flag_regs_offsets_.count(static_cast<reg_offsets>(n.regoff())))
 			  return;
 
-		live_flags_.insert(n.regoff());
-	  }
+		// If the flag register is also written in this packet, deferring insertion ensures later writes in the same packet don't "satisfy" the read
+		new_live_flags.insert(n.regoff());
+	}
 
 	void visit_write_reg_node(write_reg_node &n)
 	{
@@ -141,7 +145,7 @@ namespace arancini::ir {
 
 private:
 	std::vector<action_node *> delete_;
-	std::set<unsigned long> live_flags_;
+	std::set<unsigned long> live_flags_, new_live_flags;
 	packet *current_packet_;
 	std::unordered_map<unsigned long, packet *> last_se_packets_; // last packet with side effects on each flag in the current chunk
 	std::set<enum reg_offsets> flag_regs_offsets_
