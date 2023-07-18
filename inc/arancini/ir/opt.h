@@ -118,27 +118,26 @@ namespace arancini::ir {
 		live_flags_.insert(n.regoff());
 	  }
 
-	  void visit_write_reg_node(write_reg_node & n)
-	  {
-		if (!flag_regs_offsets_.count(static_cast<reg_offsets>(n.regoff())))
-			  return;
-
-		nr_flags_++;
-		// if we are in the last packet modifying flags in the chunk, we cannot optimise out, even if the flag is not live,
-		// since it can be used in a following chunk, e.g. basic block
-		if (!last_se_packets_.count(n.regoff())) {
-			last_se_packets_[n.regoff()] = current_packet_;
-			live_flags_.erase(n.regoff());
-			return;
+	void visit_write_reg_node(write_reg_node &n)
+	{
+		if (flag_regs_offsets_.count(static_cast<reg_offsets>(n.regoff())) != 0) {
+			nr_flags_++;
+			// if we are in the last packet modifying flags in the chunk, we cannot optimise out, even if the flag is not live,
+			// since it can be used in a following chunk, e.g. basic block
+			if (!last_se_packets_.count(n.regoff())) {
+				last_se_packets_[n.regoff()] = current_packet_;
+				live_flags_.erase(n.regoff());
+			} else {
+				// if this flag is live, i.e. is read later, we keep the write reg node and mark it dead. Else, we delete it.
+				if (live_flags_.count(n.regoff())) {
+					live_flags_.erase(n.regoff());
+				} else {
+					delete_.push_back((action_node *)&n);
+				}
+			}
 		}
-
-		  // if this flag is live, i.e. is read later, we keep the write reg node and mark it dead. Else, we delete it.
-		if (live_flags_.count(n.regoff())) {
-			live_flags_.erase(n.regoff());
-		  } else {
-			  delete_.push_back((action_node *)&n);
-		  }
-	  }
+		default_visitor::visit_write_reg_node(n);
+	}
 
 private:
 	std::vector<action_node *> delete_;
