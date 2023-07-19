@@ -96,6 +96,10 @@ public:
 		     info_ = 2;
 		     size_ = 57;
 		}
+		if (name == "sem_timedwait") {
+		     info_ = 2;
+		     size_ = 219;
+		}
 #endif
 	}
 

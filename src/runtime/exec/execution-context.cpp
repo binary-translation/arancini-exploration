@@ -44,12 +44,12 @@ void *MainLoopWrapper(void *args) {
 	auto parent_state = (x86::x86_cpu_state *)largs->parent_state;
 
 	pthread_mutex_lock(largs->lock);
+	std::cout << "Thread: " << gettid() << " - State: " << std::hex << x86_state << std::dec << std::endl;
 	parent_state->RAX = gettid();
 	pthread_mutex_unlock(largs->lock);
 	pthread_cond_signal(largs->cond);
 
 	x86_state->RSP = x86_state->RSI;
-	
 	MainLoop(x86_state);
 	return NULL;
 };
@@ -137,10 +137,10 @@ int execution_context::invoke(void *cpu_state)
 
 int execution_context::internal_call(void *cpu_state, int call)
 {
-	std::cerr << "Executing internal call via TEMPORARY interface" << std::endl;
+	//std::cerr << "Executing internal call via TEMPORARY interface" << std::endl;
 	if (call == 1) { // syscall
 		auto x86_state = (x86::x86_cpu_state *)cpu_state;
-		std::cerr << "Syscall No " << std::dec << x86_state->RAX << std::endl;
+		//std::cerr << "Syscall No " << std::dec << x86_state->RAX << std::endl;
 		switch (x86_state->RAX) {
 		case 2: // open
 		{
@@ -283,9 +283,9 @@ int execution_context::internal_call(void *cpu_state, int call)
 		{
 			// Not sure if we should allow that
 			auto set = (uintptr_t)get_memory_ptr(x86_state->RSI);
-			auto oldset = (uintptr_t)get_memory_ptr(x86_state->RDX);
+			auto oldset = x86_state->RDX ? (uintptr_t)get_memory_ptr(x86_state->RDX) : 0;
 
-			auto ret = native_syscall(__NR_rt_sigprocmask, x86_state->RDI, set, oldset);
+			auto ret = native_syscall(__NR_rt_sigprocmask, x86_state->RDI, set, oldset, x86_state->R10);
 			x86_state->RAX = ret;
 			break;
 		}
@@ -348,7 +348,6 @@ int execution_context::internal_call(void *cpu_state, int call)
 
 			pthread_create(&child, &attr, &MainLoopWrapper, &args);
 			pthread_cond_wait(&rax_cond, &rax_lock);
-			std::cerr << "Spawned thread " << x86_state->RAX << std::endl;
 
 			pthread_detach(child);
 			/*
@@ -466,19 +465,19 @@ int execution_context::internal_call(void *cpu_state, int call)
 		case 202: // futex
 		{
 			auto addr = (uint64_t)get_memory_ptr(x86_state->RDI);
-			auto timespec = (uint64_t)get_memory_ptr(x86_state->R10);
+			auto timespec = x86_state->R10 ? (uint64_t)get_memory_ptr(x86_state->R10) : 0;
 			auto addr2 = (uint64_t)get_memory_ptr(x86_state->R8);
-			x86_state->RAX = native_syscall(__NR_futex, addr, x86_state->RSI, x86_state->RDX, timespec, addr2, x86_state->R9);
+			x86_state->RAX = native_syscall(__NR_futex, addr, x86_state->RSI, (uint64_t)((uint32_t)x86_state->RDX), timespec, addr2, x86_state->R9);
 			break;
 		}
 		case 203: // sched_set_affinity
 		{
-			native_syscall(__NR_sched_setaffinity, x86_state->RDI, x86_state->RSI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RDX));
+			x86_state->RAX = native_syscall(__NR_sched_setaffinity, x86_state->RDI, x86_state->RSI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RDX));
 			break;
 		}
 		case 204: // sched_get_affinity
 		{
-			native_syscall(__NR_sched_getaffinity, x86_state->RDI, x86_state->RSI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RDX));
+			x86_state->RAX = native_syscall(__NR_sched_getaffinity, x86_state->RDI, x86_state->RSI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RDX));
 			break;
 		}
 		case 218: // set_tid_address
