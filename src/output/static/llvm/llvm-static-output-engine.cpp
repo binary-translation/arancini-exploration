@@ -5,6 +5,7 @@
 #include <arancini/ir/chunk.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine-impl.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
+#include <cstdint>
 #include <iostream>
 #include <llvm/ADT/FloatingPointMode.h>
 #include <llvm/IR/Constants.h>
@@ -748,11 +749,11 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 			switch (bsn->op()) {
 			case shift_op::asr:
-				return builder.CreateAShr(input, amount);
+				return builder.CreateAShr(input, amount, "bit_shift");
 			case shift_op::lsr:
-				return builder.CreateLShr(input, amount);
+				return builder.CreateLShr(input, amount, "bit_shift");
 			case shift_op::lsl:
-				return builder.CreateShl(input, amount);
+				return builder.CreateShl(input, amount, "bit_shift");
 
 			default:
 				throw std::runtime_error("unsupported shift op");
@@ -839,8 +840,8 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		auto dst_ty = dst->getType();
 		if (dst_ty->isFloatingPointTy())
 			dst = builder.CreateBitCast(dst, IntegerType::get(*llvm_context_, dst_ty->getPrimitiveSizeInBits()));
-		auto tmp = ConstantInt::get(dst->getType(), (1<<bin->length())-1);
-		auto mask = builder.CreateShl(tmp, ConstantInt::get(tmp->getType(), bin->to()));
+		auto tmp = ConstantInt::get(dst->getType(), ((uint64_t)1 << bin->length())-1); // TODO: This breaks for insertsd longer than 64bits
+		auto mask = builder.CreateShl(tmp, ConstantInt::get(tmp->getType(), bin->to()), "bit_insert gen mask");
 		auto inv_mask = builder.CreateXor(mask, ConstantInt::get(mask->getType(), -1), "Neg mask");
 
 		auto insert = builder.CreateAnd(
@@ -849,8 +850,8 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 					builder.CreateBitCast(val, IntegerType::getIntNTy(*llvm_context_, val->getType()->getPrimitiveSizeInBits())),
 					IntegerType::getIntNTy(*llvm_context_, dst->getType()->getPrimitiveSizeInBits())),
 				ConstantInt::get(dst->getType(), bin->to())),
-			mask);
-		auto out = builder.CreateAnd(dst, inv_mask);
+			mask, "bit_insert apply mask");
+		auto out = builder.CreateAnd(dst, inv_mask, "bit_insert mask out");
 		out = builder.CreateOr(out, insert);
 		if (dst_ty->isFloatingPointTy())
 			return builder.CreateBitCast(out, dst_ty);
