@@ -14,6 +14,7 @@ void atomic_translator::do_translate()
     auto src = read_operand(1);
 
     auto xadd = builder().insert_atomic_xadd(dst->val(), src->val());
+	write_operand(1, xadd->val());
     write_flags(xadd, flag_op::update, flag_op::update, flag_op::update, flag_op::update, flag_op::update, flag_op::update);
 
     break;
