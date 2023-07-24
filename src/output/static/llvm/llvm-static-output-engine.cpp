@@ -868,21 +868,19 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 	case node_kinds::binary_atomic: {
 		auto ban = (binary_atomic_node *)n;
-		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
-		auto lhs = lower_port(builder, state_arg, pkt, ban->lhs());
-		lhs = builder.CreateLoad(rhs->getType(), builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256)), "Atomic LHS");
-		
 		if (p.kind() == port_kinds::value)
 			return lower_node(builder, state_arg, pkt, n);
 		
+		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
+		auto lhs = lower_port(builder, state_arg, pkt, ban->lhs());
+		lhs = builder.CreateLoad(rhs->getType(), builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256)), "Atomic LHS");
+		auto value_port = lower_port(builder, state_arg, pkt, n->val());
+		
 		if (p.kind() == port_kinds::zero) {
-			auto value_port = lower_node(builder, state_arg, pkt, n);
 			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
 		} else if (p.kind() == port_kinds::negative) {
-			auto value_port = lower_node(builder, state_arg, pkt, n);
 			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_SLT, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
 		} else if (p.kind() == port_kinds::carry) {
-			auto value_port = lower_node(builder, state_arg, pkt, n);
 			switch (ban->op()) {
 			case binary_atomic_op::sub: return builder.CreateZExt(builder.CreateICmpULT(lhs, rhs, "borrow"), types.i8);
 			case binary_atomic_op::xadd:
@@ -890,7 +888,6 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			default: return ConstantInt::get(types.i8, 0);
 			}
 		} else if (p.kind() == port_kinds::overflow) {
-			auto value_port = lower_node(builder, state_arg, pkt, n);
 			switch (ban->op()) {
 			case binary_atomic_op::sub: {
 				auto z = ConstantInt::get(value_port->getType(), 0);
@@ -1093,6 +1090,10 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto lhs = lower_port(builder, state_arg, pkt, ban->lhs());
 		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
 
+		auto existing = node_ports_to_llvm_values_.find(&ban->val());
+		if (existing != node_ports_to_llvm_values_.end())
+			return existing->second;
+
 		lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
 		AtomicRMWInst *out = nullptr;
 		switch(ban->op()) {
@@ -1103,9 +1104,17 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 			case binary_atomic_op::xchg: out = builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
 			default: throw std::runtime_error("unsupported bin atomic operation " + std::to_string((int)ban->op()));
 		}
-		if (out)
+		if (out) {
+			switch (ban->op()) {
+				//case binary_atomic_op::xadd: out = builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, out, Align(64), AtomicOrdering::SequentiallyConsistent); break;
+				default: break;
+			}
+			node_ports_to_llvm_values_[&ban->val()] = out;
 			return out;
-		return builder.CreateLoad(rhs->getType(), builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256)), "Atomic result");
+		}
+		auto ret = builder.CreateLoad(rhs->getType(), builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256)), "Atomic result");
+		node_ports_to_llvm_values_[&ban->val()] = ret;
+		return ret;
 	}
 	case node_kinds::ternary_atomic: {
 		auto tan = (ternary_atomic_node *)a;
