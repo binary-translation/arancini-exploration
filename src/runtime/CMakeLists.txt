@@ -4,13 +4,20 @@ project(arancini-runtime LANGUAGES CXX ASM)
 # Compile with -fPIC
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+set(RUNTIME_SRCS
+        entry.cpp
+        exec/execution-thread.cpp
+        exec/execution-context.cpp
+        dbt/translation-engine.cpp)
+
 set(INCLUDE_PATH ../../inc)
+
 add_library(arancini-runtime
             SHARED
-            entry.cpp
-            exec/execution-thread.cpp
-            exec/execution-context.cpp
-            dbt/translation-engine.cpp)
+            ${RUNTIME_SRCS})
+add_library(arancini-runtime-static
+            STATIC
+            ${RUNTIME_SRCS})
 
 if (TARGET arancini-output-x86)
     add_library(arancini-trampoline OBJECT dbt/trampoline.x86_64.S)
@@ -27,6 +34,9 @@ elseif (TARGET arancini-output-riscv64)
     target_link_libraries(arancini-runtime
                           PRIVATE
                           arancini-output-riscv64)
+    target_link_libraries(arancini-runtime-static
+                          PRIVATE
+                          arancini-output-riscv64-static)
 else ()
     message(FATAL_ERROR "No output DBT library was built; set ARCH correctly")
 endif ()
@@ -36,5 +46,11 @@ target_link_libraries(arancini-runtime
                       xed
                       arancini-ir
                       arancini-input-x86
+                      arancini-trampoline)
+target_link_libraries(arancini-runtime-static
+                      PRIVATE
+                      xed
+                      arancini-ir-static
+                      arancini-input-x86-static
                       arancini-trampoline)
 
