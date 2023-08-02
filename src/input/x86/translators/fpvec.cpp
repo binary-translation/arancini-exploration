@@ -99,7 +99,7 @@ void fpvec_translator::do_translate()
 	case XED_ICLASS_MULSD: {
         	auto res = builder().insert_mul(builder().insert_vector_extract(src1->val(), 0)->val(), builder().insert_vector_extract(src2->val(), 0)->val());
 
-        	write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val(), true);
+        	write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
 		break;
 	}
 	case XED_ICLASS_CVTSD2SS: {
