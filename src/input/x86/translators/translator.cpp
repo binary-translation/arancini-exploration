@@ -68,7 +68,7 @@ translator::reg_offsets translator::xedreg_to_offset(xed_reg_enum_t reg)
   }
 }
 
-action_node *translator::write_operand(int opnum, port &value, bool keep_enc)
+action_node *translator::write_operand(int opnum, port &value)
 {
 	const xed_inst_t *insn = xed_decoded_inst_inst(xed_inst());
 	auto operand = xed_inst_operand(insn, opnum);
@@ -125,7 +125,7 @@ action_node *translator::write_operand(int opnum, port &value, bool keep_enc)
 			value_node *orig;
 			auto val_len = value.type().width();
 			value_node *enc;
-			if (!keep_enc) {
+			if (!xed_classify_sse(xed_inst())) {
 				value_node *flat;
 				switch(val_len) {
 					case 32: flat = builder_.insert_bitcast(value_type::u32(), value); break;
@@ -153,21 +153,25 @@ action_node *translator::write_operand(int opnum, port &value, bool keep_enc)
 						 enc = builder_.insert_bitcast(value_type::vector(value_type::u64(), enc_len/val_len), enc->val());
 						 enc = builder_.insert_vector_insert(enc->val(), 0, orig->val());
 				}
+				break;
 				case 128: {
 						 orig = builder_.insert_bitcast(value_type::u128(), value);
 						 enc = builder_.insert_bitcast(value_type::vector(value_type::u128(), enc_len/val_len), enc->val());
 						 enc = builder_.insert_vector_insert(enc->val(), 0, orig->val());
 				}
+				break;
 				case 256: {
 						 orig = builder_.insert_bitcast(value_type::u256(), value);
 						 enc = builder_.insert_bitcast(value_type::vector(value_type::u256(), enc_len/val_len), enc->val());
 						 enc = builder_.insert_vector_insert(enc->val(), 0, orig->val());
 				}
+				break;
 				case 512: {
 						 orig = builder_.insert_bitcast(value_type::u512(), value);
 						 enc = builder_.insert_bitcast(value_type::vector(value_type::u512(), enc_len/val_len), enc->val());
 						 enc = builder_.insert_vector_insert(enc->val(), 0, orig->val());
 				}
+				break;
 
 			}
 			return write_reg( enc_reg_off, enc->val());
