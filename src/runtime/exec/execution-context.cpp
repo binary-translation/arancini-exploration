@@ -327,6 +327,12 @@ int execution_context::internal_call(void *cpu_state, int call)
 			x86_state->RAX = native_syscall(__NR_writev, x86_state->RDI, (uintptr_t)iovec_new, iocnt);
 			break;
 		}
+		case 28: // madvise
+		{
+			auto start = (uintptr_t)get_memory_ptr(x86_state->RDI);
+			x86_state->RAX = native_syscall(__NR_madvise, start, x86_state->RSI, x86_state->RDX);
+			break;
+		}
 		case 56: // clone
 		{
 			auto et = create_execution_thread();
@@ -350,58 +356,6 @@ int execution_context::internal_call(void *cpu_state, int call)
 			pthread_cond_wait(&rax_cond, &rax_lock);
 
 			pthread_detach(child);
-			/*
-			pthread_attr_t attr;
-			if (pthread_getattr_np(pthread_self(), &attr) != 0)
-				throw std::runtime_error("Failed to get current thread attr\n");
-
-			auto current_frame = __builtin_frame_address(0);
-			void *current_stack;
-			size_t current_stack_size;
-			if (pthread_attr_getstack(&attr, &current_stack, &current_stack_size) != 0)
-				throw std::runtime_error("Failed to get current stack\n");
-			pthread_attr_destroy(&attr);
-
-			auto current_stack_end = (void *)0x7ffffffff000;
-			current_stack_size = (uintptr_t)current_stack_end - (uintptr_t)current_stack;
-
-			auto offset = ((uintptr_t)current_frame - 0x2b0) - (uintptr_t)current_stack;
-			auto stack_ptr = mmap(NULL, current_stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK | MAP_GROWSDOWN, -1, 0);//(uintptr_t)get_memory_ptr(x86_state->RSI);
-			if (!stack_ptr)
-				throw std::runtime_error("Failed to allocate new stack\n");
-
-			memcpy(stack_ptr, current_stack, current_stack_size);
-			stack_ptr = (void *)((uintptr_t)stack_ptr + offset);	
-
-			auto ptid_ptr = (uintptr_t)get_memory_ptr(x86_state->RDX);
-
-			auto et = create_execution_thread();
-			auto new_x86_state = et->get_cpu_state();
-			memcpy(new_x86_state, x86_state, sizeof(*x86_state));
-
-			std::cout << "Call from thread: " << gettid() << std::endl;
-
-			register auto ctid_ptr __asm__("r10") = (uintptr_t)get_memory_ptr(x86_state->R10);
-			register auto tls_ptr __asm__("r8") = (uintptr_t)get_memory_ptr(x86_state->R8);
-			__asm__ volatile(
-					"syscall\n"
-					"test %%rax, %%rax\n"
-					"cmove %6, %%rbp\n"
-					: "+a"(ret)
-					: "D"(flags), "S"((uint64_t)stack_ptr), "d"(ptid_ptr), "r"(ctid_ptr), "r"(tls_ptr), "r"((uintptr_t)stack_ptr + 0x2b0)
-					: "memory", "rcx", "r11");
-			std::cout << "Hello from thread: " << gettid() << std::endl;
-			
-			x86_state->RAX = ret;
-			if (!ret) {
-				// In reverse order to overwrite local x86_state last
-				for (int i = ((uint64_t)current_stack_size/8)-1; i >= 0; i--) {
-					if ( ((uint64_t *)stack_ptr)[i] == (uint64_t)cpu_state) {
-						((uint64_t *)stack_ptr)[i] = (uint64_t)new_x86_state;
-					}
-				}
-			}
-			*/
 			break;
 		}
 		case 77: // ftruncate
