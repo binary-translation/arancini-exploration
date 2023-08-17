@@ -830,18 +830,14 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		auto bin = (bit_insert_node *)n;
 		auto dst = lower_port(builder, state_arg, pkt, bin->source_value());
 		auto val = lower_port(builder, state_arg, pkt, bin->bits());
-/*
-		auto dst_bit = builder.CreateBitCast(dst, VectorType::get(types.i1, dst->getType()->getPrimitiveSizeInBits(), false));
-		auto val_bit = builder.CreateBitCast(val, VectorType::get(types.i1, val->getType()->getPrimitiveSizeInBits(), false));
-
-		auto result = builder.CreateInsertVector(dst_bit->getType(), dst_bit, val_bit, ConstantInt::get( types.i64, bin->to()));
-		return builder.CreateBitCast(result, dst->getType());
-*/
 		auto dst_ty = dst->getType();
+
 		if (dst_ty->isFloatingPointTy())
 			dst = builder.CreateBitCast(dst, IntegerType::get(*llvm_context_, dst_ty->getPrimitiveSizeInBits()));
-		auto tmp = ConstantInt::get(dst->getType(), ((uint64_t)1 << bin->length())-1); // TODO: This breaks for insertsd longer than 64bits
-		auto mask = builder.CreateShl(tmp, ConstantInt::get(tmp->getType(), bin->to()), "bit_insert gen mask");
+		
+		auto tmp = ConstantInt::get(dst->getType(), 1);
+		auto ones = builder.CreateSub(builder.CreateShl(tmp, ConstantInt::get(tmp->getType(), bin->length())), ConstantInt::get(tmp->getType(), 1));
+		auto mask = builder.CreateShl(ones, ConstantInt::get(tmp->getType(), bin->to()), "bit_insert gen mask");
 		auto inv_mask = builder.CreateXor(mask, ConstantInt::get(mask->getType(), -1), "Neg mask");
 
 		auto insert = builder.CreateAnd(

@@ -100,6 +100,10 @@ public:
 		     info_ = 2;
 		     size_ = 219;
 		}
+		if (name == "memmove") {
+		     info_ = 2;
+		     size_ = 37;
+		}
 #endif
 	}
 
