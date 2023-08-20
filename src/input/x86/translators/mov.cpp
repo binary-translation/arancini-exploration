@@ -17,8 +17,13 @@ void mov_translator::do_translate()
 		auto operand = xed_inst_operand(insn, 0);
 		auto opname = xed_operand_name(operand);
 
+		auto srcname = xed_operand_name(xed_inst_operand(insn, 1));
 		auto tt = opname == XED_OPERAND_MEM0 ? type_of_operand(1) : type_of_operand(0);
 		auto op1 = auto_cast(tt, read_operand(1));
+		//TODO: temporary hack for MOVQ with immediate
+		if (srcname == XED_OPERAND_IMM0 && xed_decoded_inst_operand_length_bits(xed_inst(), 1) < xed_decoded_inst_operand_length_bits(xed_inst(), 0)) {
+			op1 = builder().insert_zx(value_type::u64(), op1->val());
+		}
 		write_operand(0, op1->val());
 		break;
 	}
