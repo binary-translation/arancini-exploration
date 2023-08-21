@@ -8,6 +8,7 @@
 #include <cstring>
 #include <ostream>
 #include <pthread.h>
+#include <utility>
 
 #if defined(ARCH_X86_64)
 #include <asm/prctl.h>
@@ -466,4 +467,8 @@ int execution_context::internal_call(void *cpu_state, int call)
 		return 1;
 	}
 	return 0;
+}
+
+std::pair<decltype(execution_context::threads_)::const_iterator, decltype(execution_context::threads_)::const_iterator> execution_context::get_thread_range() {
+	return std::make_pair(threads_.cbegin(), threads_.cend());
 }
