@@ -75,10 +75,10 @@ void operand::dump(std::ostream &os) const {
     case operand_type::shift:
         if (!shift().modifier().empty())
             os << shift().modifier() << ' ';
-        os << "#0x" << std::hex << shift().u64();
+        os << "#0x" << std::hex << shift().value();
         break;
 	case operand_type::imm:
-		os << "#0x" << std::hex << immediate().u64();
+		os << "#0x" << std::hex << immediate().value();
 		break;
 
 	case operand_type::mem:
