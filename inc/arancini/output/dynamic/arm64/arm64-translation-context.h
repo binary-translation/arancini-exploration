@@ -46,7 +46,7 @@ private:
 	vreg_operand vreg_operand_for_port(ir::port &p, bool constant_fold = false);
 	int vreg_for_port(ir::port &p) const { return port_to_vreg_.at(&p); }
 
-    memory_operand guestreg_memory_operand(int width, int regoff,
+    memory_operand guestreg_memory_operand(int regoff,
                                            bool pre = false,
                                            bool post = false);
 
@@ -71,7 +71,7 @@ private:
     void materialise_internal_call(const ir::internal_call_node &n);
 
     vreg_operand add_membase(const vreg_operand &addr);
-    vreg_operand mov_immediate(uint64_t imm, size_t size);
+    vreg_operand mov_immediate(uint64_t imm, arancini::ir::value_type type);
 };
 } // namespace arancini::output::dynamic::arm64
 
