@@ -33,7 +33,9 @@ void instruction_builder::emit(machine_code_writer &writer) {
             if (op.type() == operand_type::invalid ||
                 op.type() == operand_type::vreg ||
                 (op.type() == operand_type::mem && op.memory().is_virtual())) {
-                throw std::runtime_error("Virtual register after register allocation"
+                dump(assembly);
+                std::cerr << assembly.str() << '\n';
+                throw std::runtime_error("Virtual register after register allocation: "
                                          + insn.dump());
             }
         }
