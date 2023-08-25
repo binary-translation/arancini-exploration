@@ -1,10 +1,13 @@
 #pragma once
 
+#include <cstdint>
 #include <initializer_list>
 #include <keystone/keystone.h>
 
+#include <arancini/ir/value-type.h>
 #include <arancini/output/dynamic/machine-code-writer.h>
 
+#include <array>
 #include <type_traits>
 #include <vector>
 #include <variant>
@@ -42,31 +45,35 @@ class vreg_operand {
 public:
     vreg_operand() = default;
 
-	vreg_operand(unsigned int i, size_t width)
-		: width_(width)
-        , index_(i)
+    using value_type = arancini::ir::value_type;
+
+	vreg_operand(unsigned int i, arancini::ir::value_type type)
+		: index_(i)
+        , type_(type)
 	{
 	}
 
     vreg_operand(const vreg_operand &o)
-        : width_(o.width_)
-        , index_(o.index_)
+        : index_(o.index_)
+        , type_(o.type_)
     {
     }
 
     vreg_operand &operator=(const vreg_operand &o) {
-        width_ = o.width_;
+        type_ = o.type_;
         index_ = o.index_;
 
         return *this;
     }
 
-    size_t width() const { return width_; }
+    value_type type() const { return type_; }
+
+    size_t width() const { return type_.element_width(); }
 
     unsigned int index() const { return index_; }
 private:
-    size_t width_;
 	unsigned int index_;
+    value_type type_;
 };
 
 class preg_operand {
@@ -200,44 +207,27 @@ class immediate_operand {
 public:
     immediate_operand() = default;
 
-    template <typename T, typename std::enable_if<std::is_unsigned_v<T>>::type* = nullptr>
-	immediate_operand(T v, uint8_t width)
-		: u64_(v)
-        , sign_(false)
-        , width_(width)
+    using value_type = arancini::ir::value_type;
+
+    template <typename T, typename std::enable_if<std::is_arithmetic_v<T>, int>::type = 0>
+	immediate_operand(T v, value_type type)
+		: value_(v)
+        , type_(type)
 	{
-        if (width_ && !fits(v, width_))
+        if (!fits(v, type))
             throw std::runtime_error("Specified immediate does not fit in width: " +
-                                     std::to_string(width_) + " " + std::to_string(v));
+                                     std::to_string(width()) + " " + std::to_string(v));
 	}
 
-    template <typename T, typename std::enable_if<std::is_signed_v<T>>::type* = nullptr>
-	immediate_operand(T v, uint8_t width)
-		: s64_(v)
-        , sign_(true)
-        , width_(width)
-	{
-        if (width_ && !fits(v, width_))
-            throw std::runtime_error("Specified immediate does not fit in width: " +
-                                     std::to_string(width_) + " " + std::to_string(v));
-	}
-
-    static bool fits(uint64_t v, uint8_t width) {
-        return width == 64 || (v & ((1llu << width) - 1)) == v;
+    static bool fits(uintmax_t v, value_type type) {
+        return type.element_width() >= 64 || (v & ((1llu << type.element_width()) - 1)) == v;
     }
 
-    size_t width() const { return width_; }
-
-    size_t u64() const { return u64_; }
-    size_t s64() const { return s64_; }
+    size_t width() const { return type_.element_width(); }
+    uintmax_t value() const { return value_; }
 private:
-	union {
-		unsigned long int u64_;
-		signed long int s64_;
-	};
-
-    bool sign_ = 0;
-    size_t width_;
+    uintmax_t value_;
+    value_type type_;
 
 };
 
@@ -246,9 +236,8 @@ public:
     // TODO: check fit in 48-bit shift specifier
     shift_operand() = default;
 
-    shift_operand(const std::string &modifier,
-                        size_t amount = 0, size_t width = 64)
-        : immediate_operand(amount, width)
+    shift_operand(const std::string &modifier, size_t amount = 0, value_type type = value_type::u8())
+        : immediate_operand(amount, type)
     {
         modifier_ = modifier;
     }
