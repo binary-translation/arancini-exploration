@@ -300,10 +300,11 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
     // 2. type < 64-bit => mask out upper bits
 
     // Handle case 2
+    // TODO: Not sure if necessary (upper bits likely won't be used)
     if (type.element_width() < base_type().element_width()) {
         // TODO: change immediate_operand to strong typing
         // FIXME: and has a funny way of encoding its immediate
-        auto mask = immediate_operand((1lu << type.element_width())-1, type);
+        auto mask = immediate_operand((1llu << type.element_width())-1, type);
         builder_.and_(dst_vreg, dst_vreg, mask);
     }
 }
@@ -311,6 +312,7 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
 void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
 	int w = n.value().type().element_width();
 
+    // TODO: need to implement vector writes
     if (!is_gpr(n.value()) && !is_flag(n.value()))
         throw std::runtime_error("Invalid destination width on register write: "
                                  + std::to_string(w));
@@ -499,33 +501,146 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 	auto dst_vreg = vreg_operand(alloc_vreg_for_port(n.val()), n.val().type());
     auto src_vreg = vreg_operand_for_port(n.source_value());
 
+    // The implementations of all cast operations depend on 2 things:
+    // 1. The width of destination registers (<= 64-bit: the base-width or larger)
+    // 2. The width of source registes (<= 64-bit: the base width or larger)
+    //
+    // However, for extension operations 1 => 2
 	switch (n.op()) {
 	case cast_op::sx:
+        if (dst_vreg.type().element_width() <= src_vreg.type().element_width())
+            throw std::runtime_error("ARM64-DBT cannot sign-extend " +
+                    std::to_string(dst_vreg.width()) + " to smaller size " +
+                    std::to_string(src_vreg.width()));
+
+        if (dst_vreg.type().element_width() <= base_type().element_width()) {
+            // copy + extend
+            switch (src_vreg.type().element_width()) {
+                case 8:
+                    builder_.sxtb(dst_vreg, src_vreg);
+                    break;
+                case 16:
+                    builder_.sxth(dst_vreg, src_vreg);
+                    break;
+                case 32:
+                    builder_.sxtw(dst_vreg, src_vreg);
+                    break;
+                case 64:
+                    builder_.mov(dst_vreg, src_vreg);
+                    break;
+                default:
+                    throw std::runtime_error("ARM64-DBT cannot sign-extend from size " +
+                            std::to_string(src_vreg.width()) + " to size " +
+                            std::to_string(dst_vreg.width()));
+            }
+
+            // TODO: mask out upper bits (if needed)
+            // TODO: maybe not necessary; later operations will anyway operate on
+            // the actually valid bits
+            if (dst_vreg.type().element_width() < base_type().element_width()) {
+                builder_.lsl(dst_vreg, src_vreg, immediate_operand(64 - width, value_type::u64()));
+                builder_.lsr(dst_vreg, dst_vreg, immediate_operand(64 - width, value_type::u64()));
+            }
+        } else {
+            switch (src_vreg.type().element_width()) {
+                case 128:
+                    // Must cast to type larger than base type
+                    throw std::runtime_error("ARM64-DBT does not support casting to values larger than 128-bits");
+                case 256:
+                    // Must cast to type larger than base type
+                    throw std::runtime_error("ARM64-DBT does not support casting to values larger than 128-bits");
+                case 512:
+                    // Must cast to type larger than base type
+                    throw std::runtime_error("ARM64-DBT does not support casting to values larger than 128-bits");
+            }
+        }
+        break;
 	case cast_op::bitcast:
-        // TODO: incorrect
-		builder_.mov(dst_vreg, src_vreg);
+        // Simply change the meaning of the bit pattern
+        // dst_vreg is set to the desired type already, but it must have the
+        // value of src_vreg
+        // A simple mov is sufficient (eliminated anyway by the register
+        // allocator)
+        //
+        // NOTE: widths guaranteed to be equal by frontend
+
+        // TODO: add sanity checks
+        if (dst_vreg.type().element_width() != src_vreg.type().element_width())
+            throw std::runtime_error("ARM64-DBT cannot bitcast " +
+                    std::to_string(dst_vreg.width()) + " different size " +
+                    std::to_string(src_vreg.width()));
+
+        if (dst_vreg.type().element_width() <= base_type().element_width())
+            builder_.mov(dst_vreg, src_vreg);
+        else
+            throw std::runtime_error("ARM64-DBT does not support bitcasting among values larger than 64-bits");
 		break;
 	case cast_op::zx:
-        if (width == 8) {
-            // TODO: this complete wrong because the immediate is encoded in a
-            // weird way
-            // FIXME
-            builder_.and_(dst_vreg, src_vreg, immediate_operand(64 - width, value_type::u64()));
+        // TODO: merge this into sign extension
+        // TODO: implement vector support
+        if (dst_vreg.type().element_width() <= src_vreg.type().element_width())
+            throw std::runtime_error("ARM64-DBT cannot zero-extend " +
+                    std::to_string(dst_vreg.width()) + " to smaller size " +
+                    std::to_string(src_vreg.width()));
+
+        if (dst_vreg.type().element_width() <= base_type().element_width()) {
+            // copy + extend
+            switch (src_vreg.type().element_width()) {
+                case 8:
+                    builder_.uxtb(dst_vreg, src_vreg);
+                    break;
+                case 16:
+                    builder_.uxth(dst_vreg, src_vreg);
+                    break;
+                case 32:
+                    builder_.uxtw(dst_vreg, src_vreg);
+                    break;
+                case 64:
+                    builder_.mov(dst_vreg, src_vreg);
+                    break;
+                default:
+                    throw std::runtime_error("ARM64-DBT cannot sign-extend from size " +
+                            std::to_string(src_vreg.width()) + " to size " +
+                            std::to_string(dst_vreg.width()));
+            }
+
+            // TODO: mask out upper bits (if needed)
+            // TODO: maybe not necessary; later operations will anyway operate on
+            // the actually valid bits
+            if (dst_vreg.type().element_width() < base_type().element_width()) {
+                builder_.lsl(dst_vreg, src_vreg, immediate_operand(64 - width, value_type::u64()));
+                builder_.lsr(dst_vreg, dst_vreg, immediate_operand(64 - width, value_type::u64()));
+            }
         } else {
-            builder_.lsl(dst_vreg, src_vreg, immediate_operand(64 - width, value_type::u64()));
-            builder_.lsr(dst_vreg, dst_vreg, immediate_operand(64 - width, value_type::u64()));
+            switch (src_vreg.type().element_width()) {
+                case 128:
+                    // Must cast to type larger than base type
+                    throw std::runtime_error("ARM64-DBT does not support casting to values larger than 128-bits");
+                case 256:
+                    // Must cast to type larger than base type
+                    throw std::runtime_error("ARM64-DBT does not support casting to values larger than 128-bits");
+                case 512:
+                    // Must cast to type larger than base type
+                    throw std::runtime_error("ARM64-DBT does not support casting to values larger than 128-bits");
+            }
         }
+
 		break;
     case cast_op::trunc:
-        if (width == 64) return;
+        if (dst_vreg.type().element_width() >= src_vreg.type().element_width())
+            throw std::runtime_error("ARM64-DBT cannot truncate from " +
+                    std::to_string(dst_vreg.width()) + " to larger size " +
+                    std::to_string(src_vreg.width()));
 
-        if (is_flag(n.val())) {
-            builder_.and_(dst_vreg, src_vreg, immediate_operand(1, value_type::u1()));
-        } else if (width == 32) {
-            builder_.sxtw(dst_vreg, src_vreg);
+        if (src_vreg.type().element_width() <= base_type().element_width()) {
+            if (is_flag(n.val())) {
+                builder_.and_(dst_vreg, src_vreg, immediate_operand(1, value_type::u1()));
+            } else {
+                builder_.lsl(dst_vreg, src_vreg, immediate_operand(64 - width, value_type::u64()));
+                builder_.asr(dst_vreg, dst_vreg, immediate_operand(64 - width, value_type::u64()));
+            }
         } else {
-            builder_.lsl(dst_vreg, src_vreg, immediate_operand(64 - width, value_type::u64()));
-            builder_.asr(dst_vreg, dst_vreg, immediate_operand(64 - width, value_type::u64()));
+            throw std::runtime_error("ARM64-DBT cannot truncate from size larger than 64-bits");
         }
         break;
 	default:
