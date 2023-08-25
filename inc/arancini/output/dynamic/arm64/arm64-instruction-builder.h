@@ -16,6 +16,9 @@ template <typename T>
 using is_reg = std::enable_if_t<is_one_of<T, preg_operand, vreg_operand>::value, int>;
 
 template <typename T>
+using is_imm = std::enable_if_t<std::is_same<T, immediate_operand>::value, int>;
+
+template <typename T>
 using is_reg_or_immediate = std::enable_if_t<std::disjunction<is_one_of<T, preg_operand, vreg_operand>,
                                                               std::is_same<T, immediate_operand>>::value,
                                                               int>;
@@ -278,6 +281,23 @@ public:
         append(instruction("sdiv", def(dest), use(src1), use(src2)));
     }
 
+
+    template <typename T1, typename T2, typename T3,
+              is_reg<T1> = 0, is_reg<T2> = 0, is_imm<T3> = 0>
+    void scvtf(const T1 &dest,
+              const T2 &src1,
+              const T3 &src2) {
+        append(instruction("scvtf", def(dest), use(src1), use(src2)));
+    }
+
+    template <typename T1, typename T2, typename T3,
+              is_reg<T1> = 0, is_reg<T2> = 0, is_imm<T3> = 0>
+    void ucvtf(const T1 &dest,
+              const T2 &src1,
+              const T3 &src2) {
+        append(instruction("ucvtf", def(dest), use(src1), use(src2)));
+    }
+
     void ret() {
         append(instruction("ret"));
     }
@@ -322,8 +342,38 @@ public:
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg<T2> = 0>
+    void sxtb(const T1 &dst, const T2 &src) {
+        append(instruction("sxtb", def(dst), use(src)));
+    }
+
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
+    void sxth(const T1 &dst, const T2 &src) {
+        append(instruction("sxth", def(dst), use(src)));
+    }
+
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
     void sxtw(const T1 &dst, const T2 &src) {
         append(instruction("sxtw", def(dst), use(src)));
+    }
+
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
+    void uxtb(const T1 &dst, const T2 &src) {
+        append(instruction("uxtb", def(dst), use(src)));
+    }
+
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
+    void uxth(const T1 &dst, const T2 &src) {
+        append(instruction("uxth", def(dst), use(src)));
+    }
+
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
+    void uxtw(const T1 &dst, const T2 &src) {
+        append(instruction("uxtw", def(dst), use(src)));
     }
 
     void insert_sep(const std::string &sep) { label(sep); }
