@@ -1,8 +1,9 @@
 #pragma once
 
-#include <iomanip>
-#include <sstream>
 #include <string>
+#include <vector>
+#include <sstream>
+#include <iomanip>
 
 namespace arancini::ir {
 enum class value_type_class { none, signed_integer, unsigned_integer, floating_point };
@@ -31,6 +32,8 @@ public:
 	{
 		return value_type(underlying_type.tc_, underlying_type.element_width_, nr_elements);
 	}
+
+    value_type() = default;
 
 	value_type(value_type_class tc, int element_width, int nr_elements = 1)
 		: tc_(tc)
