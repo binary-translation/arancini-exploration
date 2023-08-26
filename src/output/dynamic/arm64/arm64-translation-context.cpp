@@ -549,6 +549,22 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         default:
             throw std::runtime_error("ARM64-DBT does not support subtraction with sizes larger than 128-bits");
         }
+
+        // *MUL* do not set flags, they must be set here manually
+        //
+        // FIXME: check correctness for up to 64-bit results
+        // FIXME: this is not fully correct for > 64-bit:
+        //
+        // 1. zero flag must be logically AND-ed between all result registers
+        // 2. negative flag must only be considered for the most significant
+        // register
+        // 3. overflow flag - do we even care?
+        // 4. carry flag - how to even determine that for > 64-bit (probably
+        // by looking at sources, does x86 even care about it then?)
+        //
+        // FIXME: this applies to others too
+		builder_.cmp(dest_vreg,
+                     immediate_operand(0, value_type::u8()));
         break;
 	case binary_arith_op::div:
         //FIXME: implement
@@ -729,7 +745,12 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             break;
         case 128:
         case 256:
-            // Handle separately
+            // Move existing values into destination register
+            // Sign extension for remaining registers handled outside of the
+            // switch
+            for (size_t i = 0; i < src_reg_count; ++i) {
+                builder_.mov(dst_vregs[i], src_vregs[i]);
+            }
             break;
         default:
             throw std::runtime_error("ARM64-DBT cannot sign-extend from size " +
@@ -738,10 +759,8 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         }
 
         // Determine sign and write to upper registers
+        // This really only happens when dest_reg_count > src_reg_count > 1
         if (dest_reg_count > 1) {
-            for (size_t i = 0; i < src_reg_count; ++i) {
-                builder_.mov(dst_vregs[i], src_vregs[i]);
-            }
             for (size_t i = src_reg_count; i < dest_reg_count; ++i) {
                 builder_.mov(dst_vregs[i], src_vregs[src_reg_count-1]);
                 builder_.asr(dst_vregs[i], dst_vregs[i], immediate_operand(64, value_type::u8()));
@@ -801,6 +820,9 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         case 128:
         case 256:
             // Handle separately
+            for (size_t i = 0; i < src_reg_count; ++i) {
+                builder_.mov(dst_vregs[i], src_vregs[i]);
+            }
             break;
         default:
             throw std::runtime_error("ARM64-DBT cannot sign-extend from size " +
@@ -810,9 +832,6 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 
         // Determine sign and write to upper registers
         if (dest_reg_count > 1) {
-            for (size_t i = 0; i < src_reg_count; ++i) {
-                builder_.mov(dst_vregs[i], src_vregs[i]);
-            }
             for (size_t i = src_reg_count; i < dest_reg_count; ++i) {
                 builder_.mov(dst_vregs[i], src_vregs[src_reg_count-1]);
                 builder_.lsr(dst_vregs[i], dst_vregs[i], immediate_operand(64, value_type::u8()));
