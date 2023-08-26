@@ -70,6 +70,7 @@ void instruction_builder::allocate() {
     // Return to trampoline (x30)
     // Memory base (x18)
 	std::bitset<32> avail_physregs = 0x1FFBFFFFF;
+	std::bitset<32> avail_float_physregs = 0xFFFFFFFFF;
 
 	for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
 		auto &insn = *RI;
@@ -83,30 +84,39 @@ void instruction_builder::allocate() {
         std::array<std::pair<size_t, size_t>, 5> allocs;
         bool has_unused_keep = false;
 
-        auto allocate = [&allocs, &avail_physregs, &vreg_to_preg]
+        auto allocate = [&allocs, &avail_physregs,
+                         &avail_float_physregs, &vreg_to_preg]
                                   (operand &o, size_t idx) -> void
         {
                 unsigned int vri;
-
-                if (o.is_vreg())
+                ir::value_type type;
+                if (o.is_vreg()) {
                     vri = o.vreg().index();
-                else if (o.is_mem())
-                    vri = o.memory().vreg_base().index();
-                else
+                    type = o.vreg().type();
+                } else if (o.is_mem()) {
+                    auto vreg = o.memory().vreg_base();
+                    vri = vreg.index();
+                    type = vreg.type();
+                } else {
                     throw std::runtime_error("Trying to allocate non-virtual register operand");
+                }
 
-                auto allocation = avail_physregs._Find_first();
+                size_t allocation = 0;
+                if (type.is_floating_point()) {
+                    allocation = avail_float_physregs._Find_first();
+                    avail_float_physregs.flip(allocation);
+                } else {
+                    allocation = avail_physregs._Find_first();
+                    avail_physregs.flip(allocation);
+                }
 
                 // TODO: register spilling
-
-                avail_physregs.flip(allocation);
-
                 vreg_to_preg[vri] = allocation;
 
                 if (o.is_mem())
-                    o.allocate_base(allocation, 64);
+                    o.allocate_base(allocation, type);
                 else
-                    o.allocate(allocation, 64);
+                    o.allocate(allocation, type);
 
                 allocs[idx] = std::make_pair(vri, allocation);
         };
@@ -122,6 +132,7 @@ void instruction_builder::allocate() {
 				o.dump(DEBUG_STREAM);
 #endif
 
+                auto type = o.vreg().type();
 				unsigned int vri = o.vreg().index();
 
 				auto alloc = vreg_to_preg.find(vri);
@@ -129,9 +140,13 @@ void instruction_builder::allocate() {
 				if (alloc != vreg_to_preg.end()) {
 					int pri = alloc->second;
 
-					avail_physregs.set(pri);
+                    if (type.is_floating_point()) {
+                        avail_float_physregs.set(pri);
+                    } else {
+                        avail_physregs.set(pri);
+                    }
 
-					o.allocate(pri, 64);
+					o.allocate(pri, type);
 #ifdef DEBUG_REGALLOC
 					DEBUG_STREAM << " allocated to ";
 					o.dump(DEBUG_STREAM);
@@ -171,6 +186,7 @@ void instruction_builder::allocate() {
                 DEBUG_STREAM << '\n';
 #endif
 
+                auto type = o.vreg().type();
                 unsigned int vri = o.vreg().index();
 				if (!vreg_to_preg.count(vri)) {
                     allocate(o, i);
@@ -180,7 +196,7 @@ void instruction_builder::allocate() {
                     DEBUG_STREAM << '\n';
 #endif
 				} else {
-					o.allocate(vreg_to_preg.at(vri), 64);
+					o.allocate(vreg_to_preg.at(vri), type);
 				}
 
 #ifdef DEBUG_REGALLOC
@@ -204,7 +220,8 @@ void instruction_builder::allocate() {
                         DEBUG_STREAM << '\n';
 #endif
 					} else {
-						o.allocate_base(vreg_to_preg.at(vri), 64);
+                        auto type = o.memory().preg_base().type();
+						o.allocate_base(vreg_to_preg.at(vri), type);
 					}
 				}
 			}
@@ -236,7 +253,7 @@ void instruction_builder::allocate() {
                 preg_operand reg1 = get_preg(op1);
                 preg_operand reg2 = get_preg(op2);
 
-                if (reg1.get() == reg2.get()) {
+                if (reg1.register_index() == reg2.register_index()) {
                     insn.kill();
                 }
             }
