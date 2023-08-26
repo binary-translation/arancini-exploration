@@ -61,6 +61,14 @@ public:
 
     template <typename T1, typename T2, typename T3,
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
+    void adcs(const T1 &dst,
+              const T2 &src1,
+              const T3 &src2) {
+        append(instruction("adcs", def(keep(dst)), use(src1), use(src2)));
+    }
+
+    template <typename T1, typename T2, typename T3,
+              is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
     void sub(const T1 &dst,
              const T2 &src1,
              const T3 &src2) {
@@ -91,6 +99,14 @@ public:
               const T3 &src2,
               const shift_operand &shift) {
         append(instruction("subs", def(keep(dst)), use(src1), use(src2), use(shift)));
+    }
+
+    template <typename T1, typename T2, typename T3,
+              is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
+    void sbcs(const T1 &dst,
+              const T2 &src1,
+              const T3 &src2) {
+        append(instruction("sbcs", def(keep(dst)), use(src1), use(src2)));
     }
 
     template <typename T1, typename T2, typename T3,
@@ -265,6 +281,20 @@ public:
         append(instruction("str", use(src), def(base)));
     }
 
+    template <typename T1,
+              is_reg<T1> = 0>
+    void strb(const T1 &src,
+             const memory_operand &base) {
+        append(instruction("strb", use(src), def(base)));
+    }
+
+    template <typename T1,
+              is_reg<T1> = 0>
+    void strh(const T1 &src,
+             const memory_operand &base) {
+        append(instruction("strh", use(src), def(base)));
+    }
+
     template <typename T1, typename T2, typename T3,
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg<T3> = 0>
     void mul(const T1 &dest,
@@ -275,27 +305,99 @@ public:
 
     template <typename T1, typename T2, typename T3,
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg<T3> = 0>
+    void smulh(const T1 &dest,
+             const T2 &src1,
+             const T3 &src2) {
+        append(instruction("smulh", def(dest), use(src1), use(src2)));
+    }
+
+    template <typename T1, typename T2, typename T3,
+              is_reg<T1> = 0, is_reg<T2> = 0, is_reg<T3> = 0>
+    void smull(const T1 &dest,
+             const T2 &src1,
+             const T3 &src2) {
+        append(instruction("smull", def(dest), use(src1), use(src2)));
+    }
+
+    template <typename T1, typename T2, typename T3,
+              is_reg<T1> = 0, is_reg<T2> = 0, is_reg<T3> = 0>
+    void umulh(const T1 &dest,
+             const T2 &src1,
+             const T3 &src2) {
+        append(instruction("umulh", def(dest), use(src1), use(src2)));
+    }
+
+    template <typename T1, typename T2, typename T3,
+              is_reg<T1> = 0, is_reg<T2> = 0, is_reg<T3> = 0>
+    void umull(const T1 &dest,
+             const T2 &src1,
+             const T3 &src2) {
+        append(instruction("umull", def(dest), use(src1), use(src2)));
+    }
+
+    template <typename T1, typename T2, typename T3,
+              is_reg<T1> = 0, is_reg<T2> = 0, is_reg<T3> = 0>
+    void fmul(const T1 &dest,
+             const T2 &src1,
+             const T3 &src2) {
+        append(instruction("fmul", def(dest), use(src1), use(src2)));
+    }
+
+    template <typename T1, typename T2, typename T3,
+              is_reg<T1> = 0, is_reg<T2> = 0, is_reg<T3> = 0>
     void sdiv(const T1 &dest,
               const T2 &src1,
               const T3 &src2) {
         append(instruction("sdiv", def(dest), use(src1), use(src2)));
     }
 
-
-    template <typename T1, typename T2, typename T3,
-              is_reg<T1> = 0, is_reg<T2> = 0, is_imm<T3> = 0>
-    void scvtf(const T1 &dest,
-              const T2 &src1,
-              const T3 &src2) {
-        append(instruction("scvtf", def(dest), use(src1), use(src2)));
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
+    void fcvtzs(const T1 &dest,
+             const T2 &src) {
+        append(instruction("fcvtzs", def(dest), use(src)));
     }
 
-    template <typename T1, typename T2, typename T3,
-              is_reg<T1> = 0, is_reg<T2> = 0, is_imm<T3> = 0>
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
+    void fcvtzu(const T1 &dest,
+             const T2 &src) {
+        append(instruction("fcvtzu", def(dest), use(src)));
+    }
+
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
+    void fcvtas(const T1 &dest,
+             const T2 &src) {
+        append(instruction("fcvtas", def(dest), use(src)));
+    }
+
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
+    void fcvtau(const T1 &dest,
+             const T2 &src) {
+        append(instruction("fcvtau", def(dest), use(src)));
+    }
+
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
+    void scvtf(const T1 &dest,
+              const T2 &src) {
+        append(instruction("scvtf", def(dest), use(src)));
+    }
+
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
     void ucvtf(const T1 &dest,
-              const T2 &src1,
-              const T3 &src2) {
-        append(instruction("ucvtf", def(dest), use(src1), use(src2)));
+              const T2 &src) {
+        append(instruction("ucvtf", def(dest), use(src)));
+    }
+
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
+    void msr(const T1 &dest,
+             const T2 &src) {
+        append(instruction("msr", usedef(dest), usedef(src)));
     }
 
     void ret() {
