@@ -346,7 +346,12 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 	nr_chunk++;
 
 	size_t offset = 0;
+<<<<<<< HEAD
     std::string disasm;
+=======
+
+    std::string disasm = "";
+>>>>>>> 26071bc ([DEBUG] Print disassembly for backwards branches for debug infra)
 	while (offset < code_size) {
 		xed_decoded_inst_t xedd;
 		xed_decoded_inst_zero(&xedd);
@@ -379,8 +384,8 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 		}
 
 		offset += length;
-		base_address += length;
 	}
 
+    base_address += offset;
 	builder.end_chunk();
 }
