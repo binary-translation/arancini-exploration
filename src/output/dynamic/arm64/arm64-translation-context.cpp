@@ -286,12 +286,14 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
 
     // Sanity check; cannot by definition load a register larger than 64-bit
     // without it being a vector
-    if (type.element_width() > base_type().element_width())
+    if (type.element_width() > base_type().element_width()) {
         throw std::runtime_error("Larger than 64-bit integers not supported by backend");
+    }
 
     // TODO: implement vector support
-    if (type.is_vector())
+    if (type.is_vector()) {
         throw std::runtime_error("Vectors not supported in load routine");
+    }
 
 	auto dst_vreg = alloc_vreg_for_port(n.val(), n.val().type());
     builder_.ldr(dst_vreg, guestreg_memory_operand(n.regoff()));
@@ -315,6 +317,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
 
     switch (n.value().type().element_width()) {
         case 1:
+            builder_.str(reg, guestreg_memory_operand(n.regoff()));
             break;
         case 8:
             builder_.strb(reg, guestreg_memory_operand(n.regoff()));
@@ -383,8 +386,12 @@ void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
 }
 
 void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
-    auto value_vreg = vreg_operand_for_port(n.value());
-    builder_.str(value_vreg[0],
+    auto new_pc_vregs = vreg_operand_for_port(n.value());
+    if (new_pc_vregs.size() != 1) {
+        throw std::runtime_error("ARM64-DBT does not support PC vregs > 64-bits");
+    }
+
+    builder_.str(new_pc_vregs[0],
                  guestreg_memory_operand(static_cast<int>(reg_offsets::PC)));
 }
 
@@ -398,8 +405,13 @@ void arm64_translation_context::materialise_br(const br_node &n) {
 }
 
 void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
-    builder_.cmp(vreg_operand_for_port(n.cond())[0],
-                 immediate_operand(0, value_type::u8()));
+    auto cond_vregs = vreg_operand_for_port(n.cond());
+    if (cond_vregs.size() != 1) {
+        throw std::runtime_error("ARM64-DBT does not support condition vregs > 64-bits");
+    }
+
+    auto cond_vreg = cond_vregs[0];
+    builder_.cmp(cond_vreg, immediate_operand(0, value_type::u8()));
     builder_.beq(n.target()->name());
 }
 
@@ -819,10 +831,17 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         }
 
         if (is_flag(n.val())) {
-                builder_.and_(dst_vreg, src_vreg, immediate_operand(1, value_type::u1()));
+            // FIXME: necessary to implement a mov here due to mismatches
+            // between types
+            //
+            // We can end up with a 64-bit dst_vreg and a 32-bit src_vreg
+            //
+            // Does this even need a fix?
+            builder_.and_(src_vreg, src_vreg, immediate_operand(1, value_type::u1()));
+            builder_.mov(dst_vreg, src_vreg);
         } else if (src_reg_count == 1) {
-                builder_.lsl(dst_vreg, src_vreg, immediate_operand(64 - dest_width, value_type::u64()));
-                builder_.asr(dst_vreg, dst_vreg, immediate_operand(64 - dest_width, value_type::u64()));
+            builder_.lsl(dst_vreg, src_vreg, immediate_operand(64 - dest_width, value_type::u64()));
+            builder_.asr(dst_vreg, dst_vreg, immediate_operand(64 - dest_width, value_type::u64()));
         }
         break;
     case cast_op::convert:
@@ -953,8 +972,15 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
 
     auto dst_vreg = alloc_vreg_for_port(n.val(), n.val().type());
 
-    auto bits_vreg = vreg_operand_for_port(n.bits(), false)[0];
-    builder_.bfi(dst_vreg, bits_vreg,
+    auto bits_vreg = vreg_operand_for_port(n.bits())[0];
+
+    // FIXME: we end up in a situation that both 64-bit and 32-bit registers are
+    // used in the same BFI instruction.
+    //
+    // We need the equivalent of type promotion.
+    auto bits_reg = vreg_operand(alloc_vreg(), dst_vreg.type());
+    builder_.mov(bits_reg, bits_vreg);
+    builder_.bfi(dst_vreg, bits_reg,
                  immediate_operand(n.to(), value_type::u8()),
                  immediate_operand(n.length(), value_type::u8()));
 }
