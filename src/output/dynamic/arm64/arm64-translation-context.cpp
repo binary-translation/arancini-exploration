@@ -1,4 +1,6 @@
 #include "arancini/ir/node.h"
+#include "arancini/ir/port.h"
+#include "arancini/ir/value-type.h"
 #include "arancini/output/dynamic/arm64/arm64-instruction.h"
 #include <arancini/output/dynamic/arm64/arm64-translation-context.h>
 
@@ -6,6 +8,7 @@
 
 #include <cmath>
 #include <cctype>
+#include <cstddef>
 #include <string>
 #include <stdexcept>
 #include <unordered_map>

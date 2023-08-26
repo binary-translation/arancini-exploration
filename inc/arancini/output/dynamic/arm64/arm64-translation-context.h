@@ -1,5 +1,6 @@
 #pragma once
 
+#include "arancini/output/dynamic/arm64/arm64-instruction.h"
 #include "arm64-instruction-builder.h"
 
 #include <arancini/ir/node.h>
