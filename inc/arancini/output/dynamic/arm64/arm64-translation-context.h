@@ -1,5 +1,6 @@
 #pragma once
 
+#include "arancini/output/dynamic/arm64/arm64-instruction.h"
 #include "arm64-instruction-builder.h"
 
 #include <arancini/ir/node.h>
@@ -25,7 +26,7 @@ private:
     std::vector<std::shared_ptr<ir::action_node>> nodes_;
 	instruction_builder builder_;
 	std::set<const ir::node *> materialised_nodes_;
-	std::map<const ir::port *, int> port_to_vreg_;
+	std::map<const ir::port *, std::vector<vreg_operand>> port_to_vreg_;
 	std::map<unsigned long, off_t> instruction_index_to_guest_;
     int ret_;
 	int next_vreg_;
@@ -36,15 +37,26 @@ private:
 
 	int alloc_vreg() { return next_vreg_++; }
 
-	int alloc_vreg_for_port(const ir::port &p)
+	vreg_operand alloc_vreg_for_port(const ir::port &p, ir::value_type type)
 	{
-		int v = alloc_vreg();
-		port_to_vreg_[&p] = v;
+		auto v = vreg_operand(alloc_vreg(), type);
+
+        if (port_to_vreg_.find(&p) == port_to_vreg_.end())
+            port_to_vreg_[&p] = {v};
+        else
+            port_to_vreg_[&p].push_back(v);
 		return v;
 	}
 
-	vreg_operand vreg_operand_for_port(ir::port &p, bool constant_fold = false);
-	int vreg_for_port(ir::port &p) const { return port_to_vreg_.at(&p); }
+    std::vector<vreg_operand> vreg_operand_for_port(ir::port &p, bool constant_fold = false);
+
+	vreg_operand vreg_for_port(const ir::port &p, size_t index = 0) const {
+        return port_to_vreg_.at(&p)[index];
+    }
+
+    std::vector<vreg_operand> vregs_for_port(const ir::port &p) const {
+        return port_to_vreg_.at(&p);
+    }
 
     memory_operand guestreg_memory_operand(int regoff,
                                            bool pre = false,
