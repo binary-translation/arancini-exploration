@@ -1,4 +1,6 @@
 #include "arancini/ir/node.h"
+#include "arancini/ir/port.h"
+#include "arancini/ir/value-type.h"
 #include "arancini/output/dynamic/arm64/arm64-instruction.h"
 #include <arancini/output/dynamic/arm64/arm64-translation-context.h>
 
@@ -6,6 +8,7 @@
 
 #include <cmath>
 #include <cctype>
+#include <cstddef>
 #include <string>
 #include <stdexcept>
 #include <unordered_map>
@@ -28,7 +31,7 @@ const preg_operand CF(preg_operand::x11);
 const preg_operand OF(preg_operand::x12);
 const preg_operand SF(preg_operand::x13);
 
-static std::unordered_map<unsigned long, int> flag_map {
+static std::unordered_map<unsigned long, vreg_operand> flag_map {
 	{ (unsigned long)reg_offsets::ZF, {} },
 	{ (unsigned long)reg_offsets::CF, {} },
 	{ (unsigned long)reg_offsets::OF, {} },
@@ -42,7 +45,6 @@ value_type addr_type() {
 value_type base_type() {
     return value_type::u64();
 }
-
 
 memory_operand
 arm64_translation_context::guestreg_memory_operand(int regoff, bool pre, bool post)
@@ -62,19 +64,19 @@ arm64_translation_context::guestreg_memory_operand(int regoff, bool pre, bool po
 	return mem;
 }
 
-vreg_operand arm64_translation_context::vreg_operand_for_port(port &p, bool constant_fold) {
+std::vector<vreg_operand> arm64_translation_context::vreg_operand_for_port(port &p, bool constant_fold) {
     // TODO
 	if (constant_fold) {
 		if (p.owner()->kind() == node_kinds::read_pc) {
             // PC always represented by 64-bit value
-			return mov_immediate(this_pc_, value_type::u64());
+			return {mov_immediate(this_pc_, value_type::u64())};
 		} else if (p.owner()->kind() == node_kinds::constant) {
-			return mov_immediate(((constant_node *)p.owner())->const_val_i(), p.type());
+			return {mov_immediate(((constant_node *)p.owner())->const_val_i(), p.type())};
 		}
 	}
 
 	materialise(p.owner());
-	return vreg_operand(vreg_for_port(p), p.type());
+	return vregs_for_port(p);
 }
 
 vreg_operand arm64_translation_context::add_membase(const vreg_operand &addr) {
@@ -88,12 +90,16 @@ vreg_operand arm64_translation_context::mov_immediate(uint64_t imm, value_type t
     size_t actual_size = static_cast<size_t>(std::ceil(std::log2(imm)));
     size_t move_count = static_cast<size_t>(std::ceil(actual_size / 16.0));
 
-    auto reg = vreg_operand(alloc_vreg(), type);
+    // TODO: it seems like the frontend generates very large constants
+    // represented as s32(). This fails here, since the resultiing value does not
+    // fit
     if (actual_size <= 16) {
+        auto reg = vreg_operand(alloc_vreg(), type);
         builder_.mov(reg, immediate_operand(imm, value_type::u16()));
         return reg;
     }
 
+    auto reg = vreg_operand(alloc_vreg(), value_type::u64());
     if (actual_size <= 64) {
         builder_.movz(reg,
                       immediate_operand(imm & 0xFFFF, value_type::u16()),
@@ -156,20 +162,13 @@ void arm64_translation_context::end_instruction() {
 }
 
 void arm64_translation_context::end_block() {
+    // Return value in x0 = 0;
+	builder_.mov(preg_operand(preg_operand::x0),
+                 mov_immediate(ret_, value_type::u64()));
+
 	do_register_allocation();
 
-    // Return value in x0 = 0;
-
-    // TODO: fails register allocation, why?
-    // FIXME
-	/* builder_.mov(preg_operand(preg_operand::x0), */
-                 /* mov_immediate(ret_, value_type::u64())); */
-
-	builder_.mov(preg_operand(preg_operand::x0),
-                 immediate_operand(ret_, value_type::u64()));
 	builder_.ret();
-
-	// builder_.dump(std::cerr);
 
 	builder_.emit(writer());
 }
@@ -284,29 +283,18 @@ static inline bool is_gpr(const port &value)
 
 void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
     auto type = n.val().type();
-    if (type.element_width() > base_type().element_width() && !type.is_vector())
+
+    // Sanity check; cannot by definition load a register larger than 64-bit
+    // without it being a vector
+    if (type.element_width() > base_type().element_width())
         throw std::runtime_error("Larger than 64-bit integers not supported by backend");
+
+    // TODO: implement vector support
     if (type.is_vector())
         throw std::runtime_error("Vectors not supported in load routine");
 
-	auto dst_vreg = vreg_operand(alloc_vreg_for_port(n.val()), n.val().type());
+	auto dst_vreg = alloc_vreg_for_port(n.val(), n.val().type());
     builder_.ldr(dst_vreg, guestreg_memory_operand(n.regoff()));
-    // TODO: depending on the requested load type (in n.val().type()) different
-    // things are needed:
-    //
-    // 1. type > 64-bit => handle with vector load (check for valid n.regoff()
-    // range - can't load 128-bit or larger vectors from scalars)
-    //
-    // 2. type < 64-bit => mask out upper bits
-
-    // Handle case 2
-    // TODO: Not sure if necessary (upper bits likely won't be used)
-    if (type.element_width() < base_type().element_width()) {
-        // TODO: change immediate_operand to strong typing
-        // FIXME: and has a funny way of encoding its immediate
-        auto mask = immediate_operand((1llu << type.element_width())-1, type);
-        builder_.and_(dst_vreg, dst_vreg, mask);
-    }
 }
 
 void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
@@ -317,48 +305,86 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
         throw std::runtime_error("Invalid destination width on register write: "
                                  + std::to_string(w));
 
-    // TODO: deal with widths
     vreg_operand reg;
     if (is_flag(n.value()) && is_flag_port(n.value())) {
-        // TODO: register allocator cuts this
         materialise(reinterpret_cast<ir::node*>(n.value().owner()));
-        reg = vreg_operand(flag_map.at(n.regoff()), value_type::u64());
+        reg = flag_map.at(n.regoff());
     } else {
-        reg = vreg_operand_for_port(n.value());
+        reg = vreg_operand_for_port(n.value())[0];
     }
 
-    builder_.str(reg, guestreg_memory_operand(n.regoff()));
+    switch (n.value().type().element_width()) {
+        case 1:
+            break;
+        case 8:
+            builder_.strb(reg, guestreg_memory_operand(n.regoff()));
+            break;
+        case 16:
+            builder_.strh(reg, guestreg_memory_operand(n.regoff()));
+            break;
+        case 32:
+        case 64:
+            // Register set to either 64-bit or 32-bit, stored appropriately with
+            // STR
+            builder_.str(reg, guestreg_memory_operand(n.regoff()));
+            break;
+        default:
+            // This is by definition; registers >= 64-bits are always vector registers
+            throw std::runtime_error("ARM64-DBT cannot write values larger than 64-bits");
+    }
 }
 
 void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
-	auto dest_vreg = vreg_operand(alloc_vreg_for_port(n.val()), n.val().type());
+	auto dest_vreg = alloc_vreg_for_port(n.val(), n.val().type());
 
 	auto addr_vreg = vreg_operand_for_port(n.address());
-    addr_vreg = add_membase(addr_vreg);
+    addr_vreg[0] = add_membase(addr_vreg[0]);
 
     // TODO: widths
-    auto mem = memory_operand(addr_vreg);
+    auto mem = memory_operand(addr_vreg[0]);
 	builder_.ldr(dest_vreg, mem);
 }
 
 void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
-	auto addr_vreg = vreg_operand_for_port(n.address());
-    addr_vreg = add_membase(addr_vreg);
+    auto w = n.value().type().element_width();
+    if (!is_gpr(n.value()) && !is_flag(n.value())) {
+        throw std::runtime_error("Invalid destination width on register write: "
+                                 + std::to_string(w));
+    }
 
+	auto addr_vreg = add_membase(vreg_operand_for_port(n.address())[0]);
     auto mem = memory_operand(addr_vreg, 0, false, true);
-	builder_.str(vreg_operand_for_port(n.value()), mem);
+
+    switch (n.value().type().element_width()) {
+        case 1:
+            break;
+        case 8:
+            builder_.strb(vreg_operand_for_port(n.value())[0], mem);
+            break;
+        case 16:
+            builder_.strh(vreg_operand_for_port(n.value())[0], mem);
+            break;
+        case 32:
+        case 64:
+            // Register set to either 64-bit or 32-bit, stored appropriately with
+            // STR
+            builder_.str(vreg_operand_for_port(n.value())[0], mem);
+            break;
+        default:
+            throw std::runtime_error("ARM64-DBT cannot write to main memory values larger than 64-bits");
+    }
 }
 
 void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
-	auto dst_vreg = vreg_operand(alloc_vreg_for_port(n.val()), n.val().type());
+    // TODO: should this be type() or u64 by default?
+	auto dst_vreg = alloc_vreg_for_port(n.val(), n.val().type());
 
-    // TODO: check out immediate size
     builder_.mov(dst_vreg, mov_immediate(this_pc_, value_type::u64()));
 }
 
 void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
     auto value_vreg = vreg_operand_for_port(n.value());
-    builder_.str(value_vreg,
+    builder_.str(value_vreg[0],
                  guestreg_memory_operand(static_cast<int>(reg_offsets::PC)));
 }
 
@@ -372,123 +398,253 @@ void arm64_translation_context::materialise_br(const br_node &n) {
 }
 
 void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
-    // TODO: width
-    builder_.cmp(vreg_operand_for_port(n.cond()),
+    builder_.cmp(vreg_operand_for_port(n.cond())[0],
                  immediate_operand(0, value_type::u8()));
     builder_.beq(n.target()->name());
 }
 
 void arm64_translation_context::materialise_constant(const constant_node &n) {
-	int dst_vreg = alloc_vreg_for_port(n.val());
+	auto dst_vreg = alloc_vreg_for_port(n.val(), n.val().type());
 
-    auto value = n.const_val_i();
-
-    builder_.mov(vreg_operand(dst_vreg, n.val().type()), mov_immediate(value, n.val().type()));
+    if (n.val().type().is_floating_point()) {
+        auto value = n.const_val_f();
+        builder_.mov(dst_vreg, mov_immediate(value, n.val().type()));
+    } else {
+        auto value = n.const_val_i();
+        builder_.mov(dst_vreg, mov_immediate(value, n.val().type()));
+    }
 }
 
 void arm64_translation_context::materialise_binary_arith(const binary_arith_node &n) {
-	int w = n.val().type().element_width();
-	auto dest_vreg = vreg_operand(alloc_vreg_for_port(n.val()), n.val().type());
+    auto lhs_vregs = vreg_operand_for_port(n.lhs());
+    auto rhs_vregs = vreg_operand_for_port(n.rhs());
 
-    auto lhs = vreg_operand_for_port(n.lhs());
-    auto rhs = vreg_operand_for_port(n.rhs());
+    if (lhs_vregs.size() != rhs_vregs.size()) {
+        throw std::runtime_error("Binary operations not supported with different sized operands");
+    }
 
-    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg_for_port(n.zero());
-    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg_for_port(n.negative());
-    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg_for_port(n.overflow());
-    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg_for_port(n.carry());
+    for (int i = 0; i < n.val().type().nr_elements(); ++i) {
+        alloc_vreg_for_port(n.val(), n.val().type());
+    }
+	auto dest_vregs = vregs_for_port(n.val());
+
+    size_t dest_width = n.val().type().element_width();
+    size_t dest_reg_count = dest_width / base_type().element_width();
+
+    auto lhs_vreg = lhs_vregs[0];
+    auto rhs_vreg = rhs_vregs[0];
+    auto dest_vreg = dest_vregs[0];
+
+    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg_for_port(n.zero(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg_for_port(n.negative(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg_for_port(n.overflow(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg_for_port(n.carry(), value_type::u1());
 
     // TODO: check
-    const char* mod = (w == 16 ? "UXTX" : "UXTX");
+    const char* mod = nullptr;
+    if (n.op() == binary_arith_op::add || n.op() == binary_arith_op::sub) {
+        switch (n.val().type().element_width()) {
+        case 8:
+            if (n.val().type().type_class() == value_type_class::signed_integer)
+                mod = "SXTB";
+            else
+                mod = "UXTB";
+            break;
+        case 16:
+            if (n.val().type().type_class() == value_type_class::signed_integer)
+                mod = "SXTB";
+            else
+                mod = "UXTB";
+            break;
+        }
+    }
+
+    const char *cset_type = nullptr;
+    switch(n.op()) {
+    case binary_arith_op::cmpeq:
+        cset_type = "eq";
+        break;
+    case binary_arith_op::cmpne:
+        cset_type = "ne";
+        break;
+    case binary_arith_op::cmpgt:
+        cset_type = "gt";
+        break;
+    default:
+        break;
+    }
+
 	switch (n.op()) {
 	case binary_arith_op::add:
-        if (w == 8 || w == 16)
-            // TODO: this is incorrect, it should be 12-bits, maybe we can avoid
-            // excessive checking.
-            builder_.adds(dest_vreg, lhs, rhs, shift_operand(mod, 0, value_type::u16()));
+        if (mod == nullptr)
+            builder_.adds(dest_vreg, lhs_vreg, rhs_vreg);
         else
-            builder_.adds(dest_vreg, lhs, rhs);
-		break;
+            builder_.adds(dest_vreg, lhs_vreg, rhs_vreg, shift_operand(mod, 0, value_type::u16()));
+        for (size_t i = 1; i < dest_reg_count; ++i)
+            builder_.adcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
+        break;
 	case binary_arith_op::sub:
-        if (w == 8 || w == 16) {
-            builder_.subs(dest_vreg, lhs, rhs, shift_operand(mod, 0, value_type::u16()));
-            builder_.setcc(vreg_operand(flag_map[(unsigned long)reg_offsets::CF], value_type::u64()));
-        } else {
-            /* builder_.neg(dest_vreg, rhs); */
-            /* builder_.adds(dest_vreg, lhs, dest_vreg); */
-            builder_.subs(dest_vreg, lhs, rhs);
-            builder_.setcc(vreg_operand(flag_map[(unsigned long)reg_offsets::CF], value_type::u64()));
-            /* builder_.brk(immediate_operand(100, 64)); */
-        }
-		break;
+        if (mod == nullptr)
+            builder_.subs(dest_vreg, lhs_vreg, rhs_vreg);
+        else
+            builder_.subs(dest_vreg, lhs_vreg, rhs_vreg, shift_operand(mod, 0, value_type::u16()));
+        for (size_t i = 1; i < dest_reg_count; ++i)
+            builder_.sbcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
+        builder_.setcc(flag_map[(unsigned long)reg_offsets::CF]);
+        break;
 	case binary_arith_op::mul:
-        builder_.mul(dest_vreg, lhs, rhs);
-		break;
+        switch (dest_width) {
+        case 8:
+        case 16:
+        case 32:
+            switch (n.val().type().type_class()) {
+            case ir::value_type_class::signed_integer:
+                builder_.smulh(dest_vreg, lhs_vreg, rhs_vreg);
+                break;
+            case ir::value_type_class::unsigned_integer:
+                builder_.umulh(dest_vreg, lhs_vreg, rhs_vreg);
+                break;
+            case ir::value_type_class::floating_point:
+                builder_.fmul(dest_vreg, lhs_vreg, rhs_vreg);
+                break;
+            case ir::value_type_class::none:
+            default:
+                throw std::runtime_error("ARM64-DBT encounted unknown type class for multiplication");
+            }
+            break;
+        case 64:
+            builder_.mul(dest_vreg, lhs_vreg, rhs_vreg);
+            break;
+        case 128:
+            builder_.mul(dest_vreg, lhs_vreg, rhs_vreg);
+            switch (n.val().type().type_class()) {
+            case ir::value_type_class::signed_integer:
+                builder_.smulh(dest_vregs[1], lhs_vregs[0], rhs_vregs[0]);
+                break;
+            case ir::value_type_class::unsigned_integer:
+                builder_.umulh(dest_vregs[1], lhs_vregs[0], rhs_vregs[0]);
+                break;
+            case ir::value_type_class::floating_point:
+                builder_.fmul(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
+                break;
+            case ir::value_type_class::none:
+            default:
+                throw std::runtime_error("ARM64-DBT encounted unknown type class for multiplication");
+            }
+            break;
+        case 256:
+        case 512:
+        default:
+            throw std::runtime_error("ARM64-DBT does not support subtraction with sizes larger than 128-bits");
+        }
+        break;
 	case binary_arith_op::div:
-        builder_.sdiv(dest_vreg, lhs, rhs);
+        //FIXME: implement
+        builder_.sdiv(dest_vreg, lhs_vreg, rhs_vreg);
+        throw std::runtime_error("Not implemented: binary_arith_op::div");
 		break;
 	case binary_arith_op::mod:
-        builder_.and_(dest_vreg, lhs, rhs);
+        //FIXME: implement
+        builder_.and_(dest_vreg, lhs_vreg, rhs_vreg);
+        throw std::runtime_error("Not implemented: binary_arith_op::mov");
 		break;
 	case binary_arith_op::bor:
-        builder_.orr_(dest_vreg, lhs, rhs);
+        builder_.orr_(dest_vreg, lhs_vreg, rhs_vreg);
+        for (size_t i = 1; i < dest_reg_count; ++i) {
+            auto flag_vreg_saved = vreg_operand(alloc_vreg(), base_type());
+            auto flag_vreg_new = vreg_operand(alloc_vreg(), base_type());
+            builder_.msr(flag_vreg_saved, preg_operand(preg_operand::nzcv));
+
+            builder_.orr_(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
+
+            builder_.msr(flag_vreg_new, preg_operand(preg_operand::nzcv));
+            builder_.orr_(flag_vreg_saved, flag_vreg_saved, flag_vreg_new);
+            builder_.msr(preg_operand(preg_operand::nzcv), flag_vreg_saved);
+        }
 		break;
 	case binary_arith_op::band:
-        builder_.ands(dest_vreg, lhs, rhs);
+        builder_.ands(dest_vreg, lhs_vreg, rhs_vreg);
+        for (size_t i = 1; i < dest_reg_count; ++i) {
+            auto flag_vreg_saved = vreg_operand(alloc_vreg(), base_type());
+            auto flag_vreg_new = vreg_operand(alloc_vreg(), base_type());
+            builder_.msr(flag_vreg_saved, preg_operand(preg_operand::nzcv));
+
+            builder_.ands(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
+
+            builder_.msr(flag_vreg_new, preg_operand(preg_operand::nzcv));
+            builder_.orr_(flag_vreg_saved, flag_vreg_saved, flag_vreg_new);
+            builder_.msr(preg_operand(preg_operand::nzcv), flag_vreg_saved);
+        }
 		break;
 	case binary_arith_op::bxor:
-        builder_.eor_(dest_vreg, lhs, rhs);
+        builder_.eor_(dest_vreg, lhs_vreg, rhs_vreg);
+        for (size_t i = 1; i < dest_reg_count; ++i)
+            builder_.eor_(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
         // EOR does not set flags
         // CMP is used to set the flags
+        // TODO: find a way to set flags
 		builder_.cmp(dest_vreg,
                      immediate_operand(0, value_type::u8()));
+        for (size_t i = 1; i < dest_reg_count; ++i) {
+            auto flag_vreg_saved = vreg_operand(alloc_vreg(), base_type());
+            auto flag_vreg_new = vreg_operand(alloc_vreg(), base_type());
+            builder_.msr(flag_vreg_saved, preg_operand(preg_operand::nzcv));
+            builder_.cmp(dest_vregs[i],
+                         immediate_operand(0, value_type::u8()));
+            builder_.msr(flag_vreg_new, preg_operand(preg_operand::nzcv));
+            builder_.orr_(flag_vreg_saved, flag_vreg_saved, flag_vreg_new);
+            builder_.msr(preg_operand(preg_operand::nzcv), flag_vreg_saved);
+        }
 		break;
 	case binary_arith_op::cmpeq:
-        builder_.cmp(lhs, rhs);
-        builder_.cset(dest_vreg, cond_operand("eq"));
-		break;
 	case binary_arith_op::cmpne:
-        builder_.cmp(lhs, rhs);
-        builder_.cset(dest_vreg, cond_operand("ne"));
-		break;
 	case binary_arith_op::cmpgt:
-        builder_.cmp(lhs, rhs);
-        builder_.cset(dest_vreg, cond_operand("gt"));
+        builder_.cmp(lhs_vreg, rhs_vreg);
+        for (size_t i = 1; i < dest_reg_count; ++i) {
+            auto flag_vreg_saved = vreg_operand(alloc_vreg(), base_type());
+            auto flag_vreg_new = vreg_operand(alloc_vreg(), base_type());
+            builder_.msr(flag_vreg_saved, preg_operand(preg_operand::nzcv));
+            builder_.cmp(dest_vregs[i],
+                         immediate_operand(0, value_type::u8()));
+            builder_.msr(flag_vreg_new, preg_operand(preg_operand::nzcv));
+            builder_.orr_(flag_vreg_saved, flag_vreg_saved, flag_vreg_new);
+            builder_.msr(preg_operand(preg_operand::nzcv), flag_vreg_saved);
+        }
+        builder_.cset(dest_vreg, cond_operand(cset_type));
+        for (size_t i = 1; i < dest_reg_count; ++i) {
+            builder_.cset(dest_vregs[i], cond_operand(cset_type));
+        }
 		break;
 	default:
 		throw std::runtime_error("unsupported binary arithmetic operation " + std::to_string((int)n.op()));
 	}
 
     // FIXME Another write-reg node generated?
-	builder_.setz(vreg_operand(flag_map[(unsigned long)reg_offsets::ZF], value_type::u64()));
-	builder_.sets(vreg_operand(flag_map[(unsigned long)reg_offsets::SF], value_type::u64()));
-	builder_.seto(vreg_operand(flag_map[(unsigned long)reg_offsets::OF], value_type::u64()));
+	builder_.setz(flag_map[(unsigned long)reg_offsets::ZF]);
+	builder_.sets(flag_map[(unsigned long)reg_offsets::SF]);
+	builder_.seto(flag_map[(unsigned long)reg_offsets::OF]);
 
     if (n.op() != binary_arith_op::sub)
-        builder_.setc(vreg_operand(flag_map[(unsigned long)reg_offsets::CF], value_type::u64()));
+        builder_.setc(flag_map[(unsigned long)reg_offsets::CF]);
 }
 
 void arm64_translation_context::materialise_unary_arith(const unary_arith_node &n) {
-	int val_vreg = alloc_vreg_for_port(n.val());
+	auto val_vreg = alloc_vreg_for_port(n.val(), n.val().type());
+
+    auto lhs = vreg_operand_for_port(n.lhs())[0];
 
     switch (n.op()) {
     case unary_arith_op::bnot:
         /* builder_.brk(immediate_operand(100, 64)); */
         if (is_flag(n.val()))
-            builder_.eor_(vreg_operand(val_vreg, n.val().type()),
-                          vreg_operand_for_port(n.lhs()),
-                          immediate_operand(1, value_type::u8()));
+            builder_.eor_(val_vreg, lhs, immediate_operand(1, value_type::u8()));
         else
-            builder_.not_(vreg_operand(val_vreg, n.val().type()),
-                          vreg_operand_for_port(n.lhs()));
+            builder_.not_(val_vreg, lhs);
         break;
     case unary_arith_op::neg:
         // neg: ~reg + 1 for complement-of-2
-        builder_.not_(vreg_operand(val_vreg, n.val().type()), vreg_operand_for_port(n.lhs()));
-
-        builder_.add(vreg_operand(val_vreg, n.val().type()),
-                     vreg_operand(val_vreg, n.val().type()),
-                     immediate_operand(1, value_type::u8()));
+        builder_.not_(val_vreg, lhs);
+        builder_.add(val_vreg, val_vreg, immediate_operand(1, value_type::u8()));
         break;
     default:
         throw std::runtime_error("Unknown unary operation");
@@ -496,62 +652,87 @@ void arm64_translation_context::materialise_unary_arith(const unary_arith_node &
 }
 
 void arm64_translation_context::materialise_cast(const cast_node &n) {
-    auto width = n.val().type().width();
-
-	auto dst_vreg = vreg_operand(alloc_vreg_for_port(n.val()), n.val().type());
-    auto src_vreg = vreg_operand_for_port(n.source_value());
+    if (n.val().type().is_vector())
+        throw std::runtime_error("ARM64-DBT does not support vectors");
 
     // The implementations of all cast operations depend on 2 things:
     // 1. The width of destination registers (<= 64-bit: the base-width or larger)
     // 2. The width of source registes (<= 64-bit: the base width or larger)
     //
     // However, for extension operations 1 => 2
+    size_t src_width = n.source_value().type().element_width();
+    size_t dest_width = n.val().type().element_width();
+
+    size_t src_reg_count = src_width / base_type().element_width();
+    size_t dest_reg_count = dest_width / base_type().element_width();
+
+    if (src_reg_count == 0) src_reg_count = 1;
+    if (dest_reg_count == 0) dest_reg_count = 1;
+
+    // Multiple source registers for element_width > 64-bits
+    auto src_vregs = vreg_operand_for_port(n.source_value());
+
+    // Allocate as many destination registers as necessary
+    for (size_t i = 0; i < dest_reg_count; ++i) {
+        alloc_vreg_for_port(n.val(), n.val().type());
+    }
+	auto dst_vregs = vregs_for_port(n.val());
+
+    auto src_vreg = src_vregs[0];
+    auto dst_vreg = dst_vregs[0];
+
 	switch (n.op()) {
 	case cast_op::sx:
-        if (dst_vreg.type().element_width() <= src_vreg.type().element_width())
+        // Sanity check
+        if (n.val().type().element_width() <= n.source_value().type().element_width()) {
             throw std::runtime_error("ARM64-DBT cannot sign-extend " +
-                    std::to_string(dst_vreg.width()) + " to smaller size " +
-                    std::to_string(src_vreg.width()));
+                    std::to_string(n.val().type().element_width()) + " to smaller size " +
+                    std::to_string(n.source_value().type().element_width()));
+        }
 
-        if (dst_vreg.type().element_width() <= base_type().element_width()) {
-            // copy + extend
-            switch (src_vreg.type().element_width()) {
-                case 8:
-                    builder_.sxtb(dst_vreg, src_vreg);
-                    break;
-                case 16:
-                    builder_.sxth(dst_vreg, src_vreg);
-                    break;
-                case 32:
-                    builder_.sxtw(dst_vreg, src_vreg);
-                    break;
-                case 64:
-                    builder_.mov(dst_vreg, src_vreg);
-                    break;
-                default:
-                    throw std::runtime_error("ARM64-DBT cannot sign-extend from size " +
-                            std::to_string(src_vreg.width()) + " to size " +
-                            std::to_string(dst_vreg.width()));
-            }
+        // IDEA:
+        // 1. Sign-extend reasonably
+        // 2. If dest_value > 64-bit, determine sign
+        // 3. Plaster sign all over the upper bits
+        switch (n.source_value().type().element_width()) {
+        case 1:
+            // 1 -> N
+            // sign-extend to 1 byte
+            // sign-extend the rest
+            builder_.lsl(dst_vreg, src_vreg, immediate_operand(7, value_type::u8()));
+            builder_.sxtb(dst_vreg, src_vreg);
+            builder_.asr(dst_vreg, src_vreg, immediate_operand(7, value_type::u8()));
+            break;
+        case 8:
+            builder_.sxtb(dst_vreg, src_vreg);
+            break;
+        case 16:
+            builder_.sxth(dst_vreg, src_vreg);
+            break;
+        case 32:
+            builder_.sxtw(dst_vreg, src_vreg);
+            break;
+        case 64:
+            builder_.mov(dst_vreg, src_vreg);
+            break;
+        case 128:
+        case 256:
+            // Handle separately
+            break;
+        default:
+            throw std::runtime_error("ARM64-DBT cannot sign-extend from size " +
+                    std::to_string(src_vreg.width()) + " to size " +
+                    std::to_string(dst_vreg.width()));
+        }
 
-            // TODO: mask out upper bits (if needed)
-            // TODO: maybe not necessary; later operations will anyway operate on
-            // the actually valid bits
-            if (dst_vreg.type().element_width() < base_type().element_width()) {
-                builder_.lsl(dst_vreg, src_vreg, immediate_operand(64 - width, value_type::u64()));
-                builder_.lsr(dst_vreg, dst_vreg, immediate_operand(64 - width, value_type::u64()));
+        // Determine sign and write to upper registers
+        if (dest_reg_count > 1) {
+            for (size_t i = 0; i < src_reg_count; ++i) {
+                builder_.mov(dst_vregs[i], src_vregs[i]);
             }
-        } else {
-            switch (src_vreg.type().element_width()) {
-                case 128:
-                    // Must cast to type larger than base type
-                    throw std::runtime_error("ARM64-DBT does not support casting to values larger than 128-bits");
-                case 256:
-                    // Must cast to type larger than base type
-                    throw std::runtime_error("ARM64-DBT does not support casting to values larger than 128-bits");
-                case 512:
-                    // Must cast to type larger than base type
-                    throw std::runtime_error("ARM64-DBT does not support casting to values larger than 128-bits");
+            for (size_t i = src_reg_count; i < dest_reg_count; ++i) {
+                builder_.mov(dst_vregs[i], src_vregs[src_reg_count-1]);
+                builder_.asr(dst_vregs[i], dst_vregs[i], immediate_operand(64, value_type::u8()));
             }
         }
         break;
@@ -563,84 +744,139 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         // allocator)
         //
         // NOTE: widths guaranteed to be equal by frontend
-
-        // TODO: add sanity checks
-        if (dst_vreg.type().element_width() != src_vreg.type().element_width())
+        if (dest_width != src_width)
             throw std::runtime_error("ARM64-DBT cannot bitcast " +
                     std::to_string(dst_vreg.width()) + " different size " +
                     std::to_string(src_vreg.width()));
 
-        if (dst_vreg.type().element_width() <= base_type().element_width())
-            builder_.mov(dst_vreg, src_vreg);
-        else
-            throw std::runtime_error("ARM64-DBT does not support bitcasting among values larger than 64-bits");
+        for (size_t i = 0; i < src_reg_count; ++i) {
+            builder_.mov(dst_vregs[i], src_vregs[i]);
+        }
 		break;
 	case cast_op::zx:
-        // TODO: merge this into sign extension
-        // TODO: implement vector support
-        if (dst_vreg.type().element_width() <= src_vreg.type().element_width())
-            throw std::runtime_error("ARM64-DBT cannot zero-extend " +
-                    std::to_string(dst_vreg.width()) + " to smaller size " +
-                    std::to_string(src_vreg.width()));
-
-        if (dst_vreg.type().element_width() <= base_type().element_width()) {
-            // copy + extend
-            switch (src_vreg.type().element_width()) {
-                case 8:
-                    builder_.uxtb(dst_vreg, src_vreg);
-                    break;
-                case 16:
-                    builder_.uxth(dst_vreg, src_vreg);
-                    break;
-                case 32:
-                    builder_.uxtw(dst_vreg, src_vreg);
-                    break;
-                case 64:
-                    builder_.mov(dst_vreg, src_vreg);
-                    break;
-                default:
-                    throw std::runtime_error("ARM64-DBT cannot sign-extend from size " +
-                            std::to_string(src_vreg.width()) + " to size " +
-                            std::to_string(dst_vreg.width()));
-            }
-
-            // TODO: mask out upper bits (if needed)
-            // TODO: maybe not necessary; later operations will anyway operate on
-            // the actually valid bits
-            if (dst_vreg.type().element_width() < base_type().element_width()) {
-                builder_.lsl(dst_vreg, src_vreg, immediate_operand(64 - width, value_type::u64()));
-                builder_.lsr(dst_vreg, dst_vreg, immediate_operand(64 - width, value_type::u64()));
-            }
-        } else {
-            switch (src_vreg.type().element_width()) {
-                case 128:
-                    // Must cast to type larger than base type
-                    throw std::runtime_error("ARM64-DBT does not support casting to values larger than 128-bits");
-                case 256:
-                    // Must cast to type larger than base type
-                    throw std::runtime_error("ARM64-DBT does not support casting to values larger than 128-bits");
-                case 512:
-                    // Must cast to type larger than base type
-                    throw std::runtime_error("ARM64-DBT does not support casting to values larger than 128-bits");
-            }
+        // Sanity check
+        if (n.val().type().element_width() <= n.source_value().type().element_width()) {
+            throw std::runtime_error("ARM64-DBT cannot sign-extend " +
+                    std::to_string(n.val().type().element_width()) + " to smaller size " +
+                    std::to_string(n.source_value().type().element_width()));
         }
 
-		break;
+        // IDEA:
+        // 1. Sign-extend reasonably
+        // 2. If dest_value > 64-bit, determine sign
+        // 3. Plaster sign all over the upper bits
+        switch (n.source_value().type().element_width()) {
+        case 1:
+            // 1 -> N
+            // sign-extend to 1 byte
+            // sign-extend the rest
+            builder_.lsl(dst_vreg, src_vreg, immediate_operand(7, value_type::u8()));
+            builder_.uxtb(dst_vreg, src_vreg);
+            builder_.lsr(dst_vreg, src_vreg, immediate_operand(7, value_type::u8()));
+            break;
+        case 8:
+            builder_.uxtb(dst_vreg, src_vreg);
+            break;
+        case 16:
+            builder_.uxth(dst_vreg, src_vreg);
+            break;
+        case 32:
+            builder_.uxtw(dst_vreg, src_vreg);
+            break;
+        case 64:
+            builder_.mov(dst_vreg, src_vreg);
+            break;
+        case 128:
+        case 256:
+            // Handle separately
+            break;
+        default:
+            throw std::runtime_error("ARM64-DBT cannot sign-extend from size " +
+                    std::to_string(src_vreg.width()) + " to size " +
+                    std::to_string(dst_vreg.width()));
+        }
+
+        // Determine sign and write to upper registers
+        if (dest_reg_count > 1) {
+            for (size_t i = 0; i < src_reg_count; ++i) {
+                builder_.mov(dst_vregs[i], src_vregs[i]);
+            }
+            for (size_t i = src_reg_count; i < dest_reg_count; ++i) {
+                builder_.mov(dst_vregs[i], src_vregs[src_reg_count-1]);
+                builder_.lsr(dst_vregs[i], dst_vregs[i], immediate_operand(64, value_type::u8()));
+            }
+        }
+        break;
     case cast_op::trunc:
-        if (dst_vreg.type().element_width() >= src_vreg.type().element_width())
+        if (dest_width >= src_width) {
             throw std::runtime_error("ARM64-DBT cannot truncate from " +
                     std::to_string(dst_vreg.width()) + " to larger size " +
                     std::to_string(src_vreg.width()));
+        }
 
-        if (src_vreg.type().element_width() <= base_type().element_width()) {
-            if (is_flag(n.val())) {
+        for (size_t i = 0; i < dest_reg_count; ++i) {
+            builder_.mov(dst_vregs[i], src_vregs[i]);
+        }
+
+        if (is_flag(n.val())) {
                 builder_.and_(dst_vreg, src_vreg, immediate_operand(1, value_type::u1()));
+        } else if (src_reg_count == 1) {
+                builder_.lsl(dst_vreg, src_vreg, immediate_operand(64 - dest_width, value_type::u64()));
+                builder_.asr(dst_vreg, dst_vreg, immediate_operand(64 - dest_width, value_type::u64()));
+        }
+        break;
+    case cast_op::convert:
+        // convert between integer and float representations
+        if (dest_reg_count != 1) {
+            throw std::runtime_error("ARM64-DBT cannot convert " +
+                    std::to_string(n.val().type().element_width()) + " because it larger than 64-bit");
+        }
+
+        // convert integer to float
+        if (n.source_value().type().is_integer() && n.val().type().is_floating_point()) {
+             if (n.val().type().type_class() == value_type_class::unsigned_integer) {
+                builder_.ucvtf(dst_vreg, src_vreg);
             } else {
-                builder_.lsl(dst_vreg, src_vreg, immediate_operand(64 - width, value_type::u64()));
-                builder_.asr(dst_vreg, dst_vreg, immediate_operand(64 - width, value_type::u64()));
+                // signed
+                builder_.scvtf(dst_vreg, src_vreg);
+            }
+        } else if (n.source_value().type().is_floating_point() && n.val().type().is_integer()) {
+            // Handle float/double -> integer conversions
+            switch (n.convert_type()) {
+            case fp_convert_type::trunc:
+                // if float/double -> truncate to int
+                // NOTE: both float/double handled through the same instructions,
+                // only register differ
+                if (n.val().type().type_class() == value_type_class::unsigned_integer) {
+                    builder_.fcvtzu(dst_vreg, src_vreg);
+                } else {
+                    // signed
+                    builder_.fcvtzs(dst_vreg, src_vreg);
+                }
+                break;
+            case fp_convert_type::round:
+                // if float/double -> round to closest int
+                // NOTE: both float/double handled through the same instructions,
+                // only register differ
+                if (n.val().type().type_class() == value_type_class::unsigned_integer) {
+                    builder_.fcvtau(dst_vreg, src_vreg);
+                } else {
+                    // signed
+                    builder_.fcvtas(dst_vreg, src_vreg);
+                }
+                break;
+            case fp_convert_type::none:
+            default:
+                throw std::runtime_error("Cannot convert type: " +
+                                         std::to_string(int(n.convert_type())));
             }
         } else {
-            throw std::runtime_error("ARM64-DBT cannot truncate from size larger than 64-bits");
+            // converting between different represenations of integers/floating
+            // point numbers
+            //
+            // Destination virtual register set to the correct type upon creation
+            // TODO: need to handle different-sized types?
+            builder_.mov(dst_vreg, src_vreg);
         }
         break;
 	default:
@@ -650,7 +886,12 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 }
 
 void arm64_translation_context::materialise_csel(const csel_node &n) {
-    auto dst_vreg = vreg_operand(alloc_vreg_for_port(n.val()), n.val().type());
+    if (n.val().type().is_vector() || n.val().type().element_width() > base_type().element_width()) {
+        throw std::runtime_error("ARM64-DBT cannot implement conditional selection for \
+                                  vectors and elements widths exceeding 64-bits");
+    }
+
+    auto dst_vreg = alloc_vreg_for_port(n.val(), n.val().type());
 
     auto cond = vreg_operand_for_port(n.condition());
 
@@ -658,15 +899,20 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
     auto false_val = vreg_operand_for_port(n.falseval());
 
     /* builder_.brk(immediate_operand(100, 64)); */
-    builder_.cmp(cond, immediate_operand(0, value_type::u8()));
-    builder_.csel(dst_vreg, true_val, false_val, cond_operand("NE"));
+    builder_.cmp(cond[0], immediate_operand(0, value_type::u8()));
+    builder_.csel(dst_vreg, true_val[0], false_val[0], cond_operand("NE"));
 }
 
 void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
-    auto dst_vreg = vreg_operand(alloc_vreg_for_port(n.val()), n.val().type());
+    if (n.val().type().is_vector() || n.val().type().element_width() > base_type().element_width()) {
+        throw std::runtime_error("ARM64-DBT cannot implement bit shifts for \
+                                  vectors and elements widths exceeding 64-bits");
+    }
 
-    auto input = vreg_operand_for_port(n.input());
-    auto amount = vreg_operand_for_port(n.amount());
+    auto dst_vreg = alloc_vreg_for_port(n.val(), n.val().type());
+
+    auto input = vreg_operand_for_port(n.input())[0];
+    auto amount = vreg_operand_for_port(n.amount())[0];
 
     switch (n.op()) {
     case shift_op::lsl:
@@ -685,9 +931,14 @@ void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
 }
 
 void arm64_translation_context::materialise_bit_extract(const bit_extract_node &n) {
-    auto dst_vreg = vreg_operand(alloc_vreg_for_port(n.val()), n.val().type());
+    if (n.val().type().is_vector() || n.val().type().element_width() > base_type().element_width()) {
+        throw std::runtime_error("ARM64-DBT cannot implement bit extracts for \
+                                  vectors and elements widths exceeding 64-bits");
+    }
 
-    auto src_vreg = vreg_operand_for_port(n.source_value());
+    auto dst_vreg = alloc_vreg_for_port(n.val(), n.val().type());
+
+    auto src_vreg = vreg_operand_for_port(n.source_value())[0];
 
     builder_.bfm(dst_vreg, src_vreg,
                   immediate_operand(n.from(), value_type::u8()),
@@ -695,9 +946,14 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
 }
 
 void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n) {
-    auto dst_vreg = vreg_operand(alloc_vreg_for_port(n.val()), n.val().type());
+    if (n.val().type().is_vector() || n.val().type().element_width() > base_type().element_width()) {
+        throw std::runtime_error("ARM64-DBT cannot implement bit inserts for \
+                                  vectors and elements widths exceeding 64-bits");
+    }
 
-    auto bits_vreg = vreg_operand_for_port(n.bits(), false);
+    auto dst_vreg = alloc_vreg_for_port(n.val(), n.val().type());
+
+    auto bits_vreg = vreg_operand_for_port(n.bits(), false)[0];
     builder_.bfi(dst_vreg, bits_vreg,
                  immediate_operand(n.to(), value_type::u8()),
                  immediate_operand(n.length(), value_type::u8()));
