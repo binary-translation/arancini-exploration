@@ -92,46 +92,70 @@ public:
         wzr_sp
     };
 
+    enum regname_float32 : uint8_t {
+        none_float32 = 0,
+        s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15,
+        s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30,
+        s31
+    };
+
+    enum regname_float64 : uint8_t {
+        none_float64 = 0,
+        d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15,
+        d16, d17, d18, d19, d20, d21, d22, d23, d24, d25, d26, d27, d28, d29, d30,
+        d31
+    };
+
+    enum special : uint8_t {
+        none_special = 0,
+        nzcv
+    };
+
     using regname = uint8_t;
 
     preg_operand() = default;
 
-    explicit preg_operand(regname32 reg): width_(32), reg_(reg) { }
+    explicit preg_operand(regname32 reg): type_(ir::value_type::u32()), index_(reg) { }
 
-    explicit preg_operand(regname64 reg): width_(64), reg_(reg) { }
+    explicit preg_operand(regname64 reg): type_(ir::value_type::u64()), index_(reg) { }
 
-    explicit preg_operand(size_t index, size_t width) {
-        width_ = width;
+    explicit preg_operand(regname_float32 reg): type_(ir::value_type::f32()), index_(reg) { }
+
+    explicit preg_operand(regname_float64 reg): type_(ir::value_type::f64()), index_(reg) { }
+
+    explicit preg_operand(special reg): special_(true), type_(ir::value_type::u64()), index_(reg) { }
+
+    explicit preg_operand(size_t index, ir::value_type type) {
+        type_ = type;
+        index_ = index+1;
         if (index > static_cast<size_t>(xzr_sp) + 1)
             throw std::runtime_error("Allocating unavailable register at index: "
                                      + std::to_string(index));
-        if (width_ == 64)
-            reg_ = static_cast<regname64>(index + 1);
-        else if (width_ == 32)
-            reg_ = static_cast<regname32>(index + 1);
-        else if (width_ == 8)
-            (void)0; // FIXME
-        else
-            throw std::runtime_error("Physical registers are specified as 32-bit or 64-bit only");
     }
 
     preg_operand(const preg_operand& r)
-        : width_(r.width_)
-        , reg_(r.reg_)
+        : type_(r.type_)
+        , index_(r.index_)
     { }
 
     preg_operand& operator=(const preg_operand& r) {
-        reg_ = r.reg_;
-        width_ = r.width_;
+        index_ = r.index_;
+        type_ = r.type_;
         return *this;
     }
 
-    size_t width() const { return width_; }
+    bool special() const { return special_; }
 
-    regname get() const { return reg_; }
+    ir::value_type type() const { return type_; }
+
+    size_t width() const { return type_.element_width();; }
+
+    size_t register_index() const { return index_; }
 private:
-    size_t width_;
-    regname reg_;
+    bool special_ = false;
+    ir::value_type type_;
+
+    size_t index_;
 };
 
 const char* to_string(const preg_operand&);
@@ -361,14 +385,14 @@ struct operand {
         }
     }
 
-	void allocate(int index, size_t width) {
+	void allocate(int index, ir::value_type value_type) {
 		if (type() != operand_type::vreg)
 			throw std::runtime_error("trying to allocate non-vreg");
 
-		op_ = preg_operand(index, width);
+		op_ = preg_operand(index, value_type);
 	}
 
-	void allocate_base(int index, size_t width) {
+	void allocate_base(int index, ir::value_type value_type) {
 		if (type() != operand_type::mem)
 			throw std::runtime_error("trying to allocate non-mem");
 
@@ -376,7 +400,7 @@ struct operand {
 		if (!memory.is_virtual())
 			throw std::runtime_error("trying to allocate non-virtual membase ");
 
-        memory.set_base_reg(preg_operand(index, width));
+        memory.set_base_reg(preg_operand(index, value_type));
 	}
 
 	void dump(std::ostream &os) const;
