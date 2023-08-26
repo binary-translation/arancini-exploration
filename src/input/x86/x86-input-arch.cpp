@@ -379,8 +379,8 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 		}
 
 		offset += length;
-		base_address += length;
 	}
 
+    base_address += offset;
 	builder.end_chunk();
 }
