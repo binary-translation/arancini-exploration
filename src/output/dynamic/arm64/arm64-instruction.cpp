@@ -25,10 +25,32 @@ const char* arancini::output::dynamic::arm64::to_string(const preg_operand &op) 
         "sp"
     };
 
-    uint8_t reg_idx = static_cast<uint8_t>(op.get());
-    if (op.width() == 32)
-        return name32[reg_idx];
-    return name64[reg_idx];
+    static const char* name_float32[] = {
+        "",
+        "s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
+        "s11", "s12", "s13", "s14", "s15", "s16", "s17", "s18", "s19", "s20",
+        "s21", "s22", "s23", "s24", "s25", "s26", "s27", "s28", "s29", "s30",
+        "s31"
+    };
+
+    static const char* name_float64[] = {
+        "",
+        "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8", "d9", "d10",
+        "d11", "d12", "d13", "d14", "d15", "d16", "d17", "d18", "d19", "d20",
+        "d21", "d22", "d23", "d24", "d25", "d26", "d27", "d28", "d29", "d30",
+        "d31"
+    };
+
+    auto type = op.type();
+    size_t reg_idx = op.register_index();
+
+    if (type.is_floating_point()) {
+        return type.element_width() > 32 ? name_float64[reg_idx] : name_float32[reg_idx];
+    } else if (type.is_integer()) {
+        return type.element_width() > 32 ? name64[reg_idx] : name32[reg_idx];
+    } else {
+        throw std::runtime_error("Physical registers are specified as 32-bit or 64-bit only");
+    }
 }
 
 size_t assembler::assemble(const char *code, unsigned char **out) {
