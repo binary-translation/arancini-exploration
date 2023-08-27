@@ -7,6 +7,8 @@
 #include <arancini/ir/port.h>
 #include <arancini/output/dynamic/translation-context.h>
 
+#include <unordered_map>
+
 namespace arancini::output::dynamic::arm64 {
 class arm64_translation_context : public translation_context {
 public:
@@ -26,8 +28,9 @@ private:
     std::vector<std::shared_ptr<ir::action_node>> nodes_;
 	instruction_builder builder_;
 	std::set<const ir::node *> materialised_nodes_;
-	std::map<const ir::port *, std::vector<vreg_operand>> port_to_vreg_;
-	std::map<unsigned long, off_t> instruction_index_to_guest_;
+	std::unordered_map<const ir::port *, std::vector<vreg_operand>> port_to_vreg_;
+	std::unordered_map<unsigned long, off_t> instruction_index_to_guest_;
+    std::unordered_map<const ir::local_var *, std::vector<vreg_operand>> locals_;
     int ret_;
 	int next_vreg_;
 	off_t this_pc_;
@@ -83,6 +86,8 @@ private:
     void materialise_binary_atomic(const ir::binary_atomic_node &n);
     void materialise_ternary_atomic(const ir::ternary_atomic_node &n);
     void materialise_internal_call(const ir::internal_call_node &n);
+    void materialise_read_local(const ir::read_local_node &n);
+    void materialise_write_local(const ir::write_local_node &n);
 
     vreg_operand add_membase(const vreg_operand &addr);
     vreg_operand mov_immediate(uint64_t imm, arancini::ir::value_type type);
