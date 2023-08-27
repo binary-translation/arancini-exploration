@@ -195,6 +195,13 @@ public:
         append(instruction("bl", use(dest)));
     }
 
+    // TODO: check if this allocated correctly
+    template <typename T1,
+              is_reg<T1> = 0>
+    void cbnz(const T1 &rt, const label_operand &dest) {
+        append(instruction("cbnz", use(rt), use(dest)));
+    }
+
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg_or_immediate<T2> = 0>
     void cmn(const T1 &dst,
@@ -477,6 +484,80 @@ public:
     void uxtw(const T1 &dst, const T2 &src) {
         append(instruction("uxtw", def(dst), use(src)));
     }
+
+// ATOMICs
+    // LDXR{size} {Rt}, [Rn]
+#define LD_A_XR(name, size) \
+    template <typename T1, \
+              is_reg<T1> = 0> \
+    void name##size(const T1 &dst, const memory_operand &mem) { \
+        append(instruction(#name#size, def(dst), use(mem))); \
+    }
+
+#define ST_A_XR(name, size) \
+    template <typename T1, typename T2, \
+              is_reg<T1> = 0, is_reg<T2> = 0> \
+    void name##size(const T1 &status, const T2 &rt, const memory_operand &mem) { \
+        append(instruction(#name#size, def(status), use(rt), use(mem))); \
+    }
+
+#define LD_A_XR_VARIANTS(name) \
+    LD_A_XR(name, b) \
+    LD_A_XR(name, h) \
+    LD_A_XR(name, w) \
+    LD_A_XR(name,)
+
+#define ST_A_XR_VARIANTS(name) \
+    ST_A_XR(name, b) \
+    ST_A_XR(name, h) \
+    ST_A_XR(name, w) \
+    ST_A_XR(name,)
+
+    LD_A_XR_VARIANTS(ldxr);
+    LD_A_XR_VARIANTS(ldaxr);
+
+    ST_A_XR_VARIANTS(stxr);
+    ST_A_XR_VARIANTS(stlxr);
+
+#define AMO_SIZE_VARIANT(name, suffix_type, suffix_size) \
+    template <typename T1, typename T2, \
+              is_reg<T1> = 0, is_reg<T2> = 0> \
+    void name##suffix_type##suffix_size(const T1 &rm, const T2 &rt, const memory_operand &mem) { \
+        append(instruction(#name#suffix_type#suffix_size, use(rm), usedef(rt), use(mem))); \
+    }
+
+#define AMO_SIZE_VARIANTS(name, size) \
+    AMO_SIZE_VARIANT(name, , size) \
+    AMO_SIZE_VARIANT(name, a, size) \
+    AMO_SIZE_VARIANT(name, al, size) \
+    AMO_SIZE_VARIANT(name, l, size)
+
+#define AMO_SIZE_VARIANT_HW(name) \
+    AMO_SIZE_VARIANTS(name, ) \
+    AMO_SIZE_VARIANTS(name, h) \
+    AMO_SIZE_VARIANTS(name, w)
+
+#define AMO_SIZE_VARIANT_BHW(name) \
+        AMO_SIZE_VARIANT_HW(name) \
+        AMO_SIZE_VARIANTS(name, b) \
+
+    AMO_SIZE_VARIANT_BHW(swp);
+
+    AMO_SIZE_VARIANT_BHW(ldadd);
+
+    AMO_SIZE_VARIANT_BHW(ldclr);
+
+    AMO_SIZE_VARIANT_BHW(ldeor);
+
+    AMO_SIZE_VARIANT_BHW(ldset);
+
+    AMO_SIZE_VARIANT_HW(ldsmax);
+
+    AMO_SIZE_VARIANT_HW(ldsmin);
+
+    AMO_SIZE_VARIANT_HW(ldumax);
+
+    AMO_SIZE_VARIANT_HW(ldumin);
 
     void insert_sep(const std::string &sep) { label(sep); }
 
