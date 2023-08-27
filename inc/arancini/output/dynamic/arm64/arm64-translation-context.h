@@ -80,6 +80,8 @@ private:
     void materialise_bit_insert(const ir::bit_insert_node &n);
     void materialise_unary_arith(const ir::unary_arith_node &n);
     void materialise_binary_arith(const ir::binary_arith_node &n);
+    void materialise_binary_atomic(const ir::binary_atomic_node &n);
+    void materialise_ternary_atomic(const ir::ternary_atomic_node &n);
     void materialise_internal_call(const ir::internal_call_node &n);
 
     vreg_operand add_membase(const vreg_operand &addr);
