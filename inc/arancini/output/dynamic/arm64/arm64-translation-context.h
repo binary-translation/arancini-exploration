@@ -7,6 +7,8 @@
 #include <arancini/ir/port.h>
 #include <arancini/output/dynamic/translation-context.h>
 
+#include <unordered_map>
+
 namespace arancini::output::dynamic::arm64 {
 class arm64_translation_context : public translation_context {
 public:
