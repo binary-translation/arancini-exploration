@@ -255,6 +255,14 @@ void arm64_translation_context::materialise(const ir::node* n) {
         //std::cerr << "Node: binary arithmetic\n";
 		materialise_binary_arith(*reinterpret_cast<const binary_arith_node*>(n));
         break;
+	case node_kinds::binary_atomic:
+        //std::cerr << "Node: binary atomic\n";
+		materialise_binary_atomic(*reinterpret_cast<const binary_atomic_node *>(n));
+        break;
+	case node_kinds::ternary_atomic:
+        //std::cerr << "Node: ternary atomic\n";
+		materialise_ternary_atomic(*reinterpret_cast<const ternary_atomic_node *>(n));
+        break;
     case node_kinds::internal_call:
         //std::cerr << "Node: internal call\n";
         materialise_internal_call(*reinterpret_cast<const internal_call_node*>(n));
@@ -656,6 +664,263 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         builder_.setc(flag_map[(unsigned long)reg_offsets::CF]);
 }
 
+void arm64_translation_context::materialise_binary_atomic(const binary_atomic_node &n) {
+	auto dst_vreg = vregs_for_port(n.val())[0];
+
+    auto src_vreg = vreg_operand_for_port(n.rhs())[0];
+
+    // TODO: handle flags with atomics
+    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg_for_port(n.zero(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg_for_port(n.negative(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg_for_port(n.overflow(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg_for_port(n.carry(), value_type::u1());
+
+    auto addr_reg = vregs_for_port(n.lhs())[0];
+    auto mem_addr = memory_operand(add_membase(addr_reg));
+
+    // FIXME: correct memory ordering?
+    //
+    // FIXME: currently only fast path implemented
+    // 1. Must check that flags are not needed by the instruction before taking
+    // the fast path
+    //
+    // 2. Must implement lock-based fallback
+    //    - Acquire lock
+    //    - Do operations
+    //    - Release locks
+    //
+    // How does static backend handle these?
+    //
+    // NOTE: flags are practically not set at all now
+    //
+    // NOTE: not sure if the proper alternative was used (should a/al/l or
+    // nothing be used?)
+	switch (n.op()) {
+	case binary_atomic_op::add:
+	case binary_atomic_op::sub:
+        if (n.op() == binary_atomic_op::sub)
+            builder_.neg(src_vreg, src_vreg);
+        switch (n.val().type().element_width()) {
+        case 8:
+            builder_.ldaddb(src_vreg, dst_vreg, mem_addr);
+            break;
+        case 16:
+            builder_.ldaddh(src_vreg, dst_vreg, mem_addr);
+            break;
+        case 32:
+            builder_.ldaddw(src_vreg, dst_vreg, mem_addr);
+            break;
+        case 64:
+            builder_.ldadd(src_vreg, dst_vreg, mem_addr);
+            break;
+        default:
+            throw std::runtime_error("Atomic LDADD cannot handle sizes > 64-bit");
+        }
+        if (n.op() == binary_atomic_op::sub)
+            builder_.setcc(flag_map[(unsigned long)reg_offsets::CF]);
+        break;
+	case binary_atomic_op::bor:
+        switch (n.val().type().element_width()) {
+        case 8:
+            builder_.ldsetb(src_vreg, dst_vreg, mem_addr);
+            break;
+        case 16:
+            builder_.ldseth(src_vreg, dst_vreg, mem_addr);
+            break;
+        case 32:
+            builder_.ldsetw(src_vreg, dst_vreg, mem_addr);
+            break;
+        case 64:
+            builder_.ldset(src_vreg, dst_vreg, mem_addr);
+            break;
+        default:
+            throw std::runtime_error("Atomic LDSET cannot handle sizes > 64-bit");
+        }
+		break;
+	case binary_atomic_op::band:
+        // TODO: Not sure if this is correct
+        builder_.not_(src_vreg, src_vreg);
+        switch (n.val().type().element_width()) {
+        case 8:
+            builder_.ldclrb(src_vreg, dst_vreg, mem_addr);
+            break;
+        case 16:
+            builder_.ldclrh(src_vreg, dst_vreg, mem_addr);
+            break;
+        case 32:
+            builder_.ldclrw(src_vreg, dst_vreg, mem_addr);
+            break;
+        case 64:
+            builder_.ldclr(src_vreg, dst_vreg, mem_addr);
+            break;
+        default:
+            throw std::runtime_error("Atomic LDCLR cannot handle sizes > 64-bit");
+        }
+		break;
+	case binary_atomic_op::bxor:
+        switch (n.val().type().element_width()) {
+        case 8:
+            builder_.ldeorb(src_vreg, dst_vreg, mem_addr);
+            break;
+        case 16:
+            builder_.ldeorh(src_vreg, dst_vreg, mem_addr);
+            break;
+        case 32:
+            builder_.ldeorw(src_vreg, dst_vreg, mem_addr);
+            break;
+        case 64:
+            builder_.ldeor(src_vreg, dst_vreg, mem_addr);
+            break;
+        default:
+            throw std::runtime_error("Atomic LDEOR cannot handle sizes > 64-bit");
+        }
+		break;
+    case binary_atomic_op::btc:
+        switch (n.val().type().element_width()) {
+        case 8:
+            builder_.ldclrb(src_vreg, dst_vreg, mem_addr);
+            break;
+        case 16:
+            builder_.ldclrh(src_vreg, dst_vreg, mem_addr);
+            break;
+        case 32:
+            builder_.ldclrw(src_vreg, dst_vreg, mem_addr);
+            break;
+        case 64:
+            builder_.ldclr(src_vreg, dst_vreg, mem_addr);
+            break;
+        default:
+            throw std::runtime_error("Atomic LDCLR cannot handle sizes > 64-bit");
+        }
+		break;
+    case binary_atomic_op::bts:
+        switch (n.val().type().element_width()) {
+        case 8:
+            builder_.ldsetb(src_vreg, dst_vreg, mem_addr);
+            break;
+        case 16:
+            builder_.ldseth(src_vreg, dst_vreg, mem_addr);
+            break;
+        case 32:
+            builder_.ldsetw(src_vreg, dst_vreg, mem_addr);
+            break;
+        case 64:
+            builder_.ldset(src_vreg, dst_vreg, mem_addr);
+            break;
+        default:
+            throw std::runtime_error("Atomic LDSET cannot handle sizes > 64-bit");
+        }
+		break;
+    case binary_atomic_op::xadd:
+        // TODO: this is more or less what the slow case would look like
+        // It should be implemented as a wrapper over an operation
+        //
+        // The actual wrapper can be used also for implementing the equivalent of
+        // a lock to enable actual atomicity
+        {
+            // TODO: must find a way to make this unique
+            std::string restart_label = "restart";
+            builder_.label(restart_label);
+            switch(n.val().type().element_width()) {
+            case 8:
+                builder_.ldaxrb(dst_vreg, mem_addr);
+                break;
+            case 16:
+                builder_.ldaxrh(dst_vreg, mem_addr);
+                break;
+            case 32:
+                builder_.ldaxrw(dst_vreg, mem_addr);
+                break;
+            case 64:
+                builder_.ldaxr(dst_vreg, mem_addr);
+                break;
+            default:
+                throw std::runtime_error("Atomic XADD not supported for sizes > 64-bit");
+            }
+            builder_.adds(dst_vreg, dst_vreg, src_vreg);
+
+            auto status = vreg_operand(alloc_vreg(), value_type::u32());
+            switch(n.val().type().element_width()) {
+            case 8:
+                builder_.stlxrb(status, dst_vreg, mem_addr);
+                break;
+            case 16:
+                builder_.stlxrh(status, dst_vreg, mem_addr);
+                break;
+            case 32:
+                builder_.stlxrw(status, dst_vreg, mem_addr);
+                break;
+            case 64:
+                builder_.stlxr(status, dst_vreg, mem_addr);
+                break;
+            default:
+                throw std::runtime_error("Atomic XADD not supported for sizes > 64-bit");
+            }
+
+            builder_.cbnz(status, restart_label);
+        }
+        break;
+    case binary_atomic_op::xchg:
+        // TODO: check if this works
+        switch(n.val().type().element_width()) {
+        case 8:
+            builder_.swpb(dst_vreg, src_vreg, mem_addr);
+            break;
+        case 16:
+            builder_.swph(dst_vreg, src_vreg, mem_addr);
+            break;
+        case 32:
+            builder_.swpw(dst_vreg, src_vreg, mem_addr);
+            break;
+        case 64:
+            builder_.swp(dst_vreg, src_vreg, mem_addr);
+            break;
+        default:
+            throw std::runtime_error("Atomic XCHG not supported for sizes > 64-bit");
+        }
+        break;
+	default:
+		throw std::runtime_error("unsupported binary atomic operation " + std::to_string((int)n.op()));
+	}
+
+    // FIXME Another write-reg node generated?
+	builder_.setz(flag_map[(unsigned long)reg_offsets::ZF]);
+	builder_.sets(flag_map[(unsigned long)reg_offsets::SF]);
+	builder_.seto(flag_map[(unsigned long)reg_offsets::OF]);
+
+    if (n.op() != binary_atomic_op::sub)
+        builder_.setc(flag_map[(unsigned long)reg_offsets::CF]);
+}
+
+void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_node &n) {
+	auto dst_vreg = vregs_for_port(n.val())[0];
+
+    auto src_vreg = vreg_operand_for_port(n.rhs())[0];
+
+    // TODO: handle flags with atomics
+    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg_for_port(n.zero(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg_for_port(n.negative(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg_for_port(n.overflow(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg_for_port(n.carry(), value_type::u1());
+
+    auto addr_reg = vregs_for_port(n.lhs())[0];
+    auto mem_addr = memory_operand(add_membase(addr_reg));
+
+    switch (n.op()) {
+    case ternary_atomic_op::cmpxchg:
+ /* LDXR   Rtemp, [Rmem]      // Load the current value of memory location [Rmem] into Rtemp */
+ /*    CMP    Rtemp, Rcmp        // Compare Rtemp with the expected value (Rcmp) */
+ /*    B.NE   .failure           // If they aren't the same, branch to failure */
+ /*    STXR   Rstatus, Rnew, [Rmem] // Try to store the new value (Rnew) into [Rmem] */
+ /*    CBZ    Rstatus, .success  // If the store was successful (Rstatus == 0), branch to success */
+ /*    B      .loop */
+    case ternary_atomic_op::adc:
+    case ternary_atomic_op::sbb:
+    default:
+		throw std::runtime_error("unsupported binary atomic operation " + std::to_string((int)n.op()));
+    }
+}
+
 void arm64_translation_context::materialise_unary_arith(const unary_arith_node &n) {
 	auto val_vreg = alloc_vreg_for_port(n.val(), n.val().type());
 
@@ -1022,9 +1287,6 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
 }
 
 void arm64_translation_context::materialise_internal_call(const internal_call_node &n) {
-    // TODO
-    // func_push_args(&builder_, n.args());
-    // builder_.bl(n.fn().name());
     if (n.fn().name() == "handle_syscall") {
         auto pc_vreg = mov_immediate(this_pc_ + 2, value_type::u64());
         builder_.str(pc_vreg,
