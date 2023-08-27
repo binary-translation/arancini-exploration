@@ -341,7 +341,10 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 	const uint8_t *mc = (const uint8_t *)code;
 
 	static uint nr_chunk = 1;
-//		std::cerr << "chunk[" << std::dec << nr_chunk << "] @ " << std::hex << base_address << " code=" << code << ", size=" << code_size << std::endl;
+#ifndef NDEBUG
+	std::cerr << "chunk[" << std::dec << nr_chunk << "] @ " << std::hex << base_address << " code=" << code << ", size=" << code_size << std::endl;
+#endif
+
 	nr_chunk++;
 
 	size_t offset = 0;
@@ -371,8 +374,11 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
             if (pos != disasm.npos) {
                 auto addr_str = disasm.substr(pos);
                 off_t addr = std::strtol(addr_str.c_str(), nullptr, 16);
-                if (addr > base_address && addr < base_address + offset + length)
+                if (addr > base_address && addr < base_address + offset + length) {
+#ifndef NDEBUG
                     std::cerr << "Backwards branch @ " << addr_str << '\n';
+#endif
+                }
             }
 			break;
 		}
