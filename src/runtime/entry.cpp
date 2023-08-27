@@ -30,7 +30,11 @@ using namespace arancini::runtime::exec::x86;
 static execution_context *ctx_;
 
 // TODO: this needs to depend on something, somehow.  Some kind of variable?
+#ifndef NDEBUG
 static arancini::input::x86::x86_input_arch ia(true, arancini::input::x86::disassembly_syntax::intel);
+#else
+static arancini::input::x86::x86_input_arch ia(false, arancini::input::x86::disassembly_syntax::intel);
+#endif
 
 #if defined(ARCH_X86_64)
 static arancini::output::dynamic::x86::x86_dynamic_output_engine oe;

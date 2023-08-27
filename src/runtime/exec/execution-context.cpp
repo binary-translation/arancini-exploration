@@ -133,7 +133,6 @@ int execution_context::invoke(void *cpu_state) {
     //x86::print_stack(std::cerr, memptr, 20);
     util::global_logger.separator(util::basic_logging::levels::debug, '-');
 
-#ifndef NDEBUG
     std::cerr << *x86_state;
     auto* memptr = reinterpret_cast<uint64_t*>(get_memory_ptr(0) + x86_state->RSP);
     std::cerr << "--------------------------------------------\n";
