@@ -267,6 +267,12 @@ void arm64_translation_context::materialise(const ir::node* n) {
         //std::cerr << "Node: internal call\n";
         materialise_internal_call(*reinterpret_cast<const internal_call_node*>(n));
         break;
+	case node_kinds::read_local:
+        materialise_read_local(*reinterpret_cast<const read_local_node*>(n));
+        break;
+	case node_kinds::write_local:
+        materialise_write_local(*reinterpret_cast<const write_local_node*>(n));
+        break;
     default:
         throw std::runtime_error("unknown node encountered: " +
                                  std::to_string(static_cast<size_t>(n->kind())));
@@ -1297,6 +1303,26 @@ void arm64_translation_context::materialise_internal_call(const internal_call_no
     } else {
         throw std::runtime_error("unsupported internal call");
     }
+}
+
+void arm64_translation_context::materialise_read_local(const read_local_node &n) {
+    auto dest_vreg = alloc_vreg_for_port(n.val(), n.val().type());
+    auto local = locals_[n.local()][0];
+
+    builder_.mov(dest_vreg, local);
+}
+
+void arm64_translation_context::materialise_write_local(const write_local_node &n) {
+    vreg_operand dest_vreg;
+    auto write_reg = vregs_for_port(n.write_value())[0];
+    if (locals_.count(n.local()) == 0) {
+        dest_vreg = alloc_vreg_for_port(n.val(), n.val().type());
+        locals_[n.local()] = {dest_vreg};
+    } else {
+        dest_vreg = locals_[n.local()][0];
+    }
+
+    builder_.mov(dest_vreg, write_reg);
 }
 
 void arm64_translation_context::do_register_allocation() { builder_.allocate(); }
