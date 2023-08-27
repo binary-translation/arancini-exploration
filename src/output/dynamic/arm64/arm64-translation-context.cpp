@@ -947,10 +947,21 @@ void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
                                   vectors and elements widths exceeding 64-bits");
     }
 
-    auto dst_vreg = alloc_vreg_for_port(n.val(), n.val().type());
-
     auto input = vreg_operand_for_port(n.input())[0];
-    auto amount = vreg_operand_for_port(n.amount())[0];
+    auto amount1 = vreg_operand_for_port(n.amount())[0];
+
+    auto dst_type = n.val().type();
+    if (n.val().type().element_width() < input.type().element_width()) {
+        dst_type = input.type();
+    }
+    if (dst_type.element_width() < amount1.type().element_width()) {
+        dst_type = amount1.type();
+    }
+
+    auto amount = vreg_operand(alloc_vreg(), dst_type);
+    builder_.mov(amount, amount1);
+
+    auto dst_vreg = alloc_vreg_for_port(n.val(), dst_type);;
 
     switch (n.op()) {
     case shift_op::lsl:
@@ -974,9 +985,15 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
                                   vectors and elements widths exceeding 64-bits");
     }
 
-    auto dst_vreg = alloc_vreg_for_port(n.val(), n.val().type());
-
     auto src_vreg = vreg_operand_for_port(n.source_value())[0];
+
+    // FIXME: 32-bit registers are used as output
+    auto dst_type = n.val().type();
+    if (n.val().type().element_width() < src_vreg.type().element_width()) {
+        dst_type = src_vreg.type();
+    }
+
+    auto dst_vreg = alloc_vreg_for_port(n.val(), dst_type);;
 
     builder_.bfm(dst_vreg, src_vreg,
                   immediate_operand(n.from(), value_type::u8()),
