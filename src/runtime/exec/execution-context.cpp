@@ -126,11 +126,11 @@ int execution_context::invoke(void *cpu_state)
 
 	auto x86_state = (x86::x86_cpu_state *)cpu_state;
 
+#ifndef NDEBUG
 	std::cerr << "=================" << std::endl;
 	std::cerr << "INVOKE PC=" << std::hex << x86_state->PC << std::endl;
 	std::cerr << "=================" << std::endl;
 
-#ifndef NDEBUG
     std::cerr << *x86_state;
     auto* memptr = reinterpret_cast<uint64_t*>(get_memory_ptr(0) + x86_state->RSP);
     std::cerr << "--------------------------------------------\n";
