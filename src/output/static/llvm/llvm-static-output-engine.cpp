@@ -1089,7 +1089,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 	case node_kinds::binary_atomic: {
 		auto ban = (binary_atomic_node *)a;
-		auto lhs = lower_port(builder, state_arg, pkt, ban->lhs());
+		auto lhs = lower_port(builder, state_arg, pkt, ban->address());
 		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
 
 		auto existing = node_ports_to_llvm_values_.find(&ban->val());
@@ -1120,7 +1120,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 	}
 	case node_kinds::ternary_atomic: {
 		auto tan = (ternary_atomic_node *)a;
-		auto lhs = lower_port(builder, state_arg, pkt, tan->lhs());
+		auto lhs = lower_port(builder, state_arg, pkt, tan->address());
 		auto rhs = lower_port(builder, state_arg, pkt, tan->rhs());
 		auto top = lower_port(builder, state_arg, pkt, tan->top());
 
