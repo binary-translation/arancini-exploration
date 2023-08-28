@@ -741,7 +741,7 @@ Register riscv64_translation_context::materialise_bit_insert(const bit_insert_no
 	return out_reg;
 }
 
-Register riscv64_translation_context::materialise_read_reg(const read_reg_node &n)
+TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_node &n)
 {
 	const port &value = n.val();
 	auto [out_reg, valid] = allocate_register(&n.val());
@@ -749,15 +749,17 @@ Register riscv64_translation_context::materialise_read_reg(const read_reg_node &
 		return out_reg;
 	}
 	if (is_flag(value) || is_gpr(value)) { // Flags or GPR
-
 		auto load_instr = load_instructions.at(value.type().element_width());
 		(assembler_.*load_instr)(out_reg, { FP, static_cast<intptr_t>(n.regoff()) });
+		if (!is_flag(value)) {
+			out_reg.set_actual_width();
+		}
+		out_reg.set_type(value_type::u64());
 		return out_reg;
-	} else if (is_i128(value)) {
-		Register out_reg2 = get_secondary_register(&value); // Will give higher 64bit
-
-		assembler_.ld(out_reg, { FP, static_cast<intptr_t>(n.regoff()) });
-		assembler_.ld(out_reg2, { FP, static_cast<intptr_t>(n.regoff() + 8) });
+	} else if (is_i128(value) || is_int(value, 512)) {
+		assembler_.ld(out_reg.reg1(), { FP, static_cast<intptr_t>(n.regoff()) });
+		assembler_.ld(out_reg.reg2(), { FP, static_cast<intptr_t>(n.regoff() + 8) });
+		out_reg.set_type(value_type::u128());
 		return out_reg;
 	}
 
