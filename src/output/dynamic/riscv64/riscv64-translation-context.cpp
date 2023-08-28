@@ -1,6 +1,7 @@
 #include <arancini/ir/node.h>
 #include <arancini/output/dynamic/riscv64/encoder/riscv64-constants.h>
 #include <arancini/output/dynamic/riscv64/riscv64-translation-context.h>
+#include <arancini/output/dynamic/riscv64/utils.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
 
 #include <unordered_map>
@@ -9,16 +10,10 @@ using namespace arancini::output::dynamic::riscv64;
 using namespace arancini::ir;
 
 /**
- * All values are always held sign extended to 64 bits in RISCV registers for simple flag calculation
  * Translations assumes FP holds pointer to CPU state.
- * Flags are always stored in registers S8 (ZF), S9 (CF), S10 (OF), S11(SF)
+ * Flags are always stored in registers S8 (ZF), S9 (CF), S10 (OF), S11(SF).
+ * Memory accesses need to use MEM_BASE.
  */
-constexpr Register ZF = S8;
-constexpr Register CF = S9;
-constexpr Register OF = S10;
-constexpr Register SF = S11;
-
-constexpr Register MEM_BASE = T6;
 
 #define X86_OFFSET_OF(reg) __builtin_offsetof(struct arancini::runtime::exec::x86::x86_cpu_state, reg)
 enum class reg_offsets {
@@ -149,31 +144,6 @@ void riscv64_translation_context::lower(ir::node *n)
 {
 	// Defer until end of block (when generation is finished)
 	nodes_.push_back(n);
-}
-
-static inline bool is_flag(const port &value) { return value.type().width() == 1; }
-
-static inline bool is_flag_port(const port &value)
-{
-	return value.kind() == port_kinds::zero || value.kind() == port_kinds::carry || value.kind() == port_kinds::negative
-		|| value.kind() == port_kinds::overflow;
-}
-
-static inline bool is_gpr(const port &value)
-{
-	int width = value.type().width();
-	return (width == 8 || width == 16 || width == 32 || width == 64) && (!value.type().is_vector()) && value.type().is_integer();
-}
-
-static inline bool is_gpr_or_flag(const port &value) { return (is_gpr(value) || is_flag(value)); }
-
-static inline bool is_i128(const port &value) { return value.type().width() == 128 && value.type().is_integer() && !value.type().is_vector(); }
-
-static inline bool is_scalar_int(const port &value) { return is_gpr_or_flag(value) || is_i128(value); }
-
-static inline bool is_int_vector(const port &value, int total_width, int element_width)
-{
-	return (value.type().is_vector() && value.type().is_integer() && value.type().width() == total_width && value.type().element_width() == element_width);
 }
 
 using load_store_func_t = decltype(&Assembler::ld);
