@@ -12,6 +12,41 @@ constexpr Register SF = S11;
 
 constexpr Register MEM_BASE = T6;
 
+/**
+ * Sign extend src into full register width to allow using full reg instructions
+ * @param assembler
+ * @param out
+ * @param src
+ */
+inline void extend_to_64(Assembler &assembler, TypedRegister &out, const TypedRegister& src)
+{
+	if (!src.type().is_vector()) {
+		switch (src.type().element_width()) {
+		case 8:
+		case 16:
+			assembler.slli(out, src, 64 - src.type().element_width());
+			assembler.srai(out, out, 64 - src.type().element_width());
+			out.set_actual_width();
+			out.set_type(value_type::u64());
+			break;
+		case 32:
+			assembler.sextw(out, src);
+			out.set_actual_width(32);
+			out.set_type(value_type::u64());
+			break;
+		case 64:
+			if (src != out) {
+				assembler.mv(out, src);
+			}
+			break;
+		default:
+			throw std::runtime_error("not implemented");
+		}
+	} else {
+		return; // Noop on vectorized
+	}
+}
+
 inline void gen_constant(Assembler &assembler, int64_t imm, Register reg)
 {
 	auto immLo32 = (int32_t)imm;
