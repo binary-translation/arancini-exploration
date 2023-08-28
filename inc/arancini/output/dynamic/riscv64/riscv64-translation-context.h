@@ -2,9 +2,12 @@
 
 #include <arancini/ir/node.h>
 #include <arancini/output/dynamic/riscv64/encoder/riscv64-assembler.h>
+#include <arancini/output/dynamic/riscv64/register.h>
 #include <arancini/output/dynamic/translation-context.h>
 
+#include <forward_list>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <variant>
 
@@ -34,11 +37,12 @@ private:
 	std::unordered_map<const ir::label_node *, std::unique_ptr<Label>> labels_;
 
 	size_t reg_allocator_index_ { 0 };
-    std::unordered_map<const ir::port *, uint32_t> reg_for_port_;
-    std::unordered_map<const ir::port *, uint32_t> secondary_reg_for_port_;
+	std::unordered_map<const ir::port *, TypedRegister> reg_for_port_;
+	std::forward_list<TypedRegister> temporaries;
     std::unordered_map<const ir::local_var *, uint32_t> locals_;
 
-	std::pair<Register, bool> allocate_register(const ir::port *p = nullptr);
+	std::pair<TypedRegister &, bool> allocate_register(
+		const ir::port *p = nullptr, std::optional<Register> reg1 = std::nullopt, std::optional<Register> reg2 = std::nullopt);
 
 	std::variant<Register, std::monostate> materialise(const ir::node *n);
 
@@ -67,6 +71,5 @@ private:
 	Register materialise_vector_extract(const ir::vector_extract_node &n);
 
 	void add_marker(int payload);
-	Register get_secondary_register(const ir::port *p);
 };
 } // namespace arancini::output::dynamic::riscv64
