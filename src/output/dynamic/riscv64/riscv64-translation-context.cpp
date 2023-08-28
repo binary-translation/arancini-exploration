@@ -853,14 +853,15 @@ void riscv64_translation_context::materialise_write_mem(const write_mem_node &n)
 	(assembler_.*store_instr)(src_reg, addr);
 }
 
-Register riscv64_translation_context::materialise_read_pc(const read_pc_node &n) { return materialise_constant(current_address_); }
+TypedRegister &riscv64_translation_context::materialise_read_pc(const read_pc_node &n) { return materialise_constant(current_address_); }
 
 void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 {
 	if (!is_gpr(n.value())) {
 		throw std::runtime_error("unsupported width on write pc operation");
 	}
-	Register src_reg = std::get<Register>(materialise(n.value().owner()));
+	// FIXME maybe only support 64bit values for PC
+	TypedRegister &src_reg = *materialise(n.value().owner());
 
 	Address addr { FP, static_cast<intptr_t>(reg_offsets::PC) };
 	auto store_instr = store_instructions.at(n.value().type().element_width());

@@ -50,7 +50,7 @@ private:
 	void materialise_write_reg(const ir::write_reg_node &n);
 	TypedRegister& materialise_read_mem(const ir::read_mem_node &n);
 	void materialise_write_mem(const ir::write_mem_node &n);
-	Register materialise_read_pc(const ir::read_pc_node &n);
+	TypedRegister& materialise_read_pc(const ir::read_pc_node &n);
 	void materialise_write_pc(const ir::write_pc_node &n);
 	void materialise_label(const ir::label_node &n);
 	void materialise_br(const ir::br_node &n);
