@@ -148,7 +148,7 @@ void riscv64_translation_context::lower(ir::node *n)
 
 using load_store_func_t = decltype(&Assembler::ld);
 
-static std::unordered_map<std::size_t, load_store_func_t> load_instructions {
+static const std::unordered_map<std::size_t, load_store_func_t> load_instructions {
 	{ 1, &Assembler::lb },
 	{ 8, &Assembler::lb },
 	{ 16, &Assembler::lh },
@@ -796,13 +796,13 @@ void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 	throw std::runtime_error("Unsupported width on register write: " + std::to_string(value.type().width()));
 }
 
-Register riscv64_translation_context::materialise_read_mem(const read_mem_node &n)
+TypedRegister &riscv64_translation_context::materialise_read_mem(const read_mem_node &n)
 {
 	auto [out_reg, valid] = allocate_register(&n.val());
 	if (!valid) {
 		return out_reg;
 	}
-	Register addr_reg = std::get<Register>(materialise(n.address().owner()));
+	TypedRegister &addr_reg = *(materialise(n.address().owner())); // FIXME Assumes address has 64bit size in IR
 
 	auto [reg, _] = allocate_register();
 
@@ -811,10 +811,8 @@ Register riscv64_translation_context::materialise_read_mem(const read_mem_node &
 	Address addr { reg };
 
 	if (is_i128(n.val())) {
-		Register out_reg2 = get_secondary_register(&n.val());
-
-		assembler_.ld(out_reg, addr);
-		assembler_.ld(out_reg2, Address { reg, 8 });
+		assembler_.ld(out_reg.reg1(), addr);
+		assembler_.ld(out_reg.reg2(), Address { reg, 8 });
 		return out_reg;
 	}
 
@@ -824,6 +822,8 @@ Register riscv64_translation_context::materialise_read_mem(const read_mem_node &
 
 	auto load_instr = load_instructions.at(n.val().type().element_width());
 	(assembler_.*load_instr)(out_reg, addr);
+	out_reg.set_actual_width();
+	out_reg.set_type(value_type::u64());
 
 	return out_reg;
 }
