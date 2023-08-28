@@ -551,7 +551,7 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 {
 	Register src_reg = std::get<Register>(materialise(n.source_value().owner()));
 
-	bool works = (is_scalar_int(n.val()) || ((is_int_vector(n.val(), 128, 64) || is_int_vector(n.val(), 128, 32)) && n.op() == cast_op::bitcast))
+	bool works = (is_scalar_int(n.val()) || ((is_int_vector(n.val(), 2, 64) || is_int_vector(n.val(), 4, 32)) && n.op() == cast_op::bitcast))
 		&& (is_gpr_or_flag(n.source_value()) || (is_i128(n.source_value()) && (n.op() == cast_op::trunc || n.op() == cast_op::bitcast)));
 	if (!works) {
 		throw std::runtime_error("unsupported types on cast operation");
@@ -738,7 +738,7 @@ void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 			(assembler_.*store_instr)(reg, { FP, static_cast<intptr_t>(n.regoff()) });
 		}
 		return;
-	} else if (is_i128(value) || is_int_vector(value, 128, 64) || is_int_vector(value, 128, 32) || is_int(value, 512) || is_int_vector(value, 512, 128)) {
+	} else if (is_i128(value) || is_int_vector(value, 2, 64) || is_int_vector(value, 4, 32) || is_int(value, 512) || is_int_vector(value, 4, 128)) {
 		// Treat 512 as 128 for now. Assuming it is just 128 bit instructions acting on 512 registers
 		TypedRegister &reg = *(materialise(value.owner())); // Will give lower 64bit
 
@@ -1156,7 +1156,7 @@ Register riscv64_translation_context::materialise_binary_arith(const binary_arit
 	bool works = (is_gpr_or_flag(n.val()) && is_gpr_or_flag(n.lhs()) && is_gpr_or_flag(n.rhs()))
 		|| ((n.op() == binary_arith_op::mul || n.op() == binary_arith_op::div || n.op() == binary_arith_op::mod || n.op() == binary_arith_op::bxor)
 			&& is_i128(n.val()) && is_i128(n.lhs()) && is_i128(n.rhs()))
-		|| ((is_int_vector(n.val(), 128, 32)) && n.op() == binary_arith_op::add);
+		|| ((is_int_vector(n.val(), 4, 32)) && n.op() == binary_arith_op::add);
 	if (!works) {
 		throw std::runtime_error("unsupported width on binary arith operation");
 	}
@@ -1265,7 +1265,7 @@ standardPath:
 	case binary_arith_op::add:
 		switch (n.val().type().width()) { //Needs to stay width so vec4x32 works
 		case 128: {
-			if (is_int_vector(n.val(), 128, 32)) {
+			if (is_int_vector(n.val(), 4, 32)) {
 				Register src_reg22 = get_secondary_register(&n.rhs());
 				Register src_reg12 = get_secondary_register(&n.rhs());
 				Register out_reg2 = get_secondary_register(&n.val());
