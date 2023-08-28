@@ -1605,53 +1605,19 @@ standardPath:
 	return out_reg;
 }
 
-Register riscv64_translation_context::materialise_constant(int64_t imm)
+TypedRegister &riscv64_translation_context::materialise_constant(int64_t imm)
 {
 	// Optimizations with left or right shift at the end not implemented (for constants with trailing or leading zeroes)
 
 	if (imm == 0) {
-		return ZERO;
+		return allocate_register(nullptr, ZERO).first;
 	}
-	auto immLo32 = (int32_t)imm;
-	auto immLo12 = immLo32 << (32 - 12) >> (32 - 12); // sign extend lower 12 bit
-	if (imm == immLo32) {
-		Register out_reg = allocate_register(nullptr).first;
-		int32_t imm32Hi20 = (immLo32 - immLo12);
-		if (imm32Hi20 != 0) {
-			assembler_.lui(out_reg, imm32Hi20);
-			if (immLo12) {
-				assembler_.addiw(out_reg, out_reg, immLo12);
-			}
-		} else {
-			assembler_.li(out_reg, imm);
-		}
-		return out_reg;
 
-	} else {
-		auto val = (int64_t)((uint64_t)imm - (uint64_t)(int64_t)immLo12); // Get lower 12 bits out of imm
-		int shiftAmnt = 0;
-		if (!Utils::IsInt(32, val)) { // Might still not fit as LUI with unsigned add
-			shiftAmnt = __builtin_ctzll(val);
-			val >>= shiftAmnt;
-			if (shiftAmnt > 12 && !IsITypeImm(val)
-				&& Utils::IsInt(32, val << 12)) { // Does not fit into 12 bits but can fit into LUI U-immediate with proper shift
-				val <<= 12;
-				shiftAmnt -= 12;
-			}
-		}
-
-		Register out_reg = materialise_constant(val);
-
-		if (shiftAmnt) {
-			assembler_.slli(out_reg, out_reg, shiftAmnt);
-		}
-
-		if (immLo12) {
-			assembler_.addi(out_reg, out_reg, immLo12);
-		}
-		return out_reg;
-	}
+	TypedRegister &reg = allocate_register(nullptr).first;
+	gen_constant(assembler_, imm, reg);
+	return reg;
 }
+
 
 Register riscv64_translation_context::materialise_csel(const csel_node &n)
 {

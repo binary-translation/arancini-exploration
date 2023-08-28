@@ -55,7 +55,7 @@ private:
 	void materialise_label(const ir::label_node &n);
 	void materialise_br(const ir::br_node &n);
 	void materialise_cond_br(const ir::cond_br_node &n);
-	Register materialise_constant(int64_t imm);
+	TypedRegister &materialise_constant(int64_t imm);
 	Register materialise_unary_arith(const ir::unary_arith_node &n);
 	Register materialise_binary_arith(const ir::binary_arith_node &n);
 	Register materialise_ternary_arith(const ir::ternary_arith_node &n);
