@@ -435,6 +435,9 @@ public:
 	port &zero() { return zero_; }
 	port &negative() { return negative_; }
 
+	[[nodiscard]] const port &zero() const { return zero_; }
+	[[nodiscard]] const port &negative() const{ return negative_; }
+
 	virtual void accept(visitor &v) override
 	{
 		value_node::accept(v);
@@ -658,6 +661,11 @@ public:
 	port &negative() { return negative_; }
 	port &overflow() { return overflow_; }
 	port &carry() { return carry_; }
+
+	const port &zero() const { return zero_; }
+	const port &negative() const { return negative_; }
+	const port &overflow() const { return overflow_; }
+	const port &carry() const { return carry_; }
 
 	virtual void accept(visitor &v) override
 	{
