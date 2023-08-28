@@ -1696,35 +1696,34 @@ void riscv64_translation_context::materialise_internal_call(const internal_call_
 	}
 }
 
-Register riscv64_translation_context::materialise_vector_insert(const vector_insert_node &n)
+// FIXME 512
+TypedRegister &riscv64_translation_context::materialise_vector_insert(const vector_insert_node &n)
 {
-	if (n.val().type().width() != 128) {
+	if (n.val().type().width() != 128 && n.val().type().width() != 512) {
 		throw std::runtime_error("Unsupported vector insert width");
 	}
-	if (n.val().type().element_width() != 64) {
+	if (n.val().type().element_width() != 64 && n.val().type().element_width() != 128) {
 		throw std::runtime_error("Unsupported vector insert element width");
 	}
-	if (n.insert_value().type().width() != 64) {
+	if (n.insert_value().type().width() != 64 && n.insert_value().type().width() != 128) {
 		throw std::runtime_error("Unsupported vector insert insert_value width");
 	}
 
-	Register insert = std::get<Register>(materialise(n.insert_value().owner()));
-	Register src = std::get<Register>(materialise(n.source_vector().owner()));
+	TypedRegister &insert = *materialise(n.insert_value().owner());
+	TypedRegister &src = *materialise(n.source_vector().owner());
 
 	if (n.index() == 0) {
 		// No value modification just map correctly
-		secondary_reg_for_port_[&n.val()] = get_secondary_register(&n.source_vector()).encoding();
-		return insert;
+		return allocate_register(&n.val(), insert.reg1(), src.reg2()).first;
 	} else if (n.index() == 1) {
 		// No value modification just map correctly
-		secondary_reg_for_port_[&n.val()] = insert.encoding();
-		return src;
+		return allocate_register(&n.val(), src.reg1(), insert.reg2()).first;
 	} else {
 		throw std::runtime_error("Unsupported vector insert index");
 	}
 }
 
-Register riscv64_translation_context::materialise_vector_extract(const vector_extract_node &n)
+TypedRegister &riscv64_translation_context::materialise_vector_extract(const vector_extract_node &n)
 {
 	if (n.source_vector().type().width() != 128) {
 		throw std::runtime_error("Unsupported vector extract width");
@@ -1736,14 +1735,15 @@ Register riscv64_translation_context::materialise_vector_extract(const vector_ex
 		throw std::runtime_error("Unsupported vector extract value width");
 	}
 
-	Register src = std::get<Register>(materialise(n.source_vector().owner()));
+	TypedRegister &src = *materialise(n.source_vector().owner());
 
+	// When adding other widths, remember to set correct type
 	if (n.index() == 0) {
 		// No value modification just map correctly
-		return src;
+		return allocate_register(&n.val(), src.reg1()).first;
 	} else if (n.index() == 1) {
 		// No value modification just map correctly
-		return get_secondary_register(&n.source_vector());
+		return allocate_register(&n.val(), src.reg2()).first;
 	} else {
 		throw std::runtime_error("Unsupported vector extract index");
 	}
