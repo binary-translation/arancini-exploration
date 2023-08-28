@@ -16,7 +16,7 @@ using namespace arancini::ir;
  */
 
 #define X86_OFFSET_OF(reg) __builtin_offsetof(struct arancini::runtime::exec::x86::x86_cpu_state, reg)
-enum class reg_offsets {
+enum class reg_offsets : unsigned long {
 #define DEFREG(ctype, ltype, name) name = X86_OFFSET_OF(name),
 #include <arancini/input/x86/reg.def>
 #undef DEFREG
