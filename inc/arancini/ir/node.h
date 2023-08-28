@@ -710,20 +710,20 @@ enum class binary_atomic_op { add, sub, band, bor, xadd, bxor, btc, btr, bts, xc
 
 class binary_atomic_node : public atomic_node {
 public:
-	binary_atomic_node(binary_atomic_op op, port &lhs, port &rhs)
-		: atomic_node(node_kinds::binary_atomic, lhs.type())
+	binary_atomic_node(binary_atomic_op op, port &address, port &operand)
+		: atomic_node(node_kinds::binary_atomic, operand.type())
 		, op_(op)
-		, lhs_(lhs)
-		, rhs_(rhs)
+		, address_(address)
+		, operand_(operand)
 	{
-		lhs.add_target(this);
-		rhs.add_target(this);
+		address.add_target(this);
+		operand.add_target(this);
 	}
 
 	binary_atomic_op op() const { return op_; }
 
-	port &lhs() const { return lhs_; }
-	port &rhs() const { return rhs_; }
+	port &address() const { return address_; }
+	port &rhs() const { return operand_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -735,29 +735,29 @@ public:
 
 private:
 	binary_atomic_op op_;
-	port &lhs_;
-	port &rhs_;
+	port &address_;
+	port &operand_;
 };
 
 enum class ternary_atomic_op { adc, sbb, cmpxchg };
 
 class ternary_atomic_node : public atomic_node {
 public:
-	ternary_atomic_node(ternary_atomic_op op, port &lhs, port &rhs, port &top)
-		: atomic_node(node_kinds::ternary_atomic, lhs.type())
+	ternary_atomic_node(ternary_atomic_op op, port &address, port &rhs, port &top)
+		: atomic_node(node_kinds::ternary_atomic, rhs.type())
 		, op_(op)
-		, lhs_(lhs)
+		, address_(address)
 		, rhs_(rhs)
 		, top_(top)
 	{
-		lhs.add_target(this);
+		address.add_target(this);
 		rhs.add_target(this);
 		top.add_target(this);
 	}
 
 	ternary_atomic_op op() const { return op_; }
 
-	port &lhs() const { return lhs_; }
+	port &address() const { return address_; }
 	port &rhs() const { return rhs_; }
 	port &top() const { return top_; }
 
@@ -771,7 +771,7 @@ public:
 
 private:
 	ternary_atomic_op op_;
-	port &lhs_;
+	port &address_;
 	port &rhs_;
 	port &top_;
 };
