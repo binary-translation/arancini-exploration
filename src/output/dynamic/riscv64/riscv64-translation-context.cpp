@@ -772,24 +772,24 @@ void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 	if (is_flag(value) || is_gpr(value)) { // Flags or GPR
 		auto store_instr = store_instructions.at(value.type().element_width());
 		if (is_flag(value)) {
-			Register reg = (!is_flag_port(value)) ? std::get<Register>(materialise(value.owner())) : flag_map.at(n.regoff());
+			Register reg = (!is_flag_port(value)) ? (materialise(value.owner()))->get() : Register { flag_map.at(n.regoff()) };
 			if (is_flag_port(value) && !reg_for_port_.count(&value.owner()->val())) {
 				// Result of node not written only flags needed
 				materialise(value.owner());
 			}
 			(assembler_.*store_instr)(reg, { FP, static_cast<intptr_t>(n.regoff()) });
 		} else {
-			Register reg = std::get<Register>(materialise(value.owner()));
+			TypedRegister &reg = *(materialise(value.owner()));
 
 			(assembler_.*store_instr)(reg, { FP, static_cast<intptr_t>(n.regoff()) });
 		}
 		return;
-	} else if (is_i128(value) || is_int_vector(value, 128, 64) || is_int_vector(value, 128, 32)) {
-		Register reg = std::get<Register>(materialise(value.owner())); // Will give lower 64bit
-		Register reg2 = get_secondary_register(&value); // Will give higher 64bit
+	} else if (is_i128(value) || is_int_vector(value, 128, 64) || is_int_vector(value, 128, 32) || is_int(value, 512) || is_int_vector(value, 512, 128)) {
+		// Treat 512 as 128 for now. Assuming it is just 128 bit instructions acting on 512 registers
+		TypedRegister &reg = *(materialise(value.owner())); // Will give lower 64bit
 
-		assembler_.sd(reg, { FP, static_cast<intptr_t>(n.regoff()) });
-		assembler_.sd(reg2, { FP, static_cast<intptr_t>(n.regoff() + 8) });
+		assembler_.sd(reg.reg1(), { FP, static_cast<intptr_t>(n.regoff()) });
+		assembler_.sd(reg.reg2(), { FP, static_cast<intptr_t>(n.regoff() + 8) });
 		return;
 	}
 
