@@ -1617,8 +1617,7 @@ TypedRegister &riscv64_translation_context::materialise_constant(int64_t imm)
 	return reg;
 }
 
-
-Register riscv64_translation_context::materialise_csel(const csel_node &n)
+TypedRegister &riscv64_translation_context::materialise_csel(const csel_node &n)
 {
 	if (!(is_gpr(n.val()) && is_gpr_or_flag(n.condition()) && is_gpr(n.falseval()) && is_gpr(n.trueval()))) {
 		throw std::runtime_error("unsupported width on csel operation");
@@ -1630,21 +1629,26 @@ Register riscv64_translation_context::materialise_csel(const csel_node &n)
 
 	Label false_calc {}, end {};
 
-	Register cond = std::get<Register>(materialise(n.condition().owner()));
+	TypedRegister &cond = *materialise(n.condition().owner());
 
+	extend_to_64(assembler_, cond, cond);
 	assembler_.beqz(cond, &false_calc);
 
-	Register trueval = std::get<Register>(materialise(n.trueval().owner()));
+	TypedRegister &trueval = *materialise(n.trueval().owner());
 	assembler_.mv(out_reg, trueval);
 
 	assembler_.j(&end);
 
 	assembler_.Bind(&false_calc);
 
-	Register falseval = std::get<Register>(materialise(n.falseval().owner()));
+	TypedRegister &falseval = *materialise(n.falseval().owner());
 	assembler_.mv(out_reg, falseval);
 
 	assembler_.Bind(&end);
+
+	// In-types might be wider than out-type so out accurate to narrower of the two
+	out_reg.set_type(get_minimal_type(trueval, falseval));
+	out_reg.set_actual_width(trueval.actual_width() < falseval.actual_width() ? trueval.actual_width_0() : falseval.actual_width_0());
 	return out_reg;
 }
 
