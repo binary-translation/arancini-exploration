@@ -46,7 +46,7 @@ private:
 
 	std::variant<Register, std::monostate> materialise(const ir::node *n);
 
-	Register materialise_read_reg(const ir::read_reg_node &n);
+	TypedRegister &materialise_read_reg(const ir::read_reg_node &n);
 	void materialise_write_reg(const ir::write_reg_node &n);
 	Register materialise_read_mem(const ir::read_mem_node &n);
 	void materialise_write_mem(const ir::write_mem_node &n);
