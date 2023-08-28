@@ -156,7 +156,7 @@ static const std::unordered_map<std::size_t, load_store_func_t> load_instruction
 	{ 64, &Assembler::ld },
 };
 
-static std::unordered_map<std::size_t, load_store_func_t> store_instructions {
+static const std::unordered_map<std::size_t, load_store_func_t> store_instructions {
 	{ 1, &Assembler::sb },
 	{ 8, &Assembler::sb },
 	{ 16, &Assembler::sh },
@@ -830,20 +830,18 @@ TypedRegister &riscv64_translation_context::materialise_read_mem(const read_mem_
 
 void riscv64_translation_context::materialise_write_mem(const write_mem_node &n)
 {
-	Register src_reg = std::get<Register>(materialise(n.value().owner()));
-	Register addr_reg = std::get<Register>(materialise(n.address().owner()));
+	TypedRegister &src_reg = *materialise(n.value().owner());
+	TypedRegister &addr_reg = *materialise(n.address().owner());
 
-	auto [reg, _] = allocate_register();
+	auto [reg, _] = allocate_register(); // Temporary
 
-	assembler_.add(reg, addr_reg, MEM_BASE);
+	assembler_.add(reg, addr_reg, MEM_BASE); // FIXME Assumes address has 64bit size in IR
 
 	Address addr { reg };
 
 	if (is_i128(n.value())) {
-		Register reg2 = get_secondary_register(&n.value()); // Will give higher 64bit
-
-		assembler_.sd(src_reg, addr);
-		assembler_.sd(reg2, Address { reg, 8 });
+		assembler_.sd(src_reg.reg1(), addr);
+		assembler_.sd(src_reg.reg2(), Address { reg, 8 });
 		return;
 	}
 
