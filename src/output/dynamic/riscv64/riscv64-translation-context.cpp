@@ -890,7 +890,9 @@ void riscv64_translation_context::materialise_br(const br_node &n)
 
 void riscv64_translation_context::materialise_cond_br(const cond_br_node &n)
 {
-	Register cond = std::get<Register>(materialise(n.cond().owner()));
+	TypedRegister &cond = *materialise(n.cond().owner());
+
+	extend_to_64(assembler_, cond, cond);
 
 	auto [it, not_exist] = labels_.try_emplace(n.target(), nullptr);
 
