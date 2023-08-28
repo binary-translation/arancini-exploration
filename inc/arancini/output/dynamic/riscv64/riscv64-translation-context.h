@@ -67,8 +67,8 @@ private:
 	Register materialise_ternary_atomic(const ir::ternary_atomic_node &n);
 	Register materialise_csel(const ir::csel_node &n);
 	void materialise_internal_call(const ir::internal_call_node &n);
-	Register materialise_vector_insert(const ir::vector_insert_node &node);
-	Register materialise_vector_extract(const ir::vector_extract_node &n);
+	TypedRegister &materialise_vector_insert(const ir::vector_insert_node &node);
+	TypedRegister &materialise_vector_extract(const ir::vector_extract_node &n);
 
 	void add_marker(int payload);
 };
