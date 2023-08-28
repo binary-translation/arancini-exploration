@@ -34,10 +34,18 @@ static std::unordered_map<unsigned long, Register> flag_map {
 	{ (unsigned long)reg_offsets::SF, SF },
 };
 
-std::pair<Register, bool> riscv64_translation_context::allocate_register(const port *p)
+/**
+ * Used to get the register for the given port.
+ * Will return the previously allocated TypedRegister or a new one with type set accordingly to the given port.
+ * @param p Port of the register. Can be null for temporary.
+ * @param reg1 Optional. Use this register for the lower half instead of allocating a new one.
+ * @param reg2 Optional. Use this register for the upper half instead of allocating a new one.
+ * @return A pair reference to the allocated Register and a boolean indicating whether the allocating was new.
+ */
+std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(const port *p, std::optional<Register> reg1, std::optional<Register> reg2)
 {
 	if (p && reg_for_port_.count(p)) {
-		return { Register { reg_for_port_[p] }, false };
+		return { reg_for_port_.at(p), false };
 	}
 	constexpr static Register registers[] { S1, A0, A1, A2, A3, A4, A5, T0, T1, T2, A6, A7, S2, S3, S4, S5, S6, S7, T3, T4, T5 };
 
@@ -45,34 +53,36 @@ std::pair<Register, bool> riscv64_translation_context::allocate_register(const p
 		throw std::runtime_error("RISC-V DBT ran out of registers for packet");
 	}
 
-	Register reg = registers[reg_allocator_index_++];
-
-	if (p) {
-		reg_for_port_[p] = reg.encoding();
+	if (!p) {
+		Register r1 = reg1 ? *reg1 : registers[reg_allocator_index_++];
+		temporaries.emplace_front(r1);
+		return { temporaries.front(), true };
 	}
 
-	return { reg, true };
-}
-
-Register riscv64_translation_context::get_secondary_register(const port *p)
-{
-	if (p && secondary_reg_for_port_.count(p)) {
-		return Register { secondary_reg_for_port_[p] };
+	switch (p->type().width()) {
+	case 512: // FIXME proper
+	case 128: {
+		Register r1 = reg1 ? *reg1 : registers[reg_allocator_index_++];
+		Register r2 = reg2 ? *reg2 : registers[reg_allocator_index_++];
+		auto [a, b] = reg_for_port_.emplace(std::piecewise_construct, std::forward_as_tuple(p), std::forward_as_tuple(r1, r2));
+		TypedRegister &tr = a->second;
+		tr.set_type(p->type());
+		return { tr, true };
 	}
-
-	constexpr static Register registers[] { S1, A0, A1, A2, A3, A4, A5, T0, T1, T2, A6, A7, S2, S3, S4, S5, S6, S7, T3, T4, T5 };
-
-	if (reg_allocator_index_ >= std::size(registers)) {
-		throw std::runtime_error("RISC-V DBT ran out of registers for packet");
+	case 64:
+	case 32:
+	case 16:
+	case 8:
+	case 1: {
+		Register r1 = reg1 ? *reg1 : registers[reg_allocator_index_++];
+		auto [a, b] = reg_for_port_.emplace(p, r1);
+		TypedRegister &tr = a->second;
+		tr.set_type(p->type());
+		return { tr, true };
 	}
-
-	Register reg = registers[reg_allocator_index_++];
-
-	if (p) {
-		secondary_reg_for_port_[p] = reg.encoding();
+	default:
+		throw std::runtime_error("Invalid type for register allocation");
 	}
-
-	return reg;
 }
 
 bool insert_ebreak = false;
@@ -102,7 +112,7 @@ void riscv64_translation_context::begin_instruction(off_t address, const std::st
 	add_marker(2);
 	reg_allocator_index_ = 0;
 	reg_for_port_.clear();
-	secondary_reg_for_port_.clear();
+	temporaries.clear();
 	locals_.clear();
 	labels_.clear();
 	nodes_.clear();
