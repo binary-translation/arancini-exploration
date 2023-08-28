@@ -47,6 +47,87 @@ inline void extend_to_64(Assembler &assembler, TypedRegister &out, const TypedRe
 	}
 }
 
+/**
+ * Extends the value of reg to be accurate if interpreted in the width of type. (Currently just makes it accurate up to 64 bits)
+ *
+ * Performs zero extension if target type is unsigned, sign-extension if it is signed.
+ *
+ * No-op if it was big enough already.
+ *
+ * @param assembler
+ * @param out
+ * @param src Can be same as in_reg to perform inplace widening
+ * @param type
+ * @param shift_by Optional. Shift to apply to fixed value (positive is left, negative is right). Applied AFTER value is correct.
+ * @return Whether the optional shift was applied
+ */
+
+inline bool fixup(Assembler &assembler, TypedRegister &out, const TypedRegister& src, const value_type &type, intptr_t shift_by = 0)
+{
+	if (!type.is_vector() && !src.type().is_vector()) {
+
+		switch (type.type_class()) {
+		case value_type_class::signed_integer:
+			if (type.element_width() <= src.type().element_width() && src == out) {
+				// Part already accurate representation
+				return false;
+			}
+			switch (src.type().element_width()) {
+			case 8:
+			case 16:
+				assembler.slli(out, src, 64 - src.type().element_width());
+				assembler.srai(out, out, 64 - src.type().element_width() - shift_by);
+				out.set_actual_width();
+				out.set_type(value_type::u64());
+				return true;
+			case 32:
+				assembler.sextw(out, src);
+				out.set_actual_width(32);
+				out.set_type(value_type::u64());
+				return false;
+			case 64:
+				if (src != out) {
+					assembler.mv(out, src);
+				}
+				return false;
+			default:
+				throw std::runtime_error("not implemented");
+			}
+		case value_type_class::unsigned_integer:
+			if (type.element_width() <= src.actual_width()  && src == out) {
+				// Part already accurate representation
+				return false;
+			}
+			switch (src.actual_width()) {
+			case 8:
+				assembler.andi(out, src, 0xff);
+				out.set_type(value_type::u64());
+				out.set_actual_width(0);
+				return false;
+			case 16:
+			case 32:
+				assembler.slli(out, src, 64 - src.actual_width());
+				assembler.srli(out, out, 64 - src.actual_width() - shift_by);
+				out.set_type(value_type::u64());
+				out.set_actual_width(0);
+				return true;
+			case 64:
+				if (src != out) {
+					assembler.mv(out, src);
+				}
+				return false;
+			default:
+				throw std::runtime_error("not implemented");
+			}
+		default:
+			throw std::runtime_error("not implemented");
+		}
+
+	} else {
+		throw std::runtime_error("not implemented");
+	}
+}
+
 inline void gen_constant(Assembler &assembler, int64_t imm, Register reg)
 {
 	auto immLo32 = (int32_t)imm;
