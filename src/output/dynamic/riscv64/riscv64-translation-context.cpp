@@ -1,5 +1,8 @@
 #include <arancini/ir/node.h>
+#include <arancini/output/dynamic/riscv64/arithmetic.h>
+#include <arancini/output/dynamic/riscv64/bitwise.h>
 #include <arancini/output/dynamic/riscv64/encoder/riscv64-constants.h>
+#include <arancini/output/dynamic/riscv64/flags.h>
 #include <arancini/output/dynamic/riscv64/riscv64-translation-context.h>
 #include <arancini/output/dynamic/riscv64/utils.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
@@ -631,18 +634,18 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 	}
 }
 
-Register riscv64_translation_context::materialise_bit_extract(const bit_extract_node &n)
+TypedRegister &riscv64_translation_context::materialise_bit_extract(const bit_extract_node &n)
 {
 	int from = n.from();
 	int length = n.length();
-	Register src = std::get<Register>(materialise(n.source_value().owner()));
+	TypedRegister &src = *materialise(n.source_value().owner());
 
 	if (n.source_value().type().element_width() == 128) {
-		if (length == 64) {
+		if (length == 64) { // One half replaced by input
 			if (from == 0) {
-				return src;
+				return allocate_register(&n.val(), src.reg1()).first;
 			} else if (from == 64) {
-				return get_secondary_register(&n.source_value());
+				return allocate_register(&n.val(), src.reg2()).first;
 			}
 		}
 	}
@@ -652,34 +655,7 @@ Register riscv64_translation_context::materialise_bit_extract(const bit_extract_
 		return out_reg;
 	}
 
-	if (is_flag(n.val()) && is_gpr(n.source_value())) {
-		if (from == 0) {
-			assembler_.andi(out_reg, src, 1);
-		} else if (from == 63) {
-			assembler_.srli(out_reg, src, 63);
-		} else if (from == 31) {
-			assembler_.srliw(out_reg, src, 31);
-		} else {
-			assembler_.srli(out_reg, src, from);
-			assembler_.andi(out_reg, out_reg, 1);
-		}
-		return out_reg;
-	}
-
-	if (!(is_gpr(n.val()) && is_gpr(n.source_value()))) {
-		throw std::runtime_error("Unsupported bit extract width.");
-	}
-
-	if (from == 0 && length == 32) {
-		assembler_.sextw(out_reg, src);
-		return out_reg;
-	}
-
-	Register temp = length + from < 64 ? out_reg : src;
-	if (length + from < 64) {
-		assembler_.slli(out_reg, src, 64 - (from + length));
-	}
-	assembler_.srai(out_reg, temp, 64 - length); // Use arithmetic shift to keep sign extension up
+	bit_extract(assembler_, out_reg, src, from, length);
 
 	return out_reg;
 }
