@@ -660,61 +660,40 @@ TypedRegister &riscv64_translation_context::materialise_bit_extract(const bit_ex
 	return out_reg;
 }
 
-Register riscv64_translation_context::materialise_bit_insert(const bit_insert_node &n)
+TypedRegister &riscv64_translation_context::materialise_bit_insert(const bit_insert_node &n)
 {
 	int to = n.to();
 	int length = n.length();
 
-	Register src = std::get<Register>(materialise(n.source_value().owner()));
+	TypedRegister &src = *materialise(n.source_value().owner());
 
-	Register bits = std::get<Register>(materialise(n.bits().owner()));
+	TypedRegister &bits = *materialise(n.bits().owner());
 
 	if (is_i128(n.val()) && is_i128(n.source_value()) && is_gpr(n.bits())) {
-		if (to + length < 64) { // No modification of high part
-			secondary_reg_for_port_[&n.val()] = get_secondary_register(&n.source_value()).encoding();
-		} else if (to >= 64) { // Only upper part modified
-
-			if (to == 64 && length == 64) {
-				secondary_reg_for_port_[&n.val()] = bits.encoding();
-				return src;
-			} /*else {
-				Register out_reg2 = get_secondary_register(&n.val());
-				Register src_reg2 = get_secondary_register(&n.source_value());
-			}*/
-			throw std::runtime_error("Unsupported bit insert arguments for 128 bit width.");
+		if (to == 64 && length == 64) {
+			// Only map don't modify registers
+			auto [out_reg, _] = allocate_register(&n.val(), src.reg1(), bits);
+			return out_reg;
+		} else if (to + length < 64) {
+			// Map upper and insert into lower
+			auto [out_reg, valid] = allocate_register(&n.val(), std::nullopt, src.reg2());
+			if (valid) {
+				bit_insert(assembler_, out_reg, src, bits, to, length, allocate_register(nullptr).first);
+			}
+			return out_reg;
 		} else {
 			throw std::runtime_error("Unsupported bit insert arguments for 128 bit width.");
 		}
-
-	} else if (!(is_gpr(n.val()) && is_gpr(n.source_value()) && is_gpr(n.bits()))) {
+	} else if (is_gpr(n.val()) && is_gpr(n.source_value()) && is_gpr(n.bits())) {
+		// Insert into 64B register
+		auto [out_reg, valid] = allocate_register(&n.val());
+		if (valid) {
+			bit_insert(assembler_, out_reg, src, bits, to, length, allocate_register(nullptr).first);
+		}
+		return out_reg;
+	} else {
 		throw std::runtime_error("Unsupported bit insert width.");
 	}
-
-	auto [out_reg, valid] = allocate_register(&n.val());
-	if (!valid) {
-		return out_reg;
-	}
-	Register temp_reg = allocate_register(nullptr).first;
-
-	int64_t mask = ~(((1ll << length) - 1) << to);
-
-	if (to == 0 && IsITypeImm(mask)) {
-		// Since to==0 no shift necessary and just masking both is enough
-		// `~mask` also fits IType since `mask` has all but lower bits set
-		assembler_.andi(temp_reg, bits, ~mask);
-		assembler_.andi(out_reg, src, mask);
-	} else {
-		Register mask_reg = materialise_constant(mask);
-		assembler_.and_(out_reg, src, mask_reg);
-		assembler_.slli(temp_reg, bits, 64 - length);
-		if (length + to != 64) {
-			assembler_.srli(temp_reg, temp_reg, 64 - (length + to));
-		}
-	}
-
-	assembler_.or_(out_reg, out_reg, temp_reg);
-
-	return out_reg;
 }
 
 TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_node &n)
