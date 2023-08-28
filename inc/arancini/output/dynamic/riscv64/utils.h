@@ -3,6 +3,7 @@
 #include <arancini/output/dynamic/riscv64/register.h>
 #include <arancini/ir/port.h>
 #include <arancini/ir/value-type.h>
+#include <arancini/output/dynamic/riscv64/encoder/riscv64-assembler.h>
 
 constexpr Register ZF = S8;
 constexpr Register CF = S9;
@@ -11,6 +12,46 @@ constexpr Register SF = S11;
 
 constexpr Register MEM_BASE = T6;
 
+inline void gen_constant(Assembler &assembler, int64_t imm, Register reg)
+{
+	auto immLo32 = (int32_t)imm;
+	auto immLo12 = immLo32 << (32 - 12) >> (32 - 12); // sign extend lower 12 bit
+	if (imm == immLo32) {
+		int32_t imm32Hi20 = (immLo32 - immLo12);
+		if (imm32Hi20 != 0) {
+			assembler.lui(reg, imm32Hi20);
+			if (immLo12) {
+				assembler.addiw(reg, reg, immLo12);
+			}
+		} else {
+			assembler.li(reg, imm);
+		}
+		return;
+	} else {
+		auto val = (int64_t)((uint64_t)imm - (uint64_t)(int64_t)immLo12); // Get lower 12 bits out of imm
+		int shiftAmnt = 0;
+		if (!Utils::IsInt(32, val)) { // Might still not fit as LUI with unsigned add
+			shiftAmnt = __builtin_ctzll(val);
+			val >>= shiftAmnt;
+			if (shiftAmnt > 12 && !IsITypeImm(val)
+				&& Utils::IsInt(32, val << 12)) { // Does not fit into 12 bits but can fit into LUI U-immediate with proper shift
+				val <<= 12;
+				shiftAmnt -= 12;
+			}
+		}
+
+		gen_constant(assembler, val, reg);
+
+		if (shiftAmnt) {
+			assembler.slli(reg, reg, shiftAmnt);
+		}
+
+		if (immLo12) {
+			assembler.addi(reg, reg, immLo12);
+		}
+		return;
+	}
+}
 static inline bool is_flag_t(const value_type &type) { return type.element_width() == 1; }
 static inline bool is_flag(const port &value) { return is_flag_t(value.type()); }
 static inline bool is_flag_port(const port &value)
