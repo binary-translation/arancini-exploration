@@ -164,7 +164,7 @@ static std::unordered_map<std::size_t, load_store_func_t> store_instructions {
 	{ 64, &Assembler::sd },
 };
 
-std::variant<Register, std::monostate> riscv64_translation_context::materialise(const node *n)
+std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context::materialise(const node *n)
 {
 	if (!n) {
 		throw std::runtime_error("RISC-V DBT received NULL pointer to node");
@@ -177,26 +177,26 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise(
 		return materialise_read_reg(*reinterpret_cast<const read_reg_node *>(n));
 	case node_kinds::write_reg:
 		materialise_write_reg(*reinterpret_cast<const write_reg_node *>(n));
-		return std::monostate {};
+		return std::nullopt;
 	case node_kinds::read_mem:
 		return materialise_read_mem(*reinterpret_cast<const read_mem_node *>(n));
 	case node_kinds::write_mem:
 		materialise_write_mem(*reinterpret_cast<const write_mem_node *>(n));
-		return std::monostate {};
+		return std::nullopt;
 	case node_kinds::read_pc:
 		return materialise_read_pc(*reinterpret_cast<const read_pc_node *>(n));
 	case node_kinds::write_pc:
 		materialise_write_pc(*reinterpret_cast<const write_pc_node *>(n));
-		return std::monostate {};
+		return std::nullopt;
 	case node_kinds::label:
 		materialise_label(*reinterpret_cast<const label_node *>(n));
-		return std::monostate {};
+		return std::nullopt;
 	case node_kinds::br:
 		materialise_br(*reinterpret_cast<const br_node *>(n));
-		return std::monostate {};
+		return std::nullopt;
 	case node_kinds::cond_br:
 		materialise_cond_br(*reinterpret_cast<const cond_br_node *>(n));
-		return std::monostate {};
+		return std::nullopt;
 	case node_kinds::constant: {
 		const constant_node &node = *reinterpret_cast<const constant_node *>(n);
 		if (!is_gpr_or_flag(node.val())) {
@@ -224,26 +224,26 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise(
 		return materialise_csel(*reinterpret_cast<const csel_node *>(n));
 	case node_kinds::internal_call:
 		materialise_internal_call(*reinterpret_cast<const internal_call_node *>(n));
-		return std::monostate {};
+		return std::nullopt;
 	case node_kinds::vector_insert:
 		return materialise_vector_insert(*reinterpret_cast<const vector_insert_node *>(n));
 	case node_kinds::vector_extract:
 		return materialise_vector_extract(*reinterpret_cast<const vector_extract_node *>(n));
 	case node_kinds::read_local:
-		return Register { locals_[reinterpret_cast<const read_local_node *>(n)->local()] };
+		return locals_.at(reinterpret_cast<const read_local_node *>(n)->local());
 	case node_kinds::write_local: {
 		auto &node = *reinterpret_cast<const write_local_node *>(n);
-		Register write_reg = std::get<Register>(materialise(node.write_value().owner()));
+		TypedRegister &write_reg = *(materialise(node.write_value().owner()));
 		uint32_t reg_enc;
 		if (!locals_.count(node.local())) {
-			Register local = allocate_register(nullptr).first;
+			TypedRegister &local = allocate_register().first;
+			locals_.emplace(node.local(), std::ref(local));
 			reg_enc = local.encoding();
-			locals_[node.local()] = reg_enc;
 		} else {
-			reg_enc = locals_[node.local()];
+			reg_enc = locals_.at(node.local()).get().encoding();
 		}
 		assembler_.mv(Register { reg_enc }, write_reg);
-		return std::monostate {};
+		return std::nullopt;
 	}
 	default:
 		throw std::runtime_error("unsupported node");
