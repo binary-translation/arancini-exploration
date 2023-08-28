@@ -1,7 +1,9 @@
 #include <arancini/ir/node.h>
 #include <arancini/output/dynamic/riscv64/encoder/riscv64-constants.h>
 #include <arancini/output/dynamic/riscv64/bitwise.h>
+#include <arancini/output/dynamic/riscv64/flags.h>
 #include <arancini/output/dynamic/riscv64/riscv64-translation-context.h>
+#include <arancini/output/dynamic/riscv64/shift.h>
 #include <arancini/output/dynamic/riscv64/utils.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
 
@@ -993,7 +995,7 @@ Register riscv64_translation_context::materialise_ternary_arith(const ternary_ar
 	return out_reg;
 }
 
-Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node &n)
+TypedRegister &riscv64_translation_context::materialise_bit_shift(const bit_shift_node &n)
 {
 	if (!(is_gpr(n.val()) && is_gpr(n.input()) && is_gpr(n.amount()))) {
 		throw std::runtime_error("unsupported width on bit shift operation");
@@ -1003,7 +1005,7 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 		return out_reg;
 	}
 
-	Register src_reg = std::get<Register>(materialise(n.input().owner()));
+	TypedRegister &src_reg = *materialise(n.input().owner());
 
 	if (n.amount().kind() == port_kinds::constant) {
 		auto amt = (intptr_t)((constant_node *)n.amount().owner())->const_val_i() & 0x3f;
@@ -1012,141 +1014,34 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 		}
 		switch (n.op()) {
 		case shift_op::lsl:
-			/*
-			assembler_.srli(CF, src_reg, n.val().type().width() - amt); // CF
-
-			if (amt == 1) {
-				assembler_.srli(OF, src_reg, n.val().type().width() - amt - 1); // OF
-				assembler_.xor_(OF, OF, CF);
-				assembler_.andi(OF, OF, 1);
-			}
-			*/
-			switch (n.val().type().element_width()) {
-			case 64:
-				assembler_.slli(out_reg, src_reg, amt);
-				break;
-			case 32:
-				assembler_.slliw(out_reg, src_reg, amt);
-				break;
-			case 8:
-			case 16:
-				assembler_.slli(out_reg, src_reg, amt + (64 - n.val().type().element_width()));
-				assembler_.srai(out_reg, out_reg, (64 - n.val().type().element_width()));
-				break;
-			}
-
+			slli(assembler_, out_reg, src_reg, amt);
 			break;
 		case shift_op::lsr:
-			//			assembler_.srli(CF, src_reg, amt - 1); // CF
-			switch (n.val().type().element_width()) {
-			case 64:
-				assembler_.srli(out_reg, src_reg, amt);
-				break;
-			case 32:
-				assembler_.srliw(out_reg, src_reg, amt);
-				break;
-			case 16:
-				assembler_.slli(out_reg, src_reg, 48);
-				assembler_.srli(out_reg, out_reg, 48 + amt);
-				break;
-			case 8:
-				assembler_.andi(out_reg, src_reg, 0xff);
-				assembler_.srli(out_reg, out_reg, amt);
-				break;
-			}
-			/*if (amt == 1) {
-				assembler_.srli(OF, src_reg, n.val().type().width() - 1);
-				assembler_.andi(OF, OF, 1); // OF
-			}*/
+			srli(assembler_, out_reg, src_reg, amt);
 			break;
 		case shift_op::asr:
-			//			assembler_.srli(CF, src_reg, amt - 1); // CF
-			assembler_.srai(out_reg, src_reg, amt); // Sign extension preserved
-			if (amt == 1) {
-				assembler_.li(OF, 0);
-			}
+			srai(assembler_, out_reg, src_reg, amt);
 			break;
 		}
-		/*
-		assembler_.andi(CF, CF, 1); // CF
-		*/
-		assembler_.seqz(ZF, out_reg); // ZF
-		assembler_.sltz(SF, out_reg); // SF
+		zero_sign_flag(assembler_, out_reg, !n.zero().targets().empty(), !n.negative().targets().empty());
 
 		return out_reg;
 	}
 
-	auto amount = std::get<Register>(materialise(n.amount().owner()));
-	//	assembler_.subi(OF, amount, 1);
+	auto amount = *materialise(n.amount().owner());
 
 	switch (n.op()) {
 	case shift_op::lsl:
-		//		assembler_.sll(CF, src_reg, OF); // CF in highest bit
-
-		switch (n.val().type().element_width()) {
-		case 64:
-			assembler_.sll(out_reg, src_reg, amount);
-			break;
-		case 32:
-			assembler_.sllw(out_reg, src_reg, amount);
-			break;
-		case 8:
-		case 16:
-			assembler_.sll(out_reg, src_reg, amount);
-			assembler_.slli(out_reg, out_reg, (64 - n.val().type().element_width()));
-			assembler_.srai(out_reg, out_reg, (64 - n.val().type().element_width()));
-			break;
-		}
-		/*
-		assembler_.xor_(OF, out_reg, CF); // OF in highest bit
-
-		assembler_.srli(CF, CF, n.val().type().width() - 1);
-
-		assembler_.srli(OF, OF, n.val().type().width() - 1);
-		assembler_.andi(OF, OF, 1); // OF
-		*/
+		sll(assembler_, out_reg, src_reg, amount);
 		break;
 	case shift_op::lsr:
-		//		assembler_.srl(CF, src_reg, OF); // CF
-		switch (n.val().type().element_width()) {
-		case 64:
-			assembler_.srl(out_reg, src_reg, amount);
-			break;
-		case 32:
-			assembler_.srlw(out_reg, src_reg, amount);
-			break;
-		case 16:
-			assembler_.slli(out_reg, src_reg, 48);
-			assembler_.srli(out_reg, out_reg, 48);
-			assembler_.srl(out_reg, out_reg, amount);
-			break;
-		case 8:
-			assembler_.andi(out_reg, src_reg, 0xff);
-			assembler_.srl(out_reg, src_reg, amount);
-			break;
-		}
-		/*
-		// Undefined on shift amt > 1 (use same formula as amt == 1)
-		assembler_.srli(OF, src_reg, n.val().type().width() - 1);
-		assembler_.andi(OF, OF, 1); // OF
-		*/
-
+		srl(assembler_, out_reg, src_reg, amount);
 		break;
 	case shift_op::asr:
-		/*
-		assembler_.srl(CF, src_reg, OF); // CF
-		assembler_.li(OF, 0); // OF
-		*/
-
-		assembler_.sra(out_reg, src_reg, amount); // Sign extension preserved
-
+		sra(assembler_, out_reg, src_reg, amount);
 		break;
 	}
-	/*
-	assembler_.andi(CF, CF, 1); // Limit CF to single bit
-	*/
-	assembler_.seqz(ZF, out_reg); // ZF
-	assembler_.sltz(SF, out_reg); // SF
+	zero_sign_flag(assembler_, out_reg, !n.zero().targets().empty(), !n.negative().targets().empty());
 
 	return out_reg;
 }
