@@ -151,6 +151,40 @@ inline void xor_(Assembler &assembler, TypedRegister &out, const TypedRegister &
 	}
 }
 
+inline void mul(Assembler &assembler, TypedRegister &out, const TypedRegister &lhs, const TypedRegister &rhs)
+{
+	if (!out.type().is_vector() && out.type().is_integer()) {
+		switch (out.type().element_width()) {
+		case 128: {
+			// Split calculation
+			assembler.mul(out.reg1(), lhs, rhs);
+			switch (out.type().element_type().type_class()) {
+
+			case value_type_class::signed_integer:
+				assembler.mulh(out.reg2(), lhs, rhs);
+				break;
+			case value_type_class::unsigned_integer:
+				assembler.mulhu(out.reg2(), lhs, rhs);
+				break;
+			default:
+				// should not happen
+				throw std::runtime_error("not implemented");
+			}
+		} break;
+
+		case 64:
+		case 32:
+		case 16:
+			assembler.mul(out, lhs, rhs); // Assumes proper signed/unsigned extension from 32/16/8 bits
+			break;
+		default:
+			throw std::runtime_error("not implemented");
+		}
+	} else {
+		throw std::runtime_error("not implemented");
+	}
+}
+
 inline void not_(Assembler &assembler, TypedRegister &out, const TypedRegister &src)
 {
 	if (!out.type().is_vector() && out.type().is_integer()) {
