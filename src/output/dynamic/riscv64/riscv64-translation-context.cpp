@@ -1141,72 +1141,12 @@ standardPath:
 		zero_sign_flag(assembler_, out_reg, z_needed, n_needed);
 		break;
 	case binary_arith_op::mul:
-		switch (n.val().type().element_width()) {
-		case 128: {
-
-			// FIXME
-			if (n.lhs().owner()->kind() != node_kinds::cast || n.rhs().owner()->kind() != node_kinds::cast) {
-				throw std::runtime_error("128bit multiply without cast");
-			}
-
-			Register out_reg2 = get_secondary_register(&n.val());
-			// Split calculation
-			assembler_.mul(out_reg, src_reg1, src_reg2);
-			switch (n.val().type().element_type().type_class()) {
-
-			case value_type_class::signed_integer:
-				assembler_.mulh(out_reg2, src_reg1, src_reg2);
-				if (flags_needed) {
-					assembler_.srai(CF, out_reg, 63);
-					assembler_.xor_(CF, CF, out_reg2);
-					assembler_.snez(CF, CF);
-				}
-				break;
-			case value_type_class::unsigned_integer:
-				assembler_.mulhu(out_reg2, src_reg1, src_reg2);
-				if (flags_needed) {
-					assembler_.snez(CF, out_reg2);
-				}
-				break;
-			default:
-				throw std::runtime_error("Unsupported value type for multiply");
-			}
-			if (flags_needed) {
-				assembler_.mv(OF, CF);
-			}
-		} break;
-
-		case 64:
-		case 32:
-		case 16:
-			assembler_.mul(out_reg, src_reg1, src_reg2); // Assumes proper signed/unsigned extension from 32/16/8 bits
-
-			if (flags_needed) {
-				switch (n.val().type().element_type().type_class()) {
-
-				case value_type_class::signed_integer:
-					if (n.val().type().element_width() == 64) {
-						assembler_.sextw(CF, out_reg);
-					} else {
-						assembler_.slli(CF, out_reg, 64 - (n.val().type().element_width()) / 2);
-						assembler_.srai(CF, out_reg, 64 - (n.val().type().element_width()) / 2);
-					}
-					assembler_.xor_(CF, CF, out_reg);
-					assembler_.snez(CF, CF);
-					break;
-				case value_type_class::unsigned_integer:
-					assembler_.srli(CF, out_reg, n.val().type().element_width() / 2);
-					assembler_.snez(CF, CF);
-					break;
-				default:
-					throw std::runtime_error("Unsupported value type for multiply");
-				}
-				assembler_.mv(OF, CF);
-			}
-			break;
-		default:
-			throw std::runtime_error("Unsupported width for sub immediate");
+		// FIXME
+		if (n.val().type().element_width() == 128 && (n.lhs().owner()->kind() != node_kinds::cast || n.rhs().owner()->kind() != node_kinds::cast)) {
+			throw std::runtime_error("128bit multiply without cast");
 		}
+		mul(assembler_, out_reg, src_reg1, src_reg2);
+		mul_flags(assembler_, out_reg, v_needed, c_needed);
 		break;
 	case binary_arith_op::div:
 		switch (n.val().type().element_width()) {
