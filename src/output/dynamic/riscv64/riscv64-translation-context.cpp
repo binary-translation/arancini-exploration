@@ -529,12 +529,15 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 	}
 }
 
-Register riscv64_translation_context::materialise_cast(const cast_node &n)
+TypedRegister &riscv64_translation_context::materialise_cast(const cast_node &n)
 {
-	Register src_reg = std::get<Register>(materialise(n.source_value().owner()));
+	TypedRegister &src_reg = *materialise(n.source_value().owner());
 
-	bool works = (is_scalar_int(n.val()) || ((is_int_vector(n.val(), 2, 64) || is_int_vector(n.val(), 4, 32)) && n.op() == cast_op::bitcast))
-		&& (is_gpr_or_flag(n.source_value()) || (is_i128(n.source_value()) && (n.op() == cast_op::trunc || n.op() == cast_op::bitcast)));
+	bool works = (is_scalar_int(n.val())
+					 || ((is_int_vector(n.val(), 2, 64) || is_int_vector(n.val(), 4, 32) || is_int_vector(n.val(), 4, 128)) && n.op() == cast_op::bitcast))
+		&& (is_gpr_or_flag(n.source_value())
+			|| ((is_i128(n.source_value()) || is_int(n.source_value(), 512) || is_int_vector(n.source_value(), 4, 32))
+				&& (n.op() == cast_op::trunc || n.op() == cast_op::bitcast)));
 	if (!works) {
 		throw std::runtime_error("unsupported types on cast operation");
 	}
@@ -542,12 +545,12 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 	switch (n.op()) {
 
 	case cast_op::bitcast:
-		if (n.val().type().width() == 128) { //Needs to be width so casting to vector works
-			secondary_reg_for_port_[&n.val()] = get_secondary_register(&n.source_value()).encoding();
-		}
+		// Assumes types are compatible
+		// Just noop for now as all supported types use same layouts for same width
 		return src_reg;
 	case cast_op::sx:
 		if (is_i128(n.val())) {
+			// No true 128bit sign extension, just assume upper 64 unused
 			for (const node *target : n.val().targets()) {
 				if (target->kind() != node_kinds::binary_arith) {
 					throw std::runtime_error("unsupported types on cast sx operation");
@@ -557,8 +560,9 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 					throw std::runtime_error("unsupported types on cast sx operation");
 				}
 			}
+			fixup(assembler_, src_reg, src_reg, value_type::s64());
 		}
-		// No-op
+		fixup(assembler_, src_reg, src_reg, n.val().type().get_signed_type());
 		return src_reg;
 
 	case cast_op::zx: {
