@@ -879,7 +879,7 @@ TypedRegister &riscv64_translation_context::materialise_unary_arith(const unary_
 	throw std::runtime_error("unsupported unary arithmetic operation");
 }
 
-Register riscv64_translation_context::materialise_ternary_arith(const ternary_arith_node &n)
+TypedRegister &riscv64_translation_context::materialise_ternary_arith(const ternary_arith_node &n)
 {
 	if (!(is_gpr(n.val()) && is_gpr(n.lhs()) && is_gpr(n.rhs()) && is_gpr(n.top()))) {
 		throw std::runtime_error("unsupported width on ternary arith operation");
@@ -889,107 +889,56 @@ Register riscv64_translation_context::materialise_ternary_arith(const ternary_ar
 		return out_reg;
 	}
 
-	Register src_reg1 = std::get<Register>(materialise(n.lhs().owner()));
-	Register src_reg2 = std::get<Register>(materialise(n.rhs().owner()));
-	Register src_reg3 = std::get<Register>(materialise(n.top().owner()));
+	TypedRegister &src_reg1 = *materialise(n.lhs().owner());
+	TypedRegister &src_reg2 = *materialise(n.rhs().owner());
+	TypedRegister &src_reg3 = *materialise(n.top().owner());
+
+	bool z_needed = !n.zero().targets().empty();
+	bool v_needed = !n.overflow().targets().empty();
+	bool c_needed = !n.carry().targets().empty();
+	bool n_needed = !n.negative().targets().empty();
+	bool flags_needed = z_needed || v_needed || c_needed || n_needed;
+
 	switch (n.op()) {
 		// TODO Immediate handling
 
 	case ternary_arith_op::adc:
-		// Temporary: Add carry in
-		switch (n.val().type().element_width()) {
-		case 64:
-			assembler_.add(ZF, src_reg2, src_reg3);
-			break;
-		case 32:
-			assembler_.addw(ZF, src_reg2, src_reg3);
-			break;
-		case 8:
-		case 16:
-			assembler_.add(ZF, src_reg2, src_reg3);
-			assembler_.slli(ZF, ZF, 64 - n.val().type().element_width());
-			assembler_.srai(ZF, ZF, 64 - n.val().type().element_width());
-			break;
+
+	{
+		TypedRegister temp { CF };
+		temp.set_type(n.val().type());
+		add(assembler_, temp, src_reg2, src_reg3);
+		addi_flags(assembler_, temp, src_reg2, 1, false, v_needed, c_needed, false, SF, ZF);
+		add(assembler_, out_reg, src_reg1, temp);
+		add_flags(assembler_, out_reg, src_reg1, temp, false, v_needed, c_needed, false);
+		if (c_needed) {
+			assembler_.or_(CF, CF, ZF); // Total carry out
 		}
-
-		assembler_.slt(OF, ZF, src_reg2); // Temporary overflow
-		assembler_.sltu(CF, ZF, src_reg2); // Temporary carry
-
-		// Normal add
-		switch (n.val().type().element_width()) {
-		case 64:
-			assembler_.add(out_reg, src_reg1, ZF);
-			break;
-		case 32:
-			assembler_.addw(out_reg, src_reg1, ZF);
-			break;
-		case 8:
-		case 16:
-			assembler_.add(out_reg, src_reg1, ZF);
-			assembler_.slli(out_reg, out_reg, 64 - n.val().type().element_width());
-			assembler_.srai(out_reg, out_reg, 64 - n.val().type().element_width());
-			break;
+		if (v_needed) {
+			assembler_.xor_(OF, OF, SF); // Total overflow out
 		}
-
-		assembler_.sltu(SF, out_reg, ZF); // Normal carry out
-		assembler_.or_(CF, CF, SF); // Total carry out
-
-		assembler_.sltz(SF, src_reg1);
-		assembler_.slt(ZF, out_reg, ZF);
-		assembler_.xor_(ZF, ZF, SF); // Normal overflow out
-		assembler_.xor_(OF, OF, ZF); // Total overflow out
-
+		zero_sign_flag(assembler_, out_reg, z_needed, n_needed);
 		break;
-	case ternary_arith_op::sbb:
-		// Temporary: Add carry in
-		switch (n.val().type().element_width()) {
-		case 64:
-			assembler_.add(ZF, src_reg2, src_reg3);
-			break;
-		case 32:
-			assembler_.addw(ZF, src_reg2, src_reg3);
-			break;
-		case 8:
-		case 16:
-			assembler_.add(ZF, src_reg2, src_reg3);
-			assembler_.slli(ZF, ZF, 64 - n.val().type().element_width());
-			assembler_.srai(ZF, ZF, 64 - n.val().type().element_width());
-			break;
+	}
+	case ternary_arith_op::sbb: {
+		TypedRegister temp { CF };
+		temp.set_type(n.val().type());
+		add(assembler_, temp, src_reg2, src_reg3);
+		addi_flags(assembler_, temp, src_reg2, 1, false, v_needed, c_needed, false, SF, ZF);
+		sub(assembler_, out_reg, src_reg1, temp);
+		sub_flags(assembler_, out_reg, src_reg1, temp, false, v_needed, c_needed, false);
+		if (c_needed) {
+			assembler_.or_(CF, CF, ZF); // Total carry out
 		}
-
-		assembler_.slt(OF, ZF, src_reg2); // Temporary overflow
-		assembler_.sltu(CF, ZF, src_reg2); // Temporary carry
-
-		switch (n.val().type().element_width()) {
-		case 64:
-			assembler_.sub(out_reg, src_reg1, ZF);
-			break;
-		case 32:
-			assembler_.subw(out_reg, src_reg1, ZF);
-			break;
-		case 16:
-			assembler_.sub(out_reg, src_reg1, ZF);
-			assembler_.slli(out_reg, out_reg, 64 - n.val().type().element_width());
-			assembler_.srai(out_reg, out_reg, 64 - n.val().type().element_width());
-			break;
+		if (v_needed) {
+			assembler_.xor_(OF, OF, SF); // Total overflow out
 		}
-
-		assembler_.sltu(SF, src_reg1, out_reg); // Normal carry out
-		assembler_.or_(CF, CF, SF); // Total carry out
-
-		assembler_.sgtz(SF, ZF);
-		assembler_.slt(ZF, out_reg, src_reg1);
-		assembler_.xor_(ZF, ZF, SF); // Normal overflow out
-		assembler_.xor_(OF, OF, ZF); // Total overflow out
-
+		zero_sign_flag(assembler_, out_reg, z_needed, n_needed);
 		break;
+	}
 	default:
 		throw std::runtime_error("unsupported ternary arithmetic operation");
 	}
-
-	assembler_.seqz(ZF, out_reg); // ZF
-	assembler_.sltz(SF, out_reg); // SF
-
 	return out_reg;
 }
 
