@@ -8,6 +8,27 @@
 #include <arancini/output/dynamic/riscv64/utils.h>
 #include <arancini/output/dynamic/riscv64/encoder/riscv64-assembler.h>
 
+inline void addi(Assembler &assembler, TypedRegister &out, const TypedRegister &lhs, intptr_t imm)
+{
+	if (!out.type().is_vector() && out.type().is_integer()) {
+		switch (out.type().element_width()) {
+		case 8:
+		case 16:
+		case 64:
+			assembler.addi(out, lhs, imm);
+			break;
+		case 32:
+			assembler.addiw(out, lhs, imm);
+			out.set_actual_width();
+			out.set_type(value_type::u64());
+			break;
+		default:
+			throw std::runtime_error("not implemented");
+		}
+	} else {
+		throw std::runtime_error("not implemented");
+	}
+}
 
 inline void not_(Assembler &assembler, TypedRegister &out, const TypedRegister &src)
 {
