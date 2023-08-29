@@ -62,7 +62,7 @@ private:
 	TypedRegister &materialise_bit_shift(const ir::bit_shift_node &n);
 	TypedRegister &materialise_bit_extract(const ir::bit_extract_node &n);
 	TypedRegister &materialise_bit_insert(const ir::bit_insert_node &n);
-	Register materialise_cast(const ir::cast_node &n);
+	TypedRegister &materialise_cast(const ir::cast_node &n);
 	std::optional<std::reference_wrapper<TypedRegister>> materialise_binary_atomic(const ir::binary_atomic_node &n);
 	TypedRegister &materialise_ternary_atomic(const ir::ternary_atomic_node &n);
 	TypedRegister &materialise_csel(const ir::csel_node &n);
