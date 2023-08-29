@@ -1112,66 +1112,13 @@ TypedRegister &riscv64_translation_context::materialise_binary_arith(const binar
 	}
 
 standardPath:
-	Register src_reg2 = std::get<Register>(materialise(n.rhs().owner()));
+	TypedRegister &src_reg2 = *materialise(n.rhs().owner());
 	switch (n.op()) {
 
 	case binary_arith_op::add:
-		switch (n.val().type().width()) { //Needs to stay width so vec4x32 works
-		case 128: {
-			if (is_int_vector(n.val(), 4, 32)) {
-				Register src_reg22 = get_secondary_register(&n.rhs());
-				Register src_reg12 = get_secondary_register(&n.rhs());
-				Register out_reg2 = get_secondary_register(&n.val());
-
-				assembler_.srli(CF, src_reg1, 32);
-				assembler_.srli(OF, src_reg2, 32);
-				assembler_.add(OF, OF, CF);
-				assembler_.slli(OF, OF, 32);
-
-				assembler_.add(out_reg, src_reg1, src_reg2);
-				assembler_.slli(out_reg, out_reg, 32);
-				assembler_.srli(out_reg, out_reg, 32);
-
-				assembler_.or_(out_reg, out_reg, OF);
-
-				assembler_.srli(CF, src_reg12, 32);
-				assembler_.srli(OF, src_reg22, 32);
-				assembler_.add(OF, OF, CF);
-				assembler_.slli(OF, OF, 32);
-
-				assembler_.add(out_reg2, src_reg12, src_reg22);
-				assembler_.slli(out_reg2, out_reg2, 32);
-				assembler_.srli(out_reg2, out_reg2, 32);
-
-				assembler_.or_(out_reg2, out_reg2, OF);
-			}
-			// Else Should not happen
-		} break;
-		case 64:
-			assembler_.add(out_reg, src_reg1, src_reg2);
-			break;
-		case 32:
-			assembler_.addw(out_reg, src_reg1, src_reg2);
-			break;
-		case 8:
-		case 16:
-			assembler_.add(out_reg, src_reg1, src_reg2);
-			assembler_.slli(out_reg, out_reg, 64 - n.val().type().element_width());
-			assembler_.srai(out_reg, out_reg, 64 - n.val().type().element_width());
-			break;
-		default:
-			throw std::runtime_error("Unsupported width for sub immediate");
-		}
-
-		if (flags_needed) {
-			assembler_.sltz(CF, src_reg1);
-			assembler_.slt(OF, out_reg, src_reg2);
-			assembler_.xor_(OF, OF, CF); // OF FIXME Assumes out_reg!=src_reg1 && out_reg!=src_reg2
-
-			assembler_.sltu(CF, out_reg, src_reg2); // CF (Allows typical x86 case of regSrc1==out_reg) FIXME Assumes out_reg!=src_reg2
-		}
+		add(assembler_, out_reg, src_reg1, src_reg2);
+		add_flags(assembler_, out_reg, src_reg1, src_reg2, z_needed, v_needed, c_needed, n_needed);
 		break;
-
 	case binary_arith_op::sub:
 		switch (n.val().type().element_width()) {
 		case 64:
