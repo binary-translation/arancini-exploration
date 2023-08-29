@@ -1120,32 +1120,9 @@ standardPath:
 		add_flags(assembler_, out_reg, src_reg1, src_reg2, z_needed, v_needed, c_needed, n_needed);
 		break;
 	case binary_arith_op::sub:
-		switch (n.val().type().element_width()) {
-		case 64:
-			assembler_.sub(out_reg, src_reg1, src_reg2);
-			break;
-		case 32:
-			assembler_.subw(out_reg, src_reg1, src_reg2);
-			break;
-		case 8:
-		case 16:
-			assembler_.sub(out_reg, src_reg1, src_reg2);
-			assembler_.slli(out_reg, out_reg, 64 - n.val().type().element_width());
-			assembler_.srai(out_reg, out_reg, 64 - n.val().type().element_width());
-			break;
-		default:
-			throw std::runtime_error("Unsupported width for sub immediate");
-		}
-
-		if (flags_needed) {
-			assembler_.sgtz(CF, src_reg2);
-			assembler_.slt(OF, out_reg, src_reg1);
-			assembler_.xor_(OF, OF, CF); // OF FIXME Assumes out_reg!=src_reg1 && out_reg!=src_reg2
-
-			assembler_.sltu(CF, src_reg1, out_reg); // CF FIXME Assumes out_reg!=src_reg1
-		}
+		sub(assembler_, out_reg, src_reg1, src_reg2);
+		sub_flags(assembler_, out_reg, src_reg1, src_reg2, z_needed, v_needed, c_needed, n_needed);
 		break;
-
 	// Binary operations preserve sign extension
 	case binary_arith_op::band:
 		assembler_.and_(out_reg, src_reg1, src_reg2);
