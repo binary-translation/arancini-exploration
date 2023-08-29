@@ -162,3 +162,61 @@ inline void subi_flags(
 		}
 	}
 }
+
+/**
+ * Generate overflow and carry flags based on the result in the given register and the given input register and immediate assuming the operation was a
+ * multiplication.
+ * @param v whether overflow flag should be generated
+ * @param c whether carry flag should be generated
+ */
+inline void mul_flags(Assembler &assembler, TypedRegister &out, bool v, bool c)
+{
+	if (c || v) {
+		if (!out.type().is_vector() && out.type().is_integer()) {
+			switch (out.type().element_width()) {
+			case 128: {
+				switch (out.type().element_type().type_class()) {
+				case value_type_class::signed_integer:
+					assembler.srai(CF, out.reg1(), 63);
+					assembler.xor_(CF, CF, out.reg2());
+					assembler.snez(CF, CF);
+					break;
+				case value_type_class::unsigned_integer: {
+					assembler.snez(CF, out.reg2());
+				} break;
+				default:
+					throw std::runtime_error("Unsupported value type for multiply");
+				}
+			} break;
+			case 64:
+			case 32:
+			case 16: {
+				switch (out.type().element_type().type_class()) {
+				case value_type_class::signed_integer:
+					if (out.type().element_width() == 64) {
+						assembler.sextw(CF, out);
+					} else {
+						assembler.slli(CF, out, 64 - (out.type().element_width()) / 2);
+						assembler.srai(CF, out, 64 - (out.type().element_width()) / 2);
+					}
+					assembler.xor_(CF, CF, out);
+					assembler.snez(CF, CF);
+					break;
+				case value_type_class::unsigned_integer:
+					assembler.srli(CF, out, out.type().element_width() / 2);
+					assembler.snez(CF, CF);
+					break;
+				default:
+					throw std::runtime_error("Unsupported value type for multiply");
+				}
+
+			} break;
+			default:
+				throw std::runtime_error("Unsupported width for sub immediate");
+			}
+			assembler.mv(OF, CF);
+		} else {
+			throw std::runtime_error("not implemented");
+		}
+	}
+}
