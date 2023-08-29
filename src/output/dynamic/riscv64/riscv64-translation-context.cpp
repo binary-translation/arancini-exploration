@@ -357,14 +357,25 @@ Register riscv64_translation_context::materialise_ternary_atomic(const ternary_a
 	}
 }
 
-std::variant<Register, std::monostate> riscv64_translation_context::materialise_binary_atomic(const binary_atomic_node &n)
+std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context::materialise_binary_atomic(const binary_atomic_node &n)
 {
-	Register dstAddr = std::get<Register>(materialise(n.lhs().owner()));
-	Register src = std::get<Register>(materialise(n.rhs().owner()));
+
+	if (!(is_gpr(n.val()) && is_gpr(n.rhs()) && is_gpr(n.address()))) {
+		throw std::runtime_error("Unsupported types for binary atomic");
+	}
+
+	TypedRegister &dstAddr = *materialise(n.address().owner());
+	TypedRegister &src = *materialise(n.rhs().owner());
 	auto [out_reg, valid] = allocate_register(&n.val());
 	if (!valid) {
 		return out_reg;
 	}
+
+	bool z_needed = !n.zero().targets().empty();
+	bool v_needed = !n.overflow().targets().empty();
+	bool c_needed = !n.carry().targets().empty();
+	bool n_needed = !n.negative().targets().empty();
+	bool flags_needed = z_needed || v_needed || c_needed || n_needed;
 
 	auto [reg, _] = allocate_register();
 
@@ -374,66 +385,43 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise_
 	// FIXME Correct memory ordering?
 	switch (n.op()) {
 	case binary_atomic_op::xadd:
-		switch (n.rhs().type().element_width()) {
+	case binary_atomic_op::add: {
+		switch (n.val().type().element_width()) {
 		case 64:
 			assembler_.amoaddd(out_reg, src, addr, std::memory_order_acq_rel);
-			assembler_.add(SF, out_reg, src); // Actual sum for flag generation
 			break;
 		case 32:
 			assembler_.amoaddw(out_reg, src, addr, std::memory_order_acq_rel);
-			assembler_.addw(SF, out_reg, src); // Actual sum for flag generation
 			break;
 		default:
 			throw std::runtime_error("unsupported xadd width");
 		}
 
-		assembler_.sltz(CF, src);
-		assembler_.slt(OF, SF, out_reg);
-		assembler_.xor_(OF, OF, CF); // OF
+		if (flags_needed) {
+			TypedRegister temp_result_reg { SF };
+			temp_result_reg.set_type(n.val().type());
 
-		assembler_.sltu(CF, SF, out_reg); // CF
-
-		assembler_.seqz(ZF, SF); // ZF
-		assembler_.sltz(SF, SF); // SF
-
-		switch (n.rhs().type().element_width()) {
-		case 64:
-			assembler_.sd(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
-			break;
-		case 32:
-			assembler_.slli(out_reg, out_reg, 32);
-			assembler_.srli(out_reg, out_reg, 32);
-			assembler_.sd(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
-			break;
-		default:
-			throw std::runtime_error("unsupported xadd width");
-		}
-		return out_reg;
-	case binary_atomic_op::add:
-		switch (n.rhs().type().element_width()) {
-		case 64:
-			assembler_.amoaddd(out_reg, src, addr, std::memory_order_acq_rel);
-
-			assembler_.add(SF, out_reg, src); // Actual sum for flag generation
-			break;
-		case 32:
-			assembler_.amoaddw(out_reg, src, addr, std::memory_order_acq_rel);
-
-			assembler_.addw(SF, out_reg, src); // Actual sum for flag generation
-			break;
-		default:
-			throw std::runtime_error("unsupported lock add width");
+			add(assembler_, temp_result_reg, out_reg, src); // Actual sum for flag generation
+			add_flags(assembler_, temp_result_reg, out_reg, src, z_needed, v_needed, c_needed, n_needed);
 		}
 
-		assembler_.sltz(CF, src);
-		assembler_.slt(OF, SF, out_reg);
-		assembler_.xor_(OF, OF, CF); // OF
-
-		assembler_.sltu(CF, SF, out_reg); // CF
-
-		assembler_.seqz(ZF, SF); // ZF
-		assembler_.sltz(SF, SF); // SF
-		return std::monostate {};
+		if (n.op() == binary_atomic_op::xadd) {
+			switch (n.val().type().element_width()) { // FIXME This feels so wrong
+			case 64:
+				assembler_.sd(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
+				break;
+			case 32:
+				assembler_.slli(out_reg, out_reg, 32);
+				assembler_.srli(out_reg, out_reg, 32);
+				assembler_.sd(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
+				break;
+			default:
+				throw std::runtime_error("unsupported xadd width");
+			}
+			return out_reg;
+		}
+		return std::nullopt;
+	}
 	case binary_atomic_op::sub:
 		assembler_.neg(out_reg, src);
 		switch (n.rhs().type().element_width()) {
