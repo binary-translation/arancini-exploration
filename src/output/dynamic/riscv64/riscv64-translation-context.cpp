@@ -443,68 +443,78 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 			sub_flags(assembler_, temp_result_reg, out_reg, src, z_needed, v_needed, c_needed, n_needed);
 		}
 		return std::nullopt;
-	case binary_atomic_op::band:
-		switch (n.rhs().type().element_width()) {
+	case binary_atomic_op::band: {
+		switch (n.val().type().element_width()) {
 		case 64:
 			assembler_.amoandd(out_reg, src, addr, std::memory_order_acq_rel);
-
-			assembler_.and_(SF, out_reg, src); // Actual and for flag generation
+			if (flags_needed) {
+				assembler_.and_(SF, out_reg, src); // Actual and for flag generation
+			}
 			break;
 		case 32:
 			assembler_.amoandw(out_reg, src, addr, std::memory_order_acq_rel);
-
-			assembler_.and_(SF, out_reg, src); // Actual and for flag generation
-			assembler_.slli(SF, SF, 32); // Get rid of higher 32 bits
+			if (flags_needed) {
+				assembler_.and_(SF, out_reg, src); // Actual and for flag generation
+				assembler_.slli(SF, SF, 32); // Get rid of higher 32 bits
+			}
 			break;
 		default:
 			throw std::runtime_error("unsupported lock and width");
 		}
 
-		assembler_.seqz(ZF, SF); // ZF
-		assembler_.sltz(SF, SF); // SF
-		return std::monostate {};
-	case binary_atomic_op::bor:
-		switch (n.rhs().type().element_width()) {
+		TypedRegister out = TypedRegister { SF };
+		zero_sign_flag(assembler_, out, z_needed, n_needed);
+		return std::nullopt;
+	}
+	case binary_atomic_op::bor: {
+		switch (n.val().type().element_width()) {
 		case 64:
 			assembler_.amoord(out_reg, src, addr, std::memory_order_acq_rel);
-
-			assembler_.or_(SF, out_reg, src); // Actual or for flag generation
+			if (flags_needed) {
+				assembler_.or_(SF, out_reg, src); // Actual or for flag generation
+			}
 			break;
 		case 32:
 			assembler_.amoorw(out_reg, src, addr, std::memory_order_acq_rel);
-
-			assembler_.or_(SF, out_reg, src); // Actual or for flag generation
-			assembler_.slli(SF, SF, 32); // Get rid of higher 32 bits
+			if (flags_needed) {
+				assembler_.or_(SF, out_reg, src); // Actual or for flag generation
+				assembler_.slli(SF, SF, 32); // Get rid of higher 32 bits
+			}
 			break;
 		default:
 			throw std::runtime_error("unsupported lock or width");
 		}
 
-		assembler_.seqz(ZF, SF); // ZF
-		assembler_.sltz(SF, SF); // SF
-		return std::monostate {};
-	case binary_atomic_op::bxor:
-		switch (n.rhs().type().element_width()) {
+		TypedRegister out = TypedRegister { SF };
+		zero_sign_flag(assembler_, out, z_needed, n_needed);
+		return std::nullopt;
+	}
+	case binary_atomic_op::bxor: {
+		switch (n.val().type().element_width()) {
 		case 64:
 			assembler_.amoxord(out_reg, src, addr, std::memory_order_acq_rel);
-
-			assembler_.xor_(SF, out_reg, src); // Actual xor for flag generation
+			if (flags_needed) {
+				assembler_.xor_(SF, out_reg, src); // Actual xor for flag generation
+			}
 			break;
 		case 32:
 			assembler_.amoxorw(out_reg, src, addr, std::memory_order_acq_rel);
 
-			assembler_.xor_(SF, out_reg, src); // Actual xor for flag generation
-			assembler_.slli(SF, SF, 32); // Get rid of higher 32 bits
+			if (flags_needed) {
+				assembler_.xor_(SF, out_reg, src); // Actual xor for flag generation
+				assembler_.slli(SF, SF, 32); // Get rid of higher 32 bits
+			}
 			break;
 		default:
 			throw std::runtime_error("unsupported lock xor width");
 		}
 
-		assembler_.seqz(ZF, SF); // ZF
-		assembler_.sltz(SF, SF); // SF
-		return std::monostate {};
+		TypedRegister out = TypedRegister { SF };
+		zero_sign_flag(assembler_, out, z_needed, n_needed);
+		return std::nullopt;
+	}
 	case binary_atomic_op::xchg:
-		switch (n.rhs().type().element_width()) {
+		switch (n.val().type().element_width()) {
 		case 64:
 			assembler_.amoswapd(out_reg, src, addr, std::memory_order_acq_rel);
 			break;
@@ -515,7 +525,7 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 			throw std::runtime_error("unsupported xchg width");
 		}
 
-		switch (n.rhs().type().element_width()) {
+		switch (n.val().type().element_width()) {
 		case 64:
 			assembler_.sd(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
 			break;
