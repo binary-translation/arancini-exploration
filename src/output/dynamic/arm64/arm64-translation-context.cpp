@@ -300,54 +300,91 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
 
     // Sanity check; cannot by definition load a register larger than 64-bit
     // without it being a vector
-    if (type.element_width() > base_type().element_width()) {
-        throw std::runtime_error("Larger than 64-bit integers not supported by backend");
+    if (type.is_vector() && type.element_width() > base_type().element_width()) {
+        throw std::runtime_error("Larger than 64-bit integers in vectors not supported by backend");
     }
 
-    // TODO: implement vector support
-    if (type.is_vector()) {
-        throw std::runtime_error("Vectors not supported in load routine");
+    auto dest_reg_count = n.val().type().nr_elements();
+    auto dest_element_width = n.val().type().width();
+    if (dest_element_width > base_type().element_width()) {
+        // This will only occur for non-vectors > 64-bit
+        dest_element_width = base_type().element_width();
+        dest_reg_count = n.val().type().width() / dest_element_width;
     }
 
-	auto dst_vreg = alloc_vreg_for_port(n.val(), n.val().type());
-    builder_.ldr(dst_vreg, guestreg_memory_operand(n.regoff()));
+    value_type dest_type = value_type(n.val().type().type_class(), dest_element_width);
+    for (std::size_t i = 0; i < dest_reg_count; ++i)
+        alloc_vreg_for_port(n.val(), dest_type);
+
+    auto dest_vregs = vregs_for_port(n.val());
+
+    // TODO: endianness
+    for (std::size_t i = 0; i < dest_reg_count; ++i) {
+        size_t width = dest_vregs[i].type().width();
+        auto addr = guestreg_memory_operand(n.regoff() + i * width);
+        switch (width) {
+            case 1:
+                // NOTE: loads single byte because flag registers are defined as
+                // u8
+                builder_.ldr(dest_vregs[i], addr);
+                break;
+            case 8:
+                // FIXME: leads to segfaults
+                builder_.ldr(dest_vregs[i], addr);
+                break;
+            case 16:
+                builder_.ldr(dest_vregs[i], addr);
+                break;
+            case 32:
+            case 64:
+                builder_.ldr(dest_vregs[i], addr);
+                break;
+            default:
+                // This is by definition; registers >= 64-bits are always vector registers
+                throw std::runtime_error("ARM64-DBT cannot load individual values larger than 64-bits");
+        }
+    }
 }
 
 void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
-	int w = n.value().type().element_width();
+    auto type = n.val().type();
 
-    // TODO: need to implement vector writes
-    if (!is_gpr(n.value()) && !is_flag(n.value()))
-        throw std::runtime_error("Invalid destination width on register write: "
-                                 + std::to_string(w));
-
-    vreg_operand reg;
-    if (is_flag(n.value()) && is_flag_port(n.value())) {
-        materialise(reinterpret_cast<ir::node*>(n.value().owner()));
-        reg = flag_map.at(n.regoff());
-    } else {
-        reg = vreg_operand_for_port(n.value())[0];
+    // Sanity check; cannot by definition load a register larger than 64-bit
+    // without it being a vector
+    if (type.is_vector() && type.element_width() > base_type().element_width()) {
+        throw std::runtime_error("Larger than 64-bit integers in vectors not supported by backend");
     }
 
-    switch (n.value().type().element_width()) {
-        case 1:
-            builder_.str(reg, guestreg_memory_operand(n.regoff()));
-            break;
-        case 8:
-            builder_.strb(reg, guestreg_memory_operand(n.regoff()));
-            break;
-        case 16:
-            builder_.strh(reg, guestreg_memory_operand(n.regoff()));
-            break;
-        case 32:
-        case 64:
-            // Register set to either 64-bit or 32-bit, stored appropriately with
-            // STR
-            builder_.str(reg, guestreg_memory_operand(n.regoff()));
-            break;
-        default:
-            // This is by definition; registers >= 64-bits are always vector registers
-            throw std::runtime_error("ARM64-DBT cannot write values larger than 64-bits");
+    std::vector<vreg_operand> src_vregs;
+    if (is_flag_port(n.value())) {
+        materialise(reinterpret_cast<ir::node*>(n.value().owner()));
+        src_vregs.push_back(flag_map.at(n.regoff()));
+    } else {
+        src_vregs = vreg_operand_for_port(n.value());
+    }
+
+    memory_operand addr;
+    for (std::size_t i = 0; i < src_vregs.size(); ++i) {
+        size_t width = src_vregs[i].type().width();
+        addr = guestreg_memory_operand(n.regoff() + i * width);
+        switch (width) {
+            case 1:
+                builder_.strb(src_vregs[i], addr);
+                break;
+            case 8:
+                builder_.strb(src_vregs[i], addr);
+                break;
+            case 16:
+                builder_.strh(src_vregs[i], addr);
+                break;
+            case 32:
+            case 64:
+                builder_.str(src_vregs[i], addr);
+                break;
+            default:
+                // This is by definition; registers >= 64-bits are always vector registers
+                throw std::runtime_error("ARM64-DBT cannot write individual values larger than 64-bits");
+        }
     }
 }
 
