@@ -1123,23 +1123,23 @@ standardPath:
 		sub(assembler_, out_reg, src_reg1, src_reg2);
 		sub_flags(assembler_, out_reg, src_reg1, src_reg2, z_needed, v_needed, c_needed, n_needed);
 		break;
-	// Binary operations preserve sign extension
+	// Binary operations preserve sign extension, so we can keep smaller of effective input types
 	case binary_arith_op::band:
 		assembler_.and_(out_reg, src_reg1, src_reg2);
+		out_reg.set_actual_width();
+		out_reg.set_type(get_minimal_type(src_reg1, src_reg2));
+		zero_sign_flag(assembler_, out_reg, z_needed, n_needed);
 		break;
 	case binary_arith_op::bor:
 		assembler_.or_(out_reg, src_reg1, src_reg2);
+		out_reg.set_actual_width();
+		out_reg.set_type(get_minimal_type(src_reg1, src_reg2));
+		zero_sign_flag(assembler_, out_reg, z_needed, n_needed);
 		break;
 	case binary_arith_op::bxor:
-		assembler_.xor_(out_reg, src_reg1, src_reg2);
-		if (is_i128(n.val())) {
-			Register out_reg2 = get_secondary_register(&n.val());
-			Register src_reg12 = get_secondary_register(&n.lhs());
-			Register src_reg22 = get_secondary_register(&n.rhs());
-			assembler_.xor_(out_reg2, src_reg12, src_reg22);
-		}
+		xor_(assembler_, out_reg, src_reg1, src_reg2);
+		zero_sign_flag(assembler_, out_reg, z_needed, n_needed);
 		break;
-
 	case binary_arith_op::mul:
 		switch (n.val().type().element_width()) {
 		case 128: {
@@ -1329,11 +1329,6 @@ standardPath:
 		throw std::runtime_error("unsupported binary arithmetic operation");
 	}
 
-	// TODO those should only be set on add, sub, xor, or, and
-	if (flags_needed) {
-		assembler_.seqz(ZF, out_reg); // ZF
-		assembler_.sltz(SF, out_reg); // SF
-	}
 	return out_reg;
 }
 
