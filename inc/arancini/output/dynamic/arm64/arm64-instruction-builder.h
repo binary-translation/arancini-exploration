@@ -256,9 +256,9 @@ public:
 #define LDR_VARIANTS(name) \
     template <typename T1, \
               is_reg<T1> = 0> \
-    void name(const T1 &src, \
+    void name(const T1 &dest, \
              const memory_operand &base) { \
-        append(instruction(#name, def(src), use(base))); \
+        append(instruction(#name, def(dest), use(base))); \
     } \
 
 #define STR_VARIANTS(name) \
