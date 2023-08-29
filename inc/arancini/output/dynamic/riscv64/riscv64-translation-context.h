@@ -58,7 +58,7 @@ private:
 	TypedRegister& materialise_constant(int64_t imm);
 	TypedRegister& materialise_unary_arith(const ir::unary_arith_node &n);
 	TypedRegister& materialise_binary_arith(const ir::binary_arith_node &n);
-	Register materialise_ternary_arith(const ir::ternary_arith_node &n);
+	TypedRegister& materialise_ternary_arith(const ir::ternary_arith_node &n);
 	TypedRegister& materialise_bit_shift(const ir::bit_shift_node &n);
 	TypedRegister& materialise_bit_extract(const ir::bit_extract_node &n);
 	TypedRegister& materialise_bit_insert(const ir::bit_insert_node &n);
