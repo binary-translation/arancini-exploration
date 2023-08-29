@@ -1043,7 +1043,7 @@ TypedRegister &riscv64_translation_context::materialise_bit_shift(const bit_shif
 	return out_reg;
 }
 
-Register riscv64_translation_context::materialise_binary_arith(const binary_arith_node &n)
+TypedRegister &riscv64_translation_context::materialise_binary_arith(const binary_arith_node &n)
 {
 	bool works = (is_gpr_or_flag(n.val()) && is_gpr_or_flag(n.lhs()) && is_gpr_or_flag(n.rhs()))
 		|| ((n.op() == binary_arith_op::mul || n.op() == binary_arith_op::div || n.op() == binary_arith_op::mod || n.op() == binary_arith_op::bxor)
@@ -1057,47 +1057,28 @@ Register riscv64_translation_context::materialise_binary_arith(const binary_arit
 		return out_reg;
 	}
 
-	Register src_reg1 = std::get<Register>(materialise(n.lhs().owner()));
+	TypedRegister &src_reg1 = *materialise(n.lhs().owner());
 
-	bool flags_needed = !(n.zero().targets().empty() && n.overflow().targets().empty() && n.carry().targets().empty() && n.negative().targets().empty());
+	bool z_needed = !n.zero().targets().empty();
+	bool v_needed = !n.overflow().targets().empty();
+	bool c_needed = !n.carry().targets().empty();
+	bool n_needed = !n.negative().targets().empty();
+	bool flags_needed = z_needed || v_needed || c_needed || n_needed;
 
 	if (n.rhs().owner()->kind() == node_kinds::constant) {
 		// Could also work for LHS except sub
-		// TODO Probably incorrect to just cast to signed 64bit
+		// TODO Probably incorrect to just cast to signed 64bit. Extract to support chains of calculations
 		auto imm = (intptr_t)((constant_node *)(n.rhs().owner()))->const_val_i();
 		// imm==0 more efficient as x0. Only IType works
 		if (imm && IsITypeImm(imm)) {
 			switch (n.op()) {
-
 			case binary_arith_op::sub:
 				if (imm == -2048) { // Can happen with inversion
 					goto standardPath;
 				}
-				switch (n.val().type().element_width()) {
-				case 64:
-					assembler_.addi(out_reg, src_reg1, -imm);
-					break;
-				case 32:
-					assembler_.addiw(out_reg, src_reg1, -imm);
-					break;
-				case 8:
-				case 16:
-					assembler_.addi(out_reg, src_reg1, -imm);
-					assembler_.slli(out_reg, out_reg, 64 - n.val().type().element_width());
-					assembler_.srai(out_reg, out_reg, 64 - n.val().type().element_width());
-					break;
-				default:
-					throw std::runtime_error("Unsupported width for sub immediate");
-				}
-				if (flags_needed) {
-					assembler_.sltu(CF, src_reg1, out_reg); // CF FIXME Assumes out_reg!=src_reg1
-					assembler_.slt(OF, out_reg, src_reg1); // OF FIXME Assumes out_reg!=src_reg1
-					if (imm > 0) {
-						assembler_.xori(OF, OF, 1); // Invert on positive
-					}
-				}
+				addi(assembler_, out_reg, src_reg1, -imm);
+				subi_flags(assembler_, out_reg, src_reg1, imm, z_needed, v_needed, c_needed, n_needed);
 				break;
-
 			case binary_arith_op::add:
 
 				switch (n.val().type().element_width()) {
