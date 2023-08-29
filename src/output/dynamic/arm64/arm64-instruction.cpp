@@ -4,11 +4,12 @@
 #include <cstdint>
 #include <ostream>
 #include <sstream>
+#include <stdexcept>
 #include <unordered_set>
 
 using namespace arancini::output::dynamic::arm64;
 
-const char* arancini::output::dynamic::arm64::to_string(const preg_operand &op) {
+std::string arancini::output::dynamic::arm64::to_string(const preg_operand &op) {
     static const char* name64[] = {
         "",
         "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
@@ -41,10 +42,54 @@ const char* arancini::output::dynamic::arm64::to_string(const preg_operand &op) 
         "d31"
     };
 
+    // TODO: introduce check for NEON availability
+    static const char* name_vector_neon[] = {
+        "",
+        "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10",
+        "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20",
+        "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30",
+        "v31"
+    };
+
+    // TODO: introduce check for SVE2 availability
+    static const char* name_vector_sve2[] = {
+        "",
+        "z0", "z1", "z2", "z3", "z4", "z5", "z6", "z7", "z8", "z9", "z10",
+        "z11", "z12", "z13", "z14", "z15", "z16", "z17", "z18", "z19", "z20",
+        "z21", "z22", "z23", "z24", "z25", "z26", "z27", "z28", "z29", "z30",
+        "z31"
+    };
+
+    // TODO: vector predicates not used yet
+    static const char* name_vector_pred[] = {
+        "",
+        "p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10",
+        "p11", "p12", "p13", "p14", "p15"
+    };
+
     auto type = op.type();
     size_t reg_idx = op.register_index();
 
-    if (type.is_floating_point()) {
+    if (type.is_vector()) {
+        std::string name = type.width() == 128 ? name_vector_neon[reg_idx] : name_vector_sve2[reg_idx];
+        switch (type.width()) {
+        case 8:
+            name += ".b";
+            break;
+        case 16:
+            name += ".h";
+            break;
+        case 32:
+            name += ".w";
+            break;
+        case 64:
+            name += ".d";
+            break;
+        default:
+            throw std::runtime_error("Vectors larger than 64-bit not supported");
+        }
+        return name;
+    } else if (type.is_floating_point()) {
         return type.element_width() > 32 ? name_float64[reg_idx] : name_float32[reg_idx];
     } else if (type.is_integer()) {
         return type.element_width() > 32 ? name64[reg_idx] : name32[reg_idx];
