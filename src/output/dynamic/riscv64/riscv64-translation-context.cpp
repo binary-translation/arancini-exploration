@@ -1081,33 +1081,10 @@ TypedRegister &riscv64_translation_context::materialise_binary_arith(const binar
 				subi_flags(assembler_, out_reg, src_reg1, imm, z_needed, v_needed, c_needed, n_needed);
 				break;
 			case binary_arith_op::add:
-
-				switch (n.val().type().element_width()) {
-				case 64:
-					assembler_.addi(out_reg, src_reg1, imm);
-					break;
-				case 32:
-					assembler_.addiw(out_reg, src_reg1, imm);
-					break;
-				case 8:
-				case 16:
-					assembler_.addi(out_reg, src_reg1, imm);
-					assembler_.slli(out_reg, out_reg, 64 - n.val().type().element_width());
-					assembler_.srai(out_reg, out_reg, 64 - n.val().type().element_width());
-					break;
-				default:
-					throw std::runtime_error("Unsupported width for sub immediate");
-				}
-
-				if (flags_needed) {
-					assembler_.sltu(CF, out_reg, src_reg1); // CF FIXME Assumes out_reg!=src_reg1
-					assembler_.slt(OF, out_reg, src_reg1); // OF FIXME Assumes out_reg!=src_reg1
-					if (imm < 0) {
-						assembler_.xori(OF, OF, 1); // Invert on negative
-					}
-				}
-
+				addi(assembler_, out_reg, src_reg1, imm);
+				addi_flags(assembler_, out_reg, src_reg1, imm, z_needed, v_needed, c_needed, n_needed);
 				break;
+
 			// Binary operations preserve sign extension
 			case binary_arith_op::band:
 				assembler_.andi(out_reg, src_reg1, imm);
