@@ -123,6 +123,34 @@ inline void sub(Assembler &assembler, TypedRegister &out, const TypedRegister &l
 	}
 }
 
+inline void xor_(Assembler &assembler, TypedRegister &out, const TypedRegister &lhs, const TypedRegister &rhs)
+{
+	if (!out.type().is_vector() && out.type().is_integer()) {
+		switch (out.type().element_width()) {
+		case 1:
+		case 8:
+		case 16:
+		case 32:
+			// In-types might be wider than out-type (but xor preserves extension, so out accurate to narrower of in)
+
+			out.set_actual_width();
+			out.set_type(get_minimal_type(lhs, rhs));
+			[[fallthrough]];
+		case 64:
+			assembler.xor_(out, lhs, rhs);
+			break;
+		case 128:
+			assembler.xor_(out.reg1(), lhs.reg1(), rhs.reg1());
+			assembler.xor_(out.reg2(), lhs.reg2(), rhs.reg2());
+			break;
+		default:
+			throw std::runtime_error("not implemented");
+		}
+	} else {
+		throw std::runtime_error("not implemented");
+	}
+}
+
 inline void not_(Assembler &assembler, TypedRegister &out, const TypedRegister &src)
 {
 	if (!out.type().is_vector() && out.type().is_integer()) {
