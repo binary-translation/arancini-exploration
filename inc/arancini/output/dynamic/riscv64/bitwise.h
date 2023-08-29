@@ -3,6 +3,35 @@
 #include <arancini/output/dynamic/riscv64/register.h>
 #include <arancini/output/dynamic/riscv64/utils.h>
 
+inline void truncate(Assembler &assembler, TypedRegister &out, const Register src)
+{
+	if (!out.type().is_vector() && out.type().is_integer()) {
+		switch (out.type().element_width()) {
+		case 1:
+			// Flags are always zero extended
+			assembler.andi(out, src, 1);
+			out.set_type(value_type::u64());
+			break;
+		case 8:
+		case 16:
+			// No op FIXME not sure if good idea
+			if (src == out) {
+				assembler.mv(out, src);
+			}
+			break;
+		case 32:
+			assembler.sextw(out, src);
+			out.set_actual_width();
+			out.set_type(value_type::u64());
+			break;
+		default:
+			throw std::runtime_error("not implemented");
+		}
+	} else {
+		throw std::runtime_error("not implemented");
+	}
+}
+
 inline void bit_extract(Assembler &assembler, TypedRegister &out, const TypedRegister& src, int from, int length)
 {
 	if (is_flag_t(out.type()) && is_gpr_t(src.type())) {
