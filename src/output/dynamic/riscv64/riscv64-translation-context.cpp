@@ -596,6 +596,9 @@ TypedRegister &riscv64_translation_context::materialise_cast(const cast_node &n)
 		}
 
 		if (n.val().type().element_width() == 64) {
+			if (src_reg.type().element_width() > 64) {
+				return allocate_register(&n.val(), src_reg.reg1()).first;
+			}
 			return src_reg;
 		}
 
@@ -603,17 +606,9 @@ TypedRegister &riscv64_translation_context::materialise_cast(const cast_node &n)
 		if (!valid) {
 			return out_reg;
 		}
+		out_reg.set_type(n.val().type());
 
-		if (is_flag(n.val())) {
-			// Flags are always zero extended
-			assembler_.andi(out_reg, src_reg, 1);
-		} // Sign extend the truncated bits to preserve convention
-		else if (n.val().type().element_width() == 32) {
-			assembler_.sextw(out_reg, src_reg);
-		} else {
-			assembler_.slli(out_reg, src_reg, 64 - n.val().type().element_width());
-			assembler_.srai(out_reg, out_reg, 64 - n.val().type().element_width());
-		}
+		truncate(assembler_, out_reg, src_reg);
 		return out_reg;
 	}
 	default:
