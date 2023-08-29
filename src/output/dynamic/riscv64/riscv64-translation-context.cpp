@@ -1149,106 +1149,11 @@ standardPath:
 		mul_flags(assembler_, out_reg, v_needed, c_needed);
 		break;
 	case binary_arith_op::div:
-		switch (n.val().type().element_width()) {
-		case 128: // Fixme 128 bits not natively supported on RISCV, assuming just extended 64 bit value
-		case 64:
-			switch (n.val().type().element_type().type_class()) {
-
-			case value_type_class::signed_integer:
-				assembler_.div(out_reg, src_reg1, src_reg2);
-				break;
-			case value_type_class::unsigned_integer:
-				assembler_.divu(out_reg, src_reg1, src_reg2);
-				break;
-			default:
-				throw std::runtime_error("Unsupported value type for divide");
-			}
-			break;
-		case 32:
-			switch (n.val().type().element_type().type_class()) {
-
-			case value_type_class::signed_integer:
-				assembler_.divw(out_reg, src_reg1, src_reg2);
-				break;
-			case value_type_class::unsigned_integer:
-				assembler_.divuw(out_reg, src_reg1, src_reg2);
-				break;
-			default:
-				throw std::runtime_error("Unsupported value type for divide");
-			}
-			break;
-		case 16:
-			switch (n.val().type().element_type().type_class()) {
-
-			case value_type_class::signed_integer:
-				assembler_.divw(out_reg, src_reg1, src_reg2);
-				assembler_.slli(out_reg, out_reg, 48);
-				assembler_.srai(out_reg, out_reg, 48);
-				break;
-			case value_type_class::unsigned_integer:
-				assembler_.divuw(out_reg, src_reg1, src_reg2);
-				assembler_.slli(out_reg, out_reg, 48);
-				assembler_.srli(out_reg, out_reg, 48);
-				break;
-			default:
-				throw std::runtime_error("Unsupported value type for divide");
-			}
-			break;
-		default:
-			throw std::runtime_error("Unsupported width for sub immediate");
-		}
+		div(assembler_, out_reg, src_reg1, src_reg2);
 		break;
 	case binary_arith_op::mod:
-		switch (n.val().type().element_width()) {
-		case 128: // Fixme 128 bits not natively supported on RISCV, assuming just extended 64 bit value
-		case 64:
-			switch (n.val().type().element_type().type_class()) {
-
-			case value_type_class::signed_integer:
-				assembler_.rem(out_reg, src_reg1, src_reg2);
-				break;
-			case value_type_class::unsigned_integer:
-				assembler_.remu(out_reg, src_reg1, src_reg2);
-				break;
-			default:
-				throw std::runtime_error("Unsupported value type for divide");
-			}
-			break;
-		case 32:
-			switch (n.val().type().element_type().type_class()) {
-
-			case value_type_class::signed_integer:
-				assembler_.remw(out_reg, src_reg1, src_reg2);
-				break;
-			case value_type_class::unsigned_integer:
-				assembler_.remuw(out_reg, src_reg1, src_reg2);
-				break;
-			default:
-				throw std::runtime_error("Unsupported value type for divide");
-			}
-			break;
-		case 16:
-			switch (n.val().type().element_type().type_class()) {
-
-			case value_type_class::signed_integer:
-				assembler_.remw(out_reg, src_reg1, src_reg2);
-				assembler_.slli(out_reg, out_reg, 48);
-				assembler_.srai(out_reg, out_reg, 48);
-				break;
-			case value_type_class::unsigned_integer:
-				assembler_.remuw(out_reg, src_reg1, src_reg2);
-				assembler_.slli(out_reg, out_reg, 48);
-				assembler_.srli(out_reg, out_reg, 48);
-				break;
-			default:
-				throw std::runtime_error("Unsupported value type for divide");
-			}
-			break;
-		default:
-			throw std::runtime_error("Unsupported width for sub immediate");
-		}
+		mod(assembler_, out_reg, src_reg1, src_reg2);
 		break;
-
 	case binary_arith_op::cmpeq: {
 		Register tmp = src_reg2 != ZERO ? out_reg : src_reg1;
 		if (src_reg2 != ZERO) {
