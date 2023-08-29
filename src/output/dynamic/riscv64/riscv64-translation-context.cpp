@@ -567,24 +567,27 @@ TypedRegister &riscv64_translation_context::materialise_cast(const cast_node &n)
 
 	case cast_op::zx: {
 		if (n.val().type().element_width() == 128) {
-			secondary_reg_for_port_[&n.val()] = ZERO.encoding();
 			if (n.source_value().type().element_width() == 64) {
-				return src_reg;
+				auto [out_reg, valid] = allocate_register(&n.val(), src_reg, ZERO);
+				return out_reg;
+			} else {
+				auto [out_reg, valid] = allocate_register(&n.val(), std::nullopt, ZERO);
+				if (!valid) {
+					return out_reg;
+				}
+				fixup(assembler_, out_reg, src_reg, n.val().type().get_unsigned_type());
+				return out_reg;
 			}
 		}
 		if (is_flag(n.source_value())) { // Flags always zero extended
 			return src_reg;
 		}
+
 		auto [out_reg, valid] = allocate_register(&n.val());
 		if (!valid) {
 			return out_reg;
 		}
-		if (n.source_value().type().element_width() == 8) {
-			assembler_.andi(out_reg, src_reg, 0xff);
-		} else {
-			assembler_.slli(out_reg, src_reg, 64 - n.source_value().type().element_width());
-			assembler_.srli(out_reg, out_reg, 64 - n.source_value().type().element_width()));
-		}
+		fixup(assembler_, out_reg, src_reg, n.val().type().get_unsigned_type());
 		return out_reg;
 	}
 	case cast_op::trunc: {
