@@ -95,6 +95,39 @@ inline void addi_flags(
 }
 
 /**
+ * Generate zero, overflow, carry and sign flags based on the result in the given register and the given input registers assuming the operation was a
+ * subtraction.
+ * @param z whether zero flag should be generated
+ * @param v whether overflow flag should be generated
+ * @param c whether carry flag should be generated
+ * @param n whether sign flag should be generated
+ */
+inline void sub_flags(Assembler &assembler, TypedRegister &out, TypedRegister &lhs, TypedRegister &rhs, bool z, bool v, bool c, bool n)
+{
+	if (v || c || z || n) {
+		if (!out.type().is_vector() && out.type().is_integer()) {
+			extend_to_64(assembler, out, out);
+			if (v) {
+				extend_to_64(assembler, lhs, lhs);
+				extend_to_64(assembler, rhs, rhs);
+
+				assembler.sgtz(CF, rhs);
+				assembler.slt(OF, out, lhs);
+				assembler.xor_(OF, OF, CF); // OF FIXME Assumes out!=lhs && out!=rhs
+			}
+			if (c) {
+				extend_to_64(assembler, lhs, lhs);
+
+				assembler.sltu(CF, lhs, out); // CF FIXME Assumes out!=lhs
+			}
+			zero_sign_flag(assembler, out, z, n);
+		} else {
+			throw std::runtime_error("not implemented");
+		}
+	}
+}
+
+/**
  * Generate zero, overflow, carry and sign flags based on the result in the given register and the given input register and immediate assuming the operation was
  * a subtraction.
  * @param z whether zero flag should be generated
