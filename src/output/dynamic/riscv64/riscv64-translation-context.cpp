@@ -1155,19 +1155,23 @@ standardPath:
 		mod(assembler_, out_reg, src_reg1, src_reg2);
 		break;
 	case binary_arith_op::cmpeq: {
-		Register tmp = src_reg2 != ZERO ? out_reg : src_reg1;
-		if (src_reg2 != ZERO) {
+		Register tmp = static_cast<const Register>(src_reg2) != ZERO ? out_reg : src_reg1;
+		if (static_cast<const Register>(src_reg2) != ZERO) {
 			assembler_.xor_(out_reg, src_reg1, src_reg2);
 		}
 		assembler_.seqz(out_reg, tmp);
+		out_reg.set_actual_width(src_reg1.actual_width() < src_reg2.actual_width() ? src_reg1.actual_width_0() : src_reg2.actual_width_0());
+		out_reg.set_type(get_minimal_type(src_reg1, src_reg2));
 		return out_reg;
 	}
 	case binary_arith_op::cmpne: {
-		Register tmp = src_reg2 != ZERO ? out_reg : src_reg1;
-		if (src_reg2 != ZERO) {
+		Register tmp = static_cast<const Register>(src_reg2) != ZERO ? out_reg : src_reg1;
+		if (static_cast<const Register>(src_reg2) != ZERO) {
 			assembler_.xor_(out_reg, src_reg1, src_reg2);
 		}
 		assembler_.snez(out_reg, tmp);
+		out_reg.set_actual_width(src_reg1.actual_width() < src_reg2.actual_width() ? src_reg1.actual_width_0() : src_reg2.actual_width_0());
+		out_reg.set_type(get_minimal_type(src_reg1, src_reg2));
 		return out_reg;
 	}
 	case binary_arith_op::cmpgt:
