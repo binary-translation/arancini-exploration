@@ -273,7 +273,7 @@ Register riscv64_translation_context::materialise_ternary_atomic(const ternary_a
 	switch (n.op()) {
 
 	case ternary_atomic_op::cmpxchg:
-		switch (n.rhs().type().width()) {
+		switch (n.rhs().type().element_width()) {
 		case 64:
 			assembler_.Bind(&retry);
 
@@ -370,7 +370,7 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise_
 	// FIXME Correct memory ordering?
 	switch (n.op()) {
 	case binary_atomic_op::xadd:
-		switch (n.rhs().type().width()) {
+		switch (n.rhs().type().element_width()) {
 		case 64:
 			assembler_.amoaddd(out_reg, src, addr, std::memory_order_acq_rel);
 			assembler_.add(SF, out_reg, src); // Actual sum for flag generation
@@ -392,7 +392,7 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise_
 		assembler_.seqz(ZF, SF); // ZF
 		assembler_.sltz(SF, SF); // SF
 
-		switch (n.rhs().type().width()) {
+		switch (n.rhs().type().element_width()) {
 		case 64:
 			assembler_.sd(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
 			break;
@@ -406,7 +406,7 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise_
 		}
 		return out_reg;
 	case binary_atomic_op::add:
-		switch (n.rhs().type().width()) {
+		switch (n.rhs().type().element_width()) {
 		case 64:
 			assembler_.amoaddd(out_reg, src, addr, std::memory_order_acq_rel);
 
@@ -432,7 +432,7 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise_
 		return std::monostate {};
 	case binary_atomic_op::sub:
 		assembler_.neg(out_reg, src);
-		switch (n.rhs().type().width()) {
+		switch (n.rhs().type().element_width()) {
 		case 64:
 			assembler_.amoaddd(out_reg, out_reg, addr, std::memory_order_acq_rel);
 
@@ -457,7 +457,7 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise_
 		assembler_.sltz(SF, SF); // SF
 		return std::monostate {};
 	case binary_atomic_op::band:
-		switch (n.rhs().type().width()) {
+		switch (n.rhs().type().element_width()) {
 		case 64:
 			assembler_.amoandd(out_reg, src, addr, std::memory_order_acq_rel);
 
@@ -477,7 +477,7 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise_
 		assembler_.sltz(SF, SF); // SF
 		return std::monostate {};
 	case binary_atomic_op::bor:
-		switch (n.rhs().type().width()) {
+		switch (n.rhs().type().element_width()) {
 		case 64:
 			assembler_.amoord(out_reg, src, addr, std::memory_order_acq_rel);
 
@@ -497,7 +497,7 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise_
 		assembler_.sltz(SF, SF); // SF
 		return std::monostate {};
 	case binary_atomic_op::bxor:
-		switch (n.rhs().type().width()) {
+		switch (n.rhs().type().element_width()) {
 		case 64:
 			assembler_.amoxord(out_reg, src, addr, std::memory_order_acq_rel);
 
@@ -517,7 +517,7 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise_
 		assembler_.sltz(SF, SF); // SF
 		return std::monostate {};
 	case binary_atomic_op::xchg:
-		switch (n.rhs().type().width()) {
+		switch (n.rhs().type().element_width()) {
 		case 64:
 			assembler_.amoswapd(out_reg, src, addr, std::memory_order_acq_rel);
 			break;
@@ -528,7 +528,7 @@ std::variant<Register, std::monostate> riscv64_translation_context::materialise_
 			throw std::runtime_error("unsupported xchg width");
 		}
 
-		switch (n.rhs().type().width()) {
+		switch (n.rhs().type().element_width()) {
 		case 64:
 			assembler_.sd(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
 			break;
@@ -559,7 +559,7 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 	switch (n.op()) {
 
 	case cast_op::bitcast:
-		if (n.val().type().width() == 128) {
+		if (n.val().type().width() == 128) { //Needs to be width so casting to vector works
 			secondary_reg_for_port_[&n.val()] = get_secondary_register(&n.source_value()).encoding();
 		}
 		return src_reg;
@@ -579,9 +579,9 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 		return src_reg;
 
 	case cast_op::zx: {
-		if (n.val().type().width() == 128) {
+		if (n.val().type().element_width() == 128) {
 			secondary_reg_for_port_[&n.val()] = ZERO.encoding();
-			if (n.source_value().type().width() == 64) {
+			if (n.source_value().type().element_width() == 64) {
 				return src_reg;
 			}
 		}
@@ -592,11 +592,11 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 		if (!valid) {
 			return out_reg;
 		}
-		if (n.source_value().type().width() == 8) {
+		if (n.source_value().type().element_width() == 8) {
 			assembler_.andi(out_reg, src_reg, 0xff);
 		} else {
-			assembler_.slli(out_reg, src_reg, 64 - n.source_value().type().width());
-			assembler_.srli(out_reg, out_reg, 64 - n.source_value().type().width());
+			assembler_.slli(out_reg, src_reg, 64 - n.source_value().type().element_width());
+			assembler_.srli(out_reg, out_reg, 64 - n.source_value().type().element_width()));
 		}
 		return out_reg;
 	}
@@ -605,7 +605,7 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 			throw std::runtime_error("truncate to 128bit unsupported");
 		}
 
-		if (n.val().type().width() == 64) {
+		if (n.val().type().element_width() == 64) {
 			return src_reg;
 		}
 
@@ -618,11 +618,11 @@ Register riscv64_translation_context::materialise_cast(const cast_node &n)
 			// Flags are always zero extended
 			assembler_.andi(out_reg, src_reg, 1);
 		} // Sign extend the truncated bits to preserve convention
-		else if (n.val().type().width() == 32) {
+		else if (n.val().type().element_width() == 32) {
 			assembler_.sextw(out_reg, src_reg);
 		} else {
-			assembler_.slli(out_reg, src_reg, 64 - n.val().type().width());
-			assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
+			assembler_.slli(out_reg, src_reg, 64 - n.val().type().element_width());
+			assembler_.srai(out_reg, out_reg, 64 - n.val().type().element_width());
 		}
 		return out_reg;
 	}
@@ -637,7 +637,7 @@ Register riscv64_translation_context::materialise_bit_extract(const bit_extract_
 	int length = n.length();
 	Register src = std::get<Register>(materialise(n.source_value().owner()));
 
-	if (n.source_value().type().width() == 128) {
+	if (n.source_value().type().element_width() == 128) {
 		if (length == 64) {
 			if (from == 0) {
 				return src;
@@ -750,7 +750,7 @@ Register riscv64_translation_context::materialise_read_reg(const read_reg_node &
 	}
 	if (is_flag(value) || is_gpr(value)) { // Flags or GPR
 
-		auto load_instr = load_instructions.at(value.type().width());
+		auto load_instr = load_instructions.at(value.type().element_width());
 		(assembler_.*load_instr)(out_reg, { FP, static_cast<intptr_t>(n.regoff()) });
 		return out_reg;
 	} else if (is_i128(value)) {
@@ -768,7 +768,7 @@ void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 {
 	const port &value = n.value();
 	if (is_flag(value) || is_gpr(value)) { // Flags or GPR
-		auto store_instr = store_instructions.at(value.type().width());
+		auto store_instr = store_instructions.at(value.type().element_width());
 		if (is_flag(value)) {
 			Register reg = (!is_flag_port(value)) ? std::get<Register>(materialise(value.owner())) : flag_map.at(n.regoff());
 			if (is_flag_port(value) && !reg_for_port_.count(&value.owner()->val())) {
@@ -820,7 +820,7 @@ Register riscv64_translation_context::materialise_read_mem(const read_mem_node &
 		throw std::runtime_error("unsupported width on read mem operation");
 	}
 
-	auto load_instr = load_instructions.at(n.val().type().width());
+	auto load_instr = load_instructions.at(n.val().type().element_width());
 	(assembler_.*load_instr)(out_reg, addr);
 
 	return out_reg;
@@ -849,7 +849,7 @@ void riscv64_translation_context::materialise_write_mem(const write_mem_node &n)
 		throw std::runtime_error("unsupported width on write mem operation");
 	}
 
-	auto store_instr = store_instructions.at(n.value().type().width());
+	auto store_instr = store_instructions.at(n.value().type().element_width());
 	(assembler_.*store_instr)(src_reg, addr);
 }
 
@@ -863,7 +863,7 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 	Register src_reg = std::get<Register>(materialise(n.value().owner()));
 
 	Address addr { FP, static_cast<intptr_t>(reg_offsets::PC) };
-	auto store_instr = store_instructions.at(n.value().type().width());
+	auto store_instr = store_instructions.at(n.value().type().element_width());
 	(assembler_.*store_instr)(src_reg, addr);
 }
 
@@ -940,7 +940,7 @@ Register riscv64_translation_context::materialise_ternary_arith(const ternary_ar
 
 	case ternary_arith_op::adc:
 		// Temporary: Add carry in
-		switch (n.val().type().width()) {
+		switch (n.val().type().element_width()) {
 		case 64:
 			assembler_.add(ZF, src_reg2, src_reg3);
 			break;
@@ -950,8 +950,8 @@ Register riscv64_translation_context::materialise_ternary_arith(const ternary_ar
 		case 8:
 		case 16:
 			assembler_.add(ZF, src_reg2, src_reg3);
-			assembler_.slli(ZF, ZF, 64 - n.val().type().width());
-			assembler_.srai(ZF, ZF, 64 - n.val().type().width());
+			assembler_.slli(ZF, ZF, 64 - n.val().type().element_width());
+			assembler_.srai(ZF, ZF, 64 - n.val().type().element_width());
 			break;
 		}
 
@@ -959,7 +959,7 @@ Register riscv64_translation_context::materialise_ternary_arith(const ternary_ar
 		assembler_.sltu(CF, ZF, src_reg2); // Temporary carry
 
 		// Normal add
-		switch (n.val().type().width()) {
+		switch (n.val().type().element_width()) {
 		case 64:
 			assembler_.add(out_reg, src_reg1, ZF);
 			break;
@@ -969,8 +969,8 @@ Register riscv64_translation_context::materialise_ternary_arith(const ternary_ar
 		case 8:
 		case 16:
 			assembler_.add(out_reg, src_reg1, ZF);
-			assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
-			assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
+			assembler_.slli(out_reg, out_reg, 64 - n.val().type().element_width());
+			assembler_.srai(out_reg, out_reg, 64 - n.val().type().element_width());
 			break;
 		}
 
@@ -985,7 +985,7 @@ Register riscv64_translation_context::materialise_ternary_arith(const ternary_ar
 		break;
 	case ternary_arith_op::sbb:
 		// Temporary: Add carry in
-		switch (n.val().type().width()) {
+		switch (n.val().type().element_width()) {
 		case 64:
 			assembler_.add(ZF, src_reg2, src_reg3);
 			break;
@@ -995,15 +995,15 @@ Register riscv64_translation_context::materialise_ternary_arith(const ternary_ar
 		case 8:
 		case 16:
 			assembler_.add(ZF, src_reg2, src_reg3);
-			assembler_.slli(ZF, ZF, 64 - n.val().type().width());
-			assembler_.srai(ZF, ZF, 64 - n.val().type().width());
+			assembler_.slli(ZF, ZF, 64 - n.val().type().element_width());
+			assembler_.srai(ZF, ZF, 64 - n.val().type().element_width());
 			break;
 		}
 
 		assembler_.slt(OF, ZF, src_reg2); // Temporary overflow
 		assembler_.sltu(CF, ZF, src_reg2); // Temporary carry
 
-		switch (n.val().type().width()) {
+		switch (n.val().type().element_width()) {
 		case 64:
 			assembler_.sub(out_reg, src_reg1, ZF);
 			break;
@@ -1012,8 +1012,8 @@ Register riscv64_translation_context::materialise_ternary_arith(const ternary_ar
 			break;
 		case 16:
 			assembler_.sub(out_reg, src_reg1, ZF);
-			assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
-			assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
+			assembler_.slli(out_reg, out_reg, 64 - n.val().type().element_width());
+			assembler_.srai(out_reg, out_reg, 64 - n.val().type().element_width());
 			break;
 		}
 
@@ -1064,7 +1064,7 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 				assembler_.andi(OF, OF, 1);
 			}
 			*/
-			switch (n.val().type().width()) {
+			switch (n.val().type().element_width()) {
 			case 64:
 				assembler_.slli(out_reg, src_reg, amt);
 				break;
@@ -1073,15 +1073,15 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 				break;
 			case 8:
 			case 16:
-				assembler_.slli(out_reg, src_reg, amt + (64 - n.val().type().width()));
-				assembler_.srai(out_reg, out_reg, (64 - n.val().type().width()));
+				assembler_.slli(out_reg, src_reg, amt + (64 - n.val().type().element_width()));
+				assembler_.srai(out_reg, out_reg, (64 - n.val().type().element_width()));
 				break;
 			}
 
 			break;
 		case shift_op::lsr:
 			//			assembler_.srli(CF, src_reg, amt - 1); // CF
-			switch (n.val().type().width()) {
+			switch (n.val().type().element_width()) {
 			case 64:
 				assembler_.srli(out_reg, src_reg, amt);
 				break;
@@ -1126,7 +1126,7 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 	case shift_op::lsl:
 		//		assembler_.sll(CF, src_reg, OF); // CF in highest bit
 
-		switch (n.val().type().width()) {
+		switch (n.val().type().element_width()) {
 		case 64:
 			assembler_.sll(out_reg, src_reg, amount);
 			break;
@@ -1136,8 +1136,8 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 		case 8:
 		case 16:
 			assembler_.sll(out_reg, src_reg, amount);
-			assembler_.slli(out_reg, out_reg, (64 - n.val().type().width()));
-			assembler_.srai(out_reg, out_reg, (64 - n.val().type().width()));
+			assembler_.slli(out_reg, out_reg, (64 - n.val().type().element_width()));
+			assembler_.srai(out_reg, out_reg, (64 - n.val().type().element_width()));
 			break;
 		}
 		/*
@@ -1151,7 +1151,7 @@ Register riscv64_translation_context::materialise_bit_shift(const bit_shift_node
 		break;
 	case shift_op::lsr:
 		//		assembler_.srl(CF, src_reg, OF); // CF
-		switch (n.val().type().width()) {
+		switch (n.val().type().element_width()) {
 		case 64:
 			assembler_.srl(out_reg, src_reg, amount);
 			break;
@@ -1224,7 +1224,7 @@ Register riscv64_translation_context::materialise_binary_arith(const binary_arit
 				if (imm == -2048) { // Can happen with inversion
 					goto standardPath;
 				}
-				switch (n.val().type().width()) {
+				switch (n.val().type().element_width()) {
 				case 64:
 					assembler_.addi(out_reg, src_reg1, -imm);
 					break;
@@ -1234,8 +1234,8 @@ Register riscv64_translation_context::materialise_binary_arith(const binary_arit
 				case 8:
 				case 16:
 					assembler_.addi(out_reg, src_reg1, -imm);
-					assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
-					assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
+					assembler_.slli(out_reg, out_reg, 64 - n.val().type().element_width());
+					assembler_.srai(out_reg, out_reg, 64 - n.val().type().element_width());
 					break;
 				default:
 					throw std::runtime_error("Unsupported width for sub immediate");
@@ -1251,7 +1251,7 @@ Register riscv64_translation_context::materialise_binary_arith(const binary_arit
 
 			case binary_arith_op::add:
 
-				switch (n.val().type().width()) {
+				switch (n.val().type().element_width()) {
 				case 64:
 					assembler_.addi(out_reg, src_reg1, imm);
 					break;
@@ -1261,8 +1261,8 @@ Register riscv64_translation_context::materialise_binary_arith(const binary_arit
 				case 8:
 				case 16:
 					assembler_.addi(out_reg, src_reg1, imm);
-					assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
-					assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
+					assembler_.slli(out_reg, out_reg, 64 - n.val().type().element_width());
+					assembler_.srai(out_reg, out_reg, 64 - n.val().type().element_width());
 					break;
 				default:
 					throw std::runtime_error("Unsupported width for sub immediate");
@@ -1306,7 +1306,7 @@ standardPath:
 	switch (n.op()) {
 
 	case binary_arith_op::add:
-		switch (n.val().type().width()) {
+		switch (n.val().type().width()) { //Needs to stay width so vec4x32 works
 		case 128: {
 			if (is_int_vector(n.val(), 128, 32)) {
 				Register src_reg22 = get_secondary_register(&n.rhs());
@@ -1346,8 +1346,8 @@ standardPath:
 		case 8:
 		case 16:
 			assembler_.add(out_reg, src_reg1, src_reg2);
-			assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
-			assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
+			assembler_.slli(out_reg, out_reg, 64 - n.val().type().element_width());
+			assembler_.srai(out_reg, out_reg, 64 - n.val().type().element_width());
 			break;
 		default:
 			throw std::runtime_error("Unsupported width for sub immediate");
@@ -1363,7 +1363,7 @@ standardPath:
 		break;
 
 	case binary_arith_op::sub:
-		switch (n.val().type().width()) {
+		switch (n.val().type().element_width()) {
 		case 64:
 			assembler_.sub(out_reg, src_reg1, src_reg2);
 			break;
@@ -1373,8 +1373,8 @@ standardPath:
 		case 8:
 		case 16:
 			assembler_.sub(out_reg, src_reg1, src_reg2);
-			assembler_.slli(out_reg, out_reg, 64 - n.val().type().width());
-			assembler_.srai(out_reg, out_reg, 64 - n.val().type().width());
+			assembler_.slli(out_reg, out_reg, 64 - n.val().type().element_width());
+			assembler_.srai(out_reg, out_reg, 64 - n.val().type().element_width());
 			break;
 		default:
 			throw std::runtime_error("Unsupported width for sub immediate");
@@ -1407,7 +1407,7 @@ standardPath:
 		break;
 
 	case binary_arith_op::mul:
-		switch (n.val().type().width()) {
+		switch (n.val().type().element_width()) {
 		case 128: {
 
 			// FIXME
@@ -1451,17 +1451,17 @@ standardPath:
 				switch (n.val().type().element_type().type_class()) {
 
 				case value_type_class::signed_integer:
-					if (n.val().type().width() == 64) {
+					if (n.val().type().element_width() == 64) {
 						assembler_.sextw(CF, out_reg);
 					} else {
-						assembler_.slli(CF, out_reg, 64 - (n.val().type().width()) / 2);
-						assembler_.srai(CF, out_reg, 64 - (n.val().type().width()) / 2);
+						assembler_.slli(CF, out_reg, 64 - (n.val().type().element_width()) / 2);
+						assembler_.srai(CF, out_reg, 64 - (n.val().type().element_width()) / 2);
 					}
 					assembler_.xor_(CF, CF, out_reg);
 					assembler_.snez(CF, CF);
 					break;
 				case value_type_class::unsigned_integer:
-					assembler_.srli(CF, out_reg, n.val().type().width() / 2);
+					assembler_.srli(CF, out_reg, n.val().type().element_width() / 2);
 					assembler_.snez(CF, CF);
 					break;
 				default:
@@ -1475,7 +1475,7 @@ standardPath:
 		}
 		break;
 	case binary_arith_op::div:
-		switch (n.val().type().width()) {
+		switch (n.val().type().element_width()) {
 		case 128: // Fixme 128 bits not natively supported on RISCV, assuming just extended 64 bit value
 		case 64:
 			switch (n.val().type().element_type().type_class()) {
@@ -1525,7 +1525,7 @@ standardPath:
 		}
 		break;
 	case binary_arith_op::mod:
-		switch (n.val().type().width()) {
+		switch (n.val().type().element_width()) {
 		case 128: // Fixme 128 bits not natively supported on RISCV, assuming just extended 64 bit value
 		case 64:
 			switch (n.val().type().element_type().type_class()) {
