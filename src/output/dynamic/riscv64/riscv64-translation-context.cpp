@@ -254,12 +254,16 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 	}
 }
 
-Register riscv64_translation_context::materialise_ternary_atomic(const ternary_atomic_node &n)
+TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ternary_atomic_node &n)
 {
 
-	Register dstAddr = std::get<Register>(materialise(n.lhs().owner()));
-	Register acc = std::get<Register>(materialise(n.rhs().owner()));
-	Register src = std::get<Register>(materialise(n.top().owner()));
+	if (!(is_gpr(n.val()) && is_gpr(n.rhs()) && is_gpr(n.address()) && is_gpr(n.top()))) {
+		throw std::runtime_error("Unsupported type for Ternary Atomic");
+	}
+
+	TypedRegister &dstAddr = *materialise(n.address().owner());
+	TypedRegister &acc = *materialise(n.rhs().owner());
+	TypedRegister &src = *materialise(n.top().owner());
 	auto [out_reg, valid] = allocate_register(&n.val());
 	if (!valid) {
 		return out_reg;
@@ -272,6 +276,19 @@ Register riscv64_translation_context::materialise_ternary_atomic(const ternary_a
 
 	assembler_.add(reg, dstAddr, MEM_BASE);
 
+	bool z_needed = !n.zero().targets().empty();
+	bool v_needed = !n.overflow().targets().empty();
+	bool c_needed = !n.carry().targets().empty();
+	bool n_needed = !n.negative().targets().empty();
+	bool flags_needed = z_needed || v_needed || c_needed || n_needed;
+
+	using load_reserve_type = decltype(&Assembler::lrd);
+	using store_conditional_type = decltype(&Assembler::scd);
+
+	load_reserve_type lr = n.val().type().element_width() == 32 ? &Assembler::lrw : &Assembler::lrd;
+	store_conditional_type sc = n.val().type().element_width() == 32 ? &Assembler::scw : &Assembler::scd;
+	load_store_func_t store = n.val().type().element_width() == 32 ? &Assembler::sw : &Assembler::sd;
+
 	auto addr = Address { reg };
 	// FIXME Correct memory ordering?
 	switch (n.op()) {
@@ -279,75 +296,44 @@ Register riscv64_translation_context::materialise_ternary_atomic(const ternary_a
 	case ternary_atomic_op::cmpxchg:
 		switch (n.rhs().type().element_width()) {
 		case 64:
+		case 32: {
 			assembler_.Bind(&retry);
 
-			assembler_.lrd(out_reg, addr, std::memory_order_acq_rel);
+			(assembler_.*lr)(out_reg, addr, std::memory_order_acq_rel);
 			assembler_.bne(out_reg, acc, &fail, Assembler::kNearJump);
-			assembler_.scd(out_reg, src, addr, std::memory_order_acq_rel);
+			(assembler_.*sc)(out_reg, src, addr, std::memory_order_acq_rel);
 			assembler_.bnez(out_reg, &retry, Assembler::kNearJump);
 
 			// Flags from comparison matching (i.e subtraction of equal values)
-			assembler_.li(ZF, 1);
-			assembler_.li(CF, 0);
-			assembler_.li(OF, 0);
-			assembler_.li(SF, 0);
+			if (z_needed) {
+				assembler_.li(ZF, 1);
+			}
+			if (c_needed) {
+				assembler_.li(CF, 0);
+			}
+			if (v_needed) {
+				assembler_.li(OF, 0);
+			}
+			if (n_needed) {
+				assembler_.li(SF, 0);
+			}
 
 			assembler_.j(&end, Assembler::kNearJump);
 
 			assembler_.Bind(&fail);
 
-			assembler_.sub(SF, acc, out_reg);
-
-			assembler_.sgtz(CF, out_reg);
-			assembler_.slt(OF, SF, acc);
-			assembler_.xor_(OF, OF, CF); // OF
-
-			assembler_.sltu(CF, acc, SF); // CF
-
-			assembler_.li(ZF, 0); // ZF
-
-			assembler_.sltz(SF, SF); // SF
+			if (flags_needed) {
+				TypedRegister temp_reg { SF };
+				temp_reg.set_type(n.val().type());
+				sub(assembler_, temp_reg, acc, out_reg);
+				sub_flags(assembler_, temp_reg, acc, out_reg, z_needed, v_needed, c_needed, n_needed);
+			}
 
 			// Write back updated acc value
-			assembler_.sd(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
+			(assembler_.*store)(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
 
 			assembler_.Bind(&end);
-			break;
-		case 32:
-			assembler_.Bind(&retry);
-
-			assembler_.lrw(out_reg, addr, std::memory_order_acq_rel);
-			assembler_.bne(out_reg, acc, &fail, Assembler::kNearJump);
-			assembler_.scw(out_reg, src, addr, std::memory_order_acq_rel);
-			assembler_.bnez(out_reg, &retry, Assembler::kNearJump);
-
-			// Flags from comparison matching (i.e subtraction of equal values)
-			assembler_.li(CF, 0);
-			assembler_.li(OF, 0);
-			assembler_.li(SF, 0);
-			assembler_.li(ZF, 1);
-
-			assembler_.j(&end, Assembler::kNearJump);
-
-			assembler_.Bind(&fail);
-
-			assembler_.subw(SF, acc, out_reg);
-
-			assembler_.sgtz(CF, out_reg);
-			assembler_.slt(OF, SF, acc);
-			assembler_.xor_(OF, OF, CF); // OF
-
-			assembler_.sltu(CF, acc, SF); // CF
-
-			assembler_.li(ZF, 0); // ZF
-
-			assembler_.sltz(SF, SF); // SF
-
-			// Write back updated acc value
-			assembler_.sw(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
-
-			assembler_.Bind(&end);
-			break;
+		} break;
 		default:
 			throw std::runtime_error("unsupported cmpxchg width");
 		}
