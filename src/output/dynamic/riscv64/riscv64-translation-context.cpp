@@ -1084,26 +1084,29 @@ TypedRegister &riscv64_translation_context::materialise_binary_arith(const binar
 				addi_flags(assembler_, out_reg, src_reg1, imm, z_needed, v_needed, c_needed, n_needed);
 				break;
 
-			// Binary operations preserve sign extension
+			// Binary operations preserve sign extension, so we keep the effective input type (even if larger)
 			case binary_arith_op::band:
 				assembler_.andi(out_reg, src_reg1, imm);
+				out_reg.set_actual_width();
+				out_reg.set_type(src_reg1.type());
+				zero_sign_flag(assembler_, out_reg, z_needed, n_needed);
 				break;
 			case binary_arith_op::bor:
 				assembler_.ori(out_reg, src_reg1, imm);
+				out_reg.set_actual_width();
+				out_reg.set_type(src_reg1.type());
+				zero_sign_flag(assembler_, out_reg, z_needed, n_needed);
 				break;
 			case binary_arith_op::bxor:
 				assembler_.xori(out_reg, src_reg1, imm);
+				out_reg.set_actual_width();
+				out_reg.set_type(src_reg1.type());
+				zero_sign_flag(assembler_, out_reg, z_needed, n_needed);
 				break;
 			default:
 				// No-op Go to standard path
 				goto standardPath;
 			}
-
-			if (flags_needed) {
-				assembler_.seqz(ZF, out_reg); // ZF
-				assembler_.sltz(SF, out_reg); // SF
-			}
-
 			return out_reg;
 		}
 	}
