@@ -25,64 +25,42 @@ using is_reg_or_immediate = std::enable_if_t<std::disjunction<is_one_of<T, preg_
 
 class instruction_builder {
 public:
-    template <typename T1, typename T2, typename T3,
-              is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
-	void add(const T1 &dst,
-             const T2 &src1,
-             const T3 &src2) {
-        append(instruction("add", def(dst), use(src1), use(src2)));
+
+#define ARITH_OP_BASIC(name) \
+    template <typename T1, typename T2, typename T3, \
+              is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0> \
+	void name(const T1 &dst, \
+              const T2 &src1, \
+              const T3 &src2) { \
+        append(instruction(#name, def(dst), use(src1), use(src2))); \
     }
 
-    template <typename T1, typename T2, typename T3,
-              is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
-    void add(const T1 &dst,
-             const T2 &src1,
-             const T3 &src2,
-             const shift_operand &shift) {
-        append(instruction("add", def(dst), use(src1), use(src2), use(shift)));
+#define ARITH_OP_SHIFT(name) \
+    template <typename T1, typename T2, typename T3, \
+              is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0> \
+    void name(const T1 &dst, \
+              const T2 &src1, \
+              const T3 &src2, \
+              const shift_operand &shift) { \
+        append(instruction(#name, def(dst), use(src1), use(src2), use(shift))); \
     }
 
-    template <typename T1, typename T2, typename T3,
-              is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
-	void adds(const T1 &dst,
-              const T2 &src1,
-              const T3 &src2) {
-        append(instruction("adds", def(keep(dst)), use(src1), use(src2)));
-    }
+// TODO: refactor everything this way
+#define ARITH_OP(name) \
+    ARITH_OP_BASIC(name) \
+    ARITH_OP_SHIFT(name) \
 
-    template <typename T1, typename T2, typename T3,
-              is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
-    void adds(const T1 &dst,
-              const T2 &src1,
-              const T3 &src2,
-              const shift_operand &shift) {
-        append(instruction("adds", def(keep(dst)), use(src1), use(src2), use(shift)));
-    }
+    // ADD
+    ARITH_OP(add);
 
-    template <typename T1, typename T2, typename T3,
-              is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
-    void adcs(const T1 &dst,
-              const T2 &src1,
-              const T3 &src2) {
-        append(instruction("adcs", def(keep(dst)), use(src1), use(src2)));
-    }
+    // ADDS
+    ARITH_OP(adds);
 
-    template <typename T1, typename T2, typename T3,
-              is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
-    void sub(const T1 &dst,
-             const T2 &src1,
-             const T3 &src2) {
-        append(instruction("sub", def(dst), use(src1), use(src2)));
-    }
+    // ADCS
+    ARITH_OP_BASIC(adcs);
 
-    template <typename T1, typename T2, typename T3,
-              is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
-    void sub(const T1 &dst,
-             const T2 &src1,
-             const T3 &src2,
-             const shift_operand &shift) {
-        append(instruction("sub", def(dst), use(src1), use(src2), use(shift)));
-    }
+    // SUB
+    ARITH_OP(sub);
 
     template <typename T1, typename T2, typename T3,
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
@@ -274,33 +252,30 @@ public:
         append(instruction("bfi", def(dst), use(src1), use(immr), use(imms)));
     }
 
-    template <typename T1,
-              is_reg<T1> = 0>
-    void ldr(const T1 &dst,
-             const memory_operand &base) {
-        append(instruction("ldr", def(dst), use(base)));
-    }
 
-    template <typename T1,
-              is_reg<T1> = 0>
-    void str(const T1 &src,
-             const memory_operand &base) {
-        append(instruction("str", use(src), def(base)));
-    }
+#define LDR_VARIANTS(name) \
+    template <typename T1, \
+              is_reg<T1> = 0> \
+    void name(const T1 &src, \
+             const memory_operand &base) { \
+        append(instruction(#name, def(src), use(base))); \
+    } \
 
-    template <typename T1,
-              is_reg<T1> = 0>
-    void strb(const T1 &src,
-             const memory_operand &base) {
-        append(instruction("strb", use(src), def(base)));
-    }
+#define STR_VARIANTS(name) \
+    template <typename T1, \
+              is_reg<T1> = 0> \
+    void name(const T1 &src, \
+             const memory_operand &base) { \
+        append(instruction(#name, use(src), def(base))); \
+    } \
 
-    template <typename T1,
-              is_reg<T1> = 0>
-    void strh(const T1 &src,
-             const memory_operand &base) {
-        append(instruction("strh", use(src), def(base)));
-    }
+    LDR_VARIANTS(ldr);
+    LDR_VARIANTS(ldrh);
+    LDR_VARIANTS(ldrb);
+
+    STR_VARIANTS(str);
+    STR_VARIANTS(strh);
+    STR_VARIANTS(strb);
 
     template <typename T1, typename T2, typename T3,
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg<T3> = 0>
@@ -558,6 +533,116 @@ public:
     AMO_SIZE_VARIANT_HW(ldumax);
 
     AMO_SIZE_VARIANT_HW(ldumin);
+
+// NEON Vectors
+// NOTE: these should be built only if there is no support for SVE/SVE2
+//
+// Otherwise, we should just use SVE2 operations directly
+#define VOP_ARITH(name) \
+    template <typename T1, typename T2, typename T3, \
+              is_reg<T1> = 0, is_reg<T2> = 0, is_reg<T3> = 0> \
+    void name(const std::string &size, const T1 &dest, const T2 &src1, const T3 &src2) { \
+        append(instruction(#name "." + size, def(dest), use(src1), use(src2))); \
+    }
+
+    // vector additions
+    VOP_ARITH(vadd);
+    VOP_ARITH(vqadd);
+    VOP_ARITH(vhadd);
+    VOP_ARITH(vrhadd);
+
+    // vector subtractions
+    VOP_ARITH(vsub);
+    VOP_ARITH(vqsub);
+    VOP_ARITH(vhsub);
+
+    // vector multiplication
+    // TODO: some not included
+    VOP_ARITH(vmul);
+    VOP_ARITH(vmla);
+    VOP_ARITH(vmls);
+
+    // vector absolute value
+    VOP_ARITH(vabs);
+    VOP_ARITH(vqabs);
+
+    // vector negation
+    VOP_ARITH(vneg);
+    VOP_ARITH(vqneg);
+
+    // vector round float
+    VOP_ARITH(vrnd);
+    VOP_ARITH(vrndi);
+    VOP_ARITH(vrnda);
+
+    // pairwise addition
+    VOP_ARITH(vpadd);
+    VOP_ARITH(vpaddl);
+
+    // vector shifts
+    // shift left, shift right, shift left long.
+    VOP_ARITH(vshl);
+    VOP_ARITH(vshr);
+    VOP_ARITH(vshll);
+
+    // vector comparisons
+    // VCMP, VCEQ, VCGE, VCGT: compare, compare equal, compare greater than or equal, compare greater than.
+    VOP_ARITH(vcmp);
+    VOP_ARITH(vceq);
+    VOP_ARITH(vcge);
+    VOP_ARITH(vcgt);
+
+    // min-max
+    VOP_ARITH(vmin);
+    VOP_ARITH(vmax);
+
+    // reciprocal-sqrt
+    VOP_ARITH(vrecpe);
+    VOP_ARITH(vrsqrte);
+
+// SVE2
+    // SVE2 version
+    template <typename T1, typename T2, typename T3, typename T4,
+              is_reg<T1> = 0, is_reg<T2> = 0, is_reg<T3> = 0, is_reg<T4> = 0>
+    void add(const T1 &dst,
+             const T2 &pred,
+             const T3 &src1,
+             const T4 &src2) {
+        append(instruction("add", def(dst), use(pred), use(src1), use(src2)));
+    }
+
+    // SVE2
+    template <typename T1, typename T2, typename T3, typename T4,
+              is_reg<T1> = 0, is_reg<T2> = 0, is_reg<T3> = 0, is_reg<T4> = 0>
+    void sub(const T1 &dst,
+             const T2 &pred,
+             const T3 &src1,
+             const T4 &src2) {
+        append(instruction("sub", def(dst), use(pred), use(src1), use(src2)));
+    }
+
+    // SVE2
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
+    void ld1(const T1 &src,
+             const T2 &pred,
+             const memory_operand &addr) {
+        append(instruction("ld1", use(src), use(pred), use(addr)));
+    }
+
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
+    void st1(const T1 &dest,
+             const T2 &pred,
+             const memory_operand &addr) {
+        append(instruction("st1", def(dest), use(pred), use(addr)));
+    }
+
+    template <typename T1,
+              is_reg<T1> = 0>
+    void ptrue(const T1 &dest) {
+        append(instruction("ptrue", def(dest)));
+    }
 
     void insert_sep(const std::string &sep) { label(sep); }
 
