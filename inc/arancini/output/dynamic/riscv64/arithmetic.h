@@ -185,6 +185,124 @@ inline void mul(Assembler &assembler, TypedRegister &out, const TypedRegister &l
 	}
 }
 
+inline void div(Assembler &assembler, TypedRegister &out, TypedRegister &lhs, TypedRegister &rhs)
+{
+	if (!out.type().is_vector() && out.type().is_integer()) {
+		switch (out.type().type_class()) {
+
+		case value_type_class::signed_integer:
+			switch (out.type().element_width()) {
+			case 128: // Fixme 128 bits not natively supported on RISCV, assuming just extended 64 bit value
+				assembler.div(out.reg1(), lhs.reg1(), rhs.reg1());
+				break;
+			case 64:
+				assembler.div(out, lhs, rhs);
+				break;
+			case 16:
+				fixup(assembler, lhs, lhs, value_type::s32());
+				fixup(assembler, rhs, rhs, value_type::s32());
+				[[fallthrough]];
+				// fallthrough (use 32 bit div because it might be faster on hardware)
+
+				// Almost sure that this will mean the result will be correctly sign extended to 64 bit after the divw
+				// Only the overflow case of MIN_INT16 / -1 will not be correct but that should crash anyway so not an issue
+			case 32:
+				assembler.divw(out, lhs, rhs);
+				out.set_actual_width();
+				out.set_type(value_type::s64());
+				break;
+			default:
+				throw std::runtime_error("not implemented");
+			}
+			break;
+		case value_type_class::unsigned_integer:
+
+			switch (out.type().element_width()) {
+			case 128: // Fixme 128 bits not natively supported on RISCV, assuming just extended 64 bit value
+				assembler.divu(out.reg1(), lhs.reg1(), rhs.reg1());
+				break;
+			case 64:
+				assembler.divu(out, lhs, rhs);
+				break;
+			case 16:
+				fixup(assembler, lhs, lhs, value_type::u32());
+				fixup(assembler, rhs, rhs, value_type::u32());
+				[[fallthrough]];
+				// fallthrough (use 32 bit div because it might be faster on hardware)
+			case 32:
+				assembler.divuw(out, lhs, rhs);
+				break;
+			default:
+				throw std::runtime_error("not implemented");
+			}
+			break;
+		default:
+			throw std::runtime_error("not implemented");
+		}
+	} else {
+		throw std::runtime_error("not implemented");
+	}
+}
+
+inline void mod(Assembler &assembler, TypedRegister &out, TypedRegister &lhs, TypedRegister &rhs)
+{
+	if (!out.type().is_vector() && out.type().is_integer()) {
+		switch (out.type().type_class()) {
+
+		case value_type_class::signed_integer:
+			switch (out.type().element_width()) {
+			case 128: // Fixme 128 bits not natively supported on RISCV, assuming just extended 64 bit value
+				assembler.rem(out.reg1(), lhs.reg1(), rhs.reg1());
+				break;
+			case 64:
+				assembler.rem(out, lhs, rhs);
+				break;
+			case 16:
+				fixup(assembler, lhs, lhs, value_type::s32());
+				fixup(assembler, rhs, rhs, value_type::s32());
+				[[fallthrough]];
+				// fallthrough (use 32 bit rem because it might be faster on hardware)
+			case 32:
+				assembler.remw(out, lhs, rhs);
+				out.set_actual_width();
+				out.set_type(value_type::s64());
+				break;
+			default:
+				throw std::runtime_error("not implemented");
+			}
+			break;
+		case value_type_class::unsigned_integer:
+
+			switch (out.type().element_width()) {
+			case 128: // Fixme 128 bits not natively supported on RISCV, assuming just extended 64 bit value
+				assembler.remu(out.reg1(), lhs.reg1(), rhs.reg1());
+				break;
+			case 64:
+				assembler.remu(out, lhs, rhs);
+				break;
+			case 16:
+				fixup(assembler, lhs, lhs, value_type::u32());
+				fixup(assembler, rhs, rhs, value_type::u32());
+				[[fallthrough]];
+				// fallthrough (use 32 bit rem because it might be faster on hardware)
+
+				// Almost sure that this will mean the result will be correctly sign extended to 64 bit after the remw
+				// Only the overflow case of MIN_INT16 % -1 will not be correct but that should crash anyway so not an issue
+			case 32:
+				assembler.remuw(out, lhs, rhs);
+				break;
+			default:
+				throw std::runtime_error("not implemented");
+			}
+			break;
+		default:
+			throw std::runtime_error("not implemented");
+		}
+	} else {
+		throw std::runtime_error("not implemented");
+	}
+}
+
 inline void not_(Assembler &assembler, TypedRegister &out, const TypedRegister &src)
 {
 	if (!out.type().is_vector() && out.type().is_integer()) {
