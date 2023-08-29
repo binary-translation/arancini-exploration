@@ -168,6 +168,12 @@ inline void gen_constant(Assembler &assembler, int64_t imm, Register reg)
 		return;
 	}
 }
+
+value_type get_minimal_type(const TypedRegister &lhs, const TypedRegister &rhs)
+{
+	return lhs.type().element_width() < rhs.type().element_width() ? lhs.type() : rhs.type();
+}
+
 static inline bool is_flag_t(const value_type &type) { return type.element_width() == 1; }
 static inline bool is_flag(const port &value) { return is_flag_t(value.type()); }
 static inline bool is_flag_port(const port &value)
