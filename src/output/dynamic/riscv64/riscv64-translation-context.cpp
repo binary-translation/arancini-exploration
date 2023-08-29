@@ -1,4 +1,5 @@
 #include <arancini/ir/node.h>
+#include <arancini/output/dynamic/riscv64/arithmetic.h>
 #include <arancini/output/dynamic/riscv64/encoder/riscv64-constants.h>
 #include <arancini/output/dynamic/riscv64/bitwise.h>
 #include <arancini/output/dynamic/riscv64/flags.h>
@@ -858,7 +859,7 @@ void riscv64_translation_context::materialise_cond_br(const cond_br_node &n)
 	assembler_.bnez(cond, it->second.get());
 }
 
-Register riscv64_translation_context::materialise_unary_arith(const unary_arith_node &n)
+TypedRegister &riscv64_translation_context::materialise_unary_arith(const unary_arith_node &n)
 {
 	if (!(is_gpr_or_flag(n.val()) && is_gpr_or_flag(n.lhs()))) {
 		throw std::runtime_error("unsupported width on unary arith operation");
@@ -868,13 +869,10 @@ Register riscv64_translation_context::materialise_unary_arith(const unary_arith_
 		return out_reg;
 	}
 
-	Register src_reg = std::get<Register>(materialise(n.lhs().owner()));
+	TypedRegister &src_reg = *(materialise(n.lhs().owner()));
+
 	if (n.op() == unary_arith_op::bnot) {
-		if (is_flag(n.val())) {
-			assembler_.xori(out_reg, src_reg, 1);
-		} else {
-			assembler_.not_(out_reg, src_reg);
-		}
+		not_(assembler_, out_reg, src_reg);
 		return out_reg;
 	}
 
