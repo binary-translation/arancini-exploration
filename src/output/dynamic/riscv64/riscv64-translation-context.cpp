@@ -424,30 +424,25 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 	}
 	case binary_atomic_op::sub:
 		assembler_.neg(out_reg, src);
-		switch (n.rhs().type().element_width()) {
+		switch (n.val().type().element_width()) {
 		case 64:
 			assembler_.amoaddd(out_reg, out_reg, addr, std::memory_order_acq_rel);
-
-			assembler_.sub(SF, out_reg, src); // Actual difference for flag generation
 			break;
 		case 32:
 			assembler_.amoaddw(out_reg, src, addr, std::memory_order_acq_rel);
-
-			assembler_.subw(SF, out_reg, src); // Actual difference for flag generation
 			break;
 		default:
 			throw std::runtime_error("unsupported lock sub width");
 		}
 
-		assembler_.sgtz(CF, src);
-		assembler_.slt(OF, SF, out_reg);
-		assembler_.xor_(OF, OF, CF); // OF
+		if (flags_needed) {
+			TypedRegister temp_result_reg { SF };
+			temp_result_reg.set_type(n.val().type());
 
-		assembler_.sltu(CF, out_reg, SF); // CF
-
-		assembler_.seqz(ZF, SF); // ZF
-		assembler_.sltz(SF, SF); // SF
-		return std::monostate {};
+			sub(assembler_, temp_result_reg, out_reg, src); // Actual difference for flag generation
+			sub_flags(assembler_, temp_result_reg, out_reg, src, z_needed, v_needed, c_needed, n_needed);
+		}
+		return std::nullopt;
 	case binary_atomic_op::band:
 		switch (n.rhs().type().element_width()) {
 		case 64:
