@@ -312,7 +312,7 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
         dest_reg_count = n.val().type().width() / dest_element_width;
     }
 
-    value_type dest_type = value_type(n.val().type().type_class(), dest_element_width);
+    value_type dest_type = value_type(n.val().type().type_class(), dest_element_width, 1);
     for (std::size_t i = 0; i < dest_reg_count; ++i)
         alloc_vreg_for_port(n.val(), dest_type);
 
@@ -341,7 +341,7 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
-                throw std::runtime_error("ARM64-DBT cannot load individual values larger than 64-bits");
+                throw std::runtime_error("ARM64-DBT cannot load individual register values larger than 64-bits");
         }
     }
 }
@@ -383,7 +383,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
-                throw std::runtime_error("ARM64-DBT cannot write individual values larger than 64-bits");
+                throw std::runtime_error("ARM64-DBT cannot write individual register values larger than 64-bits");
         }
     }
 }
@@ -447,7 +447,7 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
-                throw std::runtime_error("ARM64-DBT cannot load individual values larger than 64-bits");
+                throw std::runtime_error("ARM64-DBT cannot load individual memory values larger than 64-bits");
         }
     }
 }
@@ -490,7 +490,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
-                throw std::runtime_error("ARM64-DBT cannot write individual values larger than 64-bits");
+                throw std::runtime_error("ARM64-DBT cannot write individual memory values larger than 64-bits");
         }
     }
 }
@@ -686,12 +686,12 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 	case binary_arith_op::div:
         //FIXME: implement
         builder_.sdiv(dest_vreg, lhs_vreg, rhs_vreg);
-        throw std::runtime_error("Not implemented: binary_arith_op::div");
+        /* throw std::runtime_error("Not implemented: binary_arith_op::div"); */
 		break;
 	case binary_arith_op::mod:
         //FIXME: implement
         builder_.and_(dest_vreg, lhs_vreg, rhs_vreg);
-        throw std::runtime_error("Not implemented: binary_arith_op::mov");
+        /* throw std::runtime_error("Not implemented: binary_arith_op::mov"); */
 		break;
 	case binary_arith_op::bor:
         builder_.orr_(dest_vreg, lhs_vreg, rhs_vreg);
@@ -1062,26 +1062,40 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
     // 2. The width of source registes (<= 64-bit: the base width or larger)
     //
     // However, for extension operations 1 => 2
-    size_t src_width = n.source_value().type().element_width();
-    size_t dest_width = n.val().type().element_width();
-
-    size_t src_reg_count = src_width / base_type().element_width();
-    size_t dest_reg_count = dest_width / base_type().element_width();
-
-    if (src_reg_count == 0) src_reg_count = 1;
-    if (dest_reg_count == 0) dest_reg_count = 1;
 
     // Multiple source registers for element_width > 64-bits
     auto src_vregs = vreg_operand_for_port(n.source_value());
 
     // Allocate as many destination registers as necessary
-    for (size_t i = 0; i < dest_reg_count; ++i) {
-        alloc_vreg_for_port(n.val(), n.val().type());
+    // TODO: this is not exactly correct, since we need to create different
+    // registers of the base type in such cases
+    auto type = n.val().type();
+
+    // Sanity check; cannot by definition load a register larger than 64-bit
+    // without it being a vector
+    if (type.is_vector() && type.element_width() > base_type().element_width()) {
+        throw std::runtime_error("Larger than 64-bit integers in vectors not supported by backend");
     }
-	auto dst_vregs = vregs_for_port(n.val());
+
+    auto dest_reg_count = n.val().type().nr_elements();
+    auto dest_element_width = n.val().type().width();
+    if (dest_element_width > base_type().element_width()) {
+        // This will only occur for non-vectors > 64-bit
+        dest_element_width = base_type().element_width();
+        dest_reg_count = n.val().type().width() / dest_element_width;
+    }
+
+    auto src_width = n.source_value().type().width();
+    auto dest_width = dest_element_width * dest_reg_count;
+
+    value_type dest_type = value_type(n.val().type().type_class(), dest_element_width);
+    for (std::size_t i = 0; i < dest_reg_count; ++i)
+        alloc_vreg_for_port(n.val(), dest_type);
+
+    auto dest_vregs = vregs_for_port(n.val());
 
     auto src_vreg = src_vregs[0];
-    auto dst_vreg = dst_vregs[0];
+    auto dest_vreg = dest_vregs[0];
 
 	switch (n.op()) {
 	case cast_op::sx:
@@ -1101,49 +1115,49 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             // 1 -> N
             // sign-extend to 1 byte
             // sign-extend the rest
-            builder_.lsl(dst_vreg, src_vreg, immediate_operand(7, value_type::u8()));
-            builder_.sxtb(dst_vreg, src_vreg);
-            builder_.asr(dst_vreg, src_vreg, immediate_operand(7, value_type::u8()));
+            builder_.lsl(dest_vreg, src_vreg, immediate_operand(7, value_type::u8()));
+            builder_.sxtb(dest_vreg, src_vreg);
+            builder_.asr(dest_vreg, src_vreg, immediate_operand(7, value_type::u8()));
             break;
         case 8:
-            builder_.sxtb(dst_vreg, src_vreg);
+            builder_.sxtb(dest_vreg, src_vreg);
             break;
         case 16:
-            builder_.sxth(dst_vreg, src_vreg);
+            builder_.sxth(dest_vreg, src_vreg);
             break;
         case 32:
-            builder_.sxtw(dst_vreg, src_vreg);
+            builder_.sxtw(dest_vreg, src_vreg);
             break;
         case 64:
-            builder_.mov(dst_vreg, src_vreg);
+            builder_.mov(dest_vreg, src_vreg);
             break;
         case 128:
         case 256:
             // Move existing values into destination register
             // Sign extension for remaining registers handled outside of the
             // switch
-            for (size_t i = 0; i < src_reg_count; ++i) {
-                builder_.mov(dst_vregs[i], src_vregs[i]);
+            for (size_t i = 0; i < src_vregs.size(); ++i) {
+                builder_.mov(dest_vregs[i], src_vregs[i]);
             }
             break;
         default:
             throw std::runtime_error("ARM64-DBT cannot sign-extend from size " +
                     std::to_string(src_vreg.width()) + " to size " +
-                    std::to_string(dst_vreg.width()));
+                    std::to_string(dest_vreg.width()));
         }
 
         // Determine sign and write to upper registers
         // This really only happens when dest_reg_count > src_reg_count > 1
         if (dest_reg_count > 1) {
-            for (size_t i = src_reg_count; i < dest_reg_count; ++i) {
-                builder_.mov(dst_vregs[i], src_vregs[src_reg_count-1]);
-                builder_.asr(dst_vregs[i], dst_vregs[i], immediate_operand(64, value_type::u8()));
+            for (size_t i = src_vregs.size(); i < dest_reg_count; ++i) {
+                builder_.mov(dest_vregs[i], src_vregs[src_vregs.size()-1]);
+                builder_.asr(dest_vregs[i], dest_vregs[i], immediate_operand(64, value_type::u8()));
             }
         }
         break;
 	case cast_op::bitcast:
         // Simply change the meaning of the bit pattern
-        // dst_vreg is set to the desired type already, but it must have the
+        // dest_vreg is set to the desired type already, but it must have the
         // value of src_vreg
         // A simple mov is sufficient (eliminated anyway by the register
         // allocator)
@@ -1151,11 +1165,11 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         // NOTE: widths guaranteed to be equal by frontend
         if (dest_width != src_width)
             throw std::runtime_error("ARM64-DBT cannot bitcast " +
-                    std::to_string(dst_vreg.width()) + " different size " +
-                    std::to_string(src_vreg.width()));
+                    std::to_string(dest_element_width) + " different size " +
+                    std::to_string(src_width));
 
-        for (size_t i = 0; i < src_reg_count; ++i) {
-            builder_.mov(dst_vregs[i], src_vregs[i]);
+        for (size_t i = 0; i < src_vregs.size(); ++i) {
+            builder_.mov(dest_vregs[i], src_vregs[i]);
         }
 		break;
 	case cast_op::zx:
@@ -1175,66 +1189,69 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             // 1 -> N
             // sign-extend to 1 byte
             // sign-extend the rest
-            builder_.lsl(dst_vreg, src_vreg, immediate_operand(7, value_type::u8()));
-            builder_.uxtb(dst_vreg, src_vreg);
-            builder_.lsr(dst_vreg, src_vreg, immediate_operand(7, value_type::u8()));
+            builder_.lsl(dest_vreg, src_vreg, immediate_operand(7, value_type::u8()));
+            builder_.uxtb(dest_vreg, src_vreg);
+            builder_.lsr(dest_vreg, src_vreg, immediate_operand(7, value_type::u8()));
             break;
         case 8:
-            builder_.uxtb(dst_vreg, src_vreg);
+            builder_.uxtb(dest_vreg, src_vreg);
             break;
         case 16:
-            builder_.uxth(dst_vreg, src_vreg);
+            builder_.uxth(dest_vreg, src_vreg);
             break;
         case 32:
-            builder_.uxtw(dst_vreg, src_vreg);
+            builder_.uxtw(dest_vreg, src_vreg);
             break;
         case 64:
-            builder_.mov(dst_vreg, src_vreg);
+            builder_.mov(dest_vreg, src_vreg);
             break;
         case 128:
         case 256:
             // Handle separately
-            for (size_t i = 0; i < src_reg_count; ++i) {
-                builder_.mov(dst_vregs[i], src_vregs[i]);
+            for (size_t i = 0; i < src_vregs.size(); ++i) {
+                builder_.mov(dest_vregs[i], src_vregs[i]);
             }
             break;
         default:
             throw std::runtime_error("ARM64-DBT cannot sign-extend from size " +
                     std::to_string(src_vreg.width()) + " to size " +
-                    std::to_string(dst_vreg.width()));
+                    std::to_string(dest_vreg.width()));
         }
 
         // Determine sign and write to upper registers
         if (dest_reg_count > 1) {
-            for (size_t i = src_reg_count; i < dest_reg_count; ++i) {
-                builder_.mov(dst_vregs[i], src_vregs[src_reg_count-1]);
-                builder_.lsr(dst_vregs[i], dst_vregs[i], immediate_operand(64, value_type::u8()));
+            for (size_t i = src_vregs.size(); i < dest_reg_count; ++i) {
+                builder_.mov(dest_vregs[i], src_vregs[src_vregs.size()-1]);
+                builder_.lsr(dest_vregs[i], dest_vregs[i], mov_immediate(64, value_type::u64()));
             }
         }
         break;
     case cast_op::trunc:
-        if (dest_width >= src_width) {
+        if (dest_element_width >= src_width) {
             throw std::runtime_error("ARM64-DBT cannot truncate from " +
-                    std::to_string(dst_vreg.width()) + " to larger size " +
+                    std::to_string(dest_vreg.width()) + " to larger size " +
                     std::to_string(src_vreg.width()));
         }
 
         for (size_t i = 0; i < dest_reg_count; ++i) {
-            builder_.mov(dst_vregs[i], src_vregs[i]);
+            builder_.mov(dest_vregs[i], src_vregs[i]);
         }
 
         if (is_flag(n.val())) {
             // FIXME: necessary to implement a mov here due to mismatches
             // between types
             //
-            // We can end up with a 64-bit dst_vreg and a 32-bit src_vreg
+            // We can end up with a 64-bit dest_vreg and a 32-bit src_vreg
             //
             // Does this even need a fix?
             builder_.and_(src_vreg, src_vreg, immediate_operand(1, value_type::u1()));
-            builder_.mov(dst_vreg, src_vreg);
-        } else if (src_reg_count == 1) {
-            builder_.lsl(dst_vreg, src_vreg, immediate_operand(64 - dest_width, value_type::u64()));
-            builder_.asr(dst_vreg, dst_vreg, immediate_operand(64 - dest_width, value_type::u64()));
+            builder_.mov(dest_vreg, src_vreg);
+        } else if (src_vregs.size() == 1) {
+            // TODO: again register reallocation problems, this should be clearly
+            // specified as a smaller size
+            auto immediate = mov_immediate(64 - dest_element_width, value_type::u64());
+            builder_.lsl(dest_vreg, src_vreg, immediate);
+            builder_.asr(dest_vreg, dest_vreg, immediate);
         }
         break;
     case cast_op::convert:
@@ -1247,10 +1264,10 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         // convert integer to float
         if (n.source_value().type().is_integer() && n.val().type().is_floating_point()) {
              if (n.val().type().type_class() == value_type_class::unsigned_integer) {
-                builder_.ucvtf(dst_vreg, src_vreg);
+                builder_.ucvtf(dest_vreg, src_vreg);
             } else {
                 // signed
-                builder_.scvtf(dst_vreg, src_vreg);
+                builder_.scvtf(dest_vreg, src_vreg);
             }
         } else if (n.source_value().type().is_floating_point() && n.val().type().is_integer()) {
             // Handle float/double -> integer conversions
@@ -1260,10 +1277,10 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
                 // NOTE: both float/double handled through the same instructions,
                 // only register differ
                 if (n.val().type().type_class() == value_type_class::unsigned_integer) {
-                    builder_.fcvtzu(dst_vreg, src_vreg);
+                    builder_.fcvtzu(dest_vreg, src_vreg);
                 } else {
                     // signed
-                    builder_.fcvtzs(dst_vreg, src_vreg);
+                    builder_.fcvtzs(dest_vreg, src_vreg);
                 }
                 break;
             case fp_convert_type::round:
@@ -1271,10 +1288,10 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
                 // NOTE: both float/double handled through the same instructions,
                 // only register differ
                 if (n.val().type().type_class() == value_type_class::unsigned_integer) {
-                    builder_.fcvtau(dst_vreg, src_vreg);
+                    builder_.fcvtau(dest_vreg, src_vreg);
                 } else {
                     // signed
-                    builder_.fcvtas(dst_vreg, src_vreg);
+                    builder_.fcvtas(dest_vreg, src_vreg);
                 }
                 break;
             case fp_convert_type::none:
@@ -1288,7 +1305,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             //
             // Destination virtual register set to the correct type upon creation
             // TODO: need to handle different-sized types?
-            builder_.mov(dst_vreg, src_vreg);
+            builder_.mov(dest_vreg, src_vreg);
         }
         break;
 	default:
