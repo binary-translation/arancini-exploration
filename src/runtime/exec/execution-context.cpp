@@ -47,8 +47,8 @@ void *MainLoopWrapper(void *args) {
 	pthread_mutex_lock(largs->lock);
 	std::cout << "Thread: " << gettid() << " - State: " << std::hex << x86_state << std::dec << std::endl;
 	parent_state->RAX = gettid();
-	pthread_mutex_unlock(largs->lock);
 	pthread_cond_signal(largs->cond);
+	pthread_mutex_unlock(largs->lock);
 
 	x86_state->RSP = x86_state->RSI;
 	MainLoop(x86_state);
@@ -356,6 +356,9 @@ int execution_context::internal_call(void *cpu_state, int call)
 			pthread_create(&child, &attr, &MainLoopWrapper, &args);
 			pthread_cond_wait(&rax_cond, &rax_lock);
 
+			pthread_mutex_unlock(&rax_lock);
+			pthread_mutex_destroy(&rax_lock);
+			pthread_cond_destroy(&rax_cond);
 			pthread_detach(child);
 			break;
 		}
@@ -422,7 +425,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 			auto addr = (uint64_t)get_memory_ptr(x86_state->RDI);
 			auto timespec = x86_state->R10 ? (uint64_t)get_memory_ptr(x86_state->R10) : 0;
 			auto addr2 = (uint64_t)get_memory_ptr(x86_state->R8);
-			x86_state->RAX = native_syscall(__NR_futex, addr, x86_state->RSI, (uint64_t)((uint32_t)x86_state->RDX), timespec, addr2, x86_state->R9);
+			x86_state->RAX = native_syscall(__NR_futex, addr, x86_state->RSI, (uint64_t)x86_state->RDX, timespec, addr2, x86_state->R9);
 			break;
 		}
 		case 203: // sched_set_affinity
