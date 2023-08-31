@@ -66,7 +66,7 @@ static void segv_handler(int signo, siginfo_t *info, void *context)
 	}
 
 	unsigned i = 0;
-	auto range = ctx->get_thread_range();
+	auto range = ctx_->get_thread_range();
 	for (auto it  = range.first; it != range.second; it++) {
 			std::cerr << "Thread[" << i << "] Guest PC: " << ((x86_cpu_state *)it->second->get_cpu_state())->PC << std::endl;
 			i++;
