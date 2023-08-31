@@ -98,6 +98,7 @@
 					llvmPackages_14.bintools
 					llvmPackages_14.lld
 					clang_14
+					valgrind
 					git
 				];
 				configurePhase = ''
