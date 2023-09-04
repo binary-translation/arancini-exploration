@@ -174,17 +174,28 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
     std::string cxx_compiler = cmdline.at("cxx-compiler-path").as<std::string>();
 
-    std::string arancini_runtime_lib_path = cmdline.at("runtime-lib-path").as<std::string>();
-    auto dir_start = arancini_runtime_lib_path.rfind("/");
-    std::string arancini_runtime_lib_dir = arancini_runtime_lib_path.substr(0, dir_start);
-
 	std::string debug_info = cmdline.count("debug-gen") ? " -g" : "";
 
-	// Generate the final output binary by compiling everything together.
-	run_or_fail(
-        cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie " +
-        intermediate_file->name() + " " + phobjsrc->name() + " " + arancini_runtime_lib_path
-        + " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info);
+	if (!cmdline.count("static-binary")) {
+		std::string arancini_runtime_lib_path = cmdline.at("runtime-lib-path").as<std::string>();
+		auto dir_start = arancini_runtime_lib_path.rfind("/");
+		std::string arancini_runtime_lib_dir = arancini_runtime_lib_path.substr(0, dir_start);
+
+
+		// Generate the final output binary by compiling everything together.
+		run_or_fail(
+			cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie " +
+				intermediate_file->name() + " " + phobjsrc->name() + " " + arancini_runtime_lib_path
+				+ " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info);
+	} else {
+		std::string arancini_runtime_lib_dir = cmdline.at("static-binary").as<std::string>();
+
+		// Generate the final output binary by compiling everything together.
+		run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie -static-libgcc -static-libstdc++ " + intermediate_file->name()
+			+ " " + phobjsrc->name() + " -L " + arancini_runtime_lib_dir
+			+ " -l arancini-runtime-static -l arancini-input-x86-static -l arancini-output-riscv64-static -l arancini-ir-static" + " -L "
+			+ arancini_runtime_lib_dir + "/../../obj -l xed" + debug_info +" -Wl,-rpath=" + arancini_runtime_lib_dir);
+	}
 }
 
 /*

@@ -7,11 +7,10 @@
 
 #include <arancini/output/dynamic/riscv64/encoder/globals.h>
 
-//TODO
-#define DEBUG
 
 #if !defined(DEBUG) && !defined(NDEBUG)
-#error neither DEBUG nor NDEBUG defined
+#define DEBUG
+#warning neither DEBUG nor NDEBUG defined. Defaulting to DEBUG
 #elif defined(DEBUG) && defined(NDEBUG)
 #error both DEBUG and NDEBUG defined
 #endif
