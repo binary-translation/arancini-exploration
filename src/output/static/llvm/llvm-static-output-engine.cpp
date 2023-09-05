@@ -626,8 +626,12 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 						ty = types.i64;
 					break;
 				}
+				case 128: {
+						ty = types.i128;
+					break;
+				}
 				default:
-					throw std::runtime_error("unsupported bitcast element width");
+					throw std::runtime_error("unsupported bitcast vector element width");
 				}
 				return builder.CreateBitCast(val, ::llvm::VectorType::get(ty, cn->target_type().nr_elements(), false));
 			}
@@ -981,7 +985,9 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 		//Bitcast the resulting value to the type of the register
 		//since the operations can happen on different type after
-		//other casting operations.
+		//other casting operations
+		if(val->getType()->isVectorTy())
+			val = builder.CreateBitCast(val, IntegerType::get(*llvm_context_, val->getType()->getPrimitiveSizeInBits()));
 		auto reg_val = builder.CreateZExtOrBitCast(val, reg_type);
 
 		return builder.CreateStore(reg_val, dest_reg);
