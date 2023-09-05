@@ -1,6 +1,5 @@
 #include "arancini/output/dynamic/arm64/arm64-instruction.h"
 #include <arancini/output/dynamic/arm64/arm64-instruction-builder.h>
-
 #include <array>
 #include <bitset>
 #include <utility>
@@ -220,7 +219,7 @@ void instruction_builder::allocate() {
                         DEBUG_STREAM << '\n';
 #endif
 					} else {
-                        auto type = o.memory().preg_base().type();
+                        auto type = o.memory().vreg_base().type();
 						o.allocate_base(vreg_to_preg.at(vri), type);
 					}
 				}
@@ -243,17 +242,8 @@ void instruction_builder::allocate() {
             operand op1 = insn.operands()[0];
             operand op2 = insn.operands()[1];
 
-            auto get_preg = [](const operand &op) -> preg_operand {
-                if (op.is_mem()) return op.memory().preg_base();
-                return op.preg();
-            };
-
-            if ((op1.is_mem() || op1.is_preg()) &&
-                (op2.is_mem() || op2.is_preg())) {
-                preg_operand reg1 = get_preg(op1);
-                preg_operand reg2 = get_preg(op2);
-
-                if (reg1.register_index() == reg2.register_index()) {
+            if (op1.is_preg() && op2.is_preg()) {
+                if (op1.preg().register_index() == op2.preg().register_index()) {
                     insn.kill();
                 }
             }
