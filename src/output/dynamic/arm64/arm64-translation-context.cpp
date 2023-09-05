@@ -38,6 +38,11 @@ static std::unordered_map<unsigned long, vreg_operand> flag_map {
 	{ (unsigned long)reg_offsets::SF, {} },
 };
 
+value_type u12() {
+    static value_type type(value_type_class::unsigned_integer, 12, 1);
+    return type;
+}
+
 value_type addr_type() {
     return value_type::u64();
 }
@@ -393,7 +398,7 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
     if (addr_vregs.size() != 1)
         throw std::runtime_error("ARM64-DBT does not support multiple addresses in read memory node");
 
-    auto addr_vreg = addr_vregs[0];
+    auto &addr_vreg = addr_vregs[0];
 
     auto type = n.val().type();
 
@@ -418,37 +423,34 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
     auto dest_vregs = vregs_for_port(n.val());
 
     // TODO: endianness
+    addr_vreg = add_membase(addr_vreg);
     for (std::size_t i = 0; i < dest_reg_count; ++i) {
         size_t width = dest_vregs[i].type().width();
 
-        // NOTE: due to register allocator limitations, the ordering of these 2
-        // adds here is important.
-        //
-        // Essentially, the second add defines addr.
-        // FIXME
-        auto addr = add_membase(addr_vreg);
-        builder_.add(addr, addr, immediate_operand(i * width, value_type::u16()));
+        memory_operand mem_op(addr_vreg, i * width, 0, 0);
         switch (width) {
             case 1:
                 // NOTE: loads single byte because flag registers are defined as
                 // u8
-                builder_.ldr(dest_vregs[i], addr);
+                builder_.ldr(dest_vregs[i], mem_op);
                 break;
             case 8:
                 // FIXME: leads to segfaults
-                builder_.ldr(dest_vregs[i], addr);
+                builder_.ldrb(dest_vregs[i], mem_op);
                 break;
             case 16:
-                builder_.ldr(dest_vregs[i], addr);
+                builder_.ldrh(dest_vregs[i], mem_op);
                 break;
             case 32:
             case 64:
-                builder_.ldr(dest_vregs[i], addr);
+                builder_.ldr(dest_vregs[i], mem_op);
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
                 throw std::runtime_error("ARM64-DBT cannot load individual memory values larger than 64-bits");
         }
+
+        builder_.add(addr_vreg, addr_vreg, immediate_operand(width, u12()));
     }
 }
 
@@ -467,26 +469,25 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
         throw std::runtime_error("Larger than 64-bit integers in vectors not supported by backend");
     }
 
+    addr_vreg = add_membase(addr_vreg);
     auto src_vregs = vreg_operand_for_port(n.value());
     for (std::size_t i = 0; i < src_vregs.size(); ++i) {
         size_t width = src_vregs[i].type().width();
 
-        auto addr = add_membase(addr_vreg);
-        builder_.add(addr, addr, immediate_operand(i * width, value_type::u16()));
-        auto mem = memory_operand(addr, 0, false, true);
+        memory_operand mem_op(addr_vreg, i * width, 0, 0);
         switch (width) {
             case 1:
-                builder_.strb(src_vregs[i], mem);
+                builder_.strb(src_vregs[i], mem_op);
                 break;
             case 8:
-                builder_.strb(src_vregs[i], mem);
+                builder_.strb(src_vregs[i], mem_op);
                 break;
             case 16:
-                builder_.strh(src_vregs[i], mem);
+                builder_.strh(src_vregs[i], mem_op);
                 break;
             case 32:
             case 64:
-                builder_.str(src_vregs[i], mem);
+                builder_.str(src_vregs[i], mem_op);
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
