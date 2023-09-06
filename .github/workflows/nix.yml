@@ -1,9 +1,10 @@
 name: Build check
 
 on:
+  push:
+    branches: [ 'sr/**' ]
   pull_request:
-    branches:
-      - main
+    branches: [ "main" ]
 
 jobs:
   x86_64:
