@@ -172,9 +172,11 @@ int execution_context::internal_call(void *cpu_state, int call)
 			break;
 		}
 		case 3: // close
+		{
             util::global_logger.debug("System call: close()\n");
 			x86_state->RAX = native_syscall(__NR_close, x86_state->RDI);
 			break;
+        }
 		case 5: // fstat
 		{
             util::global_logger.debug("System call: fstat()\n");
@@ -325,6 +327,7 @@ int execution_context::internal_call(void *cpu_state, int call)
             util::global_logger.debug("System call: ioctl()\n");
 
 			// Not sure how many actually needed
+            std::cerr << "Syscall ioctl()\n";
 
 			uint64_t arg = x86_state->RDX;
 			uint64_t request = x86_state->RSI;
@@ -430,7 +433,9 @@ int execution_context::internal_call(void *cpu_state, int call)
 			break;
         }
 		case 158: // arch_prctl
+		{
             util::global_logger.debug("System call: arch_prctl()");
+
 			switch (x86_state->RDI) { // code
 			case 0x1001: // ARCH_SET_GS
 				x86_state->GS = x86_state->RSI;
@@ -439,6 +444,8 @@ int execution_context::internal_call(void *cpu_state, int call)
 			case 0x1002: // ARCH_SET_FS
 				x86_state->FS = x86_state->RSI;
 				x86_state->RAX = 0;
+                std::cerr << "HELLO FS: " << x86_state->FS << '\n';
+                std::cerr << "Addr: " << &x86_state->FS << '\n';
 				break;
 			case 0x1003: // ARCH_GET_FS
 				(*((uint64_t *)(x86_state->RSI + (intptr_t)memory_))) = x86_state->FS;
@@ -453,10 +460,14 @@ int execution_context::internal_call(void *cpu_state, int call)
 			}
             x86_state->R11=0x246;
 			break;
+        }
 		case 200: // tkill
+		{
             util::global_logger.debug("System call: kill()\n");
+
 			x86_state->RAX = native_syscall(__NR_tkill, x86_state->RDI, x86_state->RSI);
 			break;
+        }
 		case 202: // futex
         {
             util::global_logger.debug("System call: futex()\n");
@@ -467,13 +478,20 @@ int execution_context::internal_call(void *cpu_state, int call)
 			break;
         }
 		case 203: // sched_set_affinity
+		{
+            std::cerr << "Syscall sched_set_affinity()\n";
             util::global_logger.debug("System call: sched_set_affinity()\n");
+
 			x86_state->RAX = native_syscall(__NR_sched_setaffinity, x86_state->RDI, x86_state->RSI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RDX));
 			break;
+        }
 		case 204: // sched_get_affinity
+        {
             util::global_logger.debug("System call: sched_get_affinity()\n");
+
 			x86_state->RAX = native_syscall(__NR_sched_getaffinity, x86_state->RDI, x86_state->RSI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RDX));
 			break;
+        }
 		case 218: // set_tid_address
         {
             util::global_logger.debug("System call: set_tid_address()\n");
@@ -485,23 +503,31 @@ int execution_context::internal_call(void *cpu_state, int call)
 			break;
 		}
 		case 231:
+        {
             util::global_logger.debug("System call: exit()\n");
 
             util::global_logger.info("Exiting from emulated process with exit code: {}\n", util::copy(x86_state->RDI));
 			exit(x86_state->RDI);
 			return 1;
+        }
 		case 228: // clock_gettime
+		{
             util::global_logger.debug("System call: clock_gettime()\n");
+
 			x86_state->RAX = native_syscall(__NR_clock_gettime, x86_state->RDI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RSI));
 			break;
+        }
 		case 60: //exit
+		{
             util::global_logger.debug("System call: exit()\n");
+
 			native_syscall(__NR_exit, x86_state->RDI);
             break;
+        }
 		default:
             util::global_logger.error("Unsupported system call: {:#x}\n", util::copy(x86_state->RAX));
 			return 1;
-		}
+        }
 	} else {
         util::global_logger.error("Unsupported internal call: {}\n", call);
 		return 1;
