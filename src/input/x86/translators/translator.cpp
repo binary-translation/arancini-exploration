@@ -403,6 +403,8 @@ value_node *translator::compute_address(int mem_idx)
 	auto index = xed_decoded_inst_get_index_reg(xed_inst(), mem_idx);
 	auto scale = xed_decoded_inst_get_scale(xed_inst(), mem_idx);
 
+	auto i = scale == 1 ? 0 : scale == 2 ? 1 : scale == 4 ? 2 : scale == 8 ? 3 : 0;
+
 	auto seg = xed_decoded_inst_get_seg_reg(xed_inst(), mem_idx);
 
 	if (xed_get_register_width_bits(base_reg) != 64 && base_reg != XED_REG_INVALID) {
@@ -422,8 +424,12 @@ value_node *translator::compute_address(int mem_idx)
 	}
 
 	if (index != XED_REG_INVALID) {
-		auto scaled_index = builder_.insert_mul(read_reg(value_type::u64(), xedreg_to_offset(index))->val(), builder_.insert_constant_u64(scale)->val());
-
+		value_node *scaled_index;
+		if (i != 0) {
+			scaled_index = builder_.insert_lsl(read_reg(value_type::u64(), xedreg_to_offset(index))->val(), builder_.insert_constant_u64(i)->val());
+		} else {
+			scaled_index = read_reg(value_type::u64(), xedreg_to_offset(index));
+		}
 		address_base = builder_.insert_add(address_base->val(), scaled_index->val());
 	}
 
