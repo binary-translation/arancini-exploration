@@ -157,6 +157,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 		switch (x86_state->RAX) {
 		case 2: // open
 		{
+            std::cerr << "Syscall open()\n";
 			auto filename = (uintptr_t)get_memory_ptr((off64_t)x86_state->RDI);
 			uint64_t flags = x86_state->RSI;
 			uint64_t mode = x86_state->RDX;
@@ -165,11 +166,13 @@ int execution_context::internal_call(void *cpu_state, int call)
 		}
 		case 3: // close
 		{
+            std::cerr << "Syscall close()\n";
 			x86_state->RAX = native_syscall(__NR_close, x86_state->RDI);
 			break;
 		}
 		case 5: // fstat
 		{
+            std::cerr << "Syscall fstat()\n";
 			uint64_t fd = x86_state->RDI;
 			uint64_t statp = x86_state->RSI;
 			struct stat tmp_struct { };
@@ -223,6 +226,8 @@ int execution_context::internal_call(void *cpu_state, int call)
 		}
 		case 9: // mmap
 		{
+            std::cerr << "Syscall mmap()\n";
+
 			// Hint to higher than already mapped memory if no hint
 			auto addr = x86_state->RDI == 0 ? (uintptr_t)get_memory_ptr((off_t)memory_size_ + 4096) : (uintptr_t)get_memory_ptr((int64_t)x86_state->RDI);
 			uint64_t length = x86_state->RSI;
@@ -248,6 +253,8 @@ int execution_context::internal_call(void *cpu_state, int call)
 		}
 		case 10: // mprotect
 		{
+            std::cerr << "Syscall mprotect()\n";
+
 			auto addr = (uintptr_t)get_memory_ptr((int64_t)x86_state->RDI);
 			uint64_t length = x86_state->RSI;
 			uint64_t prot = x86_state->RDX;
@@ -258,6 +265,8 @@ int execution_context::internal_call(void *cpu_state, int call)
 		}
 		case 11: // munmap
 		{
+            std::cerr << "Syscall munmap()\n";
+
 			auto addr = (uintptr_t)get_memory_ptr((int64_t)x86_state->RDI);
 			uint64_t length = x86_state->RSI;
 
@@ -268,6 +277,8 @@ int execution_context::internal_call(void *cpu_state, int call)
 		}
 		case 12: // brk
 		{
+            std::cerr << "Syscall brk()\n";
+
 			// 407bf7
 			uint64_t addr = x86_state->RDI;
 			if (addr == 0) {
@@ -294,6 +305,8 @@ int execution_context::internal_call(void *cpu_state, int call)
 		}
 		case 14: // rt_sigprocmask
 		{
+            std::cerr << "Syscall rt_sigprocmask()\n";
+
 			// Not sure if we should allow that
 			auto set = (uintptr_t)get_memory_ptr(x86_state->RSI);
 			auto oldset = x86_state->RDX ? (uintptr_t)get_memory_ptr(x86_state->RDX) : 0;
@@ -305,6 +318,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 		case 16: // ioctl
 		{
 			// Not sure how many actually needed
+            std::cerr << "Syscall ioctl()\n";
 
 			uint64_t arg = x86_state->RDX;
 
@@ -327,6 +341,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 		}
 		case 20: // writev
 		{
+            std::cerr << "Syscall writev()\n";
 
 			auto iovec = (const struct iovec *)(x86_state->RSI + (uintptr_t(memory_)));
 
@@ -346,12 +361,16 @@ int execution_context::internal_call(void *cpu_state, int call)
 		}
 		case 28: // madvise
 		{
+            std::cerr << "Syscall madvise()\n";
+
 			auto start = (uintptr_t)get_memory_ptr(x86_state->RDI);
 			x86_state->RAX = native_syscall(__NR_madvise, start, x86_state->RSI, x86_state->RDX);
 			break;
 		}
 		case 56: // clone
 		{
+            std::cerr << "Syscall clone()\n";
+
 			auto et = create_execution_thread();
 			auto new_x86_state = (x86::x86_cpu_state *)et->get_cpu_state();
 			memcpy(new_x86_state, x86_state, sizeof(*x86_state));
@@ -380,11 +399,15 @@ int execution_context::internal_call(void *cpu_state, int call)
 		}
 		case 77: // ftruncate
 		{
+            std::cerr << "Syscall ftruncate()\n";
+
 			x86_state->RAX = native_syscall(__NR_ftruncate, x86_state->RDI, x86_state->RSI);
 			break;
 		}
 		case 25: // mremap
 		{
+            std::cerr << "Syscall mremap()\n";
+
 			// Hint to higher than already mapped memory if no hint
 			auto old_addr = (uintptr_t)get_memory_ptr((int64_t)x86_state->RDI);
 			uint64_t old_size = x86_state->RSI;
@@ -409,6 +432,8 @@ int execution_context::internal_call(void *cpu_state, int call)
 		}
 		case 158: // arch_prctl
 		{
+            std::cerr << "Syscall arch_prctl()\n";
+
 			switch (x86_state->RDI) { // code
 			case 0x1001: // ARCH_SET_GS
 				x86_state->GS = x86_state->RSI;
@@ -417,6 +442,8 @@ int execution_context::internal_call(void *cpu_state, int call)
 			case 0x1002: // ARCH_SET_FS
 				x86_state->FS = x86_state->RSI;
 				x86_state->RAX = 0;
+                std::cerr << "HELLO FS: " << x86_state->FS << '\n';
+                std::cerr << "Addr: " << &x86_state->FS << '\n';
 				break;
 			case 0x1003: // ARCH_GET_FS
 				(*((uint64_t *)(x86_state->RSI + (intptr_t)memory_))) = x86_state->FS;
@@ -434,11 +461,15 @@ int execution_context::internal_call(void *cpu_state, int call)
 		}
 		case 200: // tkill
 		{
+            std::cerr << "Syscall kill()\n";
+
 			x86_state->RAX = native_syscall(__NR_tkill, x86_state->RDI, x86_state->RSI);
 			break;
 		}
 		case 202: // futex
 		{
+            std::cerr << "Syscall futex()\n";
+
 			auto addr = (uint64_t)get_memory_ptr(x86_state->RDI);
 			auto timespec = x86_state->R10 ? (uint64_t)get_memory_ptr(x86_state->R10) : 0;
 			auto addr2 = (uint64_t)get_memory_ptr(x86_state->R8);
@@ -447,16 +478,22 @@ int execution_context::internal_call(void *cpu_state, int call)
 		}
 		case 203: // sched_set_affinity
 		{
+            std::cerr << "Syscall sched_set_affinity()\n";
+
 			x86_state->RAX = native_syscall(__NR_sched_setaffinity, x86_state->RDI, x86_state->RSI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RDX));
 			break;
 		}
 		case 204: // sched_get_affinity
 		{
+            std::cerr << "Syscall sched_get_affinity()\n";
+
 			x86_state->RAX = native_syscall(__NR_sched_getaffinity, x86_state->RDI, x86_state->RSI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RDX));
 			break;
 		}
 		case 218: // set_tid_address
 		{
+            std::cerr << "Syscall set_tid_address()\n";
+
 			// TODO Handle clear_child_tid in exit
 			auto et = threads_[cpu_state];
 			et->clear_child_tid_ = (int *)(x86_state->RDI + (uintptr_t)memory_);
@@ -465,17 +502,23 @@ int execution_context::internal_call(void *cpu_state, int call)
 		}
 		case 231:
 		{
+            std::cerr << "Syscall exit()\n";
+
 			std::cerr << "Exiting from emulated process with exit code " << std::dec << x86_state->RDI << std::endl;
 			exit(x86_state->RDI);
 			return 1;
 		}
 		case 228: // clock_gettime
 		{
+            std::cerr << "Syscall clock_gettime()\n";
+
 			x86_state->RAX = native_syscall(__NR_clock_gettime, x86_state->RDI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RSI));
 			break;
 		}
 		case 60: //exit
 		{
+            std::cerr << "Syscall exit()()\n";
+
 			native_syscall(__NR_exit, x86_state->RDI);
 		}
 		default:
