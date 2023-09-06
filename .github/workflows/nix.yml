@@ -19,7 +19,7 @@ jobs:
         run: nix build
       
       - name: hello-world
-        run: nix-shell -p gcc --run "./result/bin/txlat -I ./result/test/hello-world/hello-static-musl -O bin.out && ./bin.out 2> /dev/null"
+        run: nix develop --comand bash -c "./result/bin/txlat -I ./result/test/hello-world/hello-static-musl -O bin.out && ./bin.out 2> /dev/null"
 
   x86_64-cross-riscv64:
     runs-on: [ self-hosted, X64]
@@ -44,4 +44,4 @@ jobs:
         run: nix build .#defaultPackage.aarch64-linux
       
       - name: hello-world
-        run: nix-shell -p gcc --run "./result/bin/txlat -I ./result/test/hello-world/hello-static-musl -O bin.out && ./bin.out 2> /dev/null"
+        run: nix develop --command bash -c "./result/bin/txlat -I ./result/test/hello-world/hello-static-musl -O bin.out && ./bin.out 2> /dev/null"
