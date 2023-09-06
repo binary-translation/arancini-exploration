@@ -329,16 +329,14 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
         auto addr = guestreg_memory_operand(n.regoff() + i * width);
         switch (width) {
             case 1:
-                // NOTE: loads single byte because flag registers are defined as
-                // u8
-                builder_.ldr(dest_vregs[i], addr);
+                builder_.ldrb(dest_vregs[i], addr);
                 break;
             case 8:
                 // FIXME: leads to segfaults
-                builder_.ldr(dest_vregs[i], addr);
+                builder_.ldrb(dest_vregs[i], addr);
                 break;
             case 16:
-                builder_.ldr(dest_vregs[i], addr);
+                builder_.ldrh(dest_vregs[i], addr);
                 break;
             case 32:
             case 64:
@@ -368,9 +366,22 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
         src_vregs = vreg_operand_for_port(n.value());
     }
 
+    // FIXME: horrible hack needed here
+    //
+    // If we have a bit-extract before, we might have casted to a 64-bit type
+    // We then attempt to write a single byte, but that won't work because strb()
+    // requires a 32-bit register.
+    //
+    // We now down-cast it.
+    //
+    // There should be clear type promotion and type coercion.
+    if (src_vregs[0].type().width() > n.value().type().width()) {
+        src_vregs[0].type() = n.value().type();
+    }
+
     memory_operand addr;
     for (std::size_t i = 0; i < src_vregs.size(); ++i) {
-        size_t width = src_vregs[i].type().width();
+        size_t width = n.value().type().width();
         addr = guestreg_memory_operand(n.regoff() + i * width);
         switch (width) {
             case 1:
@@ -1201,8 +1212,6 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             builder_.uxth(dest_vreg, src_vreg);
             break;
         case 32:
-            builder_.uxtw(dest_vreg, src_vreg);
-            break;
         case 64:
             builder_.mov(dest_vreg, src_vreg);
             break;
