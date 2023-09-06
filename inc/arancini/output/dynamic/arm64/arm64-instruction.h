@@ -66,7 +66,8 @@ public:
         return *this;
     }
 
-    value_type type() const { return type_; }
+    value_type &type() { return type_; }
+    const value_type &type() const { return type_; }
 
     size_t width() const { return type_.element_width(); }
 

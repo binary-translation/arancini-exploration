@@ -331,6 +331,7 @@ int execution_context::internal_call(void *cpu_state, int call)
             util::global_logger.debug("System call: ioctl()\n");
 
 			// Not sure how many actually needed
+            std::cerr << "Syscall ioctl()\n";
 
 			uint64_t arg = x86_state->RDX;
 			uint64_t request = x86_state->RSI;
@@ -445,6 +446,8 @@ int execution_context::internal_call(void *cpu_state, int call)
 			case 0x1002: // ARCH_SET_FS
 				x86_state->FS = x86_state->RSI;
 				x86_state->RAX = 0;
+                std::cerr << "HELLO FS: " << x86_state->FS << '\n';
+                std::cerr << "Addr: " << &x86_state->FS << '\n';
 				break;
 			case 0x1003: // ARCH_GET_FS
 				(*((uint64_t *)(x86_state->RSI + (intptr_t)memory_))) = x86_state->FS;
