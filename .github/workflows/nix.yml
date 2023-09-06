@@ -1,19 +1,19 @@
 name: Build check
 
 on:
-  push:
-    branches:
-      - sr/llvm-syscalls
   pull_request:
     branches:
       - main
 
 jobs:
   x86_64:
-    runs-on: [ self-hosted, NIX, X64]
+    runs-on: [ self-hosted, X64]
 
     steps:
       - uses: actions/checkout@v3
+      - uses: cachix/install-nix-action@v22
+        with:
+          github_access_token: ${{ secrets.ARANCINI_TOKEN }}
       - name: nix build
         run: nix build
       
@@ -21,18 +21,24 @@ jobs:
         run: nix-shell -p gcc --run "./result/bin/txlat -I ./result/test/hello-world/hello-static-musl -O bin.out && ./bin.out 2> /dev/null"
 
   x86_64-cross-riscv64:
-    runs-on: [ self-hosted, NIX, X64]
+    runs-on: [ self-hosted, X64]
 
     steps:
       - uses: actions/checkout@v3
+      - uses: cachix/install-nix-action@v22
+        with:
+          github_access_token: ${{ secrets.ARANCINI_TOKEN }}
       - name: nix build
         run: nix build .#defaultPackage.riscv64-linux
 
   aarch64:
-    runs-on: [ self-hosted, NIX, ARM64]
+    runs-on: [ self-hosted, ARM64]
 
     steps:
       - uses: actions/checkout@v3
+      - uses: cachix/install-nix-action@v22
+        with:
+          github_access_token: ${{ secrets.ARANCINI_TOKEN }}
       - name: nix build
         run: nix build .#defaultPackage.aarch64-linux
       
