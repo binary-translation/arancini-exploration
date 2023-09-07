@@ -56,10 +56,11 @@ private:
     std::vector<vreg_operand> alloc_vregs(const ir::port &p);
 
 	vreg_operand vreg_for_port(const ir::port &p, size_t index = 0) const {
-        return port_to_vreg_.at(&p)[index];
+        return vregs_for_port(p)[index];
     }
 
     std::vector<vreg_operand> vregs_for_port(const ir::port &p) const {
+        if (port_to_vreg_.count(&p) == 0) return {};
         return port_to_vreg_.at(&p);
     }
 
