@@ -57,7 +57,7 @@ arm64_translation_context::guestreg_memory_operand(int regoff, bool pre, bool po
     memory_operand mem;
     if (regoff > 255 || regoff < -256) {
         auto preg = context_block_reg;
-        auto base_vreg = vreg_operand(alloc_vreg(), addr_type());
+        auto base_vreg = alloc_vreg(addr_type());
         builder_.mov(base_vreg, immediate_operand(regoff, value_type::u32()));
         builder_.add(base_vreg, preg, base_vreg);
         mem = memory_operand(base_vreg, 0, pre, post);
@@ -69,7 +69,7 @@ arm64_translation_context::guestreg_memory_operand(int regoff, bool pre, bool po
 	return mem;
 }
 
-std::vector<vreg_operand> arm64_translation_context::vreg_operand_for_port(port &p, bool constant_fold) {
+std::vector<vreg_operand> arm64_translation_context::materialise_port(port &p, bool constant_fold) {
     // TODO
 	if (constant_fold) {
 		if (p.owner()->kind() == node_kinds::read_pc) {
@@ -85,7 +85,7 @@ std::vector<vreg_operand> arm64_translation_context::vreg_operand_for_port(port 
 }
 
 vreg_operand arm64_translation_context::add_membase(const vreg_operand &addr) {
-    auto mem_addr_vreg = vreg_operand(alloc_vreg(), addr_type());
+    auto mem_addr_vreg = alloc_vreg(addr_type());
     builder_.add(mem_addr_vreg, memory_base_reg, addr);
 
     return mem_addr_vreg;
@@ -99,12 +99,12 @@ vreg_operand arm64_translation_context::mov_immediate(uint64_t imm, value_type t
     // represented as s32(). This fails here, since the resultiing value does not
     // fit
     if (actual_size < 16) {
-        auto reg = vreg_operand(alloc_vreg(), type);
+        auto reg = alloc_vreg(type);
         builder_.mov(reg, immediate_operand(imm, value_type::u16()));
         return reg;
     }
 
-    auto reg = vreg_operand(alloc_vreg(), value_type::u64());
+    auto reg = alloc_vreg(value_type::u64());
     if (actual_size <= 64) {
         builder_.movz(reg,
                       immediate_operand(imm & 0xFFFF, value_type::u16()),
@@ -319,7 +319,7 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
 
     value_type dest_type = value_type(n.val().type().type_class(), dest_element_width, 1);
     for (std::size_t i = 0; i < dest_reg_count; ++i)
-        alloc_vreg_for_port(n.val(), dest_type);
+        alloc_vreg(n.val(), dest_type);
 
     auto dest_vregs = vregs_for_port(n.val());
 
@@ -362,7 +362,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
         materialise(reinterpret_cast<ir::node*>(n.value().owner()));
         src_vregs.push_back(flag_map.at(n.regoff()));
     } else {
-        src_vregs = vreg_operand_for_port(n.value());
+        src_vregs = materialise_port(n.value());
     }
 
     // FIXME: horrible hack needed here
@@ -404,7 +404,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
 }
 
 void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
-    auto addr_vregs = vreg_operand_for_port(n.address());
+    auto addr_vregs = materialise_port(n.address());
     if (addr_vregs.size() != 1)
         throw std::runtime_error("ARM64-DBT does not support multiple addresses in read memory node");
 
@@ -428,7 +428,7 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
 
     value_type dest_type = value_type(n.val().type().type_class(), dest_element_width);
     for (std::size_t i = 0; i < dest_reg_count; ++i)
-        alloc_vreg_for_port(n.val(), dest_type);
+        alloc_vreg(n.val(), dest_type);
 
     auto dest_vregs = vregs_for_port(n.val());
 
@@ -462,7 +462,7 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
 }
 
 void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
-    auto addr_vregs = vreg_operand_for_port(n.address());
+    auto addr_vregs = materialise_port(n.address());
     if (addr_vregs.size() != 1)
         throw std::runtime_error("ARM64-DBT does not support multiple addresses in write memory node");
 
@@ -477,7 +477,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
     }
 
     addr_vreg = add_membase(addr_vreg);
-    auto src_vregs = vreg_operand_for_port(n.value());
+    auto src_vregs = materialise_port(n.value());
     for (std::size_t i = 0; i < src_vregs.size(); ++i) {
         size_t width = src_vregs[i].type().width();
 
@@ -504,12 +504,12 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
 }
 
 void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
-	auto dst_vreg = alloc_vreg_for_port(n.val(), n.val().type());
+	auto dst_vreg = alloc_vreg(n.val());
     builder_.mov(dst_vreg, mov_immediate(this_pc_, value_type::u64()));
 }
 
 void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
-    auto new_pc_vregs = vreg_operand_for_port(n.value());
+    auto new_pc_vregs = materialise_port(n.value());
     if (new_pc_vregs.size() != 1) {
         throw std::runtime_error("ARM64-DBT does not support PC vregs > 64-bits");
     }
@@ -528,7 +528,7 @@ void arm64_translation_context::materialise_br(const br_node &n) {
 }
 
 void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
-    auto cond_vregs = vreg_operand_for_port(n.cond());
+    auto cond_vregs = materialise_port(n.cond());
     if (cond_vregs.size() != 1) {
         throw std::runtime_error("ARM64-DBT does not support condition vregs > 64-bits");
     }
@@ -539,7 +539,7 @@ void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
 }
 
 void arm64_translation_context::materialise_constant(const constant_node &n) {
-	auto dst_vreg = alloc_vreg_for_port(n.val(), n.val().type());
+	auto dst_vreg = alloc_vreg(n.val());
 
     if (n.val().type().is_floating_point()) {
         auto value = n.const_val_f();
@@ -551,16 +551,17 @@ void arm64_translation_context::materialise_constant(const constant_node &n) {
 }
 
 void arm64_translation_context::materialise_binary_arith(const binary_arith_node &n) {
-    auto lhs_vregs = vreg_operand_for_port(n.lhs());
-    auto rhs_vregs = vreg_operand_for_port(n.rhs());
+    auto lhs_vregs = materialise_port(n.lhs());
+    auto rhs_vregs = materialise_port(n.rhs());
 
     if (lhs_vregs.size() != rhs_vregs.size()) {
         throw std::runtime_error("Binary operations not supported with different sized operands");
     }
 
     for (int i = 0; i < n.val().type().nr_elements(); ++i) {
-        alloc_vreg_for_port(n.val(), n.val().type());
+        alloc_vreg(n.val());
     }
+
 	auto dest_vregs = vregs_for_port(n.val());
 
     size_t dest_width = n.val().type().element_width();
@@ -570,10 +571,10 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
     auto rhs_vreg = rhs_vregs[0];
     auto dest_vreg = dest_vregs[0];
 
-    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg_for_port(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg_for_port(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg_for_port(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg_for_port(n.carry(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg(n.zero(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg(n.negative(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg(n.overflow(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg(n.carry(), value_type::u1());
 
     // TODO: check
     const char* mod = nullptr;
@@ -703,8 +704,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 	case binary_arith_op::bor:
         builder_.orr_(dest_vreg, lhs_vreg, rhs_vreg);
         for (size_t i = 1; i < dest_reg_count; ++i) {
-            auto flag_vreg_saved = vreg_operand(alloc_vreg(), base_type());
-            auto flag_vreg_new = vreg_operand(alloc_vreg(), base_type());
+            auto flag_vreg_saved = alloc_vreg(base_type());
+            auto flag_vreg_new = alloc_vreg(base_type());
             builder_.msr(flag_vreg_saved, preg_operand(preg_operand::nzcv));
 
             builder_.orr_(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
@@ -717,8 +718,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 	case binary_arith_op::band:
         builder_.ands(dest_vreg, lhs_vreg, rhs_vreg);
         for (size_t i = 1; i < dest_reg_count; ++i) {
-            auto flag_vreg_saved = vreg_operand(alloc_vreg(), base_type());
-            auto flag_vreg_new = vreg_operand(alloc_vreg(), base_type());
+            auto flag_vreg_saved = alloc_vreg(base_type());
+            auto flag_vreg_new = alloc_vreg(base_type());
             builder_.msr(flag_vreg_saved, preg_operand(preg_operand::nzcv));
 
             builder_.ands(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
@@ -738,8 +739,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 		builder_.cmp(dest_vreg,
                      immediate_operand(0, value_type::u8()));
         for (size_t i = 1; i < dest_reg_count; ++i) {
-            auto flag_vreg_saved = vreg_operand(alloc_vreg(), base_type());
-            auto flag_vreg_new = vreg_operand(alloc_vreg(), base_type());
+            auto flag_vreg_saved = alloc_vreg(base_type());
+            auto flag_vreg_new = alloc_vreg(base_type());
             builder_.msr(flag_vreg_saved, preg_operand(preg_operand::nzcv));
             builder_.cmp(dest_vregs[i],
                          immediate_operand(0, value_type::u8()));
@@ -753,8 +754,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 	case binary_arith_op::cmpgt:
         builder_.cmp(lhs_vreg, rhs_vreg);
         for (size_t i = 1; i < dest_reg_count; ++i) {
-            auto flag_vreg_saved = vreg_operand(alloc_vreg(), base_type());
-            auto flag_vreg_new = vreg_operand(alloc_vreg(), base_type());
+            auto flag_vreg_saved = alloc_vreg(base_type());
+            auto flag_vreg_new = alloc_vreg(base_type());
             builder_.msr(flag_vreg_saved, preg_operand(preg_operand::nzcv));
             builder_.cmp(dest_vregs[i],
                          immediate_operand(0, value_type::u8()));
@@ -783,13 +784,13 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 void arm64_translation_context::materialise_binary_atomic(const binary_atomic_node &n) {
 	auto dst_vreg = vregs_for_port(n.val())[0];
 
-    auto src_vreg = vreg_operand_for_port(n.rhs())[0];
+    auto src_vreg = materialise_port(n.rhs())[0];
 
     // TODO: handle flags with atomics
-    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg_for_port(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg_for_port(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg_for_port(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg_for_port(n.carry(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg(n.zero(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg(n.negative(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg(n.overflow(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg(n.carry(), value_type::u1());
 
     auto addr_reg = vregs_for_port(n.lhs())[0];
     auto mem_addr = memory_operand(add_membase(addr_reg));
@@ -955,7 +956,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             }
             builder_.adds(dst_vreg, dst_vreg, src_vreg);
 
-            auto status = vreg_operand(alloc_vreg(), value_type::u32());
+            auto status = alloc_vreg(value_type::u32());
             switch(n.val().type().element_width()) {
             case 8:
                 builder_.stlxrb(status, dst_vreg, mem_addr);
@@ -1011,13 +1012,13 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
 void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_node &n) {
 	auto dst_vreg = vregs_for_port(n.val())[0];
 
-    auto src_vreg = vreg_operand_for_port(n.rhs())[0];
+    auto src_vreg = materialise_port(n.rhs())[0];
 
     // TODO: handle flags with atomics
-    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg_for_port(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg_for_port(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg_for_port(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg_for_port(n.carry(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg(n.zero(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg(n.negative(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg(n.overflow(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg(n.carry(), value_type::u1());
 
     auto addr_reg = vregs_for_port(n.lhs())[0];
     auto mem_addr = memory_operand(add_membase(addr_reg));
@@ -1038,9 +1039,9 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
 }
 
 void arm64_translation_context::materialise_unary_arith(const unary_arith_node &n) {
-	auto val_vreg = alloc_vreg_for_port(n.val(), n.val().type());
+	auto val_vreg = alloc_vreg(n.val());
 
-    auto lhs = vreg_operand_for_port(n.lhs())[0];
+    auto lhs = materialise_port(n.lhs())[0];
 
     switch (n.op()) {
     case unary_arith_op::bnot:
@@ -1071,7 +1072,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
     // However, for extension operations 1 => 2
 
     // Multiple source registers for element_width > 64-bits
-    auto src_vregs = vreg_operand_for_port(n.source_value());
+    auto src_vregs = materialise_port(n.source_value());
 
     // Allocate as many destination registers as necessary
     // TODO: this is not exactly correct, since we need to create different
@@ -1097,7 +1098,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 
     value_type dest_type = value_type(n.val().type().type_class(), dest_element_width);
     for (std::size_t i = 0; i < dest_reg_count; ++i)
-        alloc_vreg_for_port(n.val(), dest_type);
+        alloc_vreg(n.val(), dest_type);
 
     auto dest_vregs = vregs_for_port(n.val());
 
@@ -1325,12 +1326,12 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
                                   vectors and elements widths exceeding 64-bits");
     }
 
-    auto dst_vreg = alloc_vreg_for_port(n.val(), n.val().type());
+    auto dst_vreg = alloc_vreg(n.val());
 
-    auto cond = vreg_operand_for_port(n.condition());
+    auto cond = materialise_port(n.condition());
 
-    auto true_val = vreg_operand_for_port(n.trueval());
-    auto false_val = vreg_operand_for_port(n.falseval());
+    auto true_val = materialise_port(n.trueval());
+    auto false_val = materialise_port(n.falseval());
 
     /* builder_.brk(immediate_operand(100, 64)); */
     builder_.cmp(cond[0], immediate_operand(0, value_type::u8()));
@@ -1343,8 +1344,8 @@ void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
                                   vectors and elements widths exceeding 64-bits");
     }
 
-    auto input = vreg_operand_for_port(n.input())[0];
-    auto amount1 = vreg_operand_for_port(n.amount())[0];
+    auto input = materialise_port(n.input())[0];
+    auto amount1 = materialise_port(n.amount())[0];
 
     auto dst_type = n.val().type();
     if (n.val().type().element_width() < input.type().element_width()) {
@@ -1354,10 +1355,10 @@ void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
         dst_type = amount1.type();
     }
 
-    auto amount = vreg_operand(alloc_vreg(), dst_type);
+    auto amount = alloc_vreg(dst_type);
     builder_.mov(amount, amount1);
 
-    auto dst_vreg = alloc_vreg_for_port(n.val(), dst_type);;
+    auto dst_vreg = alloc_vreg(n.val(), dst_type);;
 
     switch (n.op()) {
     case shift_op::lsl:
@@ -1381,8 +1382,8 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
                                   vectors and elements widths exceeding 64-bits");
     }
 
-    auto src_vreg = vreg_operand_for_port(n.source_value())[0];
-    auto dst_vreg = alloc_vreg_for_port(n.val(), src_vreg.type());
+    auto src_vreg = materialise_port(n.source_value())[0];
+    auto dst_vreg = alloc_vreg(n.val(), src_vreg.type());
 
     builder_.bfm(dst_vreg, src_vreg,
                   immediate_operand(n.from(), value_type::u8()),
@@ -1395,8 +1396,8 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
                                   vectors and elements widths exceeding 64-bits");
     }
 
-    auto bits_vreg = vreg_operand_for_port(n.bits())[0];
-    auto dst_vreg = alloc_vreg_for_port(n.val(), bits_vreg.type());
+    auto bits_vreg = materialise_port(n.bits())[0];
+    auto dst_vreg = alloc_vreg(n.val(), bits_vreg.type());
 
     builder_.bfi(dst_vreg, bits_vreg,
                  immediate_operand(n.to(), value_type::u8()),
@@ -1417,7 +1418,7 @@ void arm64_translation_context::materialise_internal_call(const internal_call_no
 }
 
 void arm64_translation_context::materialise_read_local(const read_local_node &n) {
-    auto dest_vreg = alloc_vreg_for_port(n.val(), n.val().type());
+    auto dest_vreg = alloc_vreg(n.val(), n.val().type());
     auto local = locals_[n.local()][0];
 
     builder_.mov(dest_vreg, local);
@@ -1427,7 +1428,7 @@ void arm64_translation_context::materialise_write_local(const write_local_node &
     vreg_operand dest_vreg;
     auto write_reg = vregs_for_port(n.write_value())[0];
     if (locals_.count(n.local()) == 0) {
-        dest_vreg = alloc_vreg_for_port(n.val(), n.val().type());
+        dest_vreg = alloc_vreg(n.val(), n.val().type());
         locals_[n.local()] = {dest_vreg};
     } else {
         dest_vreg = locals_[n.local()][0];
