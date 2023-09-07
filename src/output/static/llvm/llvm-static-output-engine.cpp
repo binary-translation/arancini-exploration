@@ -330,15 +330,15 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		}
 
 		::llvm::Type *ty;
-		Align align = Align(64);
+		Align align = Align(8);
 		switch (rrn->val().type().width()) {
 		case 1:
 			ty = types.i1;
-			align = Align(8);
+			align = Align(1);
 			break;
 		case 8:
 			ty = types.i8;
-			align = Align(8);
+			align = Align(1);
 			break;
 		case 16:
 			ty = types.i16;
@@ -351,15 +351,15 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			break;
 		case 128:
 			ty = types.i128;
-			align = Align(512);
+			align = Align(64);
 			break;
 		case 256:
 			ty = types.i256;
-			align = Align(512);
+			align = Align(64);
 			break;
 		case 512:
 			ty = types.i512;
-			align = Align(512);
+			align = Align(64);
 			break;
 		default:
 			throw std::runtime_error("unsupported register width " + std::to_string(rrn->val().type().width()) + " in load");
@@ -1093,11 +1093,11 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
 		AtomicRMWInst *out = nullptr;
 		switch(ban->op()) {
-			case binary_atomic_op::add: builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
-			case binary_atomic_op::sub: builder.CreateAtomicRMW(AtomicRMWInst::Sub, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
-			case binary_atomic_op::xadd: out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
-			case binary_atomic_op::bor: out = builder.CreateAtomicRMW(AtomicRMWInst::Or, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
-			case binary_atomic_op::xchg: out = builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, rhs, Align(64), AtomicOrdering::SequentiallyConsistent); break;
+			case binary_atomic_op::add: builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(8), AtomicOrdering::SequentiallyConsistent); break;
+			case binary_atomic_op::sub: builder.CreateAtomicRMW(AtomicRMWInst::Sub, lhs, rhs, Align(8), AtomicOrdering::SequentiallyConsistent); break;
+			case binary_atomic_op::xadd: out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(8), AtomicOrdering::SequentiallyConsistent); break;
+			case binary_atomic_op::bor: out = builder.CreateAtomicRMW(AtomicRMWInst::Or, lhs, rhs, Align(8), AtomicOrdering::SequentiallyConsistent); break;
+			case binary_atomic_op::xchg: out = builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, rhs, Align(8), AtomicOrdering::SequentiallyConsistent); break;
 			default: throw std::runtime_error("unsupported bin atomic operation " + std::to_string((int)ban->op()));
 		}
 		if (out) {
@@ -1122,7 +1122,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		switch(tan->op()) {
 			case ternary_atomic_op::cmpxchg: {
 				lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
-				auto instr = builder.CreateAtomicCmpXchg(lhs, rhs, top, Align(64), AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
+				auto instr = builder.CreateAtomicCmpXchg(lhs, rhs, top, Align(8), AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
 				return instr;
 			}
 			default: throw std::runtime_error("unsupported tern atomic operation " + std::to_string((int)tan->op()));
