@@ -45,6 +45,7 @@ private:
 		const ir::port *p = nullptr, std::optional<Register> reg1 = std::nullopt, std::optional<Register> reg2 = std::nullopt);
 
 	std::optional<std::reference_wrapper<TypedRegister>> materialise(const ir::node *n);
+	std::optional<int64_t> get_as_int(const node *n);
 
 	TypedRegister &materialise_read_reg(const ir::read_reg_node &n);
 	void materialise_write_reg(const ir::write_reg_node &n);
