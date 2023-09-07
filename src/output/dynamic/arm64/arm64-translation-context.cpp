@@ -171,7 +171,7 @@ void arm64_translation_context::end_block() {
 	builder_.mov(preg_operand(preg_operand::x0),
                  mov_immediate(ret_, value_type::u64()));
 
-	do_register_allocation();
+    builder_.allocate();
 
 	builder_.ret();
 
@@ -332,7 +332,6 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
                 builder_.ldrb(dest_vregs[i], addr);
                 break;
             case 8:
-                // FIXME: leads to segfaults
                 builder_.ldrb(dest_vregs[i], addr);
                 break;
             case 16:
@@ -441,12 +440,9 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
         memory_operand mem_op(addr_vreg, i * width, 0, 0);
         switch (width) {
             case 1:
-                // NOTE: loads single byte because flag registers are defined as
-                // u8
-                builder_.ldr(dest_vregs[i], mem_op);
+                builder_.ldrb(dest_vregs[i], mem_op);
                 break;
             case 8:
-                // FIXME: leads to segfaults
                 builder_.ldrb(dest_vregs[i], mem_op);
                 break;
             case 16:
@@ -508,9 +504,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
 }
 
 void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
-    // TODO: should this be type() or u64 by default?
 	auto dst_vreg = alloc_vreg_for_port(n.val(), n.val().type());
-
     builder_.mov(dst_vreg, mov_immediate(this_pc_, value_type::u64()));
 }
 
@@ -638,6 +632,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         case 8:
         case 16:
         case 32:
+            // TODO: replace this with NEON
             switch (n.val().type().type_class()) {
             case ir::value_type_class::signed_integer:
                 builder_.smulh(dest_vreg, lhs_vreg, rhs_vreg);
@@ -1387,14 +1382,7 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
     }
 
     auto src_vreg = vreg_operand_for_port(n.source_value())[0];
-
-    // FIXME: 32-bit registers are used as output
-    auto dst_type = n.val().type();
-    if (n.val().type().element_width() < src_vreg.type().element_width()) {
-        dst_type = src_vreg.type();
-    }
-
-    auto dst_vreg = alloc_vreg_for_port(n.val(), dst_type);;
+    auto dst_vreg = alloc_vreg_for_port(n.val(), src_vreg.type());
 
     builder_.bfm(dst_vreg, src_vreg,
                   immediate_operand(n.from(), value_type::u8()),
@@ -1407,17 +1395,10 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
                                   vectors and elements widths exceeding 64-bits");
     }
 
-    auto dst_vreg = alloc_vreg_for_port(n.val(), n.val().type());
-
     auto bits_vreg = vreg_operand_for_port(n.bits())[0];
+    auto dst_vreg = alloc_vreg_for_port(n.val(), bits_vreg.type());
 
-    // FIXME: we end up in a situation that both 64-bit and 32-bit registers are
-    // used in the same BFI instruction.
-    //
-    // We need the equivalent of type promotion.
-    auto bits_reg = vreg_operand(alloc_vreg(), dst_vreg.type());
-    builder_.mov(bits_reg, bits_vreg);
-    builder_.bfi(dst_vreg, bits_reg,
+    builder_.bfi(dst_vreg, bits_vreg,
                  immediate_operand(n.to(), value_type::u8()),
                  immediate_operand(n.length(), value_type::u8()));
 }
@@ -1454,6 +1435,4 @@ void arm64_translation_context::materialise_write_local(const write_local_node &
 
     builder_.mov(dest_vreg, write_reg);
 }
-
-void arm64_translation_context::do_register_allocation() { builder_.allocate(); }
 
