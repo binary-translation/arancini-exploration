@@ -168,10 +168,105 @@ static const std::unordered_map<std::size_t, load_store_func_t> store_instructio
 	{ 64, &Assembler::sd },
 };
 
+std::optional<int64_t> riscv64_translation_context::get_as_int(const node *n)
+{
+	switch (n->kind()) {
+	case node_kinds::constant: {
+		const constant_node &node = *reinterpret_cast<const constant_node *>(n);
+		if (!is_gpr_or_flag(node.val())) {
+			throw std::runtime_error("unsupported width on constant");
+		}
+		return node.const_val_i();
+	} break;
+	case node_kinds::binary_arith: {
+		const auto &node = *reinterpret_cast<const binary_arith_node *>(n);
+		bool z_needed = !node.zero().targets().empty();
+		bool v_needed = !node.overflow().targets().empty();
+		bool c_needed = !node.carry().targets().empty();
+		bool n_needed = !node.negative().targets().empty();
+		bool flags_needed = z_needed || v_needed || c_needed || n_needed;
+		if (!flags_needed) {
+			const std::optional<int64_t> &lhs = get_as_int(node.lhs().owner());
+			if (lhs) {
+				const std::optional<int64_t> &rhs = get_as_int(node.rhs().owner());
+				if (rhs) {
+					switch (node.op()) {
+					case binary_arith_op::add:
+						return *lhs + *rhs;
+					case binary_arith_op::sub:
+						return *lhs - *rhs;
+					case binary_arith_op::mul:
+						return *lhs * *rhs;
+					case binary_arith_op::div:
+						return *lhs / *rhs;
+					case binary_arith_op::mod:
+						return *lhs % *rhs;
+					case binary_arith_op::band:
+						return *lhs & *rhs;
+					case binary_arith_op::bor:
+						return *lhs | *rhs;
+					case binary_arith_op::bxor:
+						return *lhs ^ *rhs;
+					}
+				}
+			}
+		}
+	} break;
+	case node_kinds::cast: {
+		const auto &node = *reinterpret_cast<const cast_node *>(n);
+		const std::optional<int64_t> &src_val = get_as_int(node.source_value().owner());
+		if (src_val) {
+			int width = node.source_value().type().element_width();
+			switch (node.op()) {
+			case cast_op::bitcast:
+				return src_val;
+			case cast_op::trunc:
+			case cast_op::zx:
+				return (((uint64_t)*src_val) << (64 - width)) >> (64 - width);
+			case cast_op::sx:
+				return (*src_val << (64 - width)) >> (64 - width);
+			}
+		}
+	} break;
+	case node_kinds::read_pc:
+		return current_address_;
+	case node_kinds::bit_extract: {
+		const auto &node = *reinterpret_cast<const bit_extract_node *>(n);
+		const std::optional<int64_t> &src_val = get_as_int(node.source_value().owner());
+		if (src_val) {
+			int from = node.from();
+			int length = node.length();
+			return (((uint64_t)*src_val) << (64 - (from + length))) >> (64 - (length));
+		}
+	} break;
+	case node_kinds::bit_shift: {
+		const auto &node = *reinterpret_cast<const bit_shift_node *>(n);
+		const std::optional<int64_t> &src_val = get_as_int(node.input().owner());
+		const std::optional<int64_t> &amt = get_as_int(node.amount().owner());
+		if (src_val && amt) {
+			switch (node.op()) {
+			case shift_op::lsl:
+				return *src_val << *amt;
+			case shift_op::lsr:
+				return ((uint64_t)*src_val) >> *amt;
+			case shift_op::asr:
+				return *src_val >> *amt;
+			}
+		}
+	} break;
+	}
+	return std::nullopt;
+}
+
 std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context::materialise(const node *n)
 {
 	if (!n) {
 		throw std::runtime_error("RISC-V DBT received NULL pointer to node");
+	}
+
+	const std::optional<int64_t> &i = get_as_int(n);
+	if (i) {
+		return materialise_constant(*i);
 	}
 
 	switch (n->kind()) {
@@ -201,13 +296,6 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 	case node_kinds::cond_br:
 		materialise_cond_br(*reinterpret_cast<const cond_br_node *>(n));
 		return std::nullopt;
-	case node_kinds::constant: {
-		const constant_node &node = *reinterpret_cast<const constant_node *>(n);
-		if (!is_gpr_or_flag(node.val())) {
-			throw std::runtime_error("unsupported width on constant");
-		}
-		return materialise_constant((int64_t)node.const_val_i());
-	}
 	case node_kinds::binary_arith:
 		return materialise_binary_arith(*reinterpret_cast<const binary_arith_node *>(n));
 	case node_kinds::unary_arith:
@@ -933,9 +1021,10 @@ TypedRegister &riscv64_translation_context::materialise_bit_shift(const bit_shif
 	}
 
 	TypedRegister &src_reg = *materialise(n.input().owner());
+	const std::optional<int64_t> &i = get_as_int(n.amount().owner());
 
-	if (n.amount().kind() == port_kinds::constant) {
-		auto amt = (intptr_t)((constant_node *)n.amount().owner())->const_val_i() & 0x3f;
+	if (i) {
+		auto amt = *i & 0x3f;
 		if (amt == 0) {
 			return src_reg;
 		}
@@ -995,10 +1084,11 @@ TypedRegister &riscv64_translation_context::materialise_binary_arith(const binar
 	bool n_needed = !n.negative().targets().empty();
 	bool flags_needed = z_needed || v_needed || c_needed || n_needed;
 
-	if (n.rhs().owner()->kind() == node_kinds::constant) {
+	const std::optional<int64_t> &i = get_as_int(n.rhs().owner());
+
+	if (i) {
 		// Could also work for LHS except sub
-		// TODO Probably incorrect to just cast to signed 64bit. Extract to support chains of calculations
-		auto imm = (intptr_t)((constant_node *)(n.rhs().owner()))->const_val_i();
+		auto imm = *i;
 		// imm==0 more efficient as x0. Only IType works
 		if (imm && IsITypeImm(imm)) {
 			switch (n.op()) {
