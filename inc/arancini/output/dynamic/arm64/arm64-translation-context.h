@@ -36,8 +36,6 @@ private:
 	off_t this_pc_;
     size_t instr_cnt_ = 0;
 
-	void do_register_allocation();
-
 	int alloc_vreg() { return next_vreg_++; }
 
 	vreg_operand alloc_vreg_for_port(const ir::port &p, ir::value_type type)
