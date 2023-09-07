@@ -163,10 +163,10 @@ void Assembler::beq(Register rs1, Register rs2, Label *label, bool near)
 {
 	ASSERT(Supports(RV_I));
 	if (Supports(RV_C) && near) {
-		if (rs1 == ZERO) {
+		if (rs1 == ZERO && IsCRs1p(rs2)) {
 			c_beqz(rs2, label);
 			return;
-		} else if (rs2 == ZERO) {
+		} else if (rs2 == ZERO && IsCRs1p(rs1)) {
 			c_beqz(rs1, label);
 			return;
 		}
@@ -178,10 +178,10 @@ void Assembler::bne(Register rs1, Register rs2, Label *label, bool near)
 {
 	ASSERT(Supports(RV_I));
 	if (Supports(RV_C) && near) {
-		if (rs1 == ZERO) {
+		if (rs1 == ZERO && IsCRs1p(rs2)) {
 			c_bnez(rs2, label);
 			return;
-		} else if (rs2 == ZERO) {
+		} else if (rs2 == ZERO && IsCRs1p(rs1)) {
 			c_bnez(rs1, label);
 			return;
 		}
