@@ -51,6 +51,23 @@ value_type base_type() {
     return value_type::u64();
 }
 
+std::vector<vreg_operand> arm64_translation_context::alloc_vregs(const ir::port &p) {
+    auto reg_count = p.type().nr_elements();
+    auto element_width = p.type().width();
+    if (element_width > base_type().element_width()) {
+        // This will only occur for non-vectors > 64-bit
+        element_width = base_type().element_width();
+        reg_count = p.type().width() / element_width;
+    }
+
+    auto type = ir::value_type(p.type().type_class(), element_width, 1);
+    for (std::size_t i = 0; i < reg_count; ++i)
+        alloc_vreg(p, type);
+
+    auto dest_vregs = vregs_for_port(p);
+    return dest_vregs;
+}
+
 memory_operand
 arm64_translation_context::guestreg_memory_operand(int regoff, bool pre, bool post)
 {
@@ -309,22 +326,10 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
         throw std::runtime_error("Larger than 64-bit integers in vectors not supported by backend");
     }
 
-    auto dest_reg_count = n.val().type().nr_elements();
-    auto dest_element_width = n.val().type().width();
-    if (dest_element_width > base_type().element_width()) {
-        // This will only occur for non-vectors > 64-bit
-        dest_element_width = base_type().element_width();
-        dest_reg_count = n.val().type().width() / dest_element_width;
-    }
-
-    value_type dest_type = value_type(n.val().type().type_class(), dest_element_width, 1);
-    for (std::size_t i = 0; i < dest_reg_count; ++i)
-        alloc_vreg(n.val(), dest_type);
-
-    auto dest_vregs = vregs_for_port(n.val());
+    auto dest_vregs = alloc_vregs(n.val());
 
     // TODO: endianness
-    for (std::size_t i = 0; i < dest_reg_count; ++i) {
+    for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
         size_t width = dest_vregs[i].type().width();
         auto addr = guestreg_memory_operand(n.regoff() + i * width);
         switch (width) {
@@ -418,23 +423,11 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
         throw std::runtime_error("Larger than 64-bit integers in vectors not supported by backend");
     }
 
-    auto dest_reg_count = n.val().type().nr_elements();
-    auto dest_element_width = n.val().type().width();
-    if (dest_element_width > base_type().element_width()) {
-        // This will only occur for non-vectors > 64-bit
-        dest_element_width = base_type().element_width();
-        dest_reg_count = n.val().type().width() / dest_element_width;
-    }
-
-    value_type dest_type = value_type(n.val().type().type_class(), dest_element_width);
-    for (std::size_t i = 0; i < dest_reg_count; ++i)
-        alloc_vreg(n.val(), dest_type);
-
-    auto dest_vregs = vregs_for_port(n.val());
+    auto dest_vregs = alloc_vregs(n.val());
 
     // TODO: endianness
     addr_vreg = add_membase(addr_vreg);
-    for (std::size_t i = 0; i < dest_reg_count; ++i) {
+    for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
         size_t width = dest_vregs[i].type().width();
 
         memory_operand mem_op(addr_vreg, i * width, 0, 0);
@@ -1085,22 +1078,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         throw std::runtime_error("Larger than 64-bit integers in vectors not supported by backend");
     }
 
-    auto dest_reg_count = n.val().type().nr_elements();
-    auto dest_element_width = n.val().type().width();
-    if (dest_element_width > base_type().element_width()) {
-        // This will only occur for non-vectors > 64-bit
-        dest_element_width = base_type().element_width();
-        dest_reg_count = n.val().type().width() / dest_element_width;
-    }
-
-    auto src_width = n.source_value().type().width();
-    auto dest_width = dest_element_width * dest_reg_count;
-
-    value_type dest_type = value_type(n.val().type().type_class(), dest_element_width);
-    for (std::size_t i = 0; i < dest_reg_count; ++i)
-        alloc_vreg(n.val(), dest_type);
-
-    auto dest_vregs = vregs_for_port(n.val());
+    auto dest_vregs = alloc_vregs(n.val());
 
     auto src_vreg = src_vregs[0];
     auto dest_vreg = dest_vregs[0];
@@ -1156,8 +1134,8 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 
         // Determine sign and write to upper registers
         // This really only happens when dest_reg_count > src_reg_count > 1
-        if (dest_reg_count > 1) {
-            for (size_t i = src_vregs.size(); i < dest_reg_count; ++i) {
+        if (dest_vregs.size() > 1) {
+            for (size_t i = src_vregs.size(); i < dest_vregs.size(); ++i) {
                 builder_.mov(dest_vregs[i], src_vregs[src_vregs.size()-1]);
                 builder_.asr(dest_vregs[i], dest_vregs[i], immediate_operand(64, value_type::u8()));
             }
@@ -1171,10 +1149,10 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         // allocator)
         //
         // NOTE: widths guaranteed to be equal by frontend
-        if (dest_width != src_width)
+        if (dest_vreg.width() != src_vreg.width())
             throw std::runtime_error("ARM64-DBT cannot bitcast " +
-                    std::to_string(dest_element_width) + " different size " +
-                    std::to_string(src_width));
+                    std::to_string(dest_vreg.width()) + " different size " +
+                    std::to_string(src_vreg.width()));
 
         for (size_t i = 0; i < src_vregs.size(); ++i) {
             builder_.mov(dest_vregs[i], src_vregs[i]);
@@ -1225,21 +1203,21 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         }
 
         // Determine sign and write to upper registers
-        if (dest_reg_count > 1) {
-            for (size_t i = src_vregs.size(); i < dest_reg_count; ++i) {
+        if (dest_vregs.size() > 1) {
+            for (size_t i = src_vregs.size(); i < dest_vregs.size(); ++i) {
                 builder_.mov(dest_vregs[i], src_vregs[src_vregs.size()-1]);
                 builder_.lsr(dest_vregs[i], dest_vregs[i], mov_immediate(64, value_type::u64()));
             }
         }
         break;
     case cast_op::trunc:
-        if (dest_element_width >= src_width) {
+        if (dest_vreg.width() >= src_vreg.width()) {
             throw std::runtime_error("ARM64-DBT cannot truncate from " +
                     std::to_string(dest_vreg.width()) + " to larger size " +
                     std::to_string(src_vreg.width()));
         }
 
-        for (size_t i = 0; i < dest_reg_count; ++i) {
+        for (size_t i = 0; i < dest_vregs.size(); ++i) {
             builder_.mov(dest_vregs[i], src_vregs[i]);
         }
 
@@ -1255,14 +1233,14 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         } else if (src_vregs.size() == 1) {
             // TODO: again register reallocation problems, this should be clearly
             // specified as a smaller size
-            auto immediate = mov_immediate(64 - dest_element_width, value_type::u64());
+            auto immediate = mov_immediate(64 - dest_vreg.width(), value_type::u64());
             builder_.lsl(dest_vreg, src_vreg, immediate);
             builder_.asr(dest_vreg, dest_vreg, immediate);
         }
         break;
     case cast_op::convert:
         // convert between integer and float representations
-        if (dest_reg_count != 1) {
+        if (dest_vregs.size() != 1) {
             throw std::runtime_error("ARM64-DBT cannot convert " +
                     std::to_string(n.val().type().element_width()) + " because it larger than 64-bit");
         }

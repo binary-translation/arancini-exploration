@@ -53,6 +53,8 @@ private:
         return alloc_vreg(p, p.type());
     }
 
+    std::vector<vreg_operand> alloc_vregs(const ir::port &p);
+
 	vreg_operand vreg_for_port(const ir::port &p, size_t index = 0) const {
         return port_to_vreg_.at(&p)[index];
     }
