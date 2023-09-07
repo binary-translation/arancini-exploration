@@ -248,13 +248,16 @@ public:
 		: value_(v)
         , type_(type)
 	{
+        if (type_.is_vector() || type_.element_width() > 64)
+            throw std::runtime_error("Cannot represent vectors as immediates");
+
         if (!fits(v, type))
             throw std::runtime_error("Specified immediate does not fit in width: " +
                                      std::to_string(width()) + " " + std::to_string(v));
 	}
 
     static bool fits(uintmax_t v, value_type type) {
-        return type.element_width() >= 64 || (v & ((1llu << type.element_width()) - 1)) == v;
+        return type.element_width() == 64 || (v & ((1llu << type.element_width()) - 1)) == v;
     }
 
     size_t width() const { return type_.element_width(); }
