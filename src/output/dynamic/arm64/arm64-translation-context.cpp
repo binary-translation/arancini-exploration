@@ -303,32 +303,20 @@ void arm64_translation_context::materialise(const ir::node* n) {
     materialised_nodes_.insert(n);
 }
 
-static inline bool is_flag(const port &value) { return value.type().width() == 1; }
-
-static inline bool is_flag_port(const port &value)
-{
-	return value.kind() == port_kinds::zero || value.kind() == port_kinds::carry || value.kind() == port_kinds::negative
-		|| value.kind() == port_kinds::overflow;
-}
-
-static inline bool is_gpr(const port &value)
-{
-	int width = value.type().width();
-	return (width == 8 || width == 16 || width == 32 || width == 64) && (!value.type().is_vector()) && value.type().is_integer();
+static inline bool is_flag_port(const port &value) {
+	return value.type().width() == 1 || value.kind() == port_kinds::zero ||
+           value.kind() == port_kinds::carry || value.kind() == port_kinds::negative ||
+           value.kind() == port_kinds::overflow;
 }
 
 void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
+    // Sanity check
     auto type = n.val().type();
-
-    // Sanity check; cannot by definition load a register larger than 64-bit
-    // without it being a vector
     if (type.is_vector() && type.element_width() > base_type().element_width()) {
-        throw std::runtime_error("Larger than 64-bit integers in vectors not supported by backend");
+        throw std::runtime_error("[ARM64-DBT] Cannot load vectors with individual elements larger than 64-bits");
     }
 
     auto dest_vregs = alloc_vregs(n.val());
-
-    // TODO: endianness
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
         size_t width = dest_vregs[i].type().width();
         auto addr = guestreg_memory_operand(n.regoff() + i * width);
@@ -348,26 +336,21 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
-                throw std::runtime_error("ARM64-DBT cannot load individual register values larger than 64-bits");
+                throw std::runtime_error("[ARM64-DBT] cannot load individual register values larger than 64-bits");
         }
     }
 }
 
 void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
+    // Sanity check
     auto type = n.val().type();
-
-    // Sanity check; cannot by definition load a register larger than 64-bit
-    // without it being a vector
     if (type.is_vector() && type.element_width() > base_type().element_width()) {
-        throw std::runtime_error("Larger than 64-bit integers in vectors not supported by backend");
+        throw std::runtime_error("[ARM64-DBT] Cannot load vectors with individual elements larger than 64-bits");
     }
 
-    std::vector<vreg_operand> src_vregs;
+    std::vector<vreg_operand> src_vregs = materialise_port(n.value());
     if (is_flag_port(n.value())) {
-        materialise(reinterpret_cast<ir::node*>(n.value().owner()));
-        src_vregs.push_back(flag_map.at(n.regoff()));
-    } else {
-        src_vregs = materialise_port(n.value());
+        src_vregs = {flag_map.at(n.regoff())};
     }
 
     // FIXME: horrible hack needed here
@@ -379,14 +362,13 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     // We now down-cast it.
     //
     // There should be clear type promotion and type coercion.
-    if (src_vregs[0].type().width() > n.value().type().width()) {
-        src_vregs[0].type() = n.value().type();
-    }
-
-    memory_operand addr;
     for (std::size_t i = 0; i < src_vregs.size(); ++i) {
-        size_t width = src_vregs[i].type().element_width();
-        addr = guestreg_memory_operand(n.regoff() + i * width);
+        if (src_vregs[i].type().width() > n.value().type().width() && n.value().type().width() <= base_type().element_width())
+            src_vregs[i].type() = n.value().type();
+
+        size_t width = src_vregs[i].type().width();
+        auto addr = guestreg_memory_operand(n.regoff() + i * width);
+
         switch (width) {
             case 1:
                 builder_.strb(src_vregs[i], addr);
@@ -403,29 +385,24 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
-                throw std::runtime_error("ARM64-DBT cannot write individual register values larger than 64-bits");
+                throw std::runtime_error("[ARM64-DBT] cannot write individual register values larger than 64-bits");
         }
     }
 }
 
 void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
     auto addr_vregs = materialise_port(n.address());
-    if (addr_vregs.size() != 1)
-        throw std::runtime_error("ARM64-DBT does not support multiple addresses in read memory node");
+    auto addr_vreg  = addr_vregs[0];
 
-    auto &addr_vreg = addr_vregs[0];
-
+    // Sanity checks
     auto type = n.val().type();
-
-    // Sanity check; cannot by definition load a register larger than 64-bit
-    // without it being a vector
-    if (type.is_vector() && type.element_width() > base_type().element_width()) {
-        throw std::runtime_error("Larger than 64-bit integers in vectors not supported by backend");
-    }
+    if (type.is_vector() && type.element_width() > base_type().element_width())
+        throw std::runtime_error("[ARM64-DBT] Cannot load vectors with individual elements larger than 64-bits");
+    if (addr_vregs.size() != 1)
+        throw std::runtime_error("[ARM64-DBT] does not support multiple addresses in read memory node");
 
     auto dest_vregs = alloc_vregs(n.val());
 
-    // TODO: endianness
     addr_vreg = add_membase(addr_vreg);
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
         size_t width = dest_vregs[i].type().width();
@@ -447,7 +424,7 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
-                throw std::runtime_error("ARM64-DBT cannot load individual memory values larger than 64-bits");
+                throw std::runtime_error("[ARM64-DBT] cannot load individual memory values larger than 64-bits");
         }
 
         builder_.add(addr_vreg, addr_vreg, immediate_operand(width, u12()));
@@ -457,7 +434,7 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
 void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
     auto addr_vregs = materialise_port(n.address());
     if (addr_vregs.size() != 1)
-        throw std::runtime_error("ARM64-DBT does not support multiple addresses in write memory node");
+        throw std::runtime_error("[ARM64-DBT] does not support multiple addresses in write memory node");
 
     auto addr_vreg = addr_vregs[0];
 
@@ -491,7 +468,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
-                throw std::runtime_error("ARM64-DBT cannot write individual memory values larger than 64-bits");
+                throw std::runtime_error("[ARM64-DBT] cannot write individual memory values larger than 64-bits");
         }
     }
 }
@@ -504,7 +481,7 @@ void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
 void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
     auto new_pc_vregs = materialise_port(n.value());
     if (new_pc_vregs.size() != 1) {
-        throw std::runtime_error("ARM64-DBT does not support PC vregs > 64-bits");
+        throw std::runtime_error("[ARM64-DBT] does not support PC vregs > 64-bits");
     }
 
     builder_.str(new_pc_vregs[0],
@@ -523,7 +500,7 @@ void arm64_translation_context::materialise_br(const br_node &n) {
 void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
     auto cond_vregs = materialise_port(n.cond());
     if (cond_vregs.size() != 1) {
-        throw std::runtime_error("ARM64-DBT does not support condition vregs > 64-bits");
+        throw std::runtime_error("[ARM64-DBT] does not support condition vregs > 64-bits");
     }
 
     auto cond_vreg = cond_vregs[0];
@@ -639,7 +616,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 break;
             case ir::value_type_class::none:
             default:
-                throw std::runtime_error("ARM64-DBT encounted unknown type class for multiplication");
+                throw std::runtime_error("[ARM64-DBT] encounted unknown type class for multiplication");
             }
             break;
         case 64:
@@ -659,13 +636,13 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 break;
             case ir::value_type_class::none:
             default:
-                throw std::runtime_error("ARM64-DBT encounted unknown type class for multiplication");
+                throw std::runtime_error("[ARM64-DBT] encounted unknown type class for multiplication");
             }
             break;
         case 256:
         case 512:
         default:
-            throw std::runtime_error("ARM64-DBT does not support subtraction with sizes larger than 128-bits");
+            throw std::runtime_error("[ARM64-DBT] does not support subtraction with sizes larger than 128-bits");
         }
 
         // *MUL* do not set flags, they must be set here manually
@@ -1039,7 +1016,7 @@ void arm64_translation_context::materialise_unary_arith(const unary_arith_node &
     switch (n.op()) {
     case unary_arith_op::bnot:
         /* builder_.brk(immediate_operand(100, 64)); */
-        if (is_flag(n.val()))
+        if (is_flag_port(n.val()))
             builder_.eor_(val_vreg, lhs, immediate_operand(1, value_type::u8()));
         else
             builder_.not_(val_vreg, lhs);
@@ -1056,7 +1033,7 @@ void arm64_translation_context::materialise_unary_arith(const unary_arith_node &
 
 void arm64_translation_context::materialise_cast(const cast_node &n) {
     if (n.val().type().is_vector())
-        throw std::runtime_error("ARM64-DBT does not support vectors");
+        throw std::runtime_error("[ARM64-DBT] does not support vectors");
 
     // The implementations of all cast operations depend on 2 things:
     // 1. The width of destination registers (<= 64-bit: the base-width or larger)
@@ -1087,7 +1064,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 	case cast_op::sx:
         // Sanity check
         if (n.val().type().element_width() <= n.source_value().type().element_width()) {
-            throw std::runtime_error("ARM64-DBT cannot sign-extend " +
+            throw std::runtime_error("[ARM64-DBT] cannot sign-extend " +
                     std::to_string(n.val().type().element_width()) + " to smaller size " +
                     std::to_string(n.source_value().type().element_width()));
         }
@@ -1127,7 +1104,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             }
             break;
         default:
-            throw std::runtime_error("ARM64-DBT cannot sign-extend from size " +
+            throw std::runtime_error("[ARM64-DBT] cannot sign-extend from size " +
                     std::to_string(src_vreg.width()) + " to size " +
                     std::to_string(dest_vreg.width()));
         }
@@ -1150,7 +1127,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         //
         // NOTE: widths guaranteed to be equal by frontend
         if (dest_vreg.width() != src_vreg.width())
-            throw std::runtime_error("ARM64-DBT cannot bitcast " +
+            throw std::runtime_error("[ARM64-DBT] cannot bitcast " +
                     std::to_string(dest_vreg.width()) + " different size " +
                     std::to_string(src_vreg.width()));
 
@@ -1161,7 +1138,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 	case cast_op::zx:
         // Sanity check
         if (n.val().type().element_width() <= n.source_value().type().element_width()) {
-            throw std::runtime_error("ARM64-DBT cannot sign-extend " +
+            throw std::runtime_error("[ARM64-DBT] cannot sign-extend " +
                     std::to_string(n.val().type().element_width()) + " to smaller size " +
                     std::to_string(n.source_value().type().element_width()));
         }
@@ -1197,7 +1174,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             }
             break;
         default:
-            throw std::runtime_error("ARM64-DBT cannot sign-extend from size " +
+            throw std::runtime_error("[ARM64-DBT] cannot sign-extend from size " +
                     std::to_string(src_vreg.width()) + " to size " +
                     std::to_string(dest_vreg.width()));
         }
@@ -1212,7 +1189,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         break;
     case cast_op::trunc:
         if (dest_vreg.width() >= src_vreg.width()) {
-            throw std::runtime_error("ARM64-DBT cannot truncate from " +
+            throw std::runtime_error("[ARM64-DBT] cannot truncate from " +
                     std::to_string(dest_vreg.width()) + " to larger size " +
                     std::to_string(src_vreg.width()));
         }
@@ -1221,7 +1198,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             builder_.mov(dest_vregs[i], src_vregs[i]);
         }
 
-        if (is_flag(n.val())) {
+        if (is_flag_port(n.val())) {
             // FIXME: necessary to implement a mov here due to mismatches
             // between types
             //
@@ -1241,7 +1218,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
     case cast_op::convert:
         // convert between integer and float representations
         if (dest_vregs.size() != 1) {
-            throw std::runtime_error("ARM64-DBT cannot convert " +
+            throw std::runtime_error("[ARM64-DBT] cannot convert " +
                     std::to_string(n.val().type().element_width()) + " because it larger than 64-bit");
         }
 
@@ -1300,7 +1277,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 
 void arm64_translation_context::materialise_csel(const csel_node &n) {
     if (n.val().type().is_vector() || n.val().type().element_width() > base_type().element_width()) {
-        throw std::runtime_error("ARM64-DBT cannot implement conditional selection for \
+        throw std::runtime_error("[ARM64-DBT] cannot implement conditional selection for \
                                   vectors and elements widths exceeding 64-bits");
     }
 
@@ -1318,7 +1295,7 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
 
 void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
     if (n.val().type().is_vector() || n.val().type().element_width() > base_type().element_width()) {
-        throw std::runtime_error("ARM64-DBT cannot implement bit shifts for \
+        throw std::runtime_error("[ARM64-DBT] cannot implement bit shifts for \
                                   vectors and elements widths exceeding 64-bits");
     }
 
@@ -1356,7 +1333,7 @@ void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
 
 void arm64_translation_context::materialise_bit_extract(const bit_extract_node &n) {
     if (n.val().type().is_vector() || n.val().type().element_width() > base_type().element_width()) {
-        throw std::runtime_error("ARM64-DBT cannot implement bit extracts for \
+        throw std::runtime_error("[ARM64-DBT] cannot implement bit extracts for \
                                   vectors and elements widths exceeding 64-bits");
     }
 
@@ -1370,7 +1347,7 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
 
 void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n) {
     if (n.val().type().is_vector() || n.val().type().element_width() > base_type().element_width()) {
-        throw std::runtime_error("ARM64-DBT cannot implement bit inserts for \
+        throw std::runtime_error("[ARM64-DBT] cannot implement bit inserts for \
                                   vectors and elements widths exceeding 64-bits");
     }
 
