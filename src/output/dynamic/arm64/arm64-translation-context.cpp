@@ -92,13 +92,13 @@ vreg_operand arm64_translation_context::add_membase(const vreg_operand &addr) {
 }
 
 vreg_operand arm64_translation_context::mov_immediate(uint64_t imm, value_type type) {
-    size_t actual_size = static_cast<size_t>(std::ceil(std::log2(imm)));
+    auto actual_size = 64 - __builtin_clzll(imm|1);
     size_t move_count = static_cast<size_t>(std::ceil(actual_size / 16.0));
 
     // TODO: it seems like the frontend generates very large constants
     // represented as s32(). This fails here, since the resultiing value does not
     // fit
-    if (actual_size <= 16) {
+    if (actual_size < 16) {
         auto reg = vreg_operand(alloc_vreg(), type);
         builder_.mov(reg, immediate_operand(imm, value_type::u16()));
         return reg;
@@ -381,7 +381,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
 
     memory_operand addr;
     for (std::size_t i = 0; i < src_vregs.size(); ++i) {
-        size_t width = n.value().type().width();
+        size_t width = src_vregs[i].type().element_width();
         addr = guestreg_memory_operand(n.regoff() + i * width);
         switch (width) {
             case 1:
