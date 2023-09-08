@@ -657,31 +657,9 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 		break;
 	case binary_arith_op::bor:
         builder_.orr_(dest_vreg, lhs_vreg, rhs_vreg);
-        for (size_t i = 1; i < dest_reg_count; ++i) {
-            auto flag_vreg_saved = alloc_vreg(base_type());
-            auto flag_vreg_new = alloc_vreg(base_type());
-            builder_.msr(flag_vreg_saved, preg_operand(preg_operand::nzcv));
-
-            builder_.orr_(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
-
-            builder_.msr(flag_vreg_new, preg_operand(preg_operand::nzcv));
-            builder_.orr_(flag_vreg_saved, flag_vreg_saved, flag_vreg_new);
-            builder_.msr(preg_operand(preg_operand::nzcv), flag_vreg_saved);
-        }
 		break;
 	case binary_arith_op::band:
         builder_.ands(dest_vreg, lhs_vreg, rhs_vreg);
-        for (size_t i = 1; i < dest_reg_count; ++i) {
-            auto flag_vreg_saved = alloc_vreg(base_type());
-            auto flag_vreg_new = alloc_vreg(base_type());
-            builder_.msr(flag_vreg_saved, preg_operand(preg_operand::nzcv));
-
-            builder_.ands(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
-
-            builder_.msr(flag_vreg_new, preg_operand(preg_operand::nzcv));
-            builder_.orr_(flag_vreg_saved, flag_vreg_saved, flag_vreg_new);
-            builder_.msr(preg_operand(preg_operand::nzcv), flag_vreg_saved);
-        }
 		break;
 	case binary_arith_op::bxor:
         builder_.eor_(dest_vreg, lhs_vreg, rhs_vreg);
@@ -692,31 +670,11 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         // TODO: find a way to set flags
 		builder_.cmp(dest_vreg,
                      immediate_operand(0, value_type::u8()));
-        for (size_t i = 1; i < dest_reg_count; ++i) {
-            auto flag_vreg_saved = alloc_vreg(base_type());
-            auto flag_vreg_new = alloc_vreg(base_type());
-            builder_.msr(flag_vreg_saved, preg_operand(preg_operand::nzcv));
-            builder_.cmp(dest_vregs[i],
-                         immediate_operand(0, value_type::u8()));
-            builder_.msr(flag_vreg_new, preg_operand(preg_operand::nzcv));
-            builder_.orr_(flag_vreg_saved, flag_vreg_saved, flag_vreg_new);
-            builder_.msr(preg_operand(preg_operand::nzcv), flag_vreg_saved);
-        }
 		break;
 	case binary_arith_op::cmpeq:
 	case binary_arith_op::cmpne:
 	case binary_arith_op::cmpgt:
         builder_.cmp(lhs_vreg, rhs_vreg);
-        for (size_t i = 1; i < dest_reg_count; ++i) {
-            auto flag_vreg_saved = alloc_vreg(base_type());
-            auto flag_vreg_new = alloc_vreg(base_type());
-            builder_.msr(flag_vreg_saved, preg_operand(preg_operand::nzcv));
-            builder_.cmp(dest_vregs[i],
-                         immediate_operand(0, value_type::u8()));
-            builder_.msr(flag_vreg_new, preg_operand(preg_operand::nzcv));
-            builder_.orr_(flag_vreg_saved, flag_vreg_saved, flag_vreg_new);
-            builder_.msr(preg_operand(preg_operand::nzcv), flag_vreg_saved);
-        }
         builder_.cset(dest_vreg, cond_operand(cset_type));
         for (size_t i = 1; i < dest_reg_count; ++i) {
             builder_.cset(dest_vregs[i], cond_operand(cset_type));
@@ -771,21 +729,34 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
     auto pstate = alloc_vreg(preg_operand(preg_operand::nzcv).type());
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
         // Set carry flag
-        builder_.msr(pstate, preg_operand(preg_operand::nzcv));
+        builder_.mrs(pstate, preg_operand(preg_operand::nzcv));
         builder_.lsl(top_vregs[i], top_vregs[i], immediate_operand(0x3, value_type::u8()));
+        top_vregs[i].type() = pstate.type();
         builder_.orr_(pstate, pstate, top_vregs[i]);
         builder_.msr(preg_operand(preg_operand::nzcv), pstate);
 
         switch (n.op()) {
         case ternary_arith_op::adc:
-            builder_.adcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i], shift_operand(mod, 0, value_type::u16()));
+            if (mod)
+                builder_.adcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i], shift_operand(mod, 0, value_type::u16()));
+            else
+                builder_.adcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
             break;
         case ternary_arith_op::sbb:
-            builder_.sbcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i], shift_operand(mod, 0, value_type::u16()));
+            if (mod)
+                builder_.sbcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i], shift_operand(mod, 0, value_type::u16()));
+            else
+                builder_.sbcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
+            break;
         default:
             throw std::runtime_error("unsupported ternary arithmetic operation " + std::to_string((int)n.op()));
         }
     }
+
+	builder_.setz(flag_map[(unsigned long)reg_offsets::ZF]);
+	builder_.sets(flag_map[(unsigned long)reg_offsets::SF]);
+	builder_.seto(flag_map[(unsigned long)reg_offsets::OF]);
+    builder_.setc(flag_map[(unsigned long)reg_offsets::CF]);
 }
 
 void arm64_translation_context::materialise_binary_atomic(const binary_atomic_node &n) {
@@ -803,20 +774,6 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
     auto mem_addr = memory_operand(add_membase(addr_reg));
 
     // FIXME: correct memory ordering?
-    //
-    // FIXME: currently only fast path implemented
-    // 1. Must check that flags are not needed by the instruction before taking
-    // the fast path
-    //
-    // 2. Must implement lock-based fallback
-    //    - Acquire lock
-    //    - Do operations
-    //    - Release locks
-    //
-    // How does static backend handle these?
-    //
-    // NOTE: flags are practically not set at all now
-    //
     // NOTE: not sure if the proper alternative was used (should a/al/l or
     // nothing be used?)
 	switch (n.op()) {
