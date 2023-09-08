@@ -57,35 +57,16 @@ public:
     ARITH_OP(adds);
 
     // ADCS
-    ARITH_OP_BASIC(adcs);
+    ARITH_OP(adcs);
 
     // SUB
     ARITH_OP(sub);
 
-    template <typename T1, typename T2, typename T3,
-              is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
-    void subs(const T1 &dst,
-              const T2 &src1,
-              const T3 &src2) {
-        append(instruction("subs", def(keep(dst)), use(src1), use(src2)));
-    }
+    // SUBS
+    ARITH_OP(subs);
 
-    template <typename T1, typename T2, typename T3,
-              is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
-    void subs(const T1 &dst,
-              const T2 &src1,
-              const T3 &src2,
-              const shift_operand &shift) {
-        append(instruction("subs", def(keep(dst)), use(src1), use(src2), use(shift)));
-    }
-
-    template <typename T1, typename T2, typename T3,
-              is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
-    void sbcs(const T1 &dst,
-              const T2 &src1,
-              const T3 &src2) {
-        append(instruction("sbcs", def(keep(dst)), use(src1), use(src2)));
-    }
+    // SBCS
+    ARITH_OP(sbcs);
 
     template <typename T1, typename T2, typename T3,
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
@@ -192,6 +173,13 @@ public:
     void cmp(const T1 &dst,
              const T2 &src) {
         append(instruction("cmp", usedef(dst), use(src)));
+    }
+
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg_or_immediate<T2> = 0>
+    void tst(const T1 &dst,
+             const T2 &src) {
+        append(instruction("tst", usedef(dst), use(src)));
     }
 
     template <typename T1, typename T2, typename T3,
@@ -373,6 +361,13 @@ public:
     void ucvtf(const T1 &dest,
               const T2 &src) {
         append(instruction("ucvtf", def(dest), use(src)));
+    }
+
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
+    void mrs(const T1 &dest,
+             const T2 &src) {
+        append(instruction("mrs", usedef(dest), usedef(src)));
     }
 
     template <typename T1, typename T2,
