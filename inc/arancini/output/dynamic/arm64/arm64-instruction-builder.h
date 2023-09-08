@@ -236,11 +236,11 @@ public:
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg<T2> = 0>
-    void bfm(const T1 &dst,
+    void bfxil(const T1 &dst,
              const T2 &src1,
-             const immediate_operand &immr,
-             const immediate_operand &imms) {
-        append(instruction("bfm", def(dst), use(src1), use(immr), use(imms)));
+             const immediate_operand &lsb,
+             const immediate_operand &width) {
+        append(instruction("bfxil", usedef(dst), use(src1), use(lsb), use(width)));
     }
 
     template <typename T1, typename T2,
