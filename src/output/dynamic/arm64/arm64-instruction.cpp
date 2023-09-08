@@ -42,6 +42,11 @@ std::string arancini::output::dynamic::arm64::to_string(const preg_operand &op) 
         "d31"
     };
 
+    static const char* name_special[] = {
+        "",
+        "nzcv"
+    };
+
     // TODO: introduce check for NEON availability
     static const char* name_vector_neon[] = {
         "",
@@ -69,6 +74,9 @@ std::string arancini::output::dynamic::arm64::to_string(const preg_operand &op) 
 
     auto type = op.type();
     size_t reg_idx = op.register_index();
+
+    if (op.special())
+        return name_special[reg_idx];
 
     if (type.is_vector()) {
         std::string name = type.width() == 128 ? name_vector_neon[reg_idx] : name_vector_sve2[reg_idx];
