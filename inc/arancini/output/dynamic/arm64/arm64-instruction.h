@@ -144,13 +144,15 @@ public:
     }
 
     preg_operand(const preg_operand& r)
-        : type_(r.type_)
+        : special_(r.special_)
+        , type_(r.type_)
         , index_(r.index_)
     { }
 
     preg_operand& operator=(const preg_operand& r) {
         index_ = r.index_;
         type_ = r.type_;
+        special_ = r.special_;
         return *this;
     }
 
