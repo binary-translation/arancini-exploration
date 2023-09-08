@@ -14,10 +14,11 @@ void shuffle_translator::do_translate()
     auto order = read_operand(2);
 
     for (int i = 0; i < 4; i++) {
-      auto shift = builder().insert_asr(src->val(), builder().insert_bit_extract(order->val(), 2 * i, 2)->val());
-      auto res = builder().insert_trunc(value_type::u32(), shift->val());
-      dst = builder().insert_bit_insert(dst->val(), res->val(), 32 * i, 32);
-    }
+		auto shift_val = builder().insert_zx(value_type::u32(), builder().insert_bit_extract(order->val(), 2 * i, 2)->val());
+		auto shift = builder().insert_asr(src->val(), builder().insert_lsl(shift_val->val(), builder().insert_constant_u32(5)->val())->val());
+		auto res = builder().insert_trunc(value_type::u32(), shift->val());
+		dst = builder().insert_bit_insert(dst->val(), res->val(), 32 * i, 32);
+	}
 
     write_operand(0, dst->val());
     break;

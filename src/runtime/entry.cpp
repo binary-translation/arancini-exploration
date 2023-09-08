@@ -4,7 +4,9 @@
 #include <cstring>
 #include <iostream>
 
+#include <mutex>
 #include <signal.h>
+#include <sys/mman.h>
 #include <unistd.h>
 
 #if defined(ARCH_X86_64)
@@ -39,11 +41,16 @@ static arancini::output::dynamic::riscv64::riscv64_dynamic_output_engine oe;
 #error "Unsupported dynamic output architecture"
 #endif
 
+// HACK: for Debugging
+static x86_cpu_state *__current_state;
+
+static std::mutex segv_lock;
 /*
  * The segfault handler.
  */
 static void segv_handler(int signo, siginfo_t *info, void *context)
 {
+	segv_lock.lock();
 #if defined(ARCH_X86_64)
 	unsigned long rip = ((ucontext_t *)context)->uc_mcontext.gregs[REG_RIP];
 #else
@@ -55,11 +62,17 @@ static void segv_handler(int signo, siginfo_t *info, void *context)
 
 	uintptr_t emulated_base = (uintptr_t)ctx_->get_memory_ptr(0);
 	if ((uintptr_t)info->si_addr >= emulated_base) {
-		std::cerr << ", guest-virtual-address=" << std::hex << ((uintptr_t)info->si_addr - emulated_base);
+		std::cerr << ", guest-virtual-address=" << std::hex << ((uintptr_t)info->si_addr - emulated_base) << std::endl;
 	}
 
-	std::cerr << std::endl;
+	unsigned i = 0;
+	auto range = ctx_->get_thread_range();
+	for (auto it  = range.first; it != range.second; it++) {
+			std::cerr << "Thread[" << i << "] Guest PC: " << ((x86_cpu_state *)it->second->get_cpu_state())->PC << std::endl;
+			i++;
+	}
 
+	segv_lock.unlock();
 	exit(1);
 }
 
@@ -232,10 +245,11 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	// the guest program, and an emulated stack pointer at the top of the
 	// emulated address space.
 	x86_cpu_state *x86_state = (x86_cpu_state *)main_thread->get_cpu_state();
+	__current_state = x86_state;
 	x86_state->PC = entry_point;
 
 	x86_state->RSP = setup_guest_stack(argc, argv, 0x100000000, ctx_, start);
-
+	x86_state->X87_STACK_BASE = (intptr_t)mmap(NULL, 80, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0) - (intptr_t)ctx_->get_memory_ptr(0);
 	// Report on various information for useful debugging purposes.
 	std::cerr << "state @ " << (void *)x86_state << ", pc @ " << std::hex << x86_state->PC << ", stack @ " << std::hex << x86_state->RSP << std::endl;
 

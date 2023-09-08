@@ -14,13 +14,14 @@ translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_
 {
 	switch (xed_decoded_inst_get_iclass(xed_inst)) {
 	// TODO: this is a bad way of avoiding empty packets. Should be done by checking that the translator is a nop_translator, not hardcoded switch case
-	case XED_ICLASS_NOP:
+	//case XED_ICLASS_NOP:
 	case XED_ICLASS_HLT:
 	case XED_ICLASS_CPUID:
 	case XED_ICLASS_PREFETCHNTA:
-  case XED_ICLASS_PAUSE:
-		return translation_result::noop;
-
+	case XED_ICLASS_PAUSE:
+	case XED_ICLASS_NOP:
+		builder_.begin_packet(address, disasm);
+		return builder_.end_packet() == packet_type::end_of_block ? translation_result::end_of_block : translation_result::noop;
 	default:
 		builder_.begin_packet(address, disasm);
 
@@ -148,6 +149,12 @@ action_node *translator::write_operand(int opnum, port &value)
 			}
 			auto enc_len = enc->val().type().width();
 			switch(val_len) {
+				case 32: {
+						 orig = builder_.insert_bitcast(value_type::u32(), value);
+						 enc = builder_.insert_bitcast(value_type::vector(value_type::u32(), enc_len/val_len), enc->val());
+						 enc = builder_.insert_vector_insert(enc->val(), 0, orig->val());
+				}
+				break;
 				case 64: {
 						 orig = builder_.insert_bitcast(value_type::u64(), value);
 						 enc = builder_.insert_bitcast(value_type::vector(value_type::u64(), enc_len/val_len), enc->val());

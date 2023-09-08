@@ -12,7 +12,9 @@ void interrupt_translator::do_translate()
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
 	case XED_ICLASS_INT: {
 		builder().insert_internal_call(
-			builder().ifr().resolve("handle_int"), { &builder().insert_constant_u32(xed_decoded_inst_get_unsigned_immediate(xed_inst()))->val() });
+			builder().ifr().resolve("handle_int"),
+			{ &builder().insert_constant_u32(xed_decoded_inst_get_unsigned_immediate(xed_inst()))->val() }
+		);
 		break;
 	}
 
@@ -21,18 +23,20 @@ void interrupt_translator::do_translate()
 		break;
 	}
 
-  case XED_ICLASS_SYSCALL: {
-    builder().insert_internal_call(builder().ifr().resolve("handle_syscall"), { });
-    break;
-  }
+	case XED_ICLASS_SYSCALL: {
+		auto next = builder().insert_add(builder().insert_read_pc()->val(), builder().insert_constant_u64(2)->val());
+		builder().insert_write_pc(next->val());
+		builder().insert_internal_call(builder().ifr().resolve("handle_syscall"), {});
+		break;
+	}
 
-  case XED_ICLASS_UD0:
-  case XED_ICLASS_UD1:
-  case XED_ICLASS_UD2: {
-    // Raises an 'Invalid Opcode' exception (exception number: 6)
-    builder().insert_internal_call(builder().ifr().resolve("handle_int"), { &builder().insert_constant_u32(6)->val() });
-    break;
-  }
+	case XED_ICLASS_UD0:
+	case XED_ICLASS_UD1:
+	case XED_ICLASS_UD2: {
+		// Raises an 'Invalid Opcode' exception (exception number: 6)
+		builder().insert_internal_call(builder().ifr().resolve("handle_int"), { &builder().insert_constant_u32(6)->val() });
+		break;
+	}
 
 	default:
 		throw std::runtime_error("unsupported interrupt operation");

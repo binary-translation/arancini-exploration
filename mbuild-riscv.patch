@@ -1,0 +1,12 @@
+index 9dc2bf5..bab7efc 100755
+--- a/mbuild/env.py
++++ b/mbuild/env.py
+@@ -1234,6 +1234,8 @@ class env_t(object):
+             return 'x86-64'
+         elif name[0:3] == 'x86':
+             return 'ia32'
++        elif name in ['riscv64', 'riscv']:
++            return 'riscv64'
+         elif name in ['aarch64', 'arm64']:
+             return 'aarch64'
+         else:

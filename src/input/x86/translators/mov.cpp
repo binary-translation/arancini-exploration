@@ -19,6 +19,10 @@ void mov_translator::do_translate()
 
 		auto tt = opname == XED_OPERAND_MEM0 ? type_of_operand(1) : type_of_operand(0);
 		auto op1 = auto_cast(tt, read_operand(1));
+		//TODO: temporary hack for MOVQ with immediate
+		if (is_immediate_operand(1) && get_operand_width(1) < get_operand_width(0)) {
+			op1 = builder().insert_zx(value_type::u64(), op1->val());
+		}
 		write_operand(0, op1->val());
 		break;
 	}

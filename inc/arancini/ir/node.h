@@ -492,6 +492,7 @@ public:
 	}
 
 	cast_op op() const { return op_; }
+	fp_convert_type convert_type() const { return convert_type_; }
 
 	port &source_value() const { return source_value_; }
 	value_type &target_type() { return target_type_; }

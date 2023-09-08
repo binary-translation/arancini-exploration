@@ -3,6 +3,12 @@
 #include <arancini/runtime/exec/execution-thread.h>
 #include <arancini/runtime/exec/native_syscall.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <ostream>
+#include <pthread.h>
+#include <utility>
 
 #if defined(ARCH_X86_64)
 #include <asm/prctl.h>
@@ -22,7 +28,32 @@
 #include <sys/mman.h>
 #include <sys/uio.h>
 
+extern "C" int MainLoop(void *);
+
 using namespace arancini::runtime::exec;
+
+struct loop_args {
+	void *new_state;
+	void *parent_state;
+	pthread_mutex_t *lock;
+	pthread_cond_t *cond;
+};
+
+void *MainLoopWrapper(void *args) {
+	auto largs = (loop_args *)args;
+	auto x86_state = (x86::x86_cpu_state *)largs->new_state;
+	auto parent_state = (x86::x86_cpu_state *)largs->parent_state;
+
+	pthread_mutex_lock(largs->lock);
+	std::cout << "Thread: " << gettid() << " - State: " << std::hex << x86_state << std::dec << std::endl;
+	parent_state->RAX = gettid();
+	pthread_cond_signal(largs->cond);
+	pthread_mutex_unlock(largs->lock);
+
+	x86_state->RSP = x86_state->RSI;
+	MainLoop(x86_state);
+	return NULL;
+};
 
 execution_context::execution_context(input::input_arch &ia, output::dynamic::dynamic_output_engine &oe, bool optimise)
 	: memory_(nullptr)
@@ -107,9 +138,10 @@ int execution_context::invoke(void *cpu_state)
 
 int execution_context::internal_call(void *cpu_state, int call)
 {
-	std::cerr << "Executing internal call via TEMPORARY interface" << std::endl;
+	//std::cerr << "Executing internal call via TEMPORARY interface" << std::endl;
 	if (call == 1) { // syscall
 		auto x86_state = (x86::x86_cpu_state *)cpu_state;
+		//std::cerr << "Syscall No " << std::dec << x86_state->RAX << std::endl;
 		switch (x86_state->RAX) {
 		case 2: // open
 		{
@@ -202,6 +234,16 @@ int execution_context::internal_call(void *cpu_state, int call)
 
 			break;
 		}
+		case 10: // mprotect
+		{
+			auto addr = (uintptr_t)get_memory_ptr((int64_t)x86_state->RDI);
+			uint64_t length = x86_state->RSI;
+			uint64_t prot = x86_state->RDX;
+
+			auto ret = native_syscall(__NR_mprotect, addr, length, prot);
+			x86_state->RAX = ret;
+			break;
+		}
 		case 11: // munmap
 		{
 			auto addr = (uintptr_t)get_memory_ptr((int64_t)x86_state->RDI);
@@ -236,6 +278,16 @@ int execution_context::internal_call(void *cpu_state, int call)
 			} else {
 				x86_state->RAX = brk_ - (uintptr_t)get_memory_ptr(0);
 			}
+			break;
+		}
+		case 14: // rt_sigprocmask
+		{
+			// Not sure if we should allow that
+			auto set = (uintptr_t)get_memory_ptr(x86_state->RSI);
+			auto oldset = x86_state->RDX ? (uintptr_t)get_memory_ptr(x86_state->RDX) : 0;
+
+			auto ret = native_syscall(__NR_rt_sigprocmask, x86_state->RDI, set, oldset, x86_state->R10);
+			x86_state->RAX = ret;
 			break;
 		}
 		case 16: // ioctl
@@ -274,6 +326,40 @@ int execution_context::internal_call(void *cpu_state, int call)
 			}
 
 			x86_state->RAX = native_syscall(__NR_writev, x86_state->RDI, (uintptr_t)iovec_new, iocnt);
+			break;
+		}
+		case 28: // madvise
+		{
+			auto start = (uintptr_t)get_memory_ptr(x86_state->RDI);
+			x86_state->RAX = native_syscall(__NR_madvise, start, x86_state->RSI, x86_state->RDX);
+			break;
+		}
+		case 56: // clone
+		{
+			auto et = create_execution_thread();
+			auto new_x86_state = (x86::x86_cpu_state *)et->get_cpu_state();
+			memcpy(new_x86_state, x86_state, sizeof(*x86_state));
+
+			new_x86_state->RAX = 0;
+
+			pthread_t child;
+			pthread_attr_t attr;
+			pthread_attr_init(&attr);
+			pthread_mutex_t rax_lock;
+			pthread_cond_t rax_cond;
+			pthread_mutex_init(&rax_lock, NULL);
+			pthread_cond_init(&rax_cond, NULL);
+
+			loop_args args = { new_x86_state, x86_state, &rax_lock, &rax_cond };
+			pthread_mutex_lock(&rax_lock);
+
+			pthread_create(&child, &attr, &MainLoopWrapper, &args);
+			pthread_cond_wait(&rax_cond, &rax_lock);
+
+			pthread_mutex_unlock(&rax_lock);
+			pthread_mutex_destroy(&rax_lock);
+			pthread_cond_destroy(&rax_cond);
+			pthread_detach(child);
 			break;
 		}
 		case 77: // ftruncate
@@ -329,6 +415,29 @@ int execution_context::internal_call(void *cpu_state, int call)
 			}
 			break;
 		}
+		case 200: // tkill
+		{
+			x86_state->RAX = native_syscall(__NR_tkill, x86_state->RDI, x86_state->RSI);
+			break;
+		}
+		case 202: // futex
+		{
+			auto addr = (uint64_t)get_memory_ptr(x86_state->RDI);
+			auto timespec = x86_state->R10 ? (uint64_t)get_memory_ptr(x86_state->R10) : 0;
+			auto addr2 = (uint64_t)get_memory_ptr(x86_state->R8);
+			x86_state->RAX = native_syscall(__NR_futex, addr, x86_state->RSI, (uint64_t)x86_state->RDX, timespec, addr2, x86_state->R9);
+			break;
+		}
+		case 203: // sched_set_affinity
+		{
+			x86_state->RAX = native_syscall(__NR_sched_setaffinity, x86_state->RDI, x86_state->RSI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RDX));
+			break;
+		}
+		case 204: // sched_get_affinity
+		{
+			x86_state->RAX = native_syscall(__NR_sched_getaffinity, x86_state->RDI, x86_state->RSI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RDX));
+			break;
+		}
 		case 218: // set_tid_address
 		{
 			// TODO Handle clear_child_tid in exit
@@ -348,6 +457,10 @@ int execution_context::internal_call(void *cpu_state, int call)
 			x86_state->RAX = native_syscall(__NR_clock_gettime, x86_state->RDI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RSI));
 			break;
 		}
+		case 60: //exit
+		{
+			native_syscall(__NR_exit, x86_state->RDI);
+		}
 		default:
 			std::cerr << "Unsupported syscall id " << std::dec << x86_state->RAX << std::endl;
 			return 1;
@@ -357,4 +470,8 @@ int execution_context::internal_call(void *cpu_state, int call)
 		return 1;
 	}
 	return 0;
+}
+
+std::pair<decltype(execution_context::threads_)::const_iterator, decltype(execution_context::threads_)::const_iterator> execution_context::get_thread_range() {
+	return std::make_pair(threads_.cbegin(), threads_.cend());
 }

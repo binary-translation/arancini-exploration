@@ -291,6 +291,9 @@ void binop_translator::do_translate()
 		br_node *end0nan_br = (br_node *)builder().insert_br(nullptr);
 
 		// op1 is NaN?
+		auto op0_not_nan = builder().insert_label("op0_not_NaN");
+		op0_not_nan_br->add_br_target(op0_not_nan);
+		op0_not_nan_br2->add_br_target(op0_not_nan);
 		auto op1_cast = builder().insert_bitcast(value_type::u32(), op1->val());
 		and_exp = builder().insert_and(op1_cast->val(), builder().insert_constant_u32(0x7F800000)->val());
 		cmpeq_exp = builder().insert_cmpeq(and_exp->val(), builder().insert_constant_u32(0)->val());
@@ -302,8 +305,6 @@ void binop_translator::do_translate()
 		br_node *end1nan_br = (br_node *)builder().insert_br(nullptr);
 
 		auto no_nan = builder().insert_label("not_NaN");
-		op0_not_nan_br->add_br_target(no_nan);
-		op0_not_nan_br2->add_br_target(no_nan);
 		op1_not_nan_br->add_br_target(no_nan);
 		op1_not_nan_br2->add_br_target(no_nan);
 		auto cmpeq = builder().insert_cmpeq(op0->val(), op1->val());
