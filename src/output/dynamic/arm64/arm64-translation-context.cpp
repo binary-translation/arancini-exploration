@@ -208,85 +208,66 @@ void arm64_translation_context::materialise(const ir::node* n) {
     if (materialised_nodes_.count(n))
         return;
 
+    /* std::cout << "Handling " << n->to_string(); */
     switch (n->kind()) {
     case node_kinds::read_reg:
-        //std::cerr << "Node: read register\n";
         materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));
         break;
     case node_kinds::write_reg:
-        //std::cerr << "Node: write register\n";
         materialise_write_reg(*reinterpret_cast<const write_reg_node*>(n));
         break;
     case node_kinds::read_mem:
-        //std::cerr << "Node: read memory\n";
         materialise_read_mem(*reinterpret_cast<const read_mem_node*>(n));
         break;
     case node_kinds::write_mem:
-        //std::cerr << "Node: write memory\n";
         materialise_write_mem(*reinterpret_cast<const write_mem_node*>(n));
         break;
 	case node_kinds::read_pc:
-        //std::cerr << "Node: read PC\n";
 		materialise_read_pc(*reinterpret_cast<const read_pc_node *>(n));
         break;
 	case node_kinds::write_pc:
-        //std::cerr << "Node: write PC\n";
 		materialise_write_pc(*reinterpret_cast<const write_pc_node *>(n));
         break;
     case node_kinds::label:
-        //std::cerr << "Node: label\n";
         materialise_label(*reinterpret_cast<const label_node *>(n));
         break;
     case node_kinds::br:
-        //std::cerr << "Node: branch\n";
         materialise_br(*reinterpret_cast<const br_node *>(n));
         break;
     case node_kinds::cond_br:
-        //std::cerr << "Node: cond branch\n";
         materialise_cond_br(*reinterpret_cast<const cond_br_node *>(n));
         break;
 	case node_kinds::cast:
-        //std::cerr << "Node: cast\n";
 		materialise_cast(*reinterpret_cast<const cast_node *>(n));
         break;
     case node_kinds::csel:
-        //std::cerr << "Node: csel\n";
 		materialise_csel(*reinterpret_cast<const csel_node *>(n));
         break;
     case node_kinds::bit_shift:
-        //std::cerr << "Node: bit shift\n";
 		materialise_bit_shift(*reinterpret_cast<const bit_shift_node *>(n));
         break;
     case node_kinds::bit_extract:
-        //std::cerr << "Node: bit extract\n";
 		materialise_bit_extract(*reinterpret_cast<const bit_extract_node *>(n));
         break;
     case node_kinds::bit_insert:
-        //std::cerr << "Node: bit insert\n";
 		materialise_bit_insert(*reinterpret_cast<const bit_insert_node *>(n));
         break;
     case node_kinds::constant:
-        //std::cerr << "Node: constant\n";
         materialise_constant(*reinterpret_cast<const constant_node*>(n));
         break;
 	case node_kinds::unary_arith:
-        //std::cerr << "Node: unary arithmetic\n";
         materialise_unary_arith(*reinterpret_cast<const unary_arith_node*>(n));
         break;
 	case node_kinds::binary_arith:
-        //std::cerr << "Node: binary arithmetic\n";
 		materialise_binary_arith(*reinterpret_cast<const binary_arith_node*>(n));
         break;
 	case node_kinds::binary_atomic:
-        //std::cerr << "Node: binary atomic\n";
 		materialise_binary_atomic(*reinterpret_cast<const binary_atomic_node *>(n));
         break;
 	case node_kinds::ternary_atomic:
-        //std::cerr << "Node: ternary atomic\n";
 		materialise_ternary_atomic(*reinterpret_cast<const ternary_atomic_node *>(n));
         break;
     case node_kinds::internal_call:
-        //std::cerr << "Node: internal call\n";
         materialise_internal_call(*reinterpret_cast<const internal_call_node*>(n));
         break;
 	case node_kinds::read_local:
@@ -297,7 +278,7 @@ void arm64_translation_context::materialise(const ir::node* n) {
         break;
     default:
         throw std::runtime_error("unknown node encountered: " +
-                                 std::to_string(static_cast<size_t>(n->kind())));
+                                 std::string(n->to_string()));
     }
 
     materialised_nodes_.insert(n);
@@ -1345,18 +1326,45 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
                   immediate_operand(n.length(), value_type::u8()));
 }
 
+static inline std::size_t total_width(const std::vector<vreg_operand> &vec) {
+    return std::ceil(vec.size() * vec[0].width());
+}
+
 void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n) {
-    if (n.val().type().is_vector() || n.val().type().element_width() > base_type().element_width()) {
-        throw std::runtime_error("[ARM64-DBT] cannot implement bit inserts for \
-                                  vectors and elements widths exceeding 64-bits");
+    auto bits_vregs = materialise_port(n.bits());
+    auto src_vregs  = materialise_port(n.source_value());
+
+    // TODO: modify output type
+    auto dest_vregs = alloc_vregs(n.val());
+
+    if (dest_vregs.size() != src_vregs.size())
+        throw std::runtime_error("[ARM64-DBT] Source and destination mismatch for bit insert node");
+
+    // Copy source to dest
+    for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
+        builder_.mov(dest_vregs[i], src_vregs[i]);
     }
 
-    auto bits_vreg = materialise_port(n.bits())[0];
-    auto dst_vreg = alloc_vreg(n.val(), bits_vreg.type());
+    auto dest_total_width = total_width(dest_vregs);
+    auto insert_start = n.to() / dest_total_width;
 
-    builder_.bfi(dst_vreg, bits_vreg,
-                 immediate_operand(n.to(), value_type::u8()),
-                 immediate_operand(n.length(), value_type::u8()));
+    std::size_t inserted = 0;
+    std::size_t insert_idx = n.to() % dest_vregs[0].width();
+    std::size_t insert_len = std::min(dest_vregs[0].width() - insert_idx, n.length() - inserted);
+
+    std::size_t bits_idx = 0;
+    std::size_t bits_total_width = total_width(bits_vregs);
+    for (std::size_t i = insert_start; inserted < n.length(); ++i) {
+        auto bits_vreg_width = bits_vregs[bits_idx].width();
+        bits_vregs[bits_idx].type() = dest_vregs[i].type();
+        builder_.bfi(dest_vregs[i], bits_vregs[bits_idx],
+                     immediate_operand(insert_idx, value_type::u8()),
+                     immediate_operand(insert_len, value_type::u8()));
+        insert_idx = 0;
+        inserted += insert_len;
+        insert_len = std::min(n.length() - inserted, bits_vreg_width);
+        bits_idx = inserted % bits_total_width;
+    }
 }
 
 void arm64_translation_context::materialise_internal_call(const internal_call_node &n) {
