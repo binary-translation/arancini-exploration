@@ -208,7 +208,7 @@ void arm64_translation_context::materialise(const ir::node* n) {
     if (materialised_nodes_.count(n))
         return;
 
-    /* std::cout << "Handling " << n->to_string(); */
+    /* std::cerr << "Handling " << n->to_string() << '\n'; */
     switch (n->kind()) {
     case node_kinds::read_reg:
         materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));
@@ -1312,31 +1312,46 @@ void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
     }
 }
 
-void arm64_translation_context::materialise_bit_extract(const bit_extract_node &n) {
-    if (n.val().type().is_vector() || n.val().type().element_width() > base_type().element_width()) {
-        throw std::runtime_error("[ARM64-DBT] cannot implement bit extracts for \
-                                  vectors and elements widths exceeding 64-bits");
-    }
-
-    auto src_vreg = materialise_port(n.source_value())[0];
-    auto dst_vreg = alloc_vreg(n.val(), src_vreg.type());
-
-    builder_.bfm(dst_vreg, src_vreg,
-                  immediate_operand(n.from(), value_type::u8()),
-                  immediate_operand(n.length(), value_type::u8()));
-}
-
 static inline std::size_t total_width(const std::vector<vreg_operand> &vec) {
     return std::ceil(vec.size() * vec[0].width());
+}
+
+void arm64_translation_context::materialise_bit_extract(const bit_extract_node &n) {
+    auto src_vregs = materialise_port(n.source_value());
+    auto dest_vregs = alloc_vregs(n.val());
+
+    // Sanity check
+    if (dest_vregs.size() > src_vregs.size())
+        throw std::runtime_error("[ARM64-DBT] Destination cannot be larger than source for bit extract node");
+
+    auto dest_total_width = total_width(dest_vregs);
+    auto src_total_width = total_width(src_vregs);
+    auto extract_start = n.from() / src_total_width;
+
+    std::size_t extracted = 0;
+    auto extract_idx = n.from() % src_vregs[0].width();
+    auto extract_len = std::min(src_vregs[0].width() - extract_idx, n.length() - extracted);
+
+    std::size_t dest_idx = 0;
+    for (std::size_t i = extract_start; extracted < n.length(); ++i) {
+        dest_vregs[dest_idx].type() = src_vregs[i].type();
+        builder_.bfxil(dest_vregs[dest_idx], src_vregs[i],
+                      immediate_operand(extract_idx, value_type::u8()),
+                      immediate_operand(extract_len, value_type::u8()));
+        extract_idx = 0;
+        extracted += extract_len;
+        extract_len = std::min(n.length() - extracted, src_vregs[i].width());
+        dest_idx = extracted % dest_total_width;
+    }
 }
 
 void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n) {
     auto bits_vregs = materialise_port(n.bits());
     auto src_vregs  = materialise_port(n.source_value());
 
-    // TODO: modify output type
     auto dest_vregs = alloc_vregs(n.val());
 
+    // Sanity check
     if (dest_vregs.size() != src_vregs.size())
         throw std::runtime_error("[ARM64-DBT] Source and destination mismatch for bit insert node");
 
