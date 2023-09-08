@@ -32,7 +32,7 @@ public:
 	void name(const T1 &dst, \
               const T2 &src1, \
               const T3 &src2) { \
-        append(instruction(#name, def(dst), use(src1), use(src2))); \
+        append(instruction(#name, def(keep(dst)), use(src1), use(src2))); \
     }
 
 #define ARITH_OP_SHIFT(name) \
@@ -42,7 +42,7 @@ public:
               const T2 &src1, \
               const T3 &src2, \
               const shift_operand &shift) { \
-        append(instruction(#name, def(dst), use(src1), use(src2), use(shift))); \
+        append(instruction(#name, def(keep(dst)), use(src1), use(src2), use(shift))); \
     }
 
 // TODO: refactor everything this way
