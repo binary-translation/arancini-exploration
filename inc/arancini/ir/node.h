@@ -88,6 +88,64 @@ public:
 
 	virtual ~node() = default;
 
+    const char *to_string() const {
+        switch (kind()) {
+        case node_kinds::label:
+            return "label node";
+        case node_kinds::read_pc:
+            return "read PC node";
+        case node_kinds::write_pc:
+            return "write PC node";
+        case node_kinds::constant:
+            return "constant node";
+        case node_kinds::unary_arith:
+            return "unary arithmetic node";
+        case node_kinds::binary_arith:
+            return "binary arithmetic node";
+        case node_kinds::ternary_arith:
+            return "ternary arithmetic node";
+        case node_kinds::unary_atomic:
+            return "unary atomic node";
+        case node_kinds::binary_atomic:
+            return "binary atomic node";
+        case node_kinds::ternary_atomic:
+            return "ternary atomic node";
+        case node_kinds::read_reg:
+            return "read register node";
+        case node_kinds::read_mem:
+            return "read memory node";
+        case node_kinds::write_reg:
+            return "write memory node";
+        case node_kinds::write_mem:
+            return "write memory node";
+        case node_kinds::cast:
+            return "cast node";
+        case node_kinds::csel:
+            return "conditional select node";
+        case node_kinds::bit_shift:
+            return "bit shift node";
+        case node_kinds::br:
+            return "branch node";
+        case node_kinds::cond_br:
+            return "conditional branch node";
+        case node_kinds::bit_extract:
+            return "bit extract node";
+        case node_kinds::bit_insert:
+            return "bit insert node";
+        case node_kinds::vector_extract:
+            return "vector extract node";
+        case node_kinds::vector_insert:
+            return "vector insert node";
+        case node_kinds::read_local:
+            return "read local node";
+        case node_kinds::write_local:
+            return "write local node";
+        case node_kinds::internal_call:
+            return "internal call node";
+        default:
+            return "Unknown node";
+        }
+    }
 private:
 	node_kinds kind_;
 #ifndef NDEBUG
