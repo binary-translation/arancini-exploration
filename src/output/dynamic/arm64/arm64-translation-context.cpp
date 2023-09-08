@@ -261,6 +261,9 @@ void arm64_translation_context::materialise(const ir::node* n) {
 	case node_kinds::binary_arith:
 		materialise_binary_arith(*reinterpret_cast<const binary_arith_node*>(n));
         break;
+    case node_kinds::ternary_arith:
+		materialise_ternary_arith(*reinterpret_cast<const ternary_arith_node*>(n));
+        break;
 	case node_kinds::binary_atomic:
 		materialise_binary_atomic(*reinterpret_cast<const binary_atomic_node *>(n));
         break;
@@ -730,6 +733,59 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 
     if (n.op() != binary_arith_op::sub)
         builder_.setc(flag_map[(unsigned long)reg_offsets::CF]);
+}
+
+void arm64_translation_context::materialise_ternary_arith(const ternary_arith_node &n) {
+    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg(n.zero(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg(n.negative(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg(n.overflow(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg(n.carry(), value_type::u1());
+
+	auto dest_vregs = alloc_vregs(n.val());
+    auto lhs_vregs = materialise_port(n.lhs());
+    auto rhs_vregs = materialise_port(n.rhs());
+    auto top_vregs = materialise_port(n.top());
+
+    if (dest_vregs.size() != lhs_vregs.size() ||
+        dest_vregs.size() != rhs_vregs.size() ||
+        dest_vregs.size() != top_vregs.size()) {
+        throw std::runtime_error("[ARM64-DBT] Ternary arithmetic node mismatch between types");
+    }
+
+    const char* mod = nullptr;
+    switch (n.val().type().element_width()) {
+    case 8:
+        if (n.val().type().type_class() == value_type_class::signed_integer)
+            mod = "SXTB";
+        else
+            mod = "UXTB";
+        break;
+    case 16:
+        if (n.val().type().type_class() == value_type_class::signed_integer)
+            mod = "SXTB";
+        else
+            mod = "UXTB";
+        break;
+    }
+
+    auto pstate = alloc_vreg(preg_operand(preg_operand::nzcv).type());
+    for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
+        // Set carry flag
+        builder_.msr(pstate, preg_operand(preg_operand::nzcv));
+        builder_.lsl(top_vregs[i], top_vregs[i], immediate_operand(0x3, value_type::u8()));
+        builder_.orr_(pstate, pstate, top_vregs[i]);
+        builder_.msr(preg_operand(preg_operand::nzcv), pstate);
+
+        switch (n.op()) {
+        case ternary_arith_op::adc:
+            builder_.adcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i], shift_operand(mod, 0, value_type::u16()));
+            break;
+        case ternary_arith_op::sbb:
+            builder_.sbcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i], shift_operand(mod, 0, value_type::u16()));
+        default:
+            throw std::runtime_error("unsupported ternary arithmetic operation " + std::to_string((int)n.op()));
+        }
+    }
 }
 
 void arm64_translation_context::materialise_binary_atomic(const binary_atomic_node &n) {
