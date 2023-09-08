@@ -249,7 +249,7 @@ public:
              const T2 &src1,
              const immediate_operand &immr,
              const immediate_operand &imms) {
-        append(instruction("bfi", def(dst), use(src1), use(immr), use(imms)));
+        append(instruction("bfi", usedef(keep(dst)), use(src1), use(immr), use(imms)));
     }
 
 
