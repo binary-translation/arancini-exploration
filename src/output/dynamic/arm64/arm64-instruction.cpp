@@ -165,14 +165,13 @@ void operand::dump(std::ostream &os) const {
 		else
 			os << to_string(memory().preg_base());
 
-
         if (!memory().post_index())
-            os << ", #0x" << std::hex << memory().offset() << ']';
+            os << ", #0x" << std::hex << memory().offset().value() << ']';
         else if (memory().pre_index())
             os << '!';
 
         if (memory().post_index())
-            os << "], #0x" << std::hex << memory().offset();
+            os << "], #0x" << std::hex << memory().offset().value();
 
 
         // TODO: register indirect with index
