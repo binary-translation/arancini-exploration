@@ -41,6 +41,11 @@ private:
 
 static assembler asm_;
 
+static ir::value_type u12() {
+    static ir::value_type type(ir::value_type_class::unsigned_integer, 12, 1);
+    return type;
+}
+
 class vreg_operand {
 public:
     vreg_operand() = default;
@@ -172,71 +177,6 @@ private:
 
 std::string to_string(const preg_operand&);
 
-class memory_operand {
-public:
-    memory_operand() = default;
-
-    template<typename T>
-	memory_operand(const T &base,
-                   int offset = 0,
-                   bool pre_index = false,
-                   bool post_index = false)
-        : reg_base_(base)
-		, offset_(offset)
-        , pre_index_(pre_index)
-        , post_index_(post_index)
-	{
-        if (pre_index == post_index && pre_index)
-            throw std::runtime_error("Both pre- and post-index passed to ARM DBT");
-    }
-
-    memory_operand(const memory_operand& m)
-        : reg_base_(m.reg_base_)
-        , offset_(m.offset_)
-        , pre_index_(m.pre_index_)
-        , post_index_(m.post_index_)
-    {
-    }
-
-    memory_operand& operator=(const memory_operand& m) {
-        reg_base_ = m.reg_base_;
-        offset_ = m.offset_;
-        pre_index_ = m.pre_index_;
-        post_index_ = m.post_index_;
-
-        return *this;
-    }
-
-    template <typename T>
-    void set_base_reg(const T &op) { reg_base_ = op; }
-
-    bool is_virtual() const { return reg_base_.index() == 0; }
-    bool is_physical() const { return !is_virtual(); }
-
-    vreg_operand &vreg_base() { return std::get<vreg_operand>(reg_base_); }
-    const vreg_operand &vreg_base() const { return std::get<vreg_operand>(reg_base_); }
-
-    preg_operand &preg_base() { return std::get<preg_operand>(reg_base_); }
-    const preg_operand &preg_base() const { return std::get<preg_operand>(reg_base_); }
-
-    size_t base_width() const {
-        if (is_virtual())
-            return std::get<vreg_operand>(reg_base_).width();
-        return std::get<preg_operand>(reg_base_).width();
-    }
-
-    int offset() const { return offset_; }
-    bool pre_index() const { return pre_index_; }
-    bool post_index() const { return post_index_; }
-private:
-    std::variant<vreg_operand, preg_operand> reg_base_;
-
-	int offset_ = 0;
-    bool pre_index_ = false;
-    bool post_index_ = false;
-
-};
-
 // TODO: how are immediates represented in arm
 // TODO: fix this
 class immediate_operand {
@@ -317,6 +257,71 @@ public:
     const std::string& condition() const { return cond_; }
 private:
     std::string cond_;
+};
+
+class memory_operand {
+public:
+    memory_operand() = default;
+
+    template<typename T>
+	memory_operand(const T &base,
+                   immediate_operand offset = immediate_operand(0, u12()),
+                   bool pre_index = false,
+                   bool post_index = false)
+        : reg_base_(base)
+		, offset_(offset)
+        , pre_index_(pre_index)
+        , post_index_(post_index)
+	{
+        if (pre_index == post_index && pre_index)
+            throw std::runtime_error("Both pre- and post-index passed to ARM DBT");
+    }
+
+    memory_operand(const memory_operand& m)
+        : reg_base_(m.reg_base_)
+        , offset_(m.offset_)
+        , pre_index_(m.pre_index_)
+        , post_index_(m.post_index_)
+    {
+    }
+
+    memory_operand& operator=(const memory_operand& m) {
+        reg_base_ = m.reg_base_;
+        offset_ = m.offset_;
+        pre_index_ = m.pre_index_;
+        post_index_ = m.post_index_;
+
+        return *this;
+    }
+
+    template <typename T>
+    void set_base_reg(const T &op) { reg_base_ = op; }
+
+    bool is_virtual() const { return reg_base_.index() == 0; }
+    bool is_physical() const { return !is_virtual(); }
+
+    vreg_operand &vreg_base() { return std::get<vreg_operand>(reg_base_); }
+    const vreg_operand &vreg_base() const { return std::get<vreg_operand>(reg_base_); }
+
+    preg_operand &preg_base() { return std::get<preg_operand>(reg_base_); }
+    const preg_operand &preg_base() const { return std::get<preg_operand>(reg_base_); }
+
+    size_t base_width() const {
+        if (is_virtual())
+            return std::get<vreg_operand>(reg_base_).width();
+        return std::get<preg_operand>(reg_base_).width();
+    }
+
+    immediate_operand offset() const { return offset_; }
+    bool pre_index() const { return pre_index_; }
+    bool post_index() const { return post_index_; }
+private:
+    std::variant<vreg_operand, preg_operand> reg_base_;
+
+	immediate_operand offset_ = immediate_operand(0, u12());
+    bool pre_index_ = false;
+    bool post_index_ = false;
+
 };
 
 enum class operand_type : uint8_t { invalid, preg, vreg, mem, imm, shift, label, cond};
