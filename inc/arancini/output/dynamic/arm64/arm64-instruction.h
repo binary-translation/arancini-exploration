@@ -215,11 +215,10 @@ private:
 
 class shift_operand : public immediate_operand {
 public:
-    // TODO: check fit in 48-bit shift specifier
     shift_operand() = default;
 
-    shift_operand(const std::string &modifier, size_t amount = 0, value_type type = value_type::u8())
-        : immediate_operand(amount, type)
+    shift_operand(const std::string &modifier, immediate_operand imm)
+        : immediate_operand(imm)
     {
         modifier_ = modifier;
     }

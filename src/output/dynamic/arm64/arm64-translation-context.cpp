@@ -120,11 +120,11 @@ vreg_operand arm64_translation_context::mov_immediate(uint64_t imm, value_type t
     if (actual_size <= 64) {
         builder_.movz(reg,
                       immediate_operand(imm & 0xFFFF, value_type::u16()),
-                      shift_operand("LSL", 0));
+                      shift_operand("LSL", immediate_operand(0, value_type::u1())));
         for (size_t i = 1; i < move_count; ++i) {
             builder_.movk(reg,
                           immediate_operand(imm >> (i * 16) & 0xFFFF, value_type::u16()),
-                          shift_operand("LSL", (i * 16), value_type::u64()));
+                          shift_operand("LSL", immediate_operand(i * 16, value_type::u16())));
         }
 
         return reg;
@@ -487,7 +487,7 @@ void arm64_translation_context::materialise_constant(const constant_node &n) {
 
     if (n.val().type().is_floating_point()) {
         auto value = n.const_val_f();
-        builder_.mov(dst_vreg, mov_immediate(value, n.val().type()));
+        builder_.mov(dst_vreg, mov_immediate(reinterpret_cast<uint64_t&>(value), n.val().type()));
     } else {
         auto value = n.const_val_i();
         builder_.mov(dst_vreg, mov_immediate(value, n.val().type()));
@@ -559,7 +559,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         if (mod == nullptr)
             builder_.adds(dest_vreg, lhs_vreg, rhs_vreg);
         else
-            builder_.adds(dest_vreg, lhs_vreg, rhs_vreg, shift_operand(mod, 0, value_type::u16()));
+            builder_.adds(dest_vreg, lhs_vreg, rhs_vreg, shift_operand(mod, immediate_operand(0, value_type::u16())));
         for (size_t i = 1; i < dest_reg_count; ++i)
             builder_.adcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
         break;
@@ -567,7 +567,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         if (mod == nullptr)
             builder_.subs(dest_vreg, lhs_vreg, rhs_vreg);
         else
-            builder_.subs(dest_vreg, lhs_vreg, rhs_vreg, shift_operand(mod, 0, value_type::u16()));
+            builder_.subs(dest_vreg, lhs_vreg, rhs_vreg, shift_operand(mod, immediate_operand(0, value_type::u16())));
         for (size_t i = 1; i < dest_reg_count; ++i)
             builder_.sbcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
         builder_.setcc(flag_map[(unsigned long)reg_offsets::CF]);
@@ -728,13 +728,13 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
         switch (n.op()) {
         case ternary_arith_op::adc:
             if (mod)
-                builder_.adcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i], shift_operand(mod, 0, value_type::u16()));
+                builder_.adcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i], shift_operand(mod, {0, value_type::u16()}));
             else
                 builder_.adcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
             break;
         case ternary_arith_op::sbb:
             if (mod)
-                builder_.sbcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i], shift_operand(mod, 0, value_type::u16()));
+                builder_.sbcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i], shift_operand(mod, {0, value_type::u16()}));
             else
                 builder_.sbcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
             break;
