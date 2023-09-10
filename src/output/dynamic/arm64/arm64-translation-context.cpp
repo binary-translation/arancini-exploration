@@ -38,11 +38,6 @@ static std::unordered_map<unsigned long, vreg_operand> flag_map {
 	{ (unsigned long)reg_offsets::SF, {} },
 };
 
-value_type u12() {
-    static value_type type(value_type_class::unsigned_integer, 12, 1);
-    return type;
-}
-
 value_type addr_type() {
     return value_type::u64();
 }
@@ -77,10 +72,10 @@ arm64_translation_context::guestreg_memory_operand(int regoff, bool pre, bool po
         auto base_vreg = alloc_vreg(addr_type());
         builder_.mov(base_vreg, immediate_operand(regoff, value_type::u32()));
         builder_.add(base_vreg, preg, base_vreg);
-        mem = memory_operand(base_vreg, 0, pre, post);
+        mem = memory_operand(base_vreg, immediate_operand(0, u12()), pre, post);
     } else {
         auto preg = context_block_reg;
-        mem = memory_operand(preg, regoff, pre, post);
+        mem = memory_operand(preg, immediate_operand(regoff, u12()), pre, post);
     }
 
 	return mem;
@@ -109,7 +104,7 @@ vreg_operand arm64_translation_context::add_membase(const vreg_operand &addr) {
 }
 
 vreg_operand arm64_translation_context::mov_immediate(uint64_t imm, value_type type) {
-    auto actual_size = 64 - __builtin_clzll(imm|1);
+    auto actual_size = base_type().element_width() - __builtin_clzll(imm|1);
     size_t move_count = static_cast<size_t>(std::ceil(actual_size / 16.0));
 
     // TODO: it seems like the frontend generates very large constants
@@ -319,7 +314,6 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
                 builder_.ldr(dest_vregs[i], addr);
                 break;
             default:
-                // This is by definition; registers >= 64-bits are always vector registers
                 throw std::runtime_error("[ARM64-DBT] cannot load individual register values larger than 64-bits");
         }
     }
@@ -352,7 +346,6 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
 
         size_t width = src_vregs[i].type().width();
         auto addr = guestreg_memory_operand(n.regoff() + i * width);
-
         switch (width) {
             case 1:
                 builder_.strb(src_vregs[i], addr);
@@ -391,7 +384,7 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
         size_t width = dest_vregs[i].type().width();
 
-        memory_operand mem_op(addr_vreg, i * width, 0, 0);
+        memory_operand mem_op(addr_vreg, immediate_operand(i * width, u12()));
         switch (width) {
             case 1:
                 builder_.ldrb(dest_vregs[i], mem_op);
@@ -410,8 +403,6 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
                 // This is by definition; registers >= 64-bits are always vector registers
                 throw std::runtime_error("[ARM64-DBT] cannot load individual memory values larger than 64-bits");
         }
-
-        builder_.add(addr_vreg, addr_vreg, immediate_operand(width, u12()));
     }
 }
 
@@ -435,7 +426,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
     for (std::size_t i = 0; i < src_vregs.size(); ++i) {
         size_t width = src_vregs[i].type().width();
 
-        memory_operand mem_op(addr_vreg, i * width, 0, 0);
+        memory_operand mem_op(addr_vreg, immediate_operand(i * width, u12()));
         switch (width) {
             case 1:
                 builder_.strb(src_vregs[i], mem_op);
