@@ -204,6 +204,9 @@ public:
 
     size_t width() const { return type_.element_width(); }
     uintmax_t value() const { return value_; }
+
+    value_type &type() { return type_; }
+    const value_type &type() const { return type_; }
 private:
     uintmax_t value_;
     value_type type_;
