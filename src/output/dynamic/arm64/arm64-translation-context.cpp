@@ -412,7 +412,6 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
         throw std::runtime_error("[ARM64-DBT] does not support multiple addresses in write memory node");
 
     auto addr_vreg = addr_vregs[0];
-
     auto type = n.val().type();
 
     // Sanity check; cannot by definition load a register larger than 64-bit
@@ -449,8 +448,8 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
 }
 
 void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
-	auto dst_vreg = alloc_vreg(n.val());
-    builder_.mov(dst_vreg, mov_immediate(this_pc_, value_type::u64()));
+	auto dest_vreg = alloc_vreg(n.val());
+    builder_.mov(dest_vreg, mov_immediate(this_pc_, value_type::u64()));
 }
 
 void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
