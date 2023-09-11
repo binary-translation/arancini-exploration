@@ -1,23 +1,28 @@
 #include "arancini/ir/node.h"
+#include "arancini/ir/opt.h"
 #include "arancini/ir/port.h"
 #include "arancini/ir/visitor.h"
 #include "llvm/Support/raw_ostream.h"
+#include <algorithm>
 #include <arancini/ir/chunk.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine-impl.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
 #include <cstdint>
+#include <initializer_list>
 #include <iostream>
 #include <llvm/ADT/FloatingPointMode.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
+#include <llvm/IR/Value.h>
 #include <llvm/Support/TimeProfiler.h>
 #include <map>
 #include <memory>
 #include <ostream>
 #include <sstream>
 #include <string>
+#include <utility>
 
 using namespace arancini::output::o_static::llvm;
 using namespace arancini::ir;
@@ -41,6 +46,12 @@ llvm_static_output_engine_impl::llvm_static_output_engine_impl(const llvm_static
 	, module_(std::make_unique<Module>("generated", *llvm_context_))
 	, in_br(false)
 {
+	static constexpr unsigned long counter_base_  = __COUNTER__;
+	offsets_to_idx_ = {
+	#define DEFREG(ctype, ltype, name) {reg_offsets::name, __COUNTER__ - counter_base_ -1},
+	#include <arancini/input/x86/reg.def>
+	#undef DEFREG
+    };
 }
 
 void llvm_static_output_engine_impl::generate()
@@ -132,6 +143,45 @@ void llvm_static_output_engine_impl::create_main_function(Function *loop_fn)
 	builder.CreateRet(ConstantInt::get(types.i32, 1));
 }
 
+void llvm_static_output_engine_impl::init_registers(IRBuilder<> *builder) {
+
+	reg_off_to_alloca_ = {
+		#define DEFREG(ctype, ltype, name) {reg_offsets::name, builder->CreateAlloca(types.ltype, nullptr, "reg_"#name)},
+		#include <arancini/input/x86/reg.def>
+		#undef DEFREG
+	};	
+}
+
+void llvm_static_output_engine_impl::restore_registers(IRBuilder<> *builder, ::llvm::Value *ctx) {
+	
+	#define DEFREG(ctype, ltype, name) auto reg_##name = builder->CreateGEP(types.cpu_state, ctx, \
+									   { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, offsets_to_idx_[reg_offsets::name]) }, \
+									   "restore_"#name);
+	#include <arancini/input/x86/reg.def>
+	#undef DEFREG
+	#define DEFREG(ctype, ltype, name) \
+		if (auto src_reg_i = ::llvm::dyn_cast<Instruction>(reg_##name)) { \
+			src_reg_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, reg_file_alias_scope_));} \
+		builder->CreateStore(builder->CreateLoad(types.ltype, reg_##name), reg_off_to_alloca_.at(reg_offsets::name));
+	#include <arancini/input/x86/reg.def>
+	#undef DEFREG
+}
+
+void llvm_static_output_engine_impl::save_registers(IRBuilder<> *builder, ::llvm::Value *ctx) {
+	
+	#define DEFREG(ctype, ltype, name) auto reg_##name = builder->CreateGEP(types.cpu_state, ctx, \
+									   { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, offsets_to_idx_[reg_offsets::name]) }, \
+									   "save_"#name);
+	#include <arancini/input/x86/reg.def>
+	#undef DEFREG
+	#define DEFREG(ctype, ltype, name) \
+		if (auto src_reg_i = ::llvm::dyn_cast<Instruction>(reg_##name)) { \
+			src_reg_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, reg_file_alias_scope_));} \
+		builder->CreateStore(builder->CreateLoad(types.ltype, reg_off_to_alloca_.at(reg_offsets::name)), reg_##name);
+	#include <arancini/input/x86/reg.def>
+	#undef DEFREG
+}
+
 void llvm_static_output_engine_impl::build()
 {
 	initialise_types();
@@ -170,12 +220,14 @@ void llvm_static_output_engine_impl::build()
 	builder.SetInsertPoint(entry_block);
 
 	// TODO: Input Arch Specific
-	auto program_counter = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 0) }, "pcptr");
+	//auto program_counter = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 0) }, "pcptr");
+	init_registers(&builder);
+	restore_registers(&builder, state_arg);
 	builder.CreateBr(loop_block);
 
 	builder.SetInsertPoint(loop_block);
 
-	auto program_counter_val = builder.CreateLoad(types.i64, program_counter, "pc");
+	auto program_counter_val = builder.CreateLoad(types.i64, reg_off_to_alloca_.at(reg_offsets::PC), "pc");
 	auto pcswitch = builder.CreateSwitch(program_counter_val, switch_to_dbt);
 
 	lower_chunks(pcswitch, loop_block);
@@ -183,7 +235,9 @@ void llvm_static_output_engine_impl::build()
 	builder.SetInsertPoint(switch_to_dbt);
 
 	auto switch_callee = module_->getOrInsertFunction("invoke_code", types.dbt_invoke);
+	save_registers(&builder, state_arg);
 	auto invoke_result = builder.CreateCall(switch_callee, { state_arg });
+	restore_registers(&builder, state_arg);
 	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 0)), loop_block, check_for_int_call_block);
 
 	builder.SetInsertPoint(check_for_int_call_block);
@@ -191,7 +245,9 @@ void llvm_static_output_engine_impl::build()
 
 	builder.SetInsertPoint(internal_call_block);
 	auto internal_call_callee = module_->getOrInsertFunction("execute_internal_call", types.internal_call_handler);
+	save_registers(&builder, state_arg);
 	auto internal_call_result = builder.CreateCall(internal_call_callee, { state_arg, invoke_result });
+	restore_registers(&builder, state_arg);
 	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, internal_call_result, ConstantInt::get(types.i32, 0)), loop_block, exit_block);
 
 
@@ -322,6 +378,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 	case node_kinds::read_reg: {
 		auto rrn = (read_reg_node *)n;
+		/*
 		auto src_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, rrn->regidx()) },
 			reg_name(rrn->regidx()));
 
@@ -329,6 +386,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			src_reg_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, reg_file_alias_scope_));
 		}
 
+		*/
 		::llvm::Type *ty;
 		Align align = Align(8);
 		switch (rrn->val().type().width()) {
@@ -364,7 +422,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		default:
 			throw std::runtime_error("unsupported register width " + std::to_string(rrn->val().type().width()) + " in load");
 		}
-		return builder.CreateAlignedLoad(ty, src_reg, align);
+		return builder.CreateAlignedLoad(ty, reg_off_to_alloca_.at((reg_offsets)rrn->regoff()), align);
 	}
 
 	case node_kinds::binary_arith: {
@@ -972,6 +1030,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 		// std::cerr << "wreg name=" << wrn->regname() << std::endl;
 
+		/*
 		auto dest_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, wrn->regidx()) },
 			reg_name(wrn->regidx()));
 
@@ -980,17 +1039,18 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		if (auto dest_reg_i = ::llvm::dyn_cast<Instruction>(dest_reg)) {
 			dest_reg_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, reg_file_alias_scope_));
 		}
-
+		*/
 		auto val = lower_port(builder, state_arg, pkt, wrn->value());
+		auto reg = reg_off_to_alloca_.at((reg_offsets)wrn->regoff());
 
 		//Bitcast the resulting value to the type of the register
 		//since the operations can happen on different type after
 		//other casting operations
 		if(val->getType()->isVectorTy())
 			val = builder.CreateBitCast(val, IntegerType::get(*llvm_context_, val->getType()->getPrimitiveSizeInBits()));
-		auto reg_val = builder.CreateZExtOrBitCast(val, reg_type);
+		auto reg_val = builder.CreateZExtOrBitCast(val, ((::llvm::AllocaInst *)reg)->getAllocatedType());
 
-		return builder.CreateStore(reg_val, dest_reg);
+		return builder.CreateStore(reg_val, reg);
 	}
 
 	case node_kinds::write_mem: {
@@ -1013,10 +1073,11 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 	case node_kinds::write_pc: {
 		auto wpn = (write_pc_node *)a;
 
-		auto dest_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 0) }, "pcptr");
+		//auto dest_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 0) }, "pcptr");
 
 		auto val = lower_port(builder, state_arg, pkt, wpn->value());
 
+		auto dest_reg = reg_off_to_alloca_.at(reg_offsets::PC);
 		return builder.CreateStore(val, dest_reg);
 	}
 
@@ -1139,7 +1200,10 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
         auto icn = (internal_call_node *)a;
         auto switch_callee = module_->getOrInsertFunction("execute_internal_call", types.internal_call_handler);
         if (icn->fn().name() == "handle_syscall") {
-                return builder.CreateCall(switch_callee, { state_arg, ConstantInt::get(types.i32, 1) });
+				save_registers(&builder, state_arg);
+                auto ret = builder.CreateCall(switch_callee, { state_arg, ConstantInt::get(types.i32, 1) });
+				restore_registers(&builder, state_arg);
+				return ret;
         }
         throw std::runtime_error("unsupported internal call type" + icn->fn().name());
 	}
