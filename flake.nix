@@ -32,80 +32,83 @@
 	flake-utils.lib.eachSystem ["x86_64-linux" "aarch64-linux" "riscv64-linux" ] (system:
 	let
 		my-mbuild = 
-			with pkgs;
-			python3Packages.buildPythonPackage rec {
+			native_pkgs.python3Packages.buildPythonPackage {
 				pname = "mbuild";
 				version = "2022.07.28";
 
 				src = mbuild-src;
 				patches = [ ./mbuild-riscv.patch ];
 			};
-		patched-xed = 
-			with pkgs;
+		patched-xed = build_pkgs.callPackage(
+        {stdenv, lib}:
 			stdenv.mkDerivation {
 				pname = "xed";
 				version = "2022.08.11";
 
 				src = xed-src;
-				nativeBuildInputs = [ my-mbuild gcc ];
+				nativeBuildInputs = [ my-mbuild ];
 
 				buildPhase = ''
 				    patchShebangs mfile.py
 
 					# this will build, test and install
-				    ./mfile.py --prefix $out
-				'';
+				    ./mfile.py --prefix $out'' + lib.optionalString (system == "riscv64-linux") " --toolchain riscv64-unknown-linux-gnu- --host-cpu riscv64";
 
 				dontInstall = true; # already installed during buildPhase
-			};
-		fadec =
-			with pkgs;
+			}){};
+		fadec = build_pkgs.callPackage(
+           {stdenv, meson, ninja}:
 			stdenv.mkDerivation {
 				name = "fadec";
 				src = fadec-src;
 				nativeBuildInputs = [ meson ninja ];
-			};
-		all_pkgs =
-				import nixpkgs { inherit system; };
-		pkgs =
+			}){};
+		native_pkgs =
+            if system == "riscv64-linux" then
+                import nixpkgs { system = "x86_64-linux"; }
+            else
+                import nixpkgs { inherit system; };
+		build_pkgs =
 			if system == "riscv64-linux" then
-				(import nixpkgs { system = "x86_64-linux"; crossSystem.config = "riscv64-unknown-linux-gnu"; }).pkgsCross.riscv64
+				import nixpkgs { system = "x86_64-linux"; crossSystem.config = "riscv64-unknown-linux-gnu"; }
 			else
-				all_pkgs;
+				native_pkgs;
 	in
 	{
-		defaultPackage =
-			with pkgs;
+		defaultPackage = build_pkgs.callPackage(
+		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang_14, zlib, boost, libffi, libxml2, llvmPackages_14, lib}:
 			stdenv.mkDerivation {
 				name = "arancini";
 				pname = "txlat";
 				src = self;
 				nativeBuildInputs = [
+					#graphviz
+					#gdb
+					python3
+					#valgrind
+					git
+					cmake
+					pkg-config
+					clang_14
+				];
+				buildInputs = [
 					zlib
 					boost
 					patched-xed
 					libffi
-					graphviz
-					gdb
-					libxml2
-					python3
 					fadec
-				];
-				buildInputs = [
-					cmake
-					pkg-config
+					libxml2
 					llvmPackages_14.llvm.dev
 					llvmPackages_14.bintools
 					llvmPackages_14.lld
-					clang_14
-					valgrind
-					git
+
 				];
 				configurePhase = ''
 					export FLAKE_BUILD=1
 					cmakeConfigurePhase
 				'';
-				cmakeFlags = [ "-DBUILD_TESTS=1" ];
-			};
+				cmakeFlags = [ "-DBUILD_TESTS=1" ] ++ lib.optionals (system == "riscv64-linux") ["--toolchain riscv64-toolchain-nix.cmake"];
+			}
+		) {};
 	});
 }
