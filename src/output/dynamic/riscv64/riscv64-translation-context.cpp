@@ -106,6 +106,7 @@ void riscv64_translation_context::begin_block()
 	if (insert_ebreak) {
 		assembler_.ebreak();
 	}
+	reg_map_.fill(0);
 
 	add_marker(1);
 }
@@ -783,12 +784,32 @@ TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_
 	if (!valid) {
 		return out_reg;
 	}
-	if (is_flag(value) || is_gpr(value)) { // Flags or GPR
-		auto load_instr = load_instructions.at(value.type().element_width());
-		(assembler_.*load_instr)(out_reg, { FP, static_cast<intptr_t>(n.regoff()) });
-		if (!is_flag(value)) {
+	if (is_gpr(value)) {
+		if (n.regoff() > static_cast<unsigned long>(reg_offsets::R15)) { // Not GPR
+			auto load_instr = load_instructions.at(value.type().element_width());
+			(assembler_.*load_instr)(out_reg, { FP, static_cast<intptr_t>(n.regoff()) });
 			out_reg.set_actual_width();
+			out_reg.set_type(value_type::u64());
+		} else {
+			unsigned int &i = reg_map_[n.regidx() - 1]; // FIXME hardcoded idx
+			if (!i) {
+				Register reg = next_register();
+				i = reg.encoding();
+				assembler_.ld(reg, { FP, static_cast<intptr_t>(n.regoff()) });
+			}
+			if (is_int(value, 32)) {
+				assembler_.sextw(out_reg, Register { i });
+				out_reg.set_actual_width();
+				out_reg.set_type(value_type::u64());
+			} else {
+				assembler_.mv(out_reg, Register { i });
+			}
 		}
+
+		return out_reg;
+	}
+	if (is_flag(value)) {
+		assembler_.lb(out_reg, { FP, static_cast<intptr_t>(n.regoff()) });
 		out_reg.set_type(value_type::u64());
 		return out_reg;
 	} else if (is_i128(value) || is_int(value, 512)) {

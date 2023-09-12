@@ -5,6 +5,7 @@
 #include <arancini/output/dynamic/riscv64/register.h>
 #include <arancini/output/dynamic/translation-context.h>
 
+#include <array>
 #include <forward_list>
 #include <memory>
 #include <optional>
@@ -40,6 +41,7 @@ private:
 	std::unordered_map<const ir::port *, TypedRegister> reg_for_port_;
 	std::forward_list<TypedRegister> temporaries;
 	std::unordered_map<const ir::local_var *, std::reference_wrapper<TypedRegister>> locals_;
+	std::array<uint32_t, 16> reg_map_ {};
 
 	Register next_register();
 	std::pair<TypedRegister &, bool> allocate_register(
