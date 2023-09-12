@@ -33,6 +33,16 @@ static std::unordered_map<unsigned long, Register> flag_map {
 	{ (unsigned long)reg_offsets::SF, SF },
 };
 
+Register riscv64_translation_context::next_register()
+{
+	constexpr static Register registers[] { S1, A0, A1, A2, A3, A4, A5, T0, T1, T2, A6, A7, S2, S3, S4, S5, S6, S7, T3, T4, T5};
+
+	if (reg_allocator_index_ >= std::size(registers)) {
+		throw std::runtime_error("RISC-V DBT ran out of registers for packet at " + std::to_string(current_address_));
+	}
+	return registers[reg_allocator_index_++];
+}
+
 /**
  * Used to get the register for the given port.
  * Will return the previously allocated TypedRegister or a new one with type set accordingly to the given port.
@@ -46,14 +56,8 @@ std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(
 	if (p && reg_for_port_.count(p)) {
 		return { reg_for_port_.at(p), false };
 	}
-	constexpr static Register registers[] { S1, A0, A1, A2, A3, A4, A5, T0, T1, T2, A6, A7, S2, S3, S4, S5, S6, S7, T3, T4, T5 };
-
-	if (reg_allocator_index_ >= std::size(registers)) {
-		throw std::runtime_error("RISC-V DBT ran out of registers for packet");
-	}
-
 	if (!p) {
-		Register r1 = reg1 ? *reg1 : registers[reg_allocator_index_++];
+		Register r1 = reg1 ? *reg1 : next_register();
 		temporaries.emplace_front(r1);
 		return { temporaries.front(), true };
 	}
@@ -61,8 +65,8 @@ std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(
 	switch (p->type().width()) {
 	case 512: // FIXME proper
 	case 128: {
-		Register r1 = reg1 ? *reg1 : registers[reg_allocator_index_++];
-		Register r2 = reg2 ? *reg2 : registers[reg_allocator_index_++];
+		Register r1 = reg1 ? *reg1 : next_register();
+		Register r2 = reg2 ? *reg2 : next_register();
 		auto [a, b] = reg_for_port_.emplace(std::piecewise_construct, std::forward_as_tuple(p), std::forward_as_tuple(r1, r2));
 		TypedRegister &tr = a->second;
 		tr.set_type(p->type());
@@ -73,7 +77,7 @@ std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(
 	case 16:
 	case 8:
 	case 1: {
-		Register r1 = reg1 ? *reg1 : registers[reg_allocator_index_++];
+		Register r1 = reg1 ? *reg1 : next_register();
 		auto [a, b] = reg_for_port_.emplace(p, r1);
 		TypedRegister &tr = a->second;
 		tr.set_type(p->type());

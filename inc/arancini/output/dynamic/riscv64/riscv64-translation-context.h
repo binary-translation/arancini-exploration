@@ -41,6 +41,7 @@ private:
 	std::forward_list<TypedRegister> temporaries;
 	std::unordered_map<const ir::local_var *, std::reference_wrapper<TypedRegister>> locals_;
 
+	Register next_register();
 	std::pair<TypedRegister &, bool> allocate_register(
 		const ir::port *p = nullptr, std::optional<Register> reg1 = std::nullopt, std::optional<Register> reg2 = std::nullopt);
 
