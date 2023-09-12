@@ -13,9 +13,14 @@
 #include <llvm/ADT/FloatingPointMode.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include "llvm/Transforms/Utils/Mem2Reg.h"
+#include <llvm/IR/PassManager.h>
 #include <llvm/IR/Value.h>
+#include <llvm/Passes/PassBuilder.h>
 #include <llvm/Support/TimeProfiler.h>
 #include <map>
 #include <memory>
@@ -180,6 +185,36 @@ void llvm_static_output_engine_impl::save_registers(IRBuilder<> *builder, ::llvm
 		builder->CreateStore(builder->CreateLoad(types.ltype, reg_off_to_alloca_.at(reg_offsets::name)), reg_##name);
 	#include <arancini/input/x86/reg.def>
 	#undef DEFREG
+}
+
+void llvm_static_output_engine_impl::save_base_registers(IRBuilder<> *builder, ::llvm::Value *ctx) {
+	
+	for (auto reg : reg_off_to_alloca_) {
+		if ((int)reg.first >= (int)reg_offsets::ZMM0)
+			break;
+		auto reg_ptr = builder->CreateGEP(types.cpu_state, ctx, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, offsets_to_idx_[reg.first]) });
+
+		if (auto src_reg_i = ::llvm::dyn_cast<Instruction>(reg_ptr)) {
+			src_reg_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, reg_file_alias_scope_));
+		}
+		auto ty = ((::llvm::GetElementPtrInst *)reg_ptr)->getResultElementType();
+		builder->CreateStore(builder->CreateLoad(ty, reg_off_to_alloca_.at(reg.first)), reg_ptr);
+	}
+}
+
+void llvm_static_output_engine_impl::restore_base_registers(IRBuilder<> *builder, ::llvm::Value *ctx) {
+	
+	for (auto reg : reg_off_to_alloca_) {
+		if ((int)reg.first >= (int)reg_offsets::ZMM0)
+			break;
+		auto reg_ptr = builder->CreateGEP(types.cpu_state, ctx, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, offsets_to_idx_[reg.first]) });
+
+		if (auto dst_reg_i = ::llvm::dyn_cast<Instruction>(reg_ptr)) {
+			dst_reg_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, reg_file_alias_scope_));
+		}
+		auto ty = ((::llvm::GetElementPtrInst *)reg_ptr)->getResultElementType();
+		builder->CreateStore(builder->CreateLoad(ty, reg_ptr), reg_off_to_alloca_.at(reg.first));
+	}
 }
 
 void llvm_static_output_engine_impl::build()
@@ -1200,9 +1235,9 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
         auto icn = (internal_call_node *)a;
         auto switch_callee = module_->getOrInsertFunction("execute_internal_call", types.internal_call_handler);
         if (icn->fn().name() == "handle_syscall") {
-				save_registers(&builder, state_arg);
+				save_base_registers(&builder, state_arg);
                 auto ret = builder.CreateCall(switch_callee, { state_arg, ConstantInt::get(types.i32, 1) });
-				restore_registers(&builder, state_arg);
+				restore_base_registers(&builder, state_arg);
 				return ret;
         }
         throw std::runtime_error("unsupported internal call type" + icn->fn().name());
@@ -1288,9 +1323,12 @@ void llvm_static_output_engine_impl::optimise()
 	PB.registerFunctionAnalyses(FAM);
 	PB.registerLoopAnalyses(LAM);
 	PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
-
-	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
-
+	
+	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O3);
+	PB.registerPipelineStartEPCallback( [&](ModulePassManager &mpm, OptimizationLevel Level) {
+		mpm.addPass(createModuleToFunctionPassAdaptor(PromotePass()));
+		}
+	);
 	MPM.run(*module_, MAM);
 
 	// Compiled modules now exists

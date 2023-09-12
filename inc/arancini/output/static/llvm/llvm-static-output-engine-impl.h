@@ -1,6 +1,9 @@
 #pragma once
+#include "arancini/ir/opt.h"
 #include <arancini/ir/node.h>
 
+#include <llvm/IR/Instructions.h>
+#include <llvm/IR/Value.h>
 #include <map>
 #include <memory>
 #include <unordered_map>
@@ -26,6 +29,7 @@
 
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Target/TargetOptions.h>
+#include <unordered_set>
 
 namespace arancini::ir {
 class chunk;
@@ -97,6 +101,8 @@ private:
 	std::map<ir::port *, ::llvm::Value *> node_ports_to_llvm_values_;
 	std::map<ir::label_node *, ::llvm::BasicBlock *> label_nodes_to_llvm_blocks_;
 	std::unordered_map<const ir::local_var *, ::llvm::Value *> local_var_to_llvm_addr_;
+	std::map<reg_offsets, ::llvm::AllocaInst *> reg_off_to_alloca_;
+	std::map<reg_offsets, unsigned long> offsets_to_idx_;
 
 	void build();
 	void initialise_types();
@@ -105,6 +111,13 @@ private:
 	void compile();
 	void lower_chunks(::llvm::SwitchInst *pcswitch, ::llvm::BasicBlock *contblock);
 	void lower_chunk(::llvm::SwitchInst *pcswitch, ::llvm::BasicBlock *contblock, std::shared_ptr<ir::chunk> chunk, std::shared_ptr<std::map<unsigned long, ::llvm::BasicBlock *>> blocks);
+
+	void init_registers(::llvm::IRBuilder<> *);
+	void save_registers(::llvm::IRBuilder<> *builder, ::llvm::Value *ctx);
+	void save_base_registers(::llvm::IRBuilder<> *builder, ::llvm::Value *ctx);
+	void restore_registers(::llvm::IRBuilder<> *builder, ::llvm::Value *ctx);
+	void restore_base_registers(::llvm::IRBuilder<> *builder, ::llvm::Value *ctx);
+
 	::llvm::Value *lower_node(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
 		std::shared_ptr<ir::packet> pkt, ir::node *a);
 	::llvm::Value *lower_port(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
