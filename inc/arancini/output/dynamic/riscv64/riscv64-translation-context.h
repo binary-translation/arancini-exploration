@@ -32,7 +32,7 @@ private:
 	Assembler assembler_;
 
 	off_t current_address_;
-	std::vector<const ir::node *> nodes_;
+	std::vector<ir::node *> nodes_;
 
 	intptr_t ret_val_;
 

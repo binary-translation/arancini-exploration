@@ -3,6 +3,7 @@
 #include <arancini/output/dynamic/riscv64/bitwise.h>
 #include <arancini/output/dynamic/riscv64/encoder/riscv64-constants.h>
 #include <arancini/output/dynamic/riscv64/flags.h>
+#include <arancini/output/dynamic/riscv64/register_usage_identifier.h>
 #include <arancini/output/dynamic/riscv64/riscv64-translation-context.h>
 #include <arancini/output/dynamic/riscv64/shift.h>
 #include <arancini/output/dynamic/riscv64/utils.h>
@@ -136,6 +137,17 @@ void riscv64_translation_context::begin_instruction(off_t address, const std::st
 
 void riscv64_translation_context::end_instruction()
 {
+	register_used_visitor v;
+	for (auto &item : nodes_) {
+		item->accept(v);
+	}
+
+	for (size_t i = 0; i < std::size(v.reg_used_); ++i) {
+		if (v.reg_used_[i]) {
+			get_or_load_mapped_register(i + 1);
+		}
+	}
+
 	for (const auto &item : nodes_) {
 		materialise(item);
 	}
