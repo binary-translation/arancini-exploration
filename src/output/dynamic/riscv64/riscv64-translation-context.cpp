@@ -91,6 +91,29 @@ std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(
 	}
 }
 
+Register riscv64_translation_context::get_or_assign_mapped_register(unsigned long idx)
+{
+	unsigned int &i = reg_map_[idx - 1];
+	if (!i) {
+		Register reg = next_register();
+		i = reg.encoding();
+		reg_used_[i] = true;
+	}
+	return Register { i };
+}
+
+Register riscv64_translation_context::get_or_load_mapped_register(unsigned long idx)
+{
+	unsigned int &i = reg_map_[idx - 1];
+	if (!i) {
+		Register reg = next_register();
+		i = reg.encoding();
+		reg_used_[i] = true;
+		assembler_.ld(reg, { FP, static_cast<intptr_t>(8 * idx) }); // FIXME hardcoded
+	}
+	return Register { i };
+}
+
 bool insert_ebreak = false;
 
 /**
@@ -444,7 +467,7 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 			}
 
 			// Write back updated acc value
-			(assembler_.*store)(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
+			assembler_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), reg);
 
 			assembler_.Bind(&end);
 		} break;
@@ -507,13 +530,12 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 
 		if (n.op() == binary_atomic_op::xadd) {
 			switch (n.val().type().element_width()) { // FIXME This feels so wrong
-			case 64:
-				assembler_.sd(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
-				break;
 			case 32:
 				assembler_.slli(out_reg, out_reg, 32);
 				assembler_.srli(out_reg, out_reg, 32);
-				assembler_.sd(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
+				[[fallthrough]];
+			case 64:
+				assembler_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), reg);
 				break;
 			default:
 				throw std::runtime_error("unsupported xadd width");
@@ -626,13 +648,12 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 		}
 
 		switch (n.val().type().element_width()) {
-		case 64:
-			assembler_.sd(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
-			break;
 		case 32:
 			assembler_.slli(out_reg, out_reg, 32);
 			assembler_.srli(out_reg, out_reg, 32);
-			assembler_.sd(out_reg, { FP, static_cast<intptr_t>(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regoff()) });
+			[[fallthrough]];
+		case 64:
+			assembler_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), reg);
 			break;
 		default:
 			throw std::runtime_error("unsupported xchg width");
@@ -812,19 +833,13 @@ TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_
 			out_reg.set_actual_width();
 			out_reg.set_type(value_type::u64());
 		} else {
-			unsigned int &i = reg_map_[n.regidx() - 1]; // FIXME hardcoded idx
-			if (!i) {
-				Register reg = next_register();
-				i = reg.encoding();
-				reg_used_[i] = true;
-				assembler_.ld(reg, { FP, static_cast<intptr_t>(n.regoff()) });
-			}
+			Register reg = get_or_load_mapped_register(n.regidx());
 			if (is_int(value, 32)) {
-				assembler_.sextw(out_reg, Register { i });
+				assembler_.sextw(out_reg, reg);
 				out_reg.set_actual_width();
 				out_reg.set_type(value_type::u64());
 			} else {
-				assembler_.mv(out_reg, Register { i });
+				assembler_.mv(out_reg, reg);
 			}
 		}
 
@@ -853,14 +868,7 @@ void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 			auto store_instr = store_instructions.at(value.type().element_width());
 			(assembler_.*store_instr)(reg, { FP, static_cast<intptr_t>(n.regoff()) });
 		}
-		unsigned int &i = reg_map_[n.regidx() - 1];
-		if (!i) {
-			Register reg_1 = next_register();
-
-			i = reg_1.encoding();
-			reg_used_[i] = true;
-		}
-		assembler_.mv(Register { i }, reg);
+		assembler_.mv(get_or_assign_mapped_register(n.regidx()), reg);
 		return;
 	} else if (is_flag(value)) {
 		Register reg = (!is_flag_port(value)) ? (materialise(value.owner()))->get() : Register { flag_map.at(n.regoff()) };

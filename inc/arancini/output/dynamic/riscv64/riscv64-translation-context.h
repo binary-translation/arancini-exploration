@@ -49,6 +49,9 @@ private:
 	std::pair<TypedRegister &, bool> allocate_register(
 		const ir::port *p = nullptr, std::optional<Register> reg1 = std::nullopt, std::optional<Register> reg2 = std::nullopt);
 
+	Register get_or_assign_mapped_register(unsigned long idx);
+	Register get_or_load_mapped_register(unsigned long idx);
+
 	std::optional<std::reference_wrapper<TypedRegister>> materialise(const ir::node *n);
 	std::optional<int64_t> get_as_int(const node *n);
 
