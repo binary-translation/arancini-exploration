@@ -822,6 +822,11 @@ TypedRegister &riscv64_translation_context::materialise_bit_insert(const bit_ins
 TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_node &n)
 {
 	const port &value = n.val();
+	if (is_int(value, 64) && value.targets().size() == 1 && n.regoff() <= static_cast<unsigned long>(reg_offsets::R15)) { // 64bit GPR only used once
+		unsigned int &i = reg_map_[n.regidx() - 1];
+		return allocate_register(&n.val(), Register { i }).first;
+	}
+
 	auto [out_reg, valid] = allocate_register(&n.val());
 	if (!valid) {
 		return out_reg;
