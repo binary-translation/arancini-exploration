@@ -40,7 +40,9 @@ Register riscv64_translation_context::next_register()
 	if (reg_allocator_index_ >= std::size(registers)) {
 		throw std::runtime_error("RISC-V DBT ran out of registers for packet at " + std::to_string(current_address_));
 	}
-	return registers[reg_allocator_index_++];
+	while (reg_used_[registers[reg_allocator_index_++].encoding()])
+		;
+	return registers[reg_allocator_index_ - 1];
 }
 
 /**
@@ -107,6 +109,7 @@ void riscv64_translation_context::begin_block()
 		assembler_.ebreak();
 	}
 	reg_map_.fill(0);
+	reg_used_.reset();
 
 	add_marker(1);
 }
@@ -801,6 +804,7 @@ TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_
 			if (!i) {
 				Register reg = next_register();
 				i = reg.encoding();
+				reg_used_[i] = true;
 				assembler_.ld(reg, { FP, static_cast<intptr_t>(n.regoff()) });
 			}
 			if (is_int(value, 32)) {
@@ -842,6 +846,7 @@ void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 			Register reg_1 = next_register();
 
 			i = reg_1.encoding();
+			reg_used_[i] = true;
 		}
 		assembler_.mv(Register { i }, reg);
 		return;
