@@ -145,6 +145,12 @@ void riscv64_translation_context::end_block()
 	if (insert_ebreak) {
 		assembler_.ebreak();
 	}
+	for (size_t i = 0; i < reg_map_.size(); ++i) {
+		if (reg_map_[i]) {
+			assembler_.sd(Register { reg_map_[i] }, { FP, static_cast<intptr_t>(8 * i + 8) }); // FIXME hardcoded offset
+		}
+	}
+
 	assembler_.li(A0, ret_val_);
 	assembler_.ret();
 }
