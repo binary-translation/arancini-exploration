@@ -825,20 +825,27 @@ TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_
 void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 {
 	const port &value = n.value();
-	if (is_flag(value) || is_gpr(value)) { // Flags or GPR
-		auto store_instr = store_instructions.at(value.type().element_width());
-		if (is_flag(value)) {
-			Register reg = (!is_flag_port(value)) ? (materialise(value.owner()))->get() : Register { flag_map.at(n.regoff()) };
-			if (is_flag_port(value) && !reg_for_port_.count(&value.owner()->val())) {
-				// Result of node not written only flags needed
-				materialise(value.owner());
-			}
-			(assembler_.*store_instr)(reg, { FP, static_cast<intptr_t>(n.regoff()) });
-		} else {
-			TypedRegister &reg = *(materialise(value.owner()));
-
+	if (is_gpr(value)) {
+		TypedRegister &reg = *(materialise(value.owner()));
+		if (n.regoff() > static_cast<unsigned long>(reg_offsets::R15)) { // Not GPR
+			auto store_instr = store_instructions.at(value.type().element_width());
 			(assembler_.*store_instr)(reg, { FP, static_cast<intptr_t>(n.regoff()) });
 		}
+		unsigned int &i = reg_map_[n.regidx() - 1];
+		if (!i) {
+			Register reg_1 = next_register();
+
+			i = reg_1.encoding();
+		}
+		assembler_.mv(Register { i }, reg);
+		return;
+	} else if (is_flag(value)) {
+		Register reg = (!is_flag_port(value)) ? (materialise(value.owner()))->get() : Register { flag_map.at(n.regoff()) };
+		if (is_flag_port(value) && !reg_for_port_.count(&value.owner()->val())) {
+			// Result of node not written only flags needed
+			materialise(value.owner());
+		}
+		assembler_.sb(reg, { FP, static_cast<intptr_t>(n.regoff()) });
 		return;
 	} else if (is_i128(value) || is_int_vector(value, 2, 64) || is_int_vector(value, 4, 32) || is_int(value, 512) || is_int_vector(value, 4, 128)) {
 		// Treat 512 as 128 for now. Assuming it is just 128 bit instructions acting on 512 registers
