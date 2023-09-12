@@ -36,7 +36,7 @@ static std::unordered_map<unsigned long, Register> flag_map {
 
 Register riscv64_translation_context::next_register()
 {
-	constexpr static Register registers[] { S1, A0, A1, A2, A3, A4, A5, T0, T1, T2, A6, A7, S2, S3, S4, S5, S6, S7, T3, T4, T5};
+	constexpr static Register registers[] { S1, A0, A1, A2, A3, A4, A5, T0, T1, T2, A6, A7, S2, S3, S4, S5, S6, S7, T3, T4, T5, GP };
 
 	if (reg_allocator_index_ >= std::size(registers)) {
 		throw std::runtime_error("RISC-V DBT ran out of registers for packet at " + std::to_string(current_address_));
