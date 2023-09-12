@@ -174,7 +174,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
     std::string cxx_compiler = cmdline.at("cxx-compiler-path").as<std::string>();
 
-	std::string debug_info = cmdline.count("debug-gen") ? " -g" : "";
+	std::string debug_info = cmdline.count("debug-gen") ? " -g -funique-basic-block-section-names -O0:w" : "";
 
 	if (!cmdline.count("static-binary")) {
 		std::string arancini_runtime_lib_path = cmdline.at("runtime-lib-path").as<std::string>();

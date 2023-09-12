@@ -18,6 +18,7 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include "llvm/Transforms/Utils/Mem2Reg.h"
+#include "llvm/Transforms/Utils/InstructionNamer.h"
 #include <llvm/IR/PassManager.h>
 #include <llvm/IR/Value.h>
 #include <llvm/Passes/PassBuilder.h>
@@ -1108,11 +1109,13 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 	case node_kinds::write_pc: {
 		auto wpn = (write_pc_node *)a;
 
-		//auto dest_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 0) }, "pcptr");
+		//DEBUG
+		auto debug_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 0) }, "pcptr");
 
 		auto val = lower_port(builder, state_arg, pkt, wpn->value());
 
 		auto dest_reg = reg_off_to_alloca_.at(reg_offsets::PC);
+		builder.CreateStore(val, debug_reg);
 		return builder.CreateStore(val, dest_reg);
 	}
 
@@ -1327,6 +1330,8 @@ void llvm_static_output_engine_impl::optimise()
 	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O3);
 	PB.registerPipelineStartEPCallback( [&](ModulePassManager &mpm, OptimizationLevel Level) {
 		mpm.addPass(createModuleToFunctionPassAdaptor(PromotePass()));
+		if (e_.dbg_)
+			mpm.addPass(createModuleToFunctionPassAdaptor(InstructionNamerPass()));
 		}
 	);
 	MPM.run(*module_, MAM);
@@ -1349,6 +1354,8 @@ void llvm_static_output_engine_impl::compile()
 	}
 
 	TargetOptions TO;
+	if (e_.dbg_)
+		TO.UniqueBasicBlockSectionNames = true;
 	auto RM = Optional<Reloc::Model>();
 #if defined(ARCH_RISCV64)
 	//Add multiply(M), atomics(A), single(F) and double(D) precision float and compressed(C) extensions
