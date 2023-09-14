@@ -70,5 +70,5 @@ void jcc_translator::do_translate()
 
 	auto target = builder().insert_add(builder().insert_read_pc()->val(), builder().insert_constant_u64(branch_target)->val());
 
-	builder().insert_write_pc(builder().insert_csel(cond->val(), target->val(), fallthrough->val())->val());
+	builder().insert_write_pc(builder().insert_csel(cond->val(), target->val(), fallthrough->val())->val(), br_type::br);
 }

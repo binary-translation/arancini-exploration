@@ -1295,7 +1295,7 @@ Function *llvm_static_output_engine_impl::lower_chunk(BasicBlock *contblock, std
 		std::stringstream block_name;
 		block_name << "INSN_" << std::hex << p->address();
 
-		BasicBlock *block = BasicBlock::Create(*llvm_context_, block_name.str(), contblock->getParent());
+		BasicBlock *block = BasicBlock::Create(*llvm_context_, block_name.str(), fn);
 		(*blocks)[p->address()] = block;
 	}
 
@@ -1320,6 +1320,25 @@ Function *llvm_static_output_engine_impl::lower_chunk(BasicBlock *contblock, std
 			packet_block = nullptr;
 		}
 		*/
+		switch (p->updates_pc()) {
+			case call: {
+				builder.CreateBr(contblock);
+				break;
+			}
+			case br: {
+				auto next = builder.CreateLoad(types.i64, local_map->at(reg_offsets::PC));
+				//TODO: Branch to some local switch
+				//builder.CreateBr(builder.CreateIntToPtr(next, Type *DestTy));
+				break;
+			}
+			case ret: {
+				builder.CreateBr(post);
+				break;
+			}
+			case none: {
+				break;
+			}
+		}
 	}
 
 	/*

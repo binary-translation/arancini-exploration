@@ -122,7 +122,7 @@ public:
 
 	virtual bool is_action() const override { return true; }
 
-	virtual bool updates_pc() const { return false; }
+	virtual br_type updates_pc() const { return br_type::none; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -221,17 +221,18 @@ public:
 
 class write_pc_node : public action_node {
 public:
-	write_pc_node(port &value)
+	write_pc_node(port &value, br_type type)
 		: action_node(node_kinds::write_pc)
 		, value_(value)
+		, type_(type)
 	{
 		value.add_target(this);
 	}
 
 	port &value() const { return value_; }
 
-	virtual bool updates_pc() const override { return true; }
-
+	virtual br_type updates_pc() const override { return type_; }
+	
 	virtual void accept(visitor &v) override
 	{
 		action_node::accept(v);
@@ -240,6 +241,7 @@ public:
 
 private:
 	port &value_;
+	br_type type_;
 };
 
 class constant_node : public value_node {
@@ -1004,7 +1006,7 @@ public:
 	const internal_function &fn() const { return fn_; }
 	const std::vector<port *> &args() const { return args_; }
 
-	virtual bool updates_pc() const override { return true; }
+	virtual br_type updates_pc() const override { return br_type::call; }
 
 	virtual void accept(visitor &v) override
 	{

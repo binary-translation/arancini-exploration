@@ -37,15 +37,16 @@ public:
 
 	off_t address() const { return address_; }
 
-	bool updates_pc() const
+	br_type updates_pc() const
 	{
+		int high = 0;
 		for (action_node *a : actions_) {
-			if (a->updates_pc()) {
-				return true;
+			if ((int)a->updates_pc() > high) {
+				high = (int)a->updates_pc();
 			}
 		}
 
-		return false;
+		return (br_type)high;
 	}
 
 	const std::string &disassembly() const { return disasm_; }

@@ -121,7 +121,7 @@ public:
 	/// @brief Returns a node representing a write of the emulated program counter.
 	/// @param value The new value of the emulated PC.
 	/// @return A write pc node.
-	action_node *insert_write_pc(port &value) { return create_and_insert<write_pc_node>(value); }
+	action_node *insert_write_pc(port &value, const br_type br_type) { return create_and_insert<write_pc_node>(value, br_type); }
 
 	/// @brief read register
 	/// @param vt value type

@@ -10,6 +10,7 @@ void branch_translator::do_translate()
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
 	case XED_ICLASS_CALL_FAR:
 	case XED_ICLASS_CALL_NEAR: {
+		// Prep stack, branch to loop
 		// push next insn to stack, write target to pc
 		auto rsp = read_reg(value_type::u64(), reg_offsets::RSP);
 		auto new_rsp = builder().insert_sub(rsp->val(), builder().insert_constant_u64(8)->val());
@@ -28,12 +29,13 @@ void branch_translator::do_translate()
 			target = builder().insert_add(builder().insert_read_pc()->val(), call_target->val());
 		}
 
-		builder().insert_write_pc(target->val());
+		builder().insert_write_pc(target->val(), br_type::call);
 		break;
 	}
 
 	case XED_ICLASS_RET_FAR:
 	case XED_ICLASS_RET_NEAR: {
+		// Pop stack, branch to post_fn
 		// pop stack, write to pc
 
 		auto rsp = read_reg(value_type::u64(), reg_offsets::RSP);
@@ -42,12 +44,12 @@ void branch_translator::do_translate()
 		auto new_rsp = builder().insert_add(rsp->val(), builder().insert_constant_u64(8)->val());
 		write_reg(reg_offsets::RSP, new_rsp->val());
 
-		builder().insert_write_pc(retaddr->val());
-
+		builder().insert_write_pc(retaddr->val(), br_type::ret);
 		break;
 	}
 
 	case XED_ICLASS_JMP: {
+		// branch to next bb
 		xed_uint_t instruction_length = xed_decoded_inst_get_length(xed_inst());
 		auto target = read_operand(0);
 
@@ -56,8 +58,7 @@ void branch_translator::do_translate()
 			target = builder().insert_add(builder().insert_read_pc()->val(), branch_target->val());
 		}
 
-		builder().insert_write_pc(target->val());
-
+		builder().insert_write_pc(target->val(), br_type::br);
 		break;
 	}
 

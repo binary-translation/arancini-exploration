@@ -6,6 +6,7 @@
 
 namespace arancini::ir {
 enum class value_type_class { none, signed_integer, unsigned_integer, floating_point };
+enum br_type { none, br, call, ret };
 
 class value_type {
 public:
