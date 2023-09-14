@@ -76,6 +76,7 @@ private:
 		::llvm::PointerType *cpu_state_ptr;
 		::llvm::FunctionType *main_fn;
 		::llvm::FunctionType *loop_fn;
+		::llvm::FunctionType *fn_fn;
 		::llvm::FunctionType *init_dbt;
 		::llvm::FunctionType *dbt_invoke;
 		::llvm::FunctionType *internal_call_handler;
@@ -101,7 +102,7 @@ private:
 	std::map<ir::port *, ::llvm::Value *> node_ports_to_llvm_values_;
 	std::map<ir::label_node *, ::llvm::BasicBlock *> label_nodes_to_llvm_blocks_;
 	std::unordered_map<const ir::local_var *, ::llvm::Value *> local_var_to_llvm_addr_;
-	std::map<reg_offsets, ::llvm::AllocaInst *> reg_off_to_alloca_;
+	//std::map<reg_offsets, ::llvm::AllocaInst *> reg_off_to_alloca_;
 	std::map<reg_offsets, unsigned long> offsets_to_idx_;
 
 	void build();
@@ -110,13 +111,13 @@ private:
 	void optimise();
 	void compile();
 	void lower_chunks(::llvm::SwitchInst *pcswitch, ::llvm::BasicBlock *contblock);
-	void lower_chunk(::llvm::SwitchInst *pcswitch, ::llvm::BasicBlock *contblock, std::shared_ptr<ir::chunk> chunk, std::shared_ptr<std::map<unsigned long, ::llvm::BasicBlock *>> blocks);
+	::llvm::Function *lower_chunk(::llvm::BasicBlock *contblock, std::shared_ptr<ir::chunk> chunk, std::shared_ptr<std::map<unsigned long, ::llvm::BasicBlock *>> blocks);
 
-	void init_registers(::llvm::IRBuilder<> *);
-	void save_registers(::llvm::IRBuilder<> *builder, ::llvm::Value *ctx);
-	void save_base_registers(::llvm::IRBuilder<> *builder, ::llvm::Value *ctx);
-	void restore_registers(::llvm::IRBuilder<> *builder, ::llvm::Value *ctx);
-	void restore_base_registers(::llvm::IRBuilder<> *builder, ::llvm::Value *ctx);
+	void init_registers(std::shared_ptr<std::unordered_map<reg_offsets, ::llvm::AllocaInst *>> map);
+	void save_registers(std::shared_ptr<std::unordered_map<reg_offsets, ::llvm::AllocaInst *>> map, ::llvm::Value *ctx);
+	void save_base_registers(std::shared_ptr<std::unordered_map<reg_offsets, ::llvm::AllocaInst *>> map, ::llvm::Value *ctx);
+	void restore_registers(std::shared_ptr<std::unordered_map<reg_offsets, ::llvm::AllocaInst *>> map, ::llvm::Value *ctx);
+	void restore_base_registers(std::shared_ptr<std::unordered_map<reg_offsets, ::llvm::AllocaInst *>> map, ::llvm::Value *ctx);
 
 	::llvm::Value *lower_node(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
 		std::shared_ptr<ir::packet> pkt, ir::node *a);

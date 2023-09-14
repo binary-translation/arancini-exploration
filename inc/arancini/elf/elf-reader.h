@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <iostream>
 
 #include <elf.h>
 
@@ -62,19 +63,11 @@ public:
 		, info_(info)
 	{
 #ifdef ARCH_X86_64
-		//HACK: for hello-world/histogram on x86
-		if (name == "__set_thread_area") {
-		     info_ = 2;
-		     size_ = 16;
-		}
-		if (name == "memcpy") {
-		     info_ = 2;
-		     size_ = 50;
-		}
+		//HACK: change the type of _start and _init, otherwise we won't find them
 		if (name == "_start") {
 		     info_ = 2;
-		     size_ = 22;
 		}
+		// this is a musl issue?
 		if (name == "_start_c") {
 		     info_ = 2;
 		     // hello-world: size_ = 241;
@@ -82,27 +75,7 @@ public:
 		}
 		if (name == "_init") {
 		     info_ = 2;
-		     size_ = 3;
-		}
-		if (name == "__syscall_cp_asm") {
-		     info_ = 2;
-		     size_ = 42;
-		}
-		if (name == "memset") {
-		     info_ = 2;
-		     size_ = 196;
-		}
-		if (name == "__clone") {
-		     info_ = 2;
-		     size_ = 57;
-		}
-		if (name == "sem_timedwait") {
-		     info_ = 2;
-		     size_ = 219;
-		}
-		if (name == "memmove") {
-		     info_ = 2;
-		     size_ = 37;
+			 size_ = 3;
 		}
 #endif
 	}
