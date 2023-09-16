@@ -1006,7 +1006,7 @@ public:
 	const internal_function &fn() const { return fn_; }
 	const std::vector<port *> &args() const { return args_; }
 
-	virtual br_type updates_pc() const override { return br_type::call; }
+	virtual br_type updates_pc() const override { return br_type::none; }
 
 	virtual void accept(visitor &v) override
 	{

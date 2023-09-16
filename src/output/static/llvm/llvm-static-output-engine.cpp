@@ -194,7 +194,7 @@ void llvm_static_output_engine_impl::save_base_registers(IRBuilder<> *builder, :
 	
 	for (auto reg : *local_map_) {
 		if ((int)reg.first >= (int)reg_offsets::ZMM0)
-			break;
+			continue;
 		auto reg_ptr = builder->CreateGEP(types.cpu_state, ctx, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, offsets_to_idx_[reg.first]) });
 
 		if (auto src_reg_i = ::llvm::dyn_cast<Instruction>(reg_ptr)) {
@@ -209,7 +209,7 @@ void llvm_static_output_engine_impl::restore_base_registers(IRBuilder<> *builder
 	
 	for (auto reg : *local_map_) {
 		if ((int)reg.first >= (int)reg_offsets::ZMM0)
-			break;
+			continue;
 		auto reg_ptr = builder->CreateGEP(types.cpu_state, ctx, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, offsets_to_idx_[reg.first]) });
 
 		if (auto dst_reg_i = ::llvm::dyn_cast<Instruction>(reg_ptr)) {
@@ -1334,6 +1334,7 @@ Function *llvm_static_output_engine_impl::lower_chunk(BasicBlock *contblock, std
 			case call: {
 				save_registers(&builder, state_arg);
 				builder.CreateCall(types.loop_fn, contblock->getParent(), { state_arg });
+				restore_registers(&builder, state_arg);
 				break;
 			}
 			case br: {
