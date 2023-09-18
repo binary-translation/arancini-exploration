@@ -2,9 +2,12 @@
 
 #include <arancini/ir/node.h>
 #include <arancini/output/dynamic/riscv64/encoder/riscv64-assembler.h>
+#include <arancini/output/dynamic/riscv64/register.h>
 #include <arancini/output/dynamic/translation-context.h>
 
+#include <forward_list>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <variant>
 
@@ -34,39 +37,39 @@ private:
 	std::unordered_map<const ir::label_node *, std::unique_ptr<Label>> labels_;
 
 	size_t reg_allocator_index_ { 0 };
-    std::unordered_map<const ir::port *, uint32_t> reg_for_port_;
-    std::unordered_map<const ir::port *, uint32_t> secondary_reg_for_port_;
-    std::unordered_map<const ir::local_var *, uint32_t> locals_;
+	std::unordered_map<const ir::port *, TypedRegister> reg_for_port_;
+	std::forward_list<TypedRegister> temporaries;
+	std::unordered_map<const ir::local_var *, std::reference_wrapper<TypedRegister>> locals_;
 
-	std::pair<Register, bool> allocate_register(const ir::port *p = nullptr);
+	std::pair<TypedRegister &, bool> allocate_register(
+		const ir::port *p = nullptr, std::optional<Register> reg1 = std::nullopt, std::optional<Register> reg2 = std::nullopt);
 
-	std::variant<Register, std::monostate> materialise(const ir::node *n);
+	std::optional<std::reference_wrapper<TypedRegister>> materialise(const ir::node *n);
 
-	Register materialise_read_reg(const ir::read_reg_node &n);
+	TypedRegister& materialise_read_reg(const ir::read_reg_node &n);
 	void materialise_write_reg(const ir::write_reg_node &n);
-	Register materialise_read_mem(const ir::read_mem_node &n);
+	TypedRegister& materialise_read_mem(const ir::read_mem_node &n);
 	void materialise_write_mem(const ir::write_mem_node &n);
-	Register materialise_read_pc(const ir::read_pc_node &n);
+	TypedRegister& materialise_read_pc(const ir::read_pc_node &n);
 	void materialise_write_pc(const ir::write_pc_node &n);
 	void materialise_label(const ir::label_node &n);
 	void materialise_br(const ir::br_node &n);
 	void materialise_cond_br(const ir::cond_br_node &n);
-	Register materialise_constant(int64_t imm);
-	Register materialise_unary_arith(const ir::unary_arith_node &n);
-	Register materialise_binary_arith(const ir::binary_arith_node &n);
-	Register materialise_ternary_arith(const ir::ternary_arith_node &n);
-	Register materialise_bit_shift(const ir::bit_shift_node &n);
-	Register materialise_bit_extract(const ir::bit_extract_node &n);
-	Register materialise_bit_insert(const ir::bit_insert_node &n);
-	Register materialise_cast(const ir::cast_node &n);
-	std::variant<Register, std::monostate> materialise_binary_atomic(const ir::binary_atomic_node &n);
-	Register materialise_ternary_atomic(const ir::ternary_atomic_node &n);
-	Register materialise_csel(const ir::csel_node &n);
+	TypedRegister& materialise_constant(int64_t imm);
+	TypedRegister& materialise_unary_arith(const ir::unary_arith_node &n);
+	TypedRegister& materialise_binary_arith(const ir::binary_arith_node &n);
+	TypedRegister& materialise_ternary_arith(const ir::ternary_arith_node &n);
+	TypedRegister& materialise_bit_shift(const ir::bit_shift_node &n);
+	TypedRegister& materialise_bit_extract(const ir::bit_extract_node &n);
+	TypedRegister& materialise_bit_insert(const ir::bit_insert_node &n);
+	TypedRegister& materialise_cast(const ir::cast_node &n);
+	std::optional<std::reference_wrapper<TypedRegister>> materialise_binary_atomic(const ir::binary_atomic_node &n);
+	TypedRegister& materialise_ternary_atomic(const ir::ternary_atomic_node &n);
+	TypedRegister& materialise_csel(const ir::csel_node &n);
 	void materialise_internal_call(const ir::internal_call_node &n);
-	Register materialise_vector_insert(const ir::vector_insert_node &node);
-	Register materialise_vector_extract(const ir::vector_extract_node &n);
+	TypedRegister& materialise_vector_insert(const ir::vector_insert_node &node);
+	TypedRegister& materialise_vector_extract(const ir::vector_extract_node &n);
 
 	void add_marker(int payload);
-	Register get_secondary_register(const ir::port *p);
 };
 } // namespace arancini::output::dynamic::riscv64
