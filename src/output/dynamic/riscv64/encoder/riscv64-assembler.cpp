@@ -142,6 +142,18 @@ void Assembler::jal(Register rd, Label *label, bool near)
 	EmitJump(rd, label, JAL);
 }
 
+void Assembler::jal(Register rd, intptr_t offset)
+{
+	ASSERT(Supports(RV_I));
+	if (Supports(RV_C) && IsCJImm(offset)) {
+		if (rd == ZERO) {
+			c_j(offset);
+			return;
+		}
+	}
+	EmitJump(rd, offset, JAL);
+}
+
 void Assembler::jalr(Register rd, Register rs1, intptr_t offset)
 {
 	ASSERT(Supports(RV_I));
@@ -174,6 +186,21 @@ void Assembler::beq(Register rs1, Register rs2, Label *label, bool near)
 	EmitBranch(rs1, rs2, label, BEQ);
 }
 
+void Assembler::beq(Register rs1, Register rs2, intptr_t offset)
+{
+	ASSERT(Supports(RV_I));
+	if (Supports(RV_C) && IsCBImm(offset)) {
+		if (rs1 == ZERO && IsCRs1p(rs2)) {
+			c_beqz(rs2, offset);
+			return;
+		} else if (rs2 == ZERO && IsCRs1p(rs1)) {
+			c_beqz(rs1, offset);
+			return;
+		}
+	}
+	EmitBranch(rs1, rs2, offset, BEQ);
+}
+
 void Assembler::bne(Register rs1, Register rs2, Label *label, bool near)
 {
 	ASSERT(Supports(RV_I));
@@ -189,10 +216,31 @@ void Assembler::bne(Register rs1, Register rs2, Label *label, bool near)
 	EmitBranch(rs1, rs2, label, BNE);
 }
 
+void Assembler::bne(Register rs1, Register rs2, intptr_t offset)
+{
+	ASSERT(Supports(RV_I));
+	if (Supports(RV_C) && IsCBImm(offset)) {
+		if (rs1 == ZERO && IsCRs1p(rs2)) {
+			c_bnez(rs2, offset);
+			return;
+		} else if (rs2 == ZERO && IsCRs1p(rs1)) {
+			c_bnez(rs1, offset);
+			return;
+		}
+	}
+	EmitBranch(rs1, rs2, offset, BNE);
+}
+
 void Assembler::blt(Register rs1, Register rs2, Label *label)
 {
 	ASSERT(Supports(RV_I));
 	EmitBranch(rs1, rs2, label, BLT);
+}
+
+void Assembler::blt(Register rs1, Register rs2, intptr_t offset)
+{
+	ASSERT(Supports(RV_I));
+	EmitBranch(rs1, rs2, offset, BLT);
 }
 
 void Assembler::bge(Register rs1, Register rs2, Label *label)
@@ -201,13 +249,27 @@ void Assembler::bge(Register rs1, Register rs2, Label *label)
 	EmitBranch(rs1, rs2, label, BGE);
 }
 
+void Assembler::bge(Register rs1, Register rs2, intptr_t offset)
+{
+	ASSERT(Supports(RV_I));
+	EmitBranch(rs1, rs2, offset, BGE);
+}
+
 void Assembler::bltu(Register rs1, Register rs2, Label *label)
 {
 	ASSERT(Supports(RV_I));
 	EmitBranch(rs1, rs2, label, BLTU);
 }
 
+void Assembler::bltu(Register rs1, Register rs2, intptr_t offset)
+{
+	ASSERT(Supports(RV_I));
+	EmitBranch(rs1, rs2, offset, BLTU);
+}
+
 void Assembler::bgeu(Register rs1, Register rs2, Label *label) { EmitBranch(rs1, rs2, label, BGEU); }
+
+void Assembler::bgeu(Register rs1, Register rs2, intptr_t offset) { EmitBranch(rs1, rs2, offset, BGEU); }
 
 void Assembler::lb(Register rd, Address addr)
 {
@@ -1746,6 +1808,12 @@ void Assembler::c_j(Label *label)
 	EmitCJump(label, C_J);
 }
 
+void Assembler::c_j(intptr_t offset)
+{
+	ASSERT(Supports(RV_C));
+	EmitCJump(offset, C_J);
+}
+
 #if XLEN == 32
 void Assembler::c_jal(Label *label)
 {
@@ -1773,10 +1841,22 @@ void Assembler::c_beqz(Register rs1p, Label *label)
 	EmitCBranch(rs1p, label, C_BEQZ);
 }
 
+void Assembler::c_beqz(Register rs1p, intptr_t offset)
+{
+	ASSERT(Supports(RV_C));
+	EmitCBranch(rs1p, offset, C_BEQZ);
+}
+
 void Assembler::c_bnez(Register rs1p, Label *label)
 {
 	ASSERT(Supports(RV_C));
 	EmitCBranch(rs1p, label, C_BNEZ);
+}
+
+void Assembler::c_bnez(Register rs1p, intptr_t offset)
+{
+	ASSERT(Supports(RV_C));
+	EmitCBranch(rs1p, offset, C_BNEZ);
 }
 
 void Assembler::c_li(Register rd, intptr_t imm)
@@ -1940,6 +2020,8 @@ void Assembler::EmitBranch(Register rs1, Register rs2, Label *label, Funct3 func
 	EmitBType(offset, rs2, rs1, func, BRANCH);
 }
 
+void Assembler::EmitBranch(Register rs1, Register rs2, intptr_t offset, Funct3 func) { EmitBType(offset, rs2, rs1, func, BRANCH); }
+
 void Assembler::EmitJump(Register rd, Label *label, Opcode op)
 {
 	intptr_t offset;
@@ -1951,6 +2033,8 @@ void Assembler::EmitJump(Register rd, Label *label, Opcode op)
 	}
 	EmitJType(offset, rd, JAL);
 }
+
+void Assembler::EmitJump(Register rd, intptr_t offset, Opcode op) { EmitJType(offset, rd, JAL); }
 
 void Assembler::EmitCBranch(Register rs1p, Label *label, COpcode op)
 {
@@ -1964,6 +2048,8 @@ void Assembler::EmitCBranch(Register rs1p, Label *label, COpcode op)
 	Emit16(op | EncodeCRs1p(rs1p) | EncodeCBImm(offset));
 }
 
+void Assembler::EmitCBranch(Register rs1p, intptr_t offset, COpcode op) { Emit16(op | EncodeCRs1p(rs1p) | EncodeCBImm(offset)); }
+
 void Assembler::EmitCJump(Label *label, COpcode op)
 {
 	intptr_t offset;
@@ -1975,6 +2061,8 @@ void Assembler::EmitCJump(Label *label, COpcode op)
 	}
 	Emit16(op | EncodeCJImm(offset));
 }
+
+void Assembler::EmitCJump(intptr_t offset, COpcode op) { Emit16(op | EncodeCJImm(offset)); }
 
 void Assembler::EmitRType(Funct5 funct5, std::memory_order order, Register rs2, Register rs1, Funct3 funct3, Register rd, Opcode opcode)
 {
