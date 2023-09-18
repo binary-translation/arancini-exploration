@@ -1549,4 +1549,93 @@ TypedRegister &riscv64_translation_context::materialise_vector_extract(const vec
 */
 void riscv64_translation_context::chain(uint64_t chain_address, void *chain_target)
 {
+	auto instr_p = reinterpret_cast<uint32_t *>(chain_address);
+	uint32_t following_instr_enc = *(instr_p + 1);
+	if (IsCInstruction(following_instr_enc)) {
+		CInstruction following_instr { static_cast<uint16_t>(following_instr_enc) };
+		if (following_instr.opcode() == C_BEQZ || following_instr.opcode() == C_BNEZ) {
+			chain_machine_code_writer writer = chain_machine_code_writer { instr_p };
+
+			Assembler ass { &writer, false, RV_GC };
+
+			intptr_t offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));
+
+			if (!IsBTypeImm(offset)) {
+				throw std::runtime_error("Chaining failed. Jump offset too big for single direct branch instruction.");
+			} else {
+				if (following_instr.opcode() == C_BEQZ) {
+					ass.beqz(following_instr.rs1p(), offset);
+				} else {
+					ass.bnez(following_instr.rs1p(), offset);
+				}
+
+				ass.nop(IsCBImm(offset)); // AUIPC full and c_bxx half size, so replacement one full and one half instruction
+
+				// TODO Check if next instruction is J or AUIPC + JR, move those inplace of the NOP
+			}
+		} else {
+			// NOP before? Use the NOP
+			chain_machine_code_writer writer = *(instr_p - 1) == 0b10011 ? chain_machine_code_writer { instr_p - 1 } : chain_machine_code_writer { instr_p };
+
+			Assembler ass { &writer, false, RV_GC };
+			intptr_t offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));
+
+			if (!IsJTypeImm(offset)) {
+				throw std::runtime_error("Chaining failed. Jump offset too big for single direct jump instruction.");
+			}
+			ass.j(offset);
+		}
+	} else {
+		Instruction following_instr { following_instr_enc };
+		if (following_instr.opcode() == BRANCH) {
+			chain_machine_code_writer writer = chain_machine_code_writer { instr_p };
+
+			Assembler ass { &writer, false, RV_GC };
+
+			intptr_t offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));
+
+			if (!IsBTypeImm(offset)) {
+				throw std::runtime_error("Chaining failed. Jump offset too big for single direct branch instruction.");
+			} else {
+				switch (following_instr.funct3()) {
+				case BEQ:
+					ass.beq(following_instr.rs1(), following_instr.rs2(), offset);
+					break;
+				case BNE:
+					ass.bne(following_instr.rs1(), following_instr.rs2(), offset);
+					break;
+				case BLT:
+					ass.blt(following_instr.rs1(), following_instr.rs2(), offset);
+					break;
+				case BGE:
+					ass.bge(following_instr.rs1(), following_instr.rs2(), offset);
+					break;
+				case BLTU:
+					ass.bltu(following_instr.rs1(), following_instr.rs2(), offset);
+					break;
+				case BGEU:
+					ass.bgeu(following_instr.rs1(), following_instr.rs2(), offset);
+					break;
+
+				default:
+					throw std::runtime_error("Should not happen");
+				}
+
+				ass.nop(true); // AUIPC and BXX both full size, so both replacements full size
+
+				// TODO Check if next instruction is J or AUIPC + JR, move those inplace of the NOP
+			}
+		} else {
+			// NOP before? Use the NOP
+			chain_machine_code_writer writer = *(instr_p - 1) == 0b10011 ? chain_machine_code_writer { instr_p - 1 } : chain_machine_code_writer { instr_p };
+
+			Assembler ass { &writer, false, RV_GC };
+			intptr_t offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));
+
+			if (!IsJTypeImm(offset)) {
+				throw std::runtime_error("Chaining failed. Jump offset too big for single direct jump instruction.");
+			}
+			ass.j(offset);
+		}
+	}
 }
