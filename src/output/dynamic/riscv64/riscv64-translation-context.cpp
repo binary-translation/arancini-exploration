@@ -1559,7 +1559,17 @@ void riscv64_translation_context::chain(uint64_t chain_address, void *chain_targ
 			intptr_t offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));
 
 			if (!IsBTypeImm(offset)) {
-				throw std::runtime_error("Chaining failed. Jump offset too big for single direct branch instruction.");
+				Label end {};
+
+				if (following_instr.opcode() == C_BEQZ) {
+					ass.bnez(following_instr.rs1p(), &end, Assembler::kNearJump);
+				} else {
+					ass.beqz(following_instr.rs1p(), &end, Assembler::kNearJump);
+				}
+
+				offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));
+				ass.j(offset);
+				ass.Bind(&end);
 			} else {
 				if (following_instr.opcode() == C_BEQZ) {
 					ass.beqz(following_instr.rs1p(), offset);
@@ -1593,7 +1603,33 @@ void riscv64_translation_context::chain(uint64_t chain_address, void *chain_targ
 			intptr_t offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));
 
 			if (!IsBTypeImm(offset)) {
-				throw std::runtime_error("Chaining failed. Jump offset too big for single direct branch instruction.");
+				Label end {};
+				switch (following_instr.funct3()) {
+				case BEQ:
+					ass.bne(following_instr.rs1(), following_instr.rs2(), &end);
+					break;
+				case BNE:
+					ass.beq(following_instr.rs1(), following_instr.rs2(), &end);
+					break;
+				case BLT:
+					ass.bge(following_instr.rs1(), following_instr.rs2(), &end);
+					break;
+				case BGE:
+					ass.blt(following_instr.rs1(), following_instr.rs2(), &end);
+					break;
+				case BLTU:
+					ass.bgeu(following_instr.rs1(), following_instr.rs2(), &end);
+					break;
+				case BGEU:
+					ass.bltu(following_instr.rs1(), following_instr.rs2(), &end);
+					break;
+				default:
+					throw std::runtime_error("Should not happen");
+				}
+
+				offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));
+				ass.j(offset);
+				ass.Bind(&end);
 			} else {
 				switch (following_instr.funct3()) {
 				case BEQ:
