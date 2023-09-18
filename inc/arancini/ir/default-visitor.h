@@ -78,13 +78,13 @@ public:
 
 	virtual void visit_binary_atomic_node(binary_atomic_node &n) override
 	{
-		n.address().accept(*this);
+		n.lhs().accept(*this);
 		n.rhs().accept(*this);
 	}
 
 	virtual void visit_ternary_atomic_node(ternary_atomic_node &n) override
 	{
-		n.address().accept(*this);
+		n.lhs().accept(*this);
 		n.rhs().accept(*this);
 		n.top().accept(*this);
 	}

@@ -341,7 +341,7 @@ void dot_graph_generator::visit_binary_atomic_node(binary_atomic_node &n)
 {
 	std::stringstream s;
 
-	s << "{{<address>Address|<rhs>RHS}|";
+	s << "{{<lhs>LHS|<rhs>RHS}|";
 
 	switch (n.op()) {
 	case binary_atomic_op::add:
@@ -382,7 +382,7 @@ void dot_graph_generator::visit_binary_atomic_node(binary_atomic_node &n)
 	s << "}";
 
 	add_node(&n, s.str());
-	add_port_edge(&n.address(), &n, "address");
+	add_port_edge(&n.lhs(), &n, "lhs");
 	add_port_edge(&n.rhs(), &n, "rhs");
 
 	default_visitor::visit_binary_atomic_node(n);
@@ -392,7 +392,7 @@ void dot_graph_generator::visit_ternary_atomic_node(ternary_atomic_node &n)
 {
 	std::stringstream s;
 
-	s << "{{<address>Address|<rhs>RHS|<top>TOP}|";
+	s << "{{<lhs>LHS|<rhs>RHS|<top>TOP}|";
 
 	switch (n.op()) {
 	case ternary_atomic_op::adc:
@@ -412,7 +412,7 @@ void dot_graph_generator::visit_ternary_atomic_node(ternary_atomic_node &n)
 	s << "}";
 
 	add_node(&n, s.str());
-	add_port_edge(&n.address(), &n, "address");
+	add_port_edge(&n.lhs(), &n, "lhs");
 	add_port_edge(&n.rhs(), &n, "rhs");
 	add_port_edge(&n.top(), &n, "top");
 
