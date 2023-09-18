@@ -1410,8 +1410,6 @@ void riscv64_translation_context::materialise_internal_call(const internal_call_
 {
 	const auto &function = n.fn();
 	if (function.name() == "handle_syscall") {
-
-		assembler_.sd(materialise_constant(current_address_ + 2), { FP, static_cast<intptr_t>(reg_offsets::PC) });
 		ret_val_ = 1;
 	} else if (function.name() == "handle_int") {
 		// TODO handle argument
