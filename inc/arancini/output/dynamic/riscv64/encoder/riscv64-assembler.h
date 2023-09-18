@@ -73,7 +73,7 @@ class Assembler {
   static const bool kNearJump = true;
   static const bool kFarJump = false;
 
-  explicit Assembler(machine_code_writer*, ExtensionSet extensions = RV_G);
+  explicit Assembler(machine_code_writer *, bool track_usage, ExtensionSet extensions = RV_G);
   ~Assembler();
 
   bool Supports(Extension extension) const {
@@ -109,6 +109,8 @@ class Assembler {
   void bgtu(Register rs1, Register rs2, Label* label) { bltu(rs2, rs1, label); }
   void bleu(Register rs1, Register rs2, Label* label) { bgeu(rs2, rs1, label); }
 
+  intptr_t offset_from_target(intptr_t target);
+
   void jal(Register rd, intptr_t offset);
   void jal(intptr_t offset) { jal(RA, offset); }
   void j(intptr_t offset) { jal(ZERO, offset); }
@@ -134,7 +136,7 @@ class Assembler {
   void sh(Register rs2, Address addr);
   void sw(Register rs2, Address addr);
 
-  void addi(Register rd, Register rs1, intptr_t imm);
+  void addi(Register rd, Register rs1, intptr_t imm, bool force_big = false);
   void subi(Register rd, Register rs1, intptr_t imm) { addi(rd, rs1, -imm); }
   void slti(Register rd, Register rs1, intptr_t imm);
   void sltiu(Register rd, Register rs1, intptr_t imm);
@@ -178,7 +180,7 @@ class Assembler {
 
   void trap();  // Permanently reserved illegal instruction.
 
-  void nop() { addi(ZERO, ZERO, 0); }
+  void nop(bool force_big = false) { addi(ZERO, ZERO, 0, force_big); }
   void li(Register rd, intptr_t imm) { addi(rd, ZERO, imm); }
   void mv(Register rd, Register rs) { addi(rd, rs, 0); }
   void not_(Register rd, Register rs) { xori(rd, rs, -1); }
@@ -822,8 +824,9 @@ class Assembler {
   const ExtensionSet extensions_;
   arancini::output::dynamic::machine_code_writer* writer;
 
-  long instructions16, instructions32;
+  long instructions16 {}, instructions32 {};
 
+  bool track_usage_;
 };
 
 }  // namespace arancini::output::dynamic::riscv64

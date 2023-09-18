@@ -18,7 +18,7 @@ class riscv64_translation_context : public translation_context {
 public:
 	riscv64_translation_context(machine_code_writer &writer)
 		: translation_context(writer)
-		, assembler_(&writer, RV_GC)
+		, assembler_(&writer, true, RV_GC)
 	{
 	}
 

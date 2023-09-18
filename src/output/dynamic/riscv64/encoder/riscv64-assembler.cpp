@@ -9,14 +9,17 @@
 
 namespace arancini::output::dynamic::riscv64 {
 
-Assembler::Assembler(arancini::output::dynamic::machine_code_writer *writer, ExtensionSet extensions)
+Assembler::Assembler(arancini::output::dynamic::machine_code_writer *writer, bool track_usage, ExtensionSet extensions)
 	: extensions_(extensions)
-	, writer {writer}
+	, writer { writer }
+	, track_usage_ { track_usage }
 {
 }
 
 Assembler::~Assembler(){
-	std::cout << "Total RISC-V instructions emitted: "<<std::dec<<instructions32<<" full size, "<<instructions16<< " compressed"<<std::endl;
+	if (track_usage_) {
+		std::cout << "Total RISC-V instructions emitted: " << std::dec << instructions32 << " full size, " << instructions16 << " compressed" << std::endl;
+	}
 }
 
 void Assembler::Bind(Label *label)
@@ -141,6 +144,8 @@ void Assembler::jal(Register rd, Label *label, bool near)
 	}
 	EmitJump(rd, label, JAL);
 }
+
+intptr_t Assembler::offset_from_target(intptr_t target) { return target - (reinterpret_cast<uword>(writer->ptr()) + Position()); }
 
 void Assembler::jal(Register rd, intptr_t offset)
 {
@@ -339,10 +344,10 @@ void Assembler::sw(Register rs2, Address addr)
 	EmitSType(addr.offset(), rs2, addr.base(), SW, STORE);
 }
 
-void Assembler::addi(Register rd, Register rs1, intptr_t imm)
+void Assembler::addi(Register rd, Register rs1, intptr_t imm, bool force_big)
 {
 	ASSERT(Supports(RV_I));
-	if (Supports(RV_C)) {
+	if (Supports(RV_C) && !force_big) {
 		if ((rd != ZERO) && (rs1 == ZERO) && IsCIImm(imm)) {
 			c_li(rd, imm);
 			return;
