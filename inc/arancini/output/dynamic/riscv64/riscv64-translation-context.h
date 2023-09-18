@@ -51,6 +51,7 @@ private:
 
 	Register get_or_assign_mapped_register(unsigned long idx);
 	Register get_or_load_mapped_register(unsigned long idx);
+	void write_back_registers();
 
 	std::optional<std::reference_wrapper<TypedRegister>> materialise(const ir::node *n);
 	std::optional<int64_t> get_as_int(const node *n);

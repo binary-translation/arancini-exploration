@@ -114,6 +114,15 @@ Register riscv64_translation_context::get_or_load_mapped_register(unsigned long 
 	return Register { i };
 }
 
+void riscv64_translation_context::write_back_registers()
+{
+	for (size_t i = 0; i < reg_map_.size(); ++i) {
+		if (reg_map_[i]) {
+			assembler_.sd(Register { reg_map_[i] }, { FP, static_cast<intptr_t>(8 * i + 8) }); // FIXME hardcoded offset
+		}
+	}
+}
+
 bool insert_ebreak = false;
 
 /**
@@ -182,11 +191,6 @@ void riscv64_translation_context::end_block()
 	// TODO Remove/only in debug
 	if (insert_ebreak) {
 		assembler_.ebreak();
-	}
-	for (size_t i = 0; i < reg_map_.size(); ++i) {
-		if (reg_map_[i]) {
-			assembler_.sd(Register { reg_map_[i] }, { FP, static_cast<intptr_t>(8 * i + 8) }); // FIXME hardcoded offset
-		}
 	}
 
 	assembler_.li(A0, ret_val_);
@@ -959,12 +963,93 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 	if (!is_gpr(n.value())) {
 		throw std::runtime_error("unsupported width on write pc operation");
 	}
+
+	if (ret_val_ == 0) { // Only chain on normal block end
+		const std::optional<int64_t> &target = get_as_int(n.value().owner());
+
+		if (target) { // Unconditional direct jump or call
+			// Set up chain
+
+			// Write back all registers
+			write_back_registers();
+			// Now A1 register is available
+
+			// Save address to patch jump into when chaining (A1 second ret value)
+			assembler_.auipc(A1, 0);
+
+			// If FOLLOWING instruction is NOT a branch (so we do unconditional control flow or we are in the trueval part of conditional):
+			// 		If PREVIOUS instruction is NOT a nop:
+			// 		overwrite AUIPC with J (or if it doesn't fit with AUIPC + JR)
+			// 		If it is a NOP (previous instruction was an already chained branch, see below):
+			//		overwrite previous instruction with J (or if it doesn't fit with AUIPC + JR)
+
+			reg_used_[A1.encoding()] = true; // Force keeping A1 unused
+			TypedRegister &reg = materialise_constant(*target);
+			assembler_.sd(reg, { FP, static_cast<intptr_t>(reg_offsets::PC) });
+			return;
+		} else if (n.value().owner()->kind() == node_kinds::csel) {
+			const auto &node = *reinterpret_cast<const csel_node *>(n.value().owner());
+			const std::optional<int64_t> &target1 = get_as_int(node.falseval().owner());
+			const std::optional<int64_t> &target2 = get_as_int(node.trueval().owner());
+			if (target1 && target2) { // Conditional direct jump
+				TypedRegister &cond = *materialise(node.condition().owner());
+				TypedRegister &out = cond != A1 ? cond : allocate_register(nullptr).first;
+				extend_to_64(assembler_, out, cond);
+
+				// Set up chain
+
+				// Write back all registers
+				write_back_registers();
+				// Now A1 register is available
+
+				// Save address to patch jump into when chaining (A1 second ret value)
+				assembler_.auipc(A1, 0);
+
+				// If following instruction IS a branch (so it is falseval part of conditional control flow):
+				// 1a. overwrite AUIPC with that branch + adjusted offset to following block
+				// 1b. and the branch with a NOP
+				//		if the instruction following the branch is a J OR an AUIPC + JR:
+				//			move the J (or AUIPC + JR) in place of the NOP (trueval part already chained)
+				// 2. if offset doesn't fit:
+				// 		a) overwrite AUIPC with inverted branch + single ins offset
+				// 		b) the branch with unconditional branch to block
+				// If that still doesn't fit:
+				// 		a) overwrite AUIPC with inverted branch + single ins offset
+				//		b) move the constant generation of trueval by 1 instruction (falseval not needed anymore, can be overwritten)
+				// 		c) overwrite the branch with AUIPC
+				//		d) overwrite the "hole" with JR
+				reg_used_[A1.encoding()] = true; // Force keeping A1 unused
+				Label false_calc {}, end {};
+
+				assembler_.beqz(out, &false_calc, Assembler::kNearJump);
+
+				assembler_.auipc(A1, 0);
+				TypedRegister &trueval = materialise_constant(*target2);
+				assembler_.sd(trueval, { FP, static_cast<intptr_t>(reg_offsets::PC) });
+				assembler_.j(&end, Assembler::kNearJump);
+
+				assembler_.Bind(&false_calc);
+
+				TypedRegister &falseval = materialise_constant(*target1);
+				assembler_.sd(falseval, { FP, static_cast<intptr_t>(reg_offsets::PC) });
+
+				assembler_.Bind(&end);
+				return;
+			}
+		}
+	}
+	// Indirect jump or call or return => No chain
 	// FIXME maybe only support 64bit values for PC
 	TypedRegister &src_reg = *materialise(n.value().owner());
 
 	Address addr { FP, static_cast<intptr_t>(reg_offsets::PC) };
 	auto store_instr = store_instructions.at(n.value().type().element_width());
 	(assembler_.*store_instr)(src_reg, addr);
+
+	// Write back all registers
+	write_back_registers();
+
+	assembler_.li(A1, 0); // 0 = No chain
 }
 
 void riscv64_translation_context::materialise_label(const label_node &n)
