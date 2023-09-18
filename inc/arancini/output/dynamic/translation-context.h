@@ -24,6 +24,10 @@ public:
 	virtual void end_instruction() = 0;
 	virtual void end_block() = 0;
 
+	virtual void chain(uint64_t chain_address, void *chain_target) {
+		// Default to No-op
+	};
+
 	virtual void lower(ir::node *n) = 0;
 
 	machine_code_writer &writer() const { return writer_; }

@@ -28,6 +28,8 @@ public:
 	virtual void end_block() override;
 	virtual void lower(ir::node *n) override;
 
+	virtual void chain(uint64_t chain_address, void *chain_target) override;
+
 private:
 	Assembler assembler_;
 

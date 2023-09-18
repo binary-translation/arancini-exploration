@@ -133,7 +133,16 @@ int execution_context::invoke(void *cpu_state)
 		return 1;
 	}
 
+	// Chain
+	if (et->chain_address_) {
+		//		std::cerr << "Chaining previous block to " << std::hex << x86_state->PC << std::endl;
+
+		te_.chain(et->chain_address_, txln->get_code_ptr());
+	}
+
 	const dbt::native_call_result result = txln->invoke(cpu_state, memory_);
+
+	et->chain_address_ = result.chain_address;
 
 	return result.exit_code;
 }
