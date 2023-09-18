@@ -157,3 +157,5 @@ translation *translation_engine::translate(unsigned long pc)
 	ia_.translate_chunk(builder, pc, code, 0x1000, true);
 	return builder.create_translation();
 }
+
+void translation_engine::chain(uint64_t chain_address, void *chain_target) { ctx_->chain(chain_address, chain_target); }

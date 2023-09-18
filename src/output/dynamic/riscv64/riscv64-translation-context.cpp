@@ -1543,3 +1543,7 @@ TypedRegister &riscv64_translation_context::materialise_vector_extract(const vec
 		throw std::runtime_error("Unsupported vector extract element width");
 	}
 }
+
+void riscv64_translation_context::chain(uint64_t chain_address, void *chain_target)
+{
+}

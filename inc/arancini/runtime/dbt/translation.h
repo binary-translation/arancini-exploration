@@ -25,6 +25,9 @@ public:
 
 	native_call_result invoke(void *cpu_state, void *mem_base) { return call_native(code_ptr_, cpu_state, mem_base); }
 
+	[[nodiscard]] void *get_code_ptr() const { return code_ptr_; }
+	[[nodiscard]] size_t get_code_size() const { return code_size_; }
+
 private:
 	void *code_ptr_;
 	size_t code_size_;
