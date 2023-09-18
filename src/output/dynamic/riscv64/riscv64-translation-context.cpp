@@ -1,4 +1,5 @@
 #include <arancini/ir/node.h>
+#include <arancini/output/dynamic/chain.h>
 #include <arancini/output/dynamic/riscv64/arithmetic.h>
 #include <arancini/output/dynamic/riscv64/bitwise.h>
 #include <arancini/output/dynamic/riscv64/encoder/riscv64-constants.h>
@@ -977,12 +978,6 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 			// Save address to patch jump into when chaining (A1 second ret value)
 			assembler_.auipc(A1, 0);
 
-			// If FOLLOWING instruction is NOT a branch (so we do unconditional control flow or we are in the trueval part of conditional):
-			// 		If PREVIOUS instruction is NOT a nop:
-			// 		overwrite AUIPC with J (or if it doesn't fit with AUIPC + JR)
-			// 		If it is a NOP (previous instruction was an already chained branch, see below):
-			//		overwrite previous instruction with J (or if it doesn't fit with AUIPC + JR)
-
 			reg_used_[A1.encoding()] = true; // Force keeping A1 unused
 			TypedRegister &reg = materialise_constant(*target);
 			assembler_.sd(reg, { FP, static_cast<intptr_t>(reg_offsets::PC) });
@@ -1005,19 +1000,6 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 				// Save address to patch jump into when chaining (A1 second ret value)
 				assembler_.auipc(A1, 0);
 
-				// If following instruction IS a branch (so it is falseval part of conditional control flow):
-				// 1a. overwrite AUIPC with that branch + adjusted offset to following block
-				// 1b. and the branch with a NOP
-				//		if the instruction following the branch is a J OR an AUIPC + JR:
-				//			move the J (or AUIPC + JR) in place of the NOP (trueval part already chained)
-				// 2. if offset doesn't fit:
-				// 		a) overwrite AUIPC with inverted branch + single ins offset
-				// 		b) the branch with unconditional branch to block
-				// If that still doesn't fit:
-				// 		a) overwrite AUIPC with inverted branch + single ins offset
-				//		b) move the constant generation of trueval by 1 instruction (falseval not needed anymore, can be overwritten)
-				// 		c) overwrite the branch with AUIPC
-				//		d) overwrite the "hole" with JR
 				reg_used_[A1.encoding()] = true; // Force keeping A1 unused
 				Label false_calc {}, end {};
 
@@ -1544,6 +1526,27 @@ TypedRegister &riscv64_translation_context::materialise_vector_extract(const vec
 	}
 }
 
+/*
+	 Instructions:
+	 If FOLLOWING instruction is NOT a branch (so we do unconditional control flow or we are in the trueval part of conditional):
+			If PREVIOUS instruction is NOT a nop:
+			overwrite AUIPC with J (or if it doesn't fit with AUIPC + JR)
+			If it is a NOP (previous instruction was an already chained branch, see below):
+			overwrite previous instruction with J (or if it doesn't fit with AUIPC + JR)
+	 If following instruction IS a branch (so it is falseval part of conditional control flow):
+	 1a. overwrite AUIPC with that branch + adjusted offset to following block
+	 1b. and the branch with a NOP
+			if the instruction following the branch is a J OR an AUIPC + JR:
+				move the J (or AUIPC + JR) in place of the NOP (trueval part already chained)
+	 2. if offset doesn't fit:
+			a) overwrite AUIPC with inverted branch + single ins offset
+			b) the branch with unconditional branch to block
+	 If that still doesn't fit:
+			a) overwrite AUIPC with inverted branch + single ins offset
+			b) move the constant generation of trueval by 1 instruction (falseval not needed anymore, can be overwritten)
+			c) overwrite the branch with AUIPC
+			d) overwrite the "hole" with JR
+*/
 void riscv64_translation_context::chain(uint64_t chain_address, void *chain_target)
 {
 }
