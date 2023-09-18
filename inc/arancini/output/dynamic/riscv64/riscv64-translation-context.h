@@ -46,6 +46,7 @@ private:
 	std::unordered_map<const ir::local_var *, std::reference_wrapper<TypedRegister>> locals_;
 	std::array<uint32_t, 16> reg_map_ {};
 	std::bitset<32> reg_used_ {};
+	std::bitset<16> reg_written_ {};
 
 	Register next_register();
 	std::pair<TypedRegister &, bool> allocate_register(

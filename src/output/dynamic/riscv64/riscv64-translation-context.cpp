@@ -100,6 +100,7 @@ Register riscv64_translation_context::get_or_assign_mapped_register(unsigned lon
 		i = reg.encoding();
 		reg_used_[i] = true;
 	}
+	reg_written_[idx - 1] = true; // Consider "assign" access as write
 	return Register { i };
 }
 
@@ -118,7 +119,7 @@ Register riscv64_translation_context::get_or_load_mapped_register(unsigned long 
 void riscv64_translation_context::write_back_registers()
 {
 	for (size_t i = 0; i < reg_map_.size(); ++i) {
-		if (reg_map_[i]) {
+		if (reg_map_[i] && reg_written_[i]) {
 			assembler_.sd(Register { reg_map_[i] }, { FP, static_cast<intptr_t>(8 * i + 8) }); // FIXME hardcoded offset
 		}
 	}
@@ -144,6 +145,7 @@ void riscv64_translation_context::begin_block()
 	}
 	reg_map_.fill(0);
 	reg_used_.reset();
+	reg_written_.reset();
 
 	add_marker(1);
 }
@@ -828,8 +830,8 @@ TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_
 {
 	const port &value = n.val();
 	if (is_int(value, 64) && value.targets().size() == 1 && n.regoff() <= static_cast<unsigned long>(reg_offsets::R15)) { // 64bit GPR only used once
-		unsigned int &i = reg_map_[n.regidx() - 1];
-		return allocate_register(&n.val(), Register { i }).first;
+		Register reg = get_or_load_mapped_register(n.regidx());
+		return allocate_register(&n.val(), reg).first;
 	}
 
 	auto [out_reg, valid] = allocate_register(&n.val());
