@@ -24,9 +24,9 @@ void interrupt_translator::do_translate()
 	}
 
 	case XED_ICLASS_SYSCALL: {
+		builder().insert_internal_call(builder().ifr().resolve("handle_syscall"), {});
 		auto next = builder().insert_add(builder().insert_read_pc()->val(), builder().insert_constant_u64(2)->val());
 		builder().insert_write_pc(next->val());
-		builder().insert_internal_call(builder().ifr().resolve("handle_syscall"), {});
 		break;
 	}
 
