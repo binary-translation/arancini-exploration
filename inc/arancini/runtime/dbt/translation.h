@@ -4,7 +4,13 @@
 #include <iostream>
 
 namespace arancini::runtime::dbt {
-extern "C" int call_native(void *, void *, void*);
+
+struct native_call_result {
+	int exit_code;
+	uint64_t chain_address;
+};
+
+extern "C" native_call_result call_native(void *, void *, void *);
 
 class translation {
 
@@ -17,7 +23,7 @@ public:
 
 	~translation() { std::free(code_ptr_); }
 
-	int invoke(void *cpu_state, void *mem_base) { return call_native(code_ptr_, cpu_state, mem_base); }
+	native_call_result invoke(void *cpu_state, void *mem_base) { return call_native(code_ptr_, cpu_state, mem_base); }
 
 private:
 	void *code_ptr_;

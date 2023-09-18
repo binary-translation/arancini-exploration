@@ -133,7 +133,9 @@ int execution_context::invoke(void *cpu_state)
 		return 1;
 	}
 
-	return txln->invoke(cpu_state, memory_);
+	const dbt::native_call_result result = txln->invoke(cpu_state, memory_);
+
+	return result.exit_code;
 }
 
 int execution_context::internal_call(void *cpu_state, int call)
