@@ -265,7 +265,7 @@ void debug_visitor::visit_binary_atomic_node(binary_atomic_node &n)
     break;
 	}
 
-	os_ << get_port_name(n.address()) << ", " << get_port_name(n.rhs()) << std::endl;
+	os_ << get_port_name(n.lhs()) << ", " << get_port_name(n.rhs()) << std::endl;
 }
 
 void debug_visitor::visit_ternary_atomic_node(ternary_atomic_node &n)
@@ -287,7 +287,7 @@ void debug_visitor::visit_ternary_atomic_node(ternary_atomic_node &n)
 		break;
 	}
 
-	os_ << get_port_name(n.address()) << ", " << get_port_name(n.rhs()) << ", " << get_port_name(n.top()) << std::endl;
+	os_ << get_port_name(n.lhs()) << ", " << get_port_name(n.rhs()) << ", " << get_port_name(n.top()) << std::endl;
 }
 
 void debug_visitor::visit_cast_node(cast_node &n)

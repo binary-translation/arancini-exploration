@@ -435,9 +435,6 @@ public:
 	port &zero() { return zero_; }
 	port &negative() { return negative_; }
 
-	[[nodiscard]] const port &zero() const { return zero_; }
-	[[nodiscard]] const port &negative() const{ return negative_; }
-
 	virtual void accept(visitor &v) override
 	{
 		value_node::accept(v);
@@ -662,11 +659,6 @@ public:
 	port &overflow() { return overflow_; }
 	port &carry() { return carry_; }
 
-	const port &zero() const { return zero_; }
-	const port &negative() const { return negative_; }
-	const port &overflow() const { return overflow_; }
-	const port &carry() const { return carry_; }
-
 	virtual void accept(visitor &v) override
 	{
 		if (v.seen_node(this))
@@ -711,20 +703,20 @@ enum class binary_atomic_op { add, sub, band, bor, xadd, bxor, btc, btr, bts, xc
 
 class binary_atomic_node : public atomic_node {
 public:
-	binary_atomic_node(binary_atomic_op op, port &address, port &operand)
-		: atomic_node(node_kinds::binary_atomic, operand.type())
+	binary_atomic_node(binary_atomic_op op, port &lhs, port &rhs)
+		: atomic_node(node_kinds::binary_atomic, lhs.type())
 		, op_(op)
-		, address_(address)
-		, operand_(operand)
+		, lhs_(lhs)
+		, rhs_(rhs)
 	{
-		address.add_target(this);
-		operand.add_target(this);
+		lhs.add_target(this);
+		rhs.add_target(this);
 	}
 
 	binary_atomic_op op() const { return op_; }
 
-	port &address() const { return address_; }
-	port &rhs() const { return operand_; }
+	port &lhs() const { return lhs_; }
+	port &rhs() const { return rhs_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -736,29 +728,29 @@ public:
 
 private:
 	binary_atomic_op op_;
-	port &address_;
-	port &operand_;
+	port &lhs_;
+	port &rhs_;
 };
 
 enum class ternary_atomic_op { adc, sbb, cmpxchg };
 
 class ternary_atomic_node : public atomic_node {
 public:
-	ternary_atomic_node(ternary_atomic_op op, port &address, port &rhs, port &top)
-		: atomic_node(node_kinds::ternary_atomic, rhs.type())
+	ternary_atomic_node(ternary_atomic_op op, port &lhs, port &rhs, port &top)
+		: atomic_node(node_kinds::ternary_atomic, lhs.type())
 		, op_(op)
-		, address_(address)
+		, lhs_(lhs)
 		, rhs_(rhs)
 		, top_(top)
 	{
-		address.add_target(this);
+		lhs.add_target(this);
 		rhs.add_target(this);
 		top.add_target(this);
 	}
 
 	ternary_atomic_op op() const { return op_; }
 
-	port &address() const { return address_; }
+	port &lhs() const { return lhs_; }
 	port &rhs() const { return rhs_; }
 	port &top() const { return top_; }
 
@@ -772,7 +764,7 @@ public:
 
 private:
 	ternary_atomic_op op_;
-	port &address_;
+	port &lhs_;
 	port &rhs_;
 	port &top_;
 };
