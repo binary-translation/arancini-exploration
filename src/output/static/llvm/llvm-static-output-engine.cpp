@@ -87,7 +87,7 @@ void llvm_static_output_engine_impl::initialise_types()
 	types.i64 = Type::getInt64Ty(*llvm_context_);
 	types.f32 = Type::getFloatTy(*llvm_context_);
 	types.f64 = Type::getDoubleTy(*llvm_context_);
-	types.f80 = Type::getX86_FP80Ty(*llvm_context_);
+	types.f80 = Type::getDoubleTy(*llvm_context_);
 	types.i128 = Type::getInt128Ty(*llvm_context_);
 	types.i256 = IntegerType::get(*llvm_context_, 256);
 	types.i512 = IntegerType::get(*llvm_context_, 512);
@@ -380,12 +380,6 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		auto rmn = (read_mem_node *)n;
 		auto address = lower_port(builder, state_arg, pkt, rmn->address());
 
-		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(types.i64, 256));
-
-		if (auto address_ptr_i = ::llvm::dyn_cast<Instruction>(address_ptr)) {
-			address_ptr_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, guest_mem_alias_scope_));
-		}
-
 		::llvm::Type *ty;
 		switch (rmn->val().type().width()) {
 		case 8:
@@ -409,6 +403,12 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 		default:
 			throw std::runtime_error("unsupported memory load width: " + std::to_string(rmn->val().type().width()));
+		}
+
+		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(ty, 256));
+
+		if (auto address_ptr_i = ::llvm::dyn_cast<Instruction>(address_ptr)) {
+			address_ptr_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, guest_mem_alias_scope_));
 		}
 
 		LoadInst *li = builder.CreateLoad(ty, address_ptr);
@@ -1423,6 +1423,9 @@ void llvm_static_output_engine_impl::compile()
 	const char *cpu = "generic-rv64";
 	//Specify abi as 64 bits using double float registers
 	TO.MCOptions.ABIName="lp64d";
+#elif defined(ARCH_AARCH64)
+	const char *features = "+fp-armv8,+v8.5a";
+	const char *cpu = "neoverse-n2";
 #else
 	const char *features = "+avx";
 	const char *cpu = "generic";
