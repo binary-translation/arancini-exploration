@@ -1012,7 +1012,23 @@ TypedRegister &riscv64_translation_context::materialise_ternary_arith(const tern
 
 TypedRegister &riscv64_translation_context::materialise_bit_shift(const bit_shift_node &n)
 {
-	if (!(is_gpr(n.val()) && is_gpr(n.input()) && is_gpr(n.amount()))) {
+	if (is_i128(n.val()) && is_i128(n.input()) && is_gpr(n.amount())) {
+		TypedRegister &src_reg = *materialise(n.input().owner());
+		const std::optional<int64_t> &i = get_as_int(n.amount().owner());
+
+		if (i) {
+			auto amt = *i;
+			if (amt == 64) {
+				if (n.op() == shift_op::lsl) {
+					return allocate_register(&n.val(), ZERO, src_reg.reg1()).first;
+				} else if (n.op() == shift_op::lsr) {
+					return allocate_register(&n.val(), src_reg.reg2(), ZERO).first;
+				}
+			}
+		}
+	}
+
+	if (!(is_scalar_int(n.val()) && is_scalar_int(n.input()) && is_gpr(n.amount()))) {
 		throw std::runtime_error("unsupported width on bit shift operation");
 	}
 	auto [out_reg, valid] = allocate_register(&n.val());
@@ -1024,7 +1040,7 @@ TypedRegister &riscv64_translation_context::materialise_bit_shift(const bit_shif
 	const std::optional<int64_t> &i = get_as_int(n.amount().owner());
 
 	if (i) {
-		auto amt = *i & 0x3f;
+		auto amt = *i;
 		if (amt == 0) {
 			return src_reg;
 		}

@@ -10,6 +10,12 @@
 inline void slli(Assembler &assembler, TypedRegister &out_reg, const TypedRegister& src_reg, intptr_t amt)
 {
 	switch (out_reg.type().element_width()) {
+	case 128:
+		assembler.slli(out_reg.reg2(), src_reg.reg2(), amt);
+		assembler.srli(out_reg.reg1(), src_reg.reg1(), 64 - amt);
+		assembler.or_(out_reg.reg2(), out_reg.reg2(), out_reg.reg1());
+		assembler.slli(out_reg.reg1(), src_reg.reg1(), amt);
+		break;
 	case 64:
 		assembler.slli(out_reg, src_reg, amt);
 		break;
@@ -29,6 +35,12 @@ inline void slli(Assembler &assembler, TypedRegister &out_reg, const TypedRegist
 inline void srli(Assembler &assembler, TypedRegister &out_reg, const TypedRegister& src_reg, intptr_t amt)
 {
 	switch (out_reg.type().element_width()) {
+	case 128:
+		assembler.srli(out_reg.reg1(), src_reg.reg1(), amt);
+		assembler.slli(out_reg.reg2(), src_reg.reg2(), 64 - amt);
+		assembler.or_(out_reg.reg1(), out_reg.reg1(), out_reg.reg2());
+		assembler.srli(out_reg.reg2(), src_reg.reg2(), amt);
+		break;
 	case 64:
 		assembler.srli(out_reg, src_reg, amt);
 		break;
