@@ -28,3 +28,4 @@ target_link_libraries(arancini-output-riscv64-static PRIVATE arancini-ir-static)
 target_compile_definitions(arancini-output-riscv64 PUBLIC ARCH_RISCV64)
 target_compile_definitions(arancini-output-riscv64-static PUBLIC ARCH_RISCV64)
 
+install(TARGETS arancini-output-riscv64-static arancini-output-riscv64 LIBRARY)
