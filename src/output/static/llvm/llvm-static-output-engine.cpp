@@ -405,6 +405,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			throw std::runtime_error("unsupported memory load width: " + std::to_string(rmn->val().type().width()));
 		}
 
+		address = builder.CreateAdd(address, builder.CreateLoad(types.i64, local_map_->at(reg_offsets::GS)));
 		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(ty, 256));
 
 		if (auto address_ptr_i = ::llvm::dyn_cast<Instruction>(address_ptr)) {
@@ -1099,6 +1100,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto address = lower_port(builder, state_arg, pkt, wmn->address());
 		auto value = lower_port(builder, state_arg, pkt, wmn->value());
 
+		address = builder.CreateAdd(address, builder.CreateLoad(types.i64, local_map_->at(reg_offsets::GS)));
 		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(value->getType(), 256));
 
 		if (auto address_ptr_i = ::llvm::dyn_cast<Instruction>(address_ptr)) {
