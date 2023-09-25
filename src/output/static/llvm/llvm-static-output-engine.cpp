@@ -266,6 +266,7 @@ void llvm_static_output_engine_impl::build()
 	// Everything is synced here, no need to load more than the PC
 	auto program_counter_val = builder.CreateLoad(types.i64, program_counter, "pc");
 	auto pcswitch = builder.CreateSwitch(program_counter_val, switch_to_dbt);
+	pcswitch->addCase(ConstantInt::get(types.i64, 0), exit_block);
 
 	lower_chunks(pcswitch, loop_block);
 
@@ -313,7 +314,8 @@ void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlo
 		auto call_block = BasicBlock::Create(*llvm_context_, "", contblock->getParent());
 		builder.SetInsertPoint(call_block);
 		builder.CreateCall(types.fn_fn, f.second, { contblock->getParent()->getArg(0) });
-		builder.CreateRetVoid();
+		//builder.CreateRetVoid();
+		builder.CreateBr(contblock);
 		pcswitch->addCase(ConstantInt::get(types.i64, f.first), call_block);
 	}
 }
@@ -1299,7 +1301,7 @@ Function *llvm_static_output_engine_impl::lower_chunk(BasicBlock *contblock, std
 
 	builder.SetInsertPoint(mid);
 	auto pc = builder.CreateLoad(types.i64, local_map->at(reg_offsets::PC));
-	auto local_switch = builder.CreateSwitch(pc, jmp);
+	auto local_switch = builder.CreateSwitch(pc, post);
 
 	for (auto p : c->packets()) {
 		std::stringstream block_name;
