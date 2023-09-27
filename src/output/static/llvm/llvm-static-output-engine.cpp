@@ -120,7 +120,7 @@ void llvm_static_output_engine_impl::initialise_types()
 	// Functions
 	types.main_fn = FunctionType::get(types.i32, { types.i32, PointerType::get(Type::getInt8PtrTy(*llvm_context_), 0) }, false);
 	types.loop_fn = FunctionType::get(types.vd, { types.cpu_state_ptr }, false);
-	types.fn_fn = FunctionType::get(types.vd, { types.cpu_state_ptr }, false);
+	types.fn_fn = FunctionType::get(types.i1, { types.cpu_state_ptr }, false);
 	types.init_dbt = FunctionType::get(types.cpu_state_ptr, { types.i64, types.i32, PointerType::get(Type::getInt8PtrTy(*llvm_context_),0) }, false);
 	types.dbt_invoke = FunctionType::get(types.i32, { types.cpu_state_ptr }, false);
 	types.internal_call_handler = FunctionType::get(types.i32, { types.cpu_state_ptr, types.i32 }, false);
@@ -249,9 +249,11 @@ void llvm_static_output_engine_impl::build()
 	auto entry_block = BasicBlock::Create(*llvm_context_, "entry", loop_fn);
 	auto loop_block = BasicBlock::Create(*llvm_context_, "loop", loop_fn);
 	auto switch_to_dbt = BasicBlock::Create(*llvm_context_, "switch_to_dbt", loop_fn);
+	auto check_for_cont_block = BasicBlock::Create(*llvm_context_, "check_for_next_call", loop_fn);
 	auto check_for_int_call_block = BasicBlock::Create(*llvm_context_, "check_for_internal_call", loop_fn);
 	auto internal_call_block = BasicBlock::Create(*llvm_context_, "internal_call", loop_fn);
 	auto exit_block = BasicBlock::Create(*llvm_context_, "exit", loop_fn);
+	auto ret_block = BasicBlock::Create(*llvm_context_, "return_from_dbt", loop_fn);
 
 	IRBuilder<> builder(*llvm_context_);
 
@@ -274,6 +276,9 @@ void llvm_static_output_engine_impl::build()
 
 	auto switch_callee = module_->getOrInsertFunction("invoke_code", types.dbt_invoke);
 	auto invoke_result = builder.CreateCall(switch_callee, { state_arg });
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 3)), ret_block, check_for_cont_block);
+
+	builder.SetInsertPoint(check_for_cont_block);
 	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 0)), loop_block, check_for_int_call_block);
 
 	builder.SetInsertPoint(check_for_int_call_block);
@@ -290,6 +295,9 @@ void llvm_static_output_engine_impl::build()
 	auto finalize_call_callee = module_->getOrInsertFunction("finalize", types.finalize);
 	builder.CreateCall(finalize_call_callee, {});
 
+	builder.CreateRetVoid();
+
+	builder.SetInsertPoint(ret_block);
 	builder.CreateRetVoid();
 
 	if (e_.dbg_) {
@@ -312,9 +320,18 @@ void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlo
 	}
 	for (auto f : fns) {
 		auto call_block = BasicBlock::Create(*llvm_context_, "", contblock->getParent());
+		auto unknown = BasicBlock::Create(*llvm_context_, "", contblock->getParent());
+		auto ret = BasicBlock::Create(*llvm_context_, "", contblock->getParent());
+
 		builder.SetInsertPoint(call_block);
-		builder.CreateCall(types.fn_fn, f.second, { contblock->getParent()->getArg(0) });
-		//builder.CreateRetVoid();
+		auto ret_val = builder.CreateCall(types.fn_fn, f.second, { contblock->getParent()->getArg(0) });
+		auto cmp = builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, ret_val, ConstantInt::get(types.i1, 0));
+		builder.CreateCondBr(cmp, unknown, ret);
+		
+		builder.SetInsertPoint(ret);
+		builder.CreateRetVoid();
+		
+		builder.SetInsertPoint(unknown);
 		builder.CreateBr(contblock);
 		pcswitch->addCase(ConstantInt::get(types.i64, f.first), call_block);
 	}
@@ -1301,7 +1318,7 @@ Function *llvm_static_output_engine_impl::lower_chunk(BasicBlock *contblock, std
 
 	builder.SetInsertPoint(mid);
 	auto pc = builder.CreateLoad(types.i64, local_map->at(reg_offsets::PC));
-	auto local_switch = builder.CreateSwitch(pc, post);
+	auto local_switch = builder.CreateSwitch(pc, jmp);
 
 	for (auto p : c->packets()) {
 		std::stringstream block_name;
@@ -1362,14 +1379,15 @@ Function *llvm_static_output_engine_impl::lower_chunk(BasicBlock *contblock, std
 
 	builder.SetInsertPoint(post);
 	save_registers(&builder, state_arg);
-	builder.CreateRetVoid();
+	builder.CreateRet(ConstantInt::get(types.i1, 1));
 
 	// Sometimes we jump to functions, thanks musl
 	builder.SetInsertPoint(jmp);
 	save_registers(&builder, state_arg);
-	builder.CreateCall(types.loop_fn, contblock->getParent(), { state_arg });
-	restore_registers(&builder, state_arg);
-	builder.CreateBr(mid);
+	//builder.CreateCall(types.loop_fn, contblock->getParent(), { state_arg });
+	//restore_registers(&builder, state_arg);
+	//builder.CreateBr(mid);
+	builder.CreateRet(ConstantInt::get(types.i1, 0));
 
 	if (verifyFunction(*fn, &errs())) {
 		throw std::runtime_error("local function verification failed");

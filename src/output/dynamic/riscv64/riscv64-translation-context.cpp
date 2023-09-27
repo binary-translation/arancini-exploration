@@ -803,6 +803,8 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 	Address addr { FP, static_cast<intptr_t>(reg_offsets::PC) };
 	auto store_instr = store_instructions.at(n.value().type().element_width());
 	(assembler_.*store_instr)(src_reg, addr);
+	if (n.updates_pc()==br_type::ret)
+		ret_val_ = 3;
 }
 
 void riscv64_translation_context::materialise_label(const label_node &n)
