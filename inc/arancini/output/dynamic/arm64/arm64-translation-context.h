@@ -1,5 +1,6 @@
 #pragma once
 
+#include "arancini/ir/value-type.h"
 #include "arancini/output/dynamic/arm64/arm64-instruction.h"
 #include "arm64-instruction-builder.h"
 
@@ -23,5 +24,6 @@ public:
 	virtual void end_block() override;
 	virtual void lower(const std::shared_ptr<ir::action_node> &n) override;
 };
+
 } // namespace arancini::output::dynamic::arm64
 
