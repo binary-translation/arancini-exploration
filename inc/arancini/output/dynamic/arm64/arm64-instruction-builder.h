@@ -642,10 +642,11 @@ public:
     void insert_sep(const std::string &sep) { label(sep); }
 
     bool has_label(const std::string &label) {
+        auto label_str = label + ":";
         auto insn = instructions_;
         return std::any_of(insn.rbegin(), insn.rend(),
                             [&](const instruction &i) {
-                                return i.opcode() == label;
+                                return i.opcode() == label_str;
                             });
     }
 
