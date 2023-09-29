@@ -1,5 +1,6 @@
 #pragma once
 
+#include "arancini/ir/value-type.h"
 #include "arancini/output/dynamic/arm64/arm64-instruction.h"
 #include "arm64-instruction-builder.h"
 
@@ -97,7 +98,10 @@ private:
     void materialise_write_local(const ir::write_local_node &n);
 
     vreg_operand add_membase(const vreg_operand &addr);
-    vreg_operand mov_immediate(uint64_t imm, arancini::ir::value_type type);
+
+    template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
+    vreg_operand mov_immediate(T imm, ir::value_type type);
 };
+
 } // namespace arancini::output::dynamic::arm64
 

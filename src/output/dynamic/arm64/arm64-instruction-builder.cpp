@@ -2,6 +2,7 @@
 #include <arancini/output/dynamic/arm64/arm64-instruction-builder.h>
 #include <array>
 #include <bitset>
+#include <exception>
 #include <utility>
 #include <stdexcept>
 #include <unordered_map>
