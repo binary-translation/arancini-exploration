@@ -61,6 +61,12 @@ std::vector<vreg_operand> &arm64_translation_context::alloc_vregs(const ir::port
     return vregs_for_port(p);
 }
 
+vreg_operand arm64_translation_context::cast(const vreg_operand &op, value_type type) {
+    auto dest_vreg = alloc_vreg(type);
+    builder_.mov(dest_vreg, op);
+    return dest_vreg;
+}
+
 template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int>>
 vreg_operand arm64_translation_context::mov_immediate(T imm, ir::value_type type) {
     auto actual_size = base_type().element_width() - __builtin_clzll(reinterpret_cast<unsigned long long&>(imm)|1);
@@ -336,7 +342,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     // There should be clear type promotion and type coercion.
     for (std::size_t i = 0; i < src_vregs.size(); ++i) {
         if (src_vregs[i].type().width() > n.value().type().width() && n.value().type().width() <= base_type().element_width())
-            src_vregs[i].type() = n.value().type();
+            src_vregs[i] = cast(src_vregs[i], n.value().type());
 
         size_t width = src_vregs[i].type().width();
         auto addr = guestreg_memory_operand(n.regoff() + i * width);
@@ -698,7 +704,9 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
         // Set carry flag
         builder_.mrs(pstate, preg_operand(preg_operand::nzcv));
         builder_.lsl(top_vregs[i], top_vregs[i], immediate_operand(0x3, value_type::u8()));
-        top_vregs[i].type() = pstate.type();
+
+        cast(top_vregs[i], pstate.type());
+
         builder_.orr_(pstate, pstate, top_vregs[i]);
         builder_.msr(preg_operand(preg_operand::nzcv), pstate);
 
@@ -1345,7 +1353,8 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
 
     std::size_t dest_idx = 0;
     for (std::size_t i = extract_start; extracted < n.length(); ++i) {
-        dest_vregs[dest_idx].type() = src_vregs[i].type();
+        dest_vregs[dest_idx] = cast(dest_vregs[dest_idx], src_vregs[i].type());
+
         builder_.bfxil(dest_vregs[dest_idx], src_vregs[i],
                       immediate_operand(extract_idx, value_type::u8()),
                       immediate_operand(extract_len, value_type::u8()));
@@ -1381,7 +1390,7 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
     std::size_t bits_total_width = total_width(bits_vregs);
     for (std::size_t i = insert_start; inserted < n.length(); ++i) {
         auto bits_vreg_width = bits_vregs[bits_idx].width();
-        bits_vregs[bits_idx].type() = dest_vregs[i].type();
+        bits_vregs[bits_idx] = cast(bits_vregs[bits_idx], dest_vregs[i].type());
         builder_.bfi(dest_vregs[i], bits_vregs[bits_idx],
                      immediate_operand(insert_idx, value_type::u8()),
                      immediate_operand(insert_len, value_type::u8()));
