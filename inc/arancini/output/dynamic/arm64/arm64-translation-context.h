@@ -41,31 +41,21 @@ private:
         return vreg_operand(next_vreg_++, type);
     }
 
-	vreg_operand alloc_vreg(const ir::port &p, ir::value_type type) {
+	vreg_operand &alloc_vreg(const ir::port &p, ir::value_type type) {
 		auto v = alloc_vreg(type);
-        if (port_to_vreg_.find(&p) == port_to_vreg_.end())
-            port_to_vreg_[&p] = {v};
-        else
-            port_to_vreg_[&p].push_back(v);
-		return v;
+        port_to_vreg_[&p].push_back(v);
+		return port_to_vreg_[&p].back();
 	}
 
-    vreg_operand alloc_vreg(const ir::port &p) {
-        return alloc_vreg(p, p.type());
-    }
+    vreg_operand &alloc_vreg(const ir::port &p) { return alloc_vreg(p, p.type()); }
 
-    std::vector<vreg_operand> alloc_vregs(const ir::port &p);
+    std::vector<vreg_operand> &alloc_vregs(const ir::port &p);
 
-	vreg_operand vreg_for_port(const ir::port &p, size_t index = 0) const {
-        return vregs_for_port(p)[index];
-    }
+	vreg_operand &vreg_for_port(const ir::port &p, size_t index = 0) { return vregs_for_port(p)[index]; }
 
-    std::vector<vreg_operand> vregs_for_port(const ir::port &p) const {
-        if (port_to_vreg_.count(&p) == 0) return {};
-        return port_to_vreg_.at(&p);
-    }
+    std::vector<vreg_operand> &vregs_for_port(const ir::port &p) { return port_to_vreg_[&p]; }
 
-    std::vector<vreg_operand> materialise_port(ir::port &p, bool constant_fold = false);
+    std::vector<vreg_operand> &materialise_port(ir::port &p);
 
 
     memory_operand guestreg_memory_operand(int regoff,
