@@ -91,6 +91,8 @@ private:
 
     template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
     vreg_operand mov_immediate(T imm, ir::value_type type);
+
+    vreg_operand cast(const vreg_operand &op, ir::value_type type);
 };
 
 } // namespace arancini::output::dynamic::arm64
