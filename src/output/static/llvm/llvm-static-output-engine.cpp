@@ -991,7 +991,10 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		
 		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
 		auto lhs = lower_port(builder, state_arg, pkt, ban->address());
-		lhs = builder.CreateLoad(rhs->getType(), builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256)), "Atomic LHS");
+		auto address = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
+		address = builder.CreateAdd(address, builder.CreateLoad(types.i64, local_map_->at(reg_offsets::GS)));
+
+		lhs = builder.CreateLoad(rhs->getType(), address, "Atomic LHS");
 		auto value_port = lower_port(builder, state_arg, pkt, n->val());
 		
 		if (p.kind() == port_kinds::zero) {
@@ -1214,6 +1217,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 	case node_kinds::binary_atomic: {
 		auto ban = (binary_atomic_node *)a;
 		auto lhs = lower_port(builder, state_arg, pkt, ban->address());
+		lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, local_map_->at(reg_offsets::GS)));
 		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
 
 		auto existing = node_ports_to_llvm_values_.find(&ban->val());
@@ -1245,6 +1249,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 	case node_kinds::ternary_atomic: {
 		auto tan = (ternary_atomic_node *)a;
 		auto lhs = lower_port(builder, state_arg, pkt, tan->address());
+		lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, local_map_->at(reg_offsets::GS)));
 		auto rhs = lower_port(builder, state_arg, pkt, tan->rhs());
 		auto top = lower_port(builder, state_arg, pkt, tan->top());
 
