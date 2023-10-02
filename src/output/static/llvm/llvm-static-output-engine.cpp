@@ -1,4 +1,5 @@
 #include "arancini/ir/node.h"
+#include "arancini/ir/opt.h"
 #include "arancini/ir/port.h"
 #include "arancini/ir/visitor.h"
 #include "llvm/Support/raw_ostream.h"
@@ -309,6 +310,10 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			throw std::runtime_error("unsupported memory load width: " + std::to_string(rmn->val().type().width()));
 		}
 
+#ifndef ARCH_X86_64
+		auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
+		address = builder.CreateAdd(address, builder.CreateLoad(types.i64, gs_reg));
+#endif
 		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(ty, 256));
 
 		if (auto address_ptr_i = ::llvm::dyn_cast<Instruction>(address_ptr)) {
@@ -873,6 +878,10 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		
 		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
 		auto lhs = lower_port(builder, state_arg, pkt, ban->address());
+#ifndef ARCH_X86_64
+		auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
+		lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, gs_reg));
+#endif
 		lhs = builder.CreateLoad(rhs->getType(), builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256)), "Atomic LHS");
 		auto value_port = lower_port(builder, state_arg, pkt, n->val());
 		
@@ -999,6 +1008,10 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto address = lower_port(builder, state_arg, pkt, wmn->address());
 		auto value = lower_port(builder, state_arg, pkt, wmn->value());
 
+#ifndef ARCH_X86_64
+		auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
+		address = builder.CreateAdd(address, builder.CreateLoad(types.i64, gs_reg));
+#endif
 		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(value->getType(), 256));
 
 		if (auto address_ptr_i = ::llvm::dyn_cast<Instruction>(address_ptr)) {
@@ -1090,6 +1103,10 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 	case node_kinds::binary_atomic: {
 		auto ban = (binary_atomic_node *)a;
 		auto lhs = lower_port(builder, state_arg, pkt, ban->address());
+#ifndef ARCH_X86_64
+		auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
+		lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, gs_reg));
+#endif
 		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
 
 		auto existing = node_ports_to_llvm_values_.find(&ban->val());
@@ -1121,6 +1138,10 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 	case node_kinds::ternary_atomic: {
 		auto tan = (ternary_atomic_node *)a;
 		auto lhs = lower_port(builder, state_arg, pkt, tan->address());
+#ifndef ARCH_X86_64
+		auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
+		lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, gs_reg));
+#endif
 		auto rhs = lower_port(builder, state_arg, pkt, tan->rhs());
 		auto top = lower_port(builder, state_arg, pkt, tan->top());
 
