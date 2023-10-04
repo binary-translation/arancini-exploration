@@ -42,9 +42,10 @@ inline void add_flags(InstructionBuilder &builder, TypedRegister &out, TypedRegi
 				extend_to_64(builder, lhs, lhs);
 				extend_to_64(builder, rhs, rhs);
 
-				builder.sltz(CF, lhs);
+				RegisterOperand temp = builder.next_register();
+				builder.sltz(temp, lhs);
 				builder.slt(OF, out, rhs);
-				builder.xor_(OF, OF, CF); // OF FIXME Assumes out!=lhs && out!=rhs
+				builder.xor_(OF, OF, temp); // OF FIXME Assumes out!=lhs && out!=rhs
 			}
 			if (c) {
 				extend_to_64(builder, rhs, rhs);
@@ -111,9 +112,10 @@ inline void sub_flags(InstructionBuilder &builder, TypedRegister &out, TypedRegi
 				extend_to_64(builder, lhs, lhs);
 				extend_to_64(builder, rhs, rhs);
 
-				builder.sgtz(CF, rhs);
+				RegisterOperand temp = builder.next_register();
+				builder.sgtz(temp, rhs);
 				builder.slt(OF, out, lhs);
-				builder.xor_(OF, OF, CF); // OF FIXME Assumes out!=lhs && out!=rhs
+				builder.xor_(OF, OF, temp); // OF FIXME Assumes out!=lhs && out!=rhs
 			}
 			if (c) {
 				extend_to_64(builder, lhs, lhs);

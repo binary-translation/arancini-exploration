@@ -434,12 +434,13 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 		switch (n.rhs().type().element_width()) {
 		case 64:
 		case 32: {
+			auto &temp = allocate_register().first;
 			builder_.Bind(&retry);
 
 			(builder_.*lr)(out_reg, addr, std::memory_order_acq_rel);
 			builder_.bne(out_reg, acc, &fail, Assembler::kNearJump);
-			(builder_.*sc)(out_reg, src, addr, std::memory_order_acq_rel); // Out_reg unused so use it here
-			builder_.bnez(out_reg, &retry, Assembler::kNearJump);
+			(builder_.*sc)(temp, src, addr, std::memory_order_acq_rel); // Out_reg unused so use it here
+			builder_.bnez(temp, &retry, Assembler::kNearJump);
 
 			// Flags from comparison matching (i.e subtraction of equal values)
 			if (z_needed) {
@@ -460,7 +461,7 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 			builder_.Bind(&fail);
 
 			if (flags_needed) {
-				TypedRegister temp_reg { SF };
+				auto &temp_reg = allocate_register().first;
 				temp_reg.set_type(n.val().type());
 				sub(builder_, temp_reg, acc, out_reg);
 				sub_flags(builder_, temp_reg, acc, out_reg, z_needed, v_needed, c_needed, n_needed);
@@ -506,6 +507,8 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 
 	auto addr = AddressOperand { reg };
 
+	auto &temp_result_reg = allocate_register().first;
+
 	// FIXME Correct memory ordering?
 	switch (n.op()) {
 	case binary_atomic_op::xadd:
@@ -522,7 +525,6 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 		}
 
 		if (flags_needed) {
-			TypedRegister temp_result_reg { SF };
 			temp_result_reg.set_type(n.val().type());
 
 			add(builder_, temp_result_reg, out_reg, src); // Actual sum for flag generation
@@ -560,7 +562,6 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 		}
 
 		if (flags_needed) {
-			TypedRegister temp_result_reg { SF };
 			temp_result_reg.set_type(n.val().type());
 
 			sub(builder_, temp_result_reg, out_reg, src); // Actual difference for flag generation
@@ -572,22 +573,20 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 		case 64:
 			builder_.amoandd(out_reg, src, addr, std::memory_order_acq_rel);
 			if (flags_needed) {
-				builder_.and_(SF, out_reg, src); // Actual and for flag generation
+				builder_.and_(temp_result_reg, out_reg, src); // Actual and for flag generation
 			}
 			break;
 		case 32:
 			builder_.amoandw(out_reg, src, addr, std::memory_order_acq_rel);
 			if (flags_needed) {
-				builder_.and_(SF, out_reg, src); // Actual and for flag generation
-				builder_.slli(SF, SF, 32); // Get rid of higher 32 bits
+				builder_.and_(temp_result_reg, out_reg, src); // Actual and for flag generation
+				builder_.slli(temp_result_reg, temp_result_reg, 32); // Get rid of higher 32 bits
 			}
 			break;
 		default:
 			throw std::runtime_error("unsupported lock and width");
 		}
-
-		TypedRegister out = TypedRegister { SF };
-		zero_sign_flag(builder_, out, z_needed, n_needed);
+		zero_sign_flag(builder_, temp_result_reg, z_needed, n_needed);
 		return std::nullopt;
 	}
 	case binary_atomic_op::bor: {
@@ -595,22 +594,21 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 		case 64:
 			builder_.amoord(out_reg, src, addr, std::memory_order_acq_rel);
 			if (flags_needed) {
-				builder_.or_(SF, out_reg, src); // Actual or for flag generation
+				builder_.or_(temp_result_reg, out_reg, src); // Actual or for flag generation
 			}
 			break;
 		case 32:
 			builder_.amoorw(out_reg, src, addr, std::memory_order_acq_rel);
 			if (flags_needed) {
-				builder_.or_(SF, out_reg, src); // Actual or for flag generation
-				builder_.slli(SF, SF, 32); // Get rid of higher 32 bits
+				builder_.or_(temp_result_reg, out_reg, src); // Actual or for flag generation
+				builder_.slli(temp_result_reg, temp_result_reg, 32); // Get rid of higher 32 bits
 			}
 			break;
 		default:
 			throw std::runtime_error("unsupported lock or width");
 		}
 
-		TypedRegister out = TypedRegister { SF };
-		zero_sign_flag(builder_, out, z_needed, n_needed);
+		zero_sign_flag(builder_, temp_result_reg, z_needed, n_needed);
 		return std::nullopt;
 	}
 	case binary_atomic_op::bxor: {
@@ -618,23 +616,22 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 		case 64:
 			builder_.amoxord(out_reg, src, addr, std::memory_order_acq_rel);
 			if (flags_needed) {
-				builder_.xor_(SF, out_reg, src); // Actual xor for flag generation
+				builder_.xor_(temp_result_reg, out_reg, src); // Actual xor for flag generation
 			}
 			break;
 		case 32:
 			builder_.amoxorw(out_reg, src, addr, std::memory_order_acq_rel);
 
 			if (flags_needed) {
-				builder_.xor_(SF, out_reg, src); // Actual xor for flag generation
-				builder_.slli(SF, SF, 32); // Get rid of higher 32 bits
+				builder_.xor_(temp_result_reg, out_reg, src); // Actual xor for flag generation
+				builder_.slli(temp_result_reg, temp_result_reg, 32); // Get rid of higher 32 bits
 			}
 			break;
 		default:
 			throw std::runtime_error("unsupported lock xor width");
 		}
 
-		TypedRegister out = TypedRegister { SF };
-		zero_sign_flag(builder_, out, z_needed, n_needed);
+		zero_sign_flag(builder_, temp_result_reg, z_needed, n_needed);
 		return std::nullopt;
 	}
 	case binary_atomic_op::xchg:
@@ -796,14 +793,14 @@ TypedRegister &riscv64_translation_context::materialise_bit_insert(const bit_ins
 			// Map upper and insert into lower
 			auto [out_reg, valid] = allocate_register(&n.val(), std::nullopt, src.reg2());
 			if (valid) {
-				bit_insert(builder_, out_reg, src, bits, to, length, allocate_register(nullptr).first);
+				bit_insert(builder_, out_reg, src, bits, to, length);
 			}
 			return out_reg;
 		} else if (to >= 64) {
 			// Map lower and insert into upper
 			auto [out_reg, valid] = allocate_register(&n.val(), src.reg1());
 			if (valid) {
-				bit_insert(builder_, out_reg, src, bits, to, length, allocate_register(nullptr).first);
+				bit_insert(builder_, out_reg, src, bits, to, length);
 			}
 			return out_reg;
 		} else {
@@ -1096,9 +1093,14 @@ TypedRegister &riscv64_translation_context::materialise_ternary_arith(const tern
 		return out_reg;
 	}
 
+	RegisterOperand tmp_carry = allocate_register().first;
+	RegisterOperand tmp_overflow = allocate_register().first;
+
 	TypedRegister &src_reg1 = *materialise(n.lhs().owner());
 	TypedRegister &src_reg2 = *materialise(n.rhs().owner());
 	TypedRegister &src_reg3 = *materialise(n.top().owner());
+
+	auto &temp_result = allocate_register().first;
 
 	bool z_needed = !n.zero().targets().empty();
 	bool v_needed = !n.overflow().targets().empty();
@@ -1110,39 +1112,31 @@ TypedRegister &riscv64_translation_context::materialise_ternary_arith(const tern
 		// TODO Immediate handling
 
 	case ternary_arith_op::adc:
-
-	{
-		TypedRegister temp { CF };
-		temp.set_type(n.val().type());
-		add(builder_, temp, src_reg2, src_reg3);
-		addi_flags(builder_, temp, src_reg2, 1, false, v_needed, c_needed, false, SF, ZF);
-		add(builder_, out_reg, src_reg1, temp);
-		add_flags(builder_, out_reg, src_reg1, temp, false, v_needed, c_needed, false);
+		add(builder_, temp_result, src_reg2, src_reg3);
+		addi_flags(builder_, temp_result, src_reg2, 1, false, v_needed, c_needed, false, tmp_overflow, tmp_carry);
+		add(builder_, out_reg, src_reg1, temp_result);
+		add_flags(builder_, out_reg, src_reg1, temp_result, false, v_needed, c_needed, false);
 		if (c_needed) {
-			builder_.or_(CF, CF, ZF); // Total carry out
+			builder_.or_(CF, CF, tmp_carry); // Total carry out
 		}
 		if (v_needed) {
-			builder_.xor_(OF, OF, SF); // Total overflow out
+			builder_.xor_(OF, OF, tmp_overflow); // Total overflow out
 		}
 		zero_sign_flag(builder_, out_reg, z_needed, n_needed);
 		break;
-	}
-	case ternary_arith_op::sbb: {
-		TypedRegister temp { CF };
-		temp.set_type(n.val().type());
-		add(builder_, temp, src_reg2, src_reg3);
-		addi_flags(builder_, temp, src_reg2, 1, false, v_needed, c_needed, false, SF, ZF);
-		sub(builder_, out_reg, src_reg1, temp);
-		sub_flags(builder_, out_reg, src_reg1, temp, false, v_needed, c_needed, false);
+	case ternary_arith_op::sbb:
+		add(builder_, temp_result, src_reg2, src_reg3);
+		addi_flags(builder_, temp_result, src_reg2, 1, false, v_needed, c_needed, false, tmp_overflow, tmp_carry);
+		sub(builder_, out_reg, src_reg1, temp_result);
+		sub_flags(builder_, out_reg, src_reg1, temp_result, false, v_needed, c_needed, false);
 		if (c_needed) {
-			builder_.or_(CF, CF, ZF); // Total carry out
+			builder_.or_(CF, CF, tmp_carry); // Total carry out
 		}
 		if (v_needed) {
-			builder_.xor_(OF, OF, SF); // Total overflow out
+			builder_.xor_(OF, OF, tmp_overflow); // Total overflow out
 		}
 		zero_sign_flag(builder_, out_reg, z_needed, n_needed);
 		break;
-	}
 	default:
 		throw std::runtime_error("unsupported ternary arithmetic operation");
 	}
@@ -1461,7 +1455,7 @@ TypedRegister &riscv64_translation_context::materialise_vector_insert(const vect
 		case 1: {
 			auto [out_reg, valid] = allocate_register(&n.val(), std::nullopt, src.reg2());
 			if (valid) {
-				bit_insert(builder_, out_reg, src, insert, 32 * n.index(), 32, allocate_register(nullptr).first);
+				bit_insert(builder_, out_reg, src, insert, 32 * n.index(), 32);
 			}
 			return out_reg;
 		}
@@ -1469,7 +1463,7 @@ TypedRegister &riscv64_translation_context::materialise_vector_insert(const vect
 		case 3: {
 			auto [out_reg, valid] = allocate_register(&n.val(), src.reg1(), std::nullopt);
 			if (valid) {
-				bit_insert(builder_, out_reg, src, insert, 32 * n.index(), 32, allocate_register(nullptr).first);
+				bit_insert(builder_, out_reg, src, insert, 32 * n.index(), 32);
 			}
 			return out_reg;
 		}
