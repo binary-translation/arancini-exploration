@@ -36,17 +36,6 @@ static std::unordered_map<unsigned long, Register> flag_map {
 	{ (unsigned long)reg_offsets::SF, SF },
 };
 
-RegisterOperand riscv64_translation_context::next_register()
-{
-	constexpr static RegisterOperand registers[] { S1, A0, A1, A2, A3, A4, A5, T0, T1, T2, A6, A7, S2, S3, S4, S5, S6, S7, T3, T4, T5, GP };
-
-	if (reg_allocator_index_ >= std::size(registers)) {
-		throw std::runtime_error("RISC-V DBT ran out of registers for packet at " + std::to_string(current_address_));
-	}
-	while (reg_used_[registers[reg_allocator_index_++].encoding()])
-		;
-	return registers[reg_allocator_index_ - 1];
-}
 
 /**
  * Used to get the register for the given port.
@@ -63,7 +52,7 @@ std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(
 		return { treg_for_port_.at(p), false };
 	}
 	if (!p) {
-		RegisterOperand r1 = reg1 ? *reg1 : next_register();
+		RegisterOperand r1 = reg1 ? *reg1 : builder_.next_register();
 		temporaries.emplace_front(r1);
 		return { temporaries.front(), true };
 	}
@@ -71,8 +60,8 @@ std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(
 	switch (p->type().width()) {
 	case 512: // FIXME proper
 	case 128: {
-		RegisterOperand r1 = reg1 ? *reg1 : next_register();
-		RegisterOperand r2 = reg2 ? *reg2 : next_register();
+		RegisterOperand r1 = reg1 ? *reg1 : builder_.next_register();
+		RegisterOperand r2 = reg2 ? *reg2 : builder_.next_register();
 		auto [a, b] = treg_for_port_.emplace(std::piecewise_construct, std::forward_as_tuple(p), std::forward_as_tuple(r1, r2));
 		TypedRegister &tr = a->second;
 		tr.set_type(p->type());
@@ -83,7 +72,7 @@ std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(
 	case 16:
 	case 8:
 	case 1: {
-		RegisterOperand r1 = reg1 ? *reg1 : next_register();
+		RegisterOperand r1 = reg1 ? *reg1 : builder_.next_register();
 		auto [a, b] = treg_for_port_.emplace(p, r1);
 		TypedRegister &tr = a->second;
 		tr.set_type(p->type());
@@ -141,6 +130,8 @@ void riscv64_translation_context::add_marker(int payload)
 
 void riscv64_translation_context::begin_block()
 {
+	builder_.reset();
+
 	// TODO Remove/only in debug
 	if (insert_ebreak) {
 		builder_.ebreak();
@@ -155,7 +146,6 @@ void riscv64_translation_context::begin_block()
 void riscv64_translation_context::begin_instruction(off_t address, const std::string &disasm)
 {
 	add_marker(2);
-	reg_allocator_index_ = 0;
 	treg_for_port_.clear();
 	temporaries.clear();
 	locals_.clear();
