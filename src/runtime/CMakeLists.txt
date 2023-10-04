@@ -8,6 +8,7 @@ set(RUNTIME_SRCS
         entry.cpp
         exec/execution-thread.cpp
         exec/execution-context.cpp
+		exec/x86/x86-cpu-state.cpp
         dbt/translation-engine.cpp)
 
 set(INCLUDE_PATH ../../inc)
