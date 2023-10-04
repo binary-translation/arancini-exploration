@@ -76,7 +76,7 @@
 	in
 	{
 		defaultPackage = build_pkgs.callPackage(
-		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang_14, zlib, boost, libffi, libxml2, llvmPackages_14, lib, gcc, fmt}:
+		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang_14, zlib, boost, libffi, libxml2, llvmPackages_14, lib, gcc, fmt, keystone}:
 			stdenv.mkDerivation {
 				name = "arancini";
 				pname = "txlat";
@@ -103,6 +103,7 @@
 					llvmPackages_14.bintools
 					llvmPackages_14.lld
                     fmt
+					keystone
 				];
 				depsTargetTarget = [ gcc ];
 				configurePhase = ''
