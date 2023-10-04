@@ -137,6 +137,8 @@ class Assembler {
   void sw(Register rs2, Address addr);
 
   void addi(Register rd, Register rs1, intptr_t imm, bool force_big = false);
+  void addi_big(Register rd, Register rs1, intptr_t imm) { addi(rd, rs1, imm, true); }
+  void addi_normal(Register rd, Register rs1, intptr_t imm) { addi(rd, rs1, imm, false); }
   void subi(Register rd, Register rs1, intptr_t imm) { addi(rd, rs1, -imm); }
   void slti(Register rd, Register rs1, intptr_t imm);
   void sltiu(Register rd, Register rs1, intptr_t imm);
