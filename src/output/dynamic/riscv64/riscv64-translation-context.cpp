@@ -10,6 +10,7 @@
 #include <arancini/output/dynamic/riscv64/shift.h>
 #include <arancini/output/dynamic/riscv64/utils.h>
 
+#include <algorithm>
 #include <unordered_map>
 
 using namespace arancini::output::dynamic::riscv64;
@@ -17,17 +18,27 @@ using namespace arancini::ir;
 
 /**
  * Translations assumes FP holds pointer to CPU state.
- * Flags are always stored in registers S8 (ZF), S9 (CF), S10 (OF), S11(SF).
  * Memory accesses need to use MEM_BASE.
  */
 
-static std::unordered_map<unsigned long, Register> flag_map {
-	{ (unsigned long)reg_offsets::ZF, ZF },
-	{ (unsigned long)reg_offsets::CF, CF },
-	{ (unsigned long)reg_offsets::OF, OF },
-	{ (unsigned long)reg_offsets::SF, SF },
-};
+static constexpr const unsigned long flag_idx = static_cast<const unsigned long>(std::min({ reg_idx::ZF, reg_idx::CF, reg_idx::OF, reg_idx::SF }));
 
+template <const size_t order[], typename Tuple, size_t... idxs> auto riscv64_translation_context::reorder(Tuple tuple, std::index_sequence<idxs...>)
+{
+	return std::make_tuple(allocate_register(std::get<order[idxs]>(tuple)).first.reg()...);
+}
+
+template <reg_idx... idx>
+std::tuple<to_type_t<reg_idx, idx, RegisterOperand>...> riscv64_translation_context::allocate_in_order(to_type_t<reg_idx, idx, const port *>... args)
+{
+	auto constexpr order = ordered<reg_idx, idx...>::value;
+
+	auto tuple = std::make_tuple(args...);
+
+	auto allocations = reorder<order>(tuple, std::make_index_sequence<sizeof...(idx)> {});
+
+	return { (args && !args->targets().empty()) ? std::get<static_cast<const unsigned long>(idx) - flag_idx>(allocations) : builder::none_reg... };
+}
 
 /**
  * Used to get the register for the given port.
@@ -397,6 +408,10 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 	if (!valid) {
 		return out_reg;
 	}
+
+	auto [zf, of, cf, sf] = allocate_in_order<reg_idx::ZF, reg_idx::OF, reg_idx::CF, reg_idx::SF>(&n.zero(), &n.overflow(), &n.carry(), &n.negative());
+	bool flags_needed = zf || of || cf || sf;
+
 	Label *fail = builder_.alloc_label();
 	Label *retry = builder_.alloc_label();
 	Label *end = builder_.alloc_label();
@@ -404,12 +419,6 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 	auto [reg, _] = allocate_register();
 
 	builder_.add(reg, dstAddr, MEM_BASE);
-
-	bool z_needed = !n.zero().targets().empty();
-	bool v_needed = !n.overflow().targets().empty();
-	bool c_needed = !n.carry().targets().empty();
-	bool n_needed = !n.negative().targets().empty();
-	bool flags_needed = z_needed || v_needed || c_needed || n_needed;
 
 	using load_reserve_type = decltype(&InstructionBuilder::lrd);
 	using store_conditional_type = decltype(&InstructionBuilder::scd);
@@ -434,18 +443,18 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 			(builder_.*sc)(temp, src, addr, std::memory_order_acq_rel); // Out_reg unused so use it here
 			builder_.bnez(temp, retry, Assembler::kNearJump);
 
-			// Flags from comparison matching (i.e subtraction of equal values)
-			if (z_needed) {
-				builder_.li(ZF, 1);
+			// Flags from comparison matching (i.e. subtraction of equal values)
+			if (zf) {
+				builder_.li(zf, 1);
 			}
-			if (c_needed) {
-				builder_.li(CF, 0);
+			if (cf) {
+				builder_.li(cf, 0);
 			}
-			if (v_needed) {
-				builder_.li(OF, 0);
+			if (of) {
+				builder_.li(of, 0);
 			}
-			if (n_needed) {
-				builder_.li(SF, 0);
+			if (sf) {
+				builder_.li(sf, 0);
 			}
 
 			builder_.j(end, Assembler::kNearJump);
@@ -456,7 +465,7 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 				auto &temp_reg = allocate_register().first;
 				temp_reg.set_type(n.val().type());
 				sub(builder_, temp_reg, acc, out_reg);
-				sub_flags(builder_, temp_reg, acc, out_reg, z_needed, v_needed, c_needed, n_needed);
+				sub_flags(builder_, temp_reg, acc, out_reg, zf, of, cf, sf);
 			}
 
 			// Write back updated acc value
@@ -486,12 +495,8 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 	if (!valid) {
 		return out_reg;
 	}
-
-	bool z_needed = !n.zero().targets().empty();
-	bool v_needed = !n.overflow().targets().empty();
-	bool c_needed = !n.carry().targets().empty();
-	bool n_needed = !n.negative().targets().empty();
-	bool flags_needed = z_needed || v_needed || c_needed || n_needed;
+	auto [zf, of, cf, sf] = allocate_in_order<reg_idx::ZF, reg_idx::OF, reg_idx::CF, reg_idx::SF>(&n.zero(), &n.overflow(), &n.carry(), &n.negative());
+	bool flags_needed = zf || of || cf || sf;
 
 	auto [reg, _] = allocate_register();
 
@@ -520,7 +525,7 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 			temp_result_reg.set_type(n.val().type());
 
 			add(builder_, temp_result_reg, out_reg, src); // Actual sum for flag generation
-			add_flags(builder_, temp_result_reg, out_reg, src, z_needed, v_needed, c_needed, n_needed);
+			add_flags(builder_, temp_result_reg, out_reg, src, zf, of, cf, sf);
 		}
 
 		if (n.op() == binary_atomic_op::xadd) {
@@ -557,7 +562,7 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 			temp_result_reg.set_type(n.val().type());
 
 			sub(builder_, temp_result_reg, out_reg, src); // Actual difference for flag generation
-			sub_flags(builder_, temp_result_reg, out_reg, src, z_needed, v_needed, c_needed, n_needed);
+			sub_flags(builder_, temp_result_reg, out_reg, src, zf, of, cf, sf);
 		}
 		return std::nullopt;
 	case binary_atomic_op::band: {
@@ -578,7 +583,7 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 		default:
 			throw std::runtime_error("unsupported lock and width");
 		}
-		zero_sign_flag(builder_, temp_result_reg, z_needed, n_needed);
+		zero_sign_flag(builder_, temp_result_reg, zf, sf);
 		return std::nullopt;
 	}
 	case binary_atomic_op::bor: {
@@ -600,7 +605,7 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 			throw std::runtime_error("unsupported lock or width");
 		}
 
-		zero_sign_flag(builder_, temp_result_reg, z_needed, n_needed);
+		zero_sign_flag(builder_, temp_result_reg, zf, sf);
 		return std::nullopt;
 	}
 	case binary_atomic_op::bxor: {
@@ -623,7 +628,7 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 			throw std::runtime_error("unsupported lock xor width");
 		}
 
-		zero_sign_flag(builder_, temp_result_reg, z_needed, n_needed);
+		zero_sign_flag(builder_, temp_result_reg, zf, sf);
 		return std::nullopt;
 	}
 	case binary_atomic_op::xchg:
@@ -868,11 +873,8 @@ void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 		}
 		return;
 	} else if (is_flag(value)) {
-		RegisterOperand reg = (!is_flag_port(value)) ? (materialise(value.owner()))->get() : RegisterOperand { flag_map.at(n.regoff()) };
-		if (is_flag_port(value) && !treg_for_port_.count(&value.owner()->val())) {
-			// Result of node not written only flags needed
-			materialise(value.owner());
-		}
+		TypedRegister &reg_in = *(materialise(value.owner()));
+		RegisterOperand reg = (!is_flag_port(value)) ? reg_in : reg_in.flag(n.regidx() - flag_idx);
 		builder_.sb(reg, AddressOperand { FP, static_cast<intptr_t>(n.regoff()) });
 		return;
 	} else if (is_i128(value) || is_int_vector(value, 2, 64) || is_int_vector(value, 4, 32) || is_int(value, 512) || is_int_vector(value, 4, 128)) {
@@ -1086,8 +1088,11 @@ TypedRegister &riscv64_translation_context::materialise_ternary_arith(const tern
 		return out_reg;
 	}
 
-	RegisterOperand tmp_carry = allocate_register().first;
-	RegisterOperand tmp_overflow = allocate_register().first;
+	auto [zf, of, cf, sf] = allocate_in_order<reg_idx::ZF, reg_idx::OF, reg_idx::CF, reg_idx::SF>(&n.zero(), &n.overflow(), &n.carry(), &n.negative());
+	bool flags_needed = zf || of || cf || sf;
+
+	RegisterOperand tmp_carry = cf ? allocate_register().first : builder::none_reg;
+	RegisterOperand tmp_overflow = of ? allocate_register().first : builder::none_reg;
 
 	TypedRegister &src_reg1 = *materialise(n.lhs().owner());
 	TypedRegister &src_reg2 = *materialise(n.rhs().owner());
@@ -1095,40 +1100,34 @@ TypedRegister &riscv64_translation_context::materialise_ternary_arith(const tern
 
 	auto &temp_result = allocate_register().first;
 
-	bool z_needed = !n.zero().targets().empty();
-	bool v_needed = !n.overflow().targets().empty();
-	bool c_needed = !n.carry().targets().empty();
-	bool n_needed = !n.negative().targets().empty();
-	bool flags_needed = z_needed || v_needed || c_needed || n_needed;
-
 	switch (n.op()) {
 		// TODO Immediate handling
 
 	case ternary_arith_op::adc:
 		add(builder_, temp_result, src_reg2, src_reg3);
-		addi_flags(builder_, temp_result, src_reg2, 1, false, v_needed, c_needed, false, tmp_overflow, tmp_carry);
+		addi_flags(builder_, temp_result, src_reg2, 1, builder::none_reg, tmp_overflow, tmp_carry, builder::none_reg);
 		add(builder_, out_reg, src_reg1, temp_result);
-		add_flags(builder_, out_reg, src_reg1, temp_result, false, v_needed, c_needed, false);
-		if (c_needed) {
-			builder_.or_(CF, CF, tmp_carry); // Total carry out
+		add_flags(builder_, out_reg, src_reg1, temp_result, builder::none_reg, of, cf, builder::none_reg);
+		if (cf) {
+			builder_.or_(cf, cf, tmp_carry); // Total carry out
 		}
-		if (v_needed) {
-			builder_.xor_(OF, OF, tmp_overflow); // Total overflow out
+		if (of) {
+			builder_.xor_(of, of, tmp_overflow); // Total overflow out
 		}
-		zero_sign_flag(builder_, out_reg, z_needed, n_needed);
+		zero_sign_flag(builder_, out_reg, zf, sf);
 		break;
 	case ternary_arith_op::sbb:
 		add(builder_, temp_result, src_reg2, src_reg3);
-		addi_flags(builder_, temp_result, src_reg2, 1, false, v_needed, c_needed, false, tmp_overflow, tmp_carry);
+		addi_flags(builder_, temp_result, src_reg2, 1, builder::none_reg, tmp_overflow, tmp_carry, builder::none_reg);
 		sub(builder_, out_reg, src_reg1, temp_result);
-		sub_flags(builder_, out_reg, src_reg1, temp_result, false, v_needed, c_needed, false);
-		if (c_needed) {
-			builder_.or_(CF, CF, tmp_carry); // Total carry out
+		sub_flags(builder_, out_reg, src_reg1, temp_result, builder::none_reg, of, cf, builder::none_reg);
+		if (cf) {
+			builder_.or_(cf, cf, tmp_carry); // Total carry out
 		}
-		if (v_needed) {
-			builder_.xor_(OF, OF, tmp_overflow); // Total overflow out
+		if (of) {
+			builder_.xor_(of, of, tmp_overflow); // Total overflow out
 		}
-		zero_sign_flag(builder_, out_reg, z_needed, n_needed);
+		zero_sign_flag(builder_, out_reg, zf, sf);
 		break;
 	default:
 		throw std::runtime_error("unsupported ternary arithmetic operation");
@@ -1161,6 +1160,7 @@ TypedRegister &riscv64_translation_context::materialise_bit_shift(const bit_shif
 	if (!valid) {
 		return out_reg;
 	}
+	auto [zf, _1, _2, sf] = allocate_in_order<reg_idx::ZF, reg_idx::OF, reg_idx::CF, reg_idx::SF>(&n.zero(), nullptr, nullptr, &n.negative());
 
 	TypedRegister &src_reg = *materialise(n.input().owner());
 	const std::optional<int64_t> &i = get_as_int(n.amount().owner());
@@ -1181,7 +1181,7 @@ TypedRegister &riscv64_translation_context::materialise_bit_shift(const bit_shif
 			srai(builder_, out_reg, src_reg, amt);
 			break;
 		}
-		zero_sign_flag(builder_, out_reg, !n.zero().targets().empty(), !n.negative().targets().empty());
+		zero_sign_flag(builder_, out_reg, zf, sf);
 
 		return out_reg;
 	}
@@ -1199,7 +1199,7 @@ TypedRegister &riscv64_translation_context::materialise_bit_shift(const bit_shif
 		sra(builder_, out_reg, src_reg, amount);
 		break;
 	}
-	zero_sign_flag(builder_, out_reg, !n.zero().targets().empty(), !n.negative().targets().empty());
+	zero_sign_flag(builder_, out_reg, zf, sf);
 
 	return out_reg;
 }
@@ -1217,14 +1217,9 @@ TypedRegister &riscv64_translation_context::materialise_binary_arith(const binar
 	if (!valid) {
 		return out_reg;
 	}
+	auto [zf, of, cf, sf] = allocate_in_order<reg_idx::ZF, reg_idx::OF, reg_idx::CF, reg_idx::SF>(&n.zero(), &n.overflow(), &n.carry(), &n.negative());
 
 	TypedRegister &src_reg1 = *materialise(n.lhs().owner());
-
-	bool z_needed = !n.zero().targets().empty();
-	bool v_needed = !n.overflow().targets().empty();
-	bool c_needed = !n.carry().targets().empty();
-	bool n_needed = !n.negative().targets().empty();
-	bool flags_needed = z_needed || v_needed || c_needed || n_needed;
 
 	const std::optional<int64_t> &i = get_as_int(n.rhs().owner());
 
@@ -1239,11 +1234,11 @@ TypedRegister &riscv64_translation_context::materialise_binary_arith(const binar
 					goto standardPath;
 				}
 				addi(builder_, out_reg, src_reg1, -imm);
-				subi_flags(builder_, out_reg, src_reg1, imm, z_needed, v_needed, c_needed, n_needed);
+				subi_flags(builder_, out_reg, src_reg1, imm, zf, of, cf, sf);
 				break;
 			case binary_arith_op::add:
 				addi(builder_, out_reg, src_reg1, imm);
-				addi_flags(builder_, out_reg, src_reg1, imm, z_needed, v_needed, c_needed, n_needed);
+				addi_flags(builder_, out_reg, src_reg1, imm, zf, of, cf, sf);
 				break;
 
 			// Binary operations preserve sign extension, so we keep the effective input type (even if larger)
@@ -1251,19 +1246,19 @@ TypedRegister &riscv64_translation_context::materialise_binary_arith(const binar
 				builder_.andi(out_reg, src_reg1, imm);
 				out_reg.set_actual_width();
 				out_reg.set_type(src_reg1.type());
-				zero_sign_flag(builder_, out_reg, z_needed, n_needed);
+				zero_sign_flag(builder_, out_reg, zf, sf);
 				break;
 			case binary_arith_op::bor:
 				builder_.ori(out_reg, src_reg1, imm);
 				out_reg.set_actual_width();
 				out_reg.set_type(src_reg1.type());
-				zero_sign_flag(builder_, out_reg, z_needed, n_needed);
+				zero_sign_flag(builder_, out_reg, zf, sf);
 				break;
 			case binary_arith_op::bxor:
 				builder_.xori(out_reg, src_reg1, imm);
 				out_reg.set_actual_width();
 				out_reg.set_type(src_reg1.type());
-				zero_sign_flag(builder_, out_reg, z_needed, n_needed);
+				zero_sign_flag(builder_, out_reg, zf, sf);
 				break;
 			default:
 				// No-op Go to standard path
@@ -1279,28 +1274,28 @@ standardPath:
 
 	case binary_arith_op::add:
 		add(builder_, out_reg, src_reg1, src_reg2);
-		add_flags(builder_, out_reg, src_reg1, src_reg2, z_needed, v_needed, c_needed, n_needed);
+		add_flags(builder_, out_reg, src_reg1, src_reg2, zf, of, cf, sf);
 		break;
 	case binary_arith_op::sub:
 		sub(builder_, out_reg, src_reg1, src_reg2);
-		sub_flags(builder_, out_reg, src_reg1, src_reg2, z_needed, v_needed, c_needed, n_needed);
+		sub_flags(builder_, out_reg, src_reg1, src_reg2, zf, of, cf, sf);
 		break;
 	// Binary operations preserve sign extension, so we can keep smaller of effective input types
 	case binary_arith_op::band:
 		builder_.and_(out_reg, src_reg1, src_reg2);
 		out_reg.set_actual_width();
 		out_reg.set_type(get_minimal_type(src_reg1, src_reg2));
-		zero_sign_flag(builder_, out_reg, z_needed, n_needed);
+		zero_sign_flag(builder_, out_reg, zf, sf);
 		break;
 	case binary_arith_op::bor:
 		builder_.or_(out_reg, src_reg1, src_reg2);
 		out_reg.set_actual_width();
 		out_reg.set_type(get_minimal_type(src_reg1, src_reg2));
-		zero_sign_flag(builder_, out_reg, z_needed, n_needed);
+		zero_sign_flag(builder_, out_reg, zf, sf);
 		break;
 	case binary_arith_op::bxor:
 		xor_(builder_, out_reg, src_reg1, src_reg2);
-		zero_sign_flag(builder_, out_reg, z_needed, n_needed);
+		zero_sign_flag(builder_, out_reg, zf, sf);
 		break;
 	case binary_arith_op::mul:
 		// FIXME
@@ -1308,7 +1303,7 @@ standardPath:
 			throw std::runtime_error("128bit multiply without cast");
 		}
 		mul(builder_, out_reg, src_reg1, src_reg2);
-		mul_flags(builder_, out_reg, v_needed, c_needed);
+		mul_flags(builder_, out_reg, of, cf);
 		break;
 	case binary_arith_op::div:
 		div(builder_, out_reg, src_reg1, src_reg2);
