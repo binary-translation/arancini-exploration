@@ -5,11 +5,6 @@
 #include <arancini/output/dynamic/riscv64/instruction-builder/builder.h>
 #include <arancini/output/dynamic/riscv64/register.h>
 
-constexpr RegisterOperand ZF = S8;
-constexpr RegisterOperand CF = S9;
-constexpr RegisterOperand OF = S10;
-constexpr RegisterOperand SF = S11;
-
 constexpr RegisterOperand MEM_BASE = T6;
 
 using builder::InstructionBuilder;

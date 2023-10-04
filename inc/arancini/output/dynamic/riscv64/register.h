@@ -64,6 +64,11 @@ public:
 	TypedRegister &operator=(TypedRegister &&) = delete;
 	TypedRegister(TypedRegister &&) = delete;
 
+	[[nodiscard]] RegisterOperand flag(uint32_t flag_type) const
+	{
+		return type().element_width() == 128 ? RegisterOperand { encoding2_ + flag_type + 1 } : RegisterOperand { encoding_ + flag_type + 1 };
+	}
+
 private:
 	/**
 	 * Current type that the value in the register is accurate to. Assumes the value is represented as signed regardless of the type.

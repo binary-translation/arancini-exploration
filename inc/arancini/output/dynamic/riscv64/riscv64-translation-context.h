@@ -6,6 +6,7 @@
 #include <arancini/output/dynamic/riscv64/register.h>
 #include <arancini/output/dynamic/translation-context.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
+#include <arancini/util/ordering.h>
 
 #include <array>
 #include <bitset>
@@ -103,5 +104,8 @@ private:
 	TypedRegister &materialise_vector_extract(const ir::vector_extract_node &n);
 
 	void add_marker(int payload);
+
+	template <reg_idx... idx> std::tuple<to_type_t<reg_idx, idx, RegisterOperand>...> allocate_in_order(to_type_t<reg_idx, idx, const port *>... args);
+	template <const size_t order[], typename Tuple, size_t... idxs> auto reorder(Tuple tuple, std::index_sequence<idxs...>);
 };
 } // namespace arancini::output::dynamic::riscv64
