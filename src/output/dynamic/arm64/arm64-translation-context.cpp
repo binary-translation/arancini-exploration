@@ -8,6 +8,7 @@
 
 #include <cmath>
 #include <cctype>
+#include <stdexcept>
 #include <string>
 #include <cstddef>
 #include <unordered_map>
