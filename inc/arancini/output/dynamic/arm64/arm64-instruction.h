@@ -8,6 +8,7 @@
 #include <arancini/output/dynamic/machine-code-writer.h>
 
 #include <array>
+#include <llvm/IR/CallingConv.h>
 #include <type_traits>
 #include <vector>
 #include <variant>
@@ -468,8 +469,9 @@ public:
     typedef std::array<operand, 5> operand_array;
 
     template <typename... Args>
-    instruction(const std::string& opc, Args&&... args)
+    instruction(const std::string& opc, Args&&... args, const std::string &comment = "")
         : opcode_(opc)
+        , comment_(comment)
     {
         static_assert(sizeof...(Args) <= 5,
                       "aarch64 instructions accept at most 5 operands");
@@ -492,6 +494,7 @@ public:
 	const operand_array &operands() const { return operands_; }
 private:
     std::string opcode_;
+    std::string comment_;
 
     size_t opcount_;
     operand_array operands_;
