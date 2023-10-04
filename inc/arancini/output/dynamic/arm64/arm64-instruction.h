@@ -8,13 +8,12 @@
 #include <arancini/output/dynamic/machine-code-writer.h>
 
 #include <array>
-#include <llvm/IR/CallingConv.h>
-#include <type_traits>
 #include <vector>
 #include <variant>
 #include <sstream>
 #include <iostream>
 #include <stdexcept>
+#include <type_traits>
 
 namespace arancini::output::dynamic::arm64 {
 
