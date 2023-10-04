@@ -250,6 +250,9 @@ void arm64_translation_context::materialise(const ir::node* n) {
     case node_kinds::vector_insert:
 		materialise_vector_insert(*reinterpret_cast<const vector_insert_node *>(n));
         break;
+    case node_kinds::vector_extract:
+		materialise_vector_extract(*reinterpret_cast<const vector_extract_node *>(n));
+        break;
     case node_kinds::constant:
         materialise_constant(*reinterpret_cast<const constant_node*>(n));
         break;
@@ -1407,17 +1410,32 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
 
 void arm64_translation_context::materialise_vector_insert(const vector_insert_node &n) {
     if (n.val().type().element_width() > base_type().element_width())
-        throw std::runtime_error("[ARM64 DBT] Vector insertion not supported for vectors with elements > 64 bits");
+        throw std::runtime_error("[ARM64-DBT] Vector insertion not supported for vectors with elements > 64 bits");
 
     const auto &dest_vregs = alloc_vregs(n.val()) ;
     const auto &value_vreg = materialise_port(n.insert_value());
 
     if (n.insert_value().type().element_width() > base_type().element_width() || value_vreg.size() > 1)
-        throw std::runtime_error("[ARM64 DBT] Vector insertion not supported with value > 64 bits");
+        throw std::runtime_error("[ARM64-DBT] Vector insertion not supported with value > 64 bits");
 
     // TODO: what if value_vreg is composed 2 32-bit regs?
     // Does this occur in practice?
     builder_.mov(value_vreg[n.index()], value_vreg[0]);
+}
+
+void arm64_translation_context::materialise_vector_extract(const vector_extract_node &n) {
+    const auto &dest_vregs = alloc_vregs(n.val()) ;
+    const auto &source_vregs = materialise_port(n.source_vector());
+
+    if (n.source_vector().type().element_width() > base_type().element_width())
+        throw std::runtime_error("[ARM64-DBT] Vector extraction not supported from vector with elements > 64 bits");
+
+    if (dest_vregs.size() > 1)
+        throw std::runtime_error("[ARM64-DBT] Vector extraction not supported for values > 64-bit");
+
+    // TODO: what if value_vreg is composed 2 32-bit regs?
+    // Does this occur in practice?
+    builder_.mov(dest_vregs[0], source_vregs[n.index()]);
 }
 
 void arm64_translation_context::materialise_internal_call(const internal_call_node &n) {

@@ -79,6 +79,7 @@ private:
     void materialise_bit_extract(const ir::bit_extract_node &n);
     void materialise_bit_insert(const ir::bit_insert_node &n);
     void materialise_vector_insert(const ir::vector_insert_node &n);
+    void materialise_vector_extract(const ir::vector_extract_node &n);
     void materialise_unary_arith(const ir::unary_arith_node &n);
     void materialise_binary_arith(const ir::binary_arith_node &n);
     void materialise_ternary_arith(const ir::ternary_arith_node &n);
