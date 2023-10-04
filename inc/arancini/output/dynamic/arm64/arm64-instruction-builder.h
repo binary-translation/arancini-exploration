@@ -72,138 +72,138 @@ public:
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
     void orr_(const T1 &dst,
               const T2 &src1,
-              const T3 &src2) {
-        append(instruction("orr", def(dst), use(src1), use(src2)));
+              const T3 &src2, const std::string &comment = "") {
+        append(instruction("orr", def(dst), use(src1), use(src2), comment));
     }
 
     template <typename T1, typename T2, typename T3,
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
     void and_(const T1 &dst,
               const T2 &src1,
-              const T3 &src2) {
-        append(instruction("and", def(keep(dst)), use(src1), use(src2)));
+              const T3 &src2, const std::string &comment = "") {
+        append(instruction("and", def(keep(dst)), use(src1), use(src2), comment));
     }
 
     template <typename T1, typename T2, typename T3,
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
     void ands(const T1 &dst,
               const T2 &src1,
-              const T3 &src2) {
-        append(instruction("ands", def(keep(dst)), use(src1), use(src2)));
+              const T3 &src2, const std::string &comment = "") {
+        append(instruction("ands", def(keep(dst)), use(src1), use(src2), comment));
     }
 
     template <typename T1, typename T2, typename T3,
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
     void eor_(const T1 &dst,
               const T2 &src1,
-              const T3 &src2) {
-        append(instruction("eor", def(dst), use(src1), use(src2)));
+              const T3 &src2, const std::string &comment = "") {
+        append(instruction("eor", def(dst), use(src1), use(src2), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg_or_immediate<T2> = 0>
-    void not_(const T1 &dst, const T2 &src) {
-        append(instruction("mvn", def(dst), use(src)));
+    void not_(const T1 &dst, const T2 &src, const std::string &comment = "") {
+        append(instruction("mvn", def(dst), use(src), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg<T2> = 0>
-    void neg(const T1 &dst, const T2 &src) {
-        append(instruction("neg", def(dst), use(src)));
+    void neg(const T1 &dst, const T2 &src, const std::string &comment = "") {
+        append(instruction("neg", def(dst), use(src), comment));
     }
 
     template <typename T1,
               is_reg<T1> = 0>
     void movn(const T1 &dst,
               const immediate_operand &src,
-              const shift_operand &shift) {
-        append(instruction("movn", def(dst), use(src), use(shift)));
+              const shift_operand &shift, const std::string &comment = "") {
+        append(instruction("movn", def(dst), use(src), use(shift), comment));
     }
 
     template <typename T1,
               is_reg<T1> = 0>
     void movz(const T1 &dst,
               const immediate_operand &src,
-              const shift_operand &shift) {
-        append(instruction("movz", def(dst), use(src), use(shift)));
+              const shift_operand &shift, const std::string &comment = "") {
+        append(instruction("movz", def(dst), use(src), use(shift), comment));
     }
 
     template <typename T1,
               is_reg<T1> = 0>
     void movk(const T1 &dst,
               const immediate_operand &src,
-              const shift_operand &shift) {
-        append(instruction("movk", usedef(dst), use(src), use(shift)));
+              const shift_operand &shift, const std::string &comment = "") {
+        append(instruction("movk", usedef(dst), use(src), use(shift), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg_or_immediate<T2> = 0>
-    void mov(const T1 &dst, const T2 &src) {
-        append(instruction("mov", def(dst), use(src)));
+    void mov(const T1 &dst, const T2 &src, const std::string &comment = "") {
+        append(instruction("mov", def(dst), use(src), comment));
     }
 
-    void b(const label_operand &dest) {
-        append(instruction("b", use(dest)));
+    void b(const label_operand &dest, const std::string &comment = "") {
+        append(instruction("b", use(dest), comment));
     }
 
-    void beq(const label_operand &dest) {
-        append(instruction("beq", use(dest)));
+    void beq(const label_operand &dest, const std::string &comment = "") {
+        append(instruction("beq", use(dest), comment));
     }
 
-    void bl(const label_operand &dest) {
-        append(instruction("bl", use(dest)));
+    void bl(const label_operand &dest, const std::string &comment = "") {
+        append(instruction("bl", use(dest), comment));
     }
 
     // TODO: check if this allocated correctly
     template <typename T1,
               is_reg<T1> = 0>
-    void cbnz(const T1 &rt, const label_operand &dest) {
-        append(instruction("cbnz", use(rt), use(dest)));
+    void cbnz(const T1 &rt, const label_operand &dest, const std::string &comment = "") {
+        append(instruction("cbnz", use(rt), use(dest), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg_or_immediate<T2> = 0>
     void cmn(const T1 &dst,
-             const T2 &src) {
-        append(instruction("cmn", usedef(dst), use(src)));
+             const T2 &src, const std::string &comment = "") {
+        append(instruction("cmn", usedef(dst), use(src), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg_or_immediate<T2> = 0>
     void cmp(const T1 &dst,
-             const T2 &src) {
-        append(instruction("cmp", usedef(dst), use(src)));
+             const T2 &src, const std::string &comment = "") {
+        append(instruction("cmp", usedef(dst), use(src), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg_or_immediate<T2> = 0>
     void tst(const T1 &dst,
-             const T2 &src) {
-        append(instruction("tst", usedef(dst), use(src)));
+             const T2 &src, const std::string &comment = "") {
+        append(instruction("tst", usedef(dst), use(src), comment));
     }
 
     template <typename T1, typename T2, typename T3,
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
     void lsl(const T1 &dst,
              const T2 &src1,
-             const T3 &src2) {
-        append(instruction("lsl", def(dst), use(src1), use(src2)));
+             const T3 &src2, const std::string &comment = "") {
+        append(instruction("lsl", def(dst), use(src1), use(src2), comment));
     }
 
     template <typename T1, typename T2, typename T3,
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
     void lsr(const T1 &dst,
              const T2 &src1,
-             const T3 &src2) {
-        append(instruction("lsr", def(dst), use(src1), use(src2)));
+             const T3 &src2, const std::string &comment = "") {
+        append(instruction("lsr", def(dst), use(src1), use(src2), comment));
     }
 
     template <typename T1, typename T2, typename T3,
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0>
     void asr(const T1 &dst,
              const T2 &src1,
-             const T3 &src2) {
-        append(instruction("asr", def(dst), use(src1), use(src2)));
+             const T3 &src2, const std::string &comment = "") {
+        append(instruction("asr", def(dst), use(src1), use(src2), comment));
     }
 
     template <typename T1, typename T2, typename T3,
@@ -211,15 +211,15 @@ public:
     void csel(const T1 &dst,
               const T2 &src1,
               const T3 &src2,
-              const cond_operand &cond) {
-        append(instruction("csel", def(dst), use(src1), use(src2), use(cond)));
+              const cond_operand &cond, const std::string &comment = "") {
+        append(instruction("csel", def(dst), use(src1), use(src2), use(cond), comment));
     }
 
     template <typename T1,
               is_reg<T1> = 0>
     void cset(const T1 &dst,
-              const cond_operand &cond) {
-        append(instruction("cset", def(dst), use(cond)));
+              const cond_operand &cond, const std::string &comment = "") {
+        append(instruction("cset", def(dst), use(cond), comment));
     }
 
     template <typename T1, typename T2,
@@ -227,8 +227,8 @@ public:
     void bfxil(const T1 &dst,
              const T2 &src1,
              const immediate_operand &lsb,
-             const immediate_operand &width) {
-        append(instruction("bfxil", usedef(dst), use(src1), use(lsb), use(width)));
+             const immediate_operand &width, const std::string &comment = "") {
+        append(instruction("bfxil", usedef(dst), use(src1), use(lsb), use(width), comment));
     }
 
     template <typename T1, typename T2,
@@ -236,8 +236,8 @@ public:
     void bfi(const T1 &dst,
              const T2 &src1,
              const immediate_operand &immr,
-             const immediate_operand &imms) {
-        append(instruction("bfi", usedef(keep(dst)), use(src1), use(immr), use(imms)));
+             const immediate_operand &imms, const std::string &comment = "") {
+        append(instruction("bfi", usedef(keep(dst)), use(src1), use(immr), use(imms), comment));
     }
 
 
@@ -245,16 +245,16 @@ public:
     template <typename T1, \
               is_reg<T1> = 0> \
     void name(const T1 &dest, \
-             const memory_operand &base) { \
-        append(instruction(#name, def(dest), use(base))); \
+             const memory_operand &base, const std::string &comment = "") { \
+        append(instruction(#name, def(dest), use(base), comment)); \
     } \
 
 #define STR_VARIANTS(name) \
     template <typename T1, \
               is_reg<T1> = 0> \
     void name(const T1 &src, \
-             const memory_operand &base) { \
-        append(instruction(#name, use(src), def(base))); \
+             const memory_operand &base, const std::string &comment = "") { \
+        append(instruction(#name, use(src), def(base), comment)); \
     } \
 
     LDR_VARIANTS(ldr);
@@ -269,190 +269,190 @@ public:
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg<T3> = 0>
     void mul(const T1 &dest,
              const T2 &src1,
-             const T3 &src2) {
-        append(instruction("mul", def(dest), use(src1), use(src2)));
+             const T3 &src2, const std::string &comment = "") {
+        append(instruction("mul", def(dest), use(src1), use(src2), comment));
     }
 
     template <typename T1, typename T2, typename T3,
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg<T3> = 0>
     void smulh(const T1 &dest,
              const T2 &src1,
-             const T3 &src2) {
-        append(instruction("smulh", def(dest), use(src1), use(src2)));
+             const T3 &src2, const std::string &comment = "") {
+        append(instruction("smulh", def(dest), use(src1), use(src2), comment));
     }
 
     template <typename T1, typename T2, typename T3,
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg<T3> = 0>
     void smull(const T1 &dest,
              const T2 &src1,
-             const T3 &src2) {
-        append(instruction("smull", def(dest), use(src1), use(src2)));
+             const T3 &src2, const std::string &comment = "") {
+        append(instruction("smull", def(dest), use(src1), use(src2), comment));
     }
 
     template <typename T1, typename T2, typename T3,
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg<T3> = 0>
     void umulh(const T1 &dest,
              const T2 &src1,
-             const T3 &src2) {
-        append(instruction("umulh", def(dest), use(src1), use(src2)));
+             const T3 &src2, const std::string &comment = "") {
+        append(instruction("umulh", def(dest), use(src1), use(src2), comment));
     }
 
     template <typename T1, typename T2, typename T3,
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg<T3> = 0>
     void umull(const T1 &dest,
              const T2 &src1,
-             const T3 &src2) {
-        append(instruction("umull", def(dest), use(src1), use(src2)));
+             const T3 &src2, const std::string &comment = "") {
+        append(instruction("umull", def(dest), use(src1), use(src2), comment));
     }
 
     template <typename T1, typename T2, typename T3,
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg<T3> = 0>
     void fmul(const T1 &dest,
              const T2 &src1,
-             const T3 &src2) {
-        append(instruction("fmul", def(dest), use(src1), use(src2)));
+             const T3 &src2, const std::string &comment = "") {
+        append(instruction("fmul", def(dest), use(src1), use(src2), comment));
     }
 
     template <typename T1, typename T2, typename T3,
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg<T3> = 0>
     void sdiv(const T1 &dest,
               const T2 &src1,
-              const T3 &src2) {
-        append(instruction("sdiv", def(dest), use(src1), use(src2)));
+              const T3 &src2, const std::string &comment = "") {
+        append(instruction("sdiv", def(dest), use(src1), use(src2), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg<T2> = 0>
     void fcvtzs(const T1 &dest,
-             const T2 &src) {
-        append(instruction("fcvtzs", def(dest), use(src)));
+             const T2 &src, const std::string &comment = "") {
+        append(instruction("fcvtzs", def(dest), use(src), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg<T2> = 0>
     void fcvtzu(const T1 &dest,
-             const T2 &src) {
-        append(instruction("fcvtzu", def(dest), use(src)));
+             const T2 &src, const std::string &comment = "") {
+        append(instruction("fcvtzu", def(dest), use(src), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg<T2> = 0>
     void fcvtas(const T1 &dest,
-             const T2 &src) {
-        append(instruction("fcvtas", def(dest), use(src)));
+             const T2 &src, const std::string &comment = "") {
+        append(instruction("fcvtas", def(dest), use(src), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg<T2> = 0>
     void fcvtau(const T1 &dest,
-             const T2 &src) {
-        append(instruction("fcvtau", def(dest), use(src)));
+             const T2 &src, const std::string &comment = "") {
+        append(instruction("fcvtau", def(dest), use(src), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg<T2> = 0>
     void scvtf(const T1 &dest,
-              const T2 &src) {
-        append(instruction("scvtf", def(dest), use(src)));
+              const T2 &src, const std::string &comment = "") {
+        append(instruction("scvtf", def(dest), use(src), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg<T2> = 0>
     void ucvtf(const T1 &dest,
-              const T2 &src) {
-        append(instruction("ucvtf", def(dest), use(src)));
+              const T2 &src, const std::string &comment = "") {
+        append(instruction("ucvtf", def(dest), use(src), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg<T2> = 0>
     void mrs(const T1 &dest,
-             const T2 &src) {
-        append(instruction("mrs", usedef(dest), usedef(src)));
+             const T2 &src, const std::string &comment = "") {
+        append(instruction("mrs", usedef(dest), usedef(src), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg<T2> = 0>
     void msr(const T1 &dest,
-             const T2 &src) {
-        append(instruction("msr", usedef(dest), usedef(src)));
+             const T2 &src, const std::string &comment = "") {
+        append(instruction("msr", usedef(dest), usedef(src), comment));
     }
 
-    void ret() {
-        append(instruction("ret"));
+    void ret(const std::string &comment = "") {
+        append(instruction("ret", comment));
     }
 
-    void brk(const immediate_operand &imm) {
-        append(instruction("brk", use(imm)));
+    void brk(const immediate_operand &imm, const std::string &comment = "") {
+        append(instruction("brk", use(imm), comment));
     }
 
-    void label(const std::string &label) {
+    void label(const std::string &label, const std::string &comment = "") {
         append(instruction(label + ":"));
     }
 
     template <typename T1,
               is_reg<T1> = 0>
-	void setz(const T1 &dst) {
-        append(instruction("cset", def(dst), cond_operand("eq")));
+	void setz(const T1 &dst, const std::string &comment = "") {
+        append(instruction("cset", def(dst), cond_operand("eq"), comment));
     }
 
     template <typename T1,
               is_reg<T1> = 0>
-	void sets(const T1 &dst) {
-        append(instruction("cset", def(dst), cond_operand("lt")));
+	void sets(const T1 &dst, const std::string &comment = "") {
+        append(instruction("cset", def(dst), cond_operand("lt"), comment));
     }
 
     template <typename T1,
               is_reg<T1> = 0>
-	void setc(const T1 &dst) {
-        append(instruction("cset", def(dst), cond_operand("cs")));
+	void setc(const T1 &dst, const std::string &comment = "") {
+        append(instruction("cset", def(dst), cond_operand("cs"), comment));
     }
 
     template <typename T1,
               is_reg<T1> = 0>
-	void setcc(const T1 &dst) {
-        append(instruction("cset", def(dst), cond_operand("cc")));
+	void setcc(const T1 &dst, const std::string &comment = "") {
+        append(instruction("cset", def(dst), cond_operand("cc"), comment));
     }
 
     template <typename T1,
               is_reg<T1> = 0>
-	void seto(const T1 &dst) {
-        append(instruction("cset", def(dst), cond_operand("vs")));
+	void seto(const T1 &dst, const std::string &comment = "") {
+        append(instruction("cset", def(dst), cond_operand("vs"), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg<T2> = 0>
-    void sxtb(const T1 &dst, const T2 &src) {
-        append(instruction("sxtb", def(dst), use(src)));
+    void sxtb(const T1 &dst, const T2 &src, const std::string &comment = "") {
+        append(instruction("sxtb", def(dst), use(src), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg<T2> = 0>
-    void sxth(const T1 &dst, const T2 &src) {
-        append(instruction("sxth", def(dst), use(src)));
+    void sxth(const T1 &dst, const T2 &src, const std::string &comment = "") {
+        append(instruction("sxth", def(dst), use(src), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg<T2> = 0>
-    void sxtw(const T1 &dst, const T2 &src) {
-        append(instruction("sxtw", def(dst), use(src)));
+    void sxtw(const T1 &dst, const T2 &src, const std::string &comment = "") {
+        append(instruction("sxtw", def(dst), use(src), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg<T2> = 0>
-    void uxtb(const T1 &dst, const T2 &src) {
-        append(instruction("uxtb", def(dst), use(src)));
+    void uxtb(const T1 &dst, const T2 &src, const std::string &comment = "") {
+        append(instruction("uxtb", def(dst), use(src), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg<T2> = 0>
-    void uxth(const T1 &dst, const T2 &src) {
-        append(instruction("uxth", def(dst), use(src)));
+    void uxth(const T1 &dst, const T2 &src, const std::string &comment = "") {
+        append(instruction("uxth", def(dst), use(src), comment));
     }
 
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg<T2> = 0>
-    void uxtw(const T1 &dst, const T2 &src) {
-        append(instruction("uxtw", def(dst), use(src)));
+    void uxtw(const T1 &dst, const T2 &src, const std::string &comment = "") {
+        append(instruction("uxtw", def(dst), use(src), comment));
     }
 
 // ATOMICs
