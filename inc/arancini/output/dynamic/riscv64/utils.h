@@ -1,42 +1,44 @@
 #pragma once
-#include <arancini/output/dynamic/riscv64/encoder/riscv64-constants.h>
-#include <arancini/output/dynamic/riscv64/register.h>
 #include <arancini/ir/port.h>
 #include <arancini/ir/value-type.h>
-#include <arancini/output/dynamic/riscv64/encoder/riscv64-assembler.h>
+#include <arancini/output/dynamic/riscv64/encoder/riscv64-constants.h>
+#include <arancini/output/dynamic/riscv64/instruction-builder/builder.h>
+#include <arancini/output/dynamic/riscv64/register.h>
 
-constexpr Register ZF = S8;
-constexpr Register CF = S9;
-constexpr Register OF = S10;
-constexpr Register SF = S11;
+constexpr RegisterOperand ZF = S8;
+constexpr RegisterOperand CF = S9;
+constexpr RegisterOperand OF = S10;
+constexpr RegisterOperand SF = S11;
 
-constexpr Register MEM_BASE = T6;
+constexpr RegisterOperand MEM_BASE = T6;
+
+using builder::InstructionBuilder;
 
 /**
  * Sign extend src into full register width to allow using full reg instructions
- * @param assembler
+ * @param builder
  * @param out
  * @param src
  */
-inline void extend_to_64(Assembler &assembler, TypedRegister &out, const TypedRegister& src)
+inline void extend_to_64(InstructionBuilder &builder, TypedRegister &out, const TypedRegister &src)
 {
 	if (!src.type().is_vector()) {
 		switch (src.type().element_width()) {
 		case 8:
 		case 16:
-			assembler.slli(out, src, 64 - src.type().element_width());
-			assembler.srai(out, out, 64 - src.type().element_width());
+			builder.slli(out, src, 64 - src.type().element_width());
+			builder.srai(out, out, 64 - src.type().element_width());
 			out.set_actual_width();
 			out.set_type(value_type::u64());
 			break;
 		case 32:
-			assembler.sextw(out, src);
+			builder.sextw(out, src);
 			out.set_actual_width(32);
 			out.set_type(value_type::u64());
 			break;
 		case 64:
 			if (src != out) {
-				assembler.mv(out, src);
+				builder.mv(out, src);
 			}
 			break;
 		default:
@@ -54,7 +56,7 @@ inline void extend_to_64(Assembler &assembler, TypedRegister &out, const TypedRe
  *
  * No-op if it was big enough already.
  *
- * @param assembler
+ * @param builder
  * @param out
  * @param src Can be same as in_reg to perform inplace widening
  * @param type
@@ -62,7 +64,7 @@ inline void extend_to_64(Assembler &assembler, TypedRegister &out, const TypedRe
  * @return Whether the optional shift was applied
  */
 
-inline bool fixup(Assembler &assembler, TypedRegister &out, const TypedRegister& src, const value_type &type, intptr_t shift_by = 0)
+inline bool fixup(InstructionBuilder &builder, TypedRegister &out, const TypedRegister &src, const value_type &type, intptr_t shift_by = 0)
 {
 	if (!type.is_vector() && !src.type().is_vector()) {
 
@@ -75,45 +77,45 @@ inline bool fixup(Assembler &assembler, TypedRegister &out, const TypedRegister&
 			switch (src.type().element_width()) {
 			case 8:
 			case 16:
-				assembler.slli(out, src, 64 - src.type().element_width());
-				assembler.srai(out, out, 64 - src.type().element_width() - shift_by);
+				builder.slli(out, src, 64 - src.type().element_width());
+				builder.srai(out, out, 64 - src.type().element_width() - shift_by);
 				out.set_actual_width();
 				out.set_type(value_type::u64());
 				return true;
 			case 32:
-				assembler.sextw(out, src);
+				builder.sextw(out, src);
 				out.set_actual_width(32);
 				out.set_type(value_type::u64());
 				return false;
 			case 64:
 				if (src != out) {
-					assembler.mv(out, src);
+					builder.mv(out, src);
 				}
 				return false;
 			default:
 				throw std::runtime_error("not implemented");
 			}
 		case value_type_class::unsigned_integer:
-			if (type.element_width() <= src.actual_width()  && src == out) {
+			if (type.element_width() <= src.actual_width() && src == out) {
 				// Part already accurate representation
 				return false;
 			}
 			switch (src.actual_width()) {
 			case 8:
-				assembler.andi(out, src, 0xff);
+				builder.andi(out, src, 0xff);
 				out.set_type(value_type::u64());
 				out.set_actual_width(0);
 				return false;
 			case 16:
 			case 32:
-				assembler.slli(out, src, 64 - src.actual_width());
-				assembler.srli(out, out, 64 - src.actual_width() - shift_by);
+				builder.slli(out, src, 64 - src.actual_width());
+				builder.srli(out, out, 64 - src.actual_width() - shift_by);
 				out.set_type(value_type::u64());
 				out.set_actual_width(0);
 				return true;
 			case 64:
 				if (src != out) {
-					assembler.mv(out, src);
+					builder.mv(out, src);
 				}
 				return false;
 			default:
@@ -128,19 +130,19 @@ inline bool fixup(Assembler &assembler, TypedRegister &out, const TypedRegister&
 	}
 }
 
-inline void gen_constant(Assembler &assembler, int64_t imm, Register reg)
+inline void gen_constant(InstructionBuilder &builder, int64_t imm, RegisterOperand reg)
 {
 	auto immLo32 = (int32_t)imm;
 	auto immLo12 = immLo32 << (32 - 12) >> (32 - 12); // sign extend lower 12 bit
 	if (imm == immLo32) {
 		int32_t imm32Hi20 = (immLo32 - immLo12);
 		if (imm32Hi20 != 0) {
-			assembler.lui(reg, imm32Hi20);
+			builder.lui(reg, imm32Hi20);
 			if (immLo12) {
-				assembler.addiw(reg, reg, immLo12);
+				builder.addiw(reg, reg, immLo12);
 			}
 		} else {
-			assembler.li(reg, imm);
+			builder.li(reg, imm);
 		}
 		return;
 	} else {
@@ -156,14 +158,14 @@ inline void gen_constant(Assembler &assembler, int64_t imm, Register reg)
 			}
 		}
 
-		gen_constant(assembler, val, reg);
+		gen_constant(builder, val, reg);
 
 		if (shiftAmnt) {
-			assembler.slli(reg, reg, shiftAmnt);
+			builder.slli(reg, reg, shiftAmnt);
 		}
 
 		if (immLo12) {
-			assembler.addi(reg, reg, immLo12);
+			builder.addi(reg, reg, immLo12);
 		}
 		return;
 	}

@@ -2,6 +2,7 @@
 
 #include <arancini/ir/node.h>
 #include <arancini/output/dynamic/riscv64/encoder/riscv64-assembler.h>
+#include <arancini/output/dynamic/riscv64/instruction-builder/builder.h>
 #include <arancini/output/dynamic/riscv64/register.h>
 #include <arancini/output/dynamic/translation-context.h>
 
@@ -14,6 +15,10 @@
 #include <variant>
 
 namespace arancini::output::dynamic::riscv64 {
+
+using builder::AddressOperand;
+using builder::InstructionBuilder;
+
 class riscv64_translation_context : public translation_context {
 public:
 	riscv64_translation_context(machine_code_writer &writer)
@@ -31,6 +36,7 @@ public:
 	virtual void chain(uint64_t chain_address, void *chain_target) override;
 
 private:
+	InstructionBuilder builder_;
 	Assembler assembler_;
 
 	off_t current_address_;
@@ -41,19 +47,19 @@ private:
 	std::unordered_map<const ir::label_node *, std::unique_ptr<Label>> labels_;
 
 	size_t reg_allocator_index_ { 0 };
-	std::unordered_map<const ir::port *, TypedRegister> reg_for_port_;
+	std::unordered_map<const ir::port *, TypedRegister> treg_for_port_;
 	std::forward_list<TypedRegister> temporaries;
 	std::unordered_map<const ir::local_var *, std::reference_wrapper<TypedRegister>> locals_;
 	std::array<uint32_t, 16> reg_map_ {};
 	std::bitset<32> reg_used_ {};
 	std::bitset<16> reg_written_ {};
 
-	Register next_register();
+	RegisterOperand next_register();
 	std::pair<TypedRegister &, bool> allocate_register(
-		const ir::port *p = nullptr, std::optional<Register> reg1 = std::nullopt, std::optional<Register> reg2 = std::nullopt);
+		const ir::port *p = nullptr, std::optional<RegisterOperand> reg1 = std::nullopt, std::optional<RegisterOperand> reg2 = std::nullopt);
 
-	Register get_or_assign_mapped_register(unsigned long idx);
-	Register get_or_load_mapped_register(unsigned long idx);
+	RegisterOperand get_or_assign_mapped_register(uint32_t idx);
+	RegisterOperand get_or_load_mapped_register(uint32_t idx);
 	void write_back_registers();
 
 	std::optional<std::reference_wrapper<TypedRegister>> materialise(const ir::node *n);
