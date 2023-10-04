@@ -469,15 +469,16 @@ public:
     typedef std::array<operand, 5> operand_array;
 
     template <typename... Args>
-    instruction(const std::string& opc, Args&&... args, const std::string &comment = "")
+    instruction(const std::string& opc, Args&&... args)
         : opcode_(opc)
-        , comment_(comment)
     {
         static_assert(sizeof...(Args) <= 5,
                       "aarch64 instructions accept at most 5 operands");
         opcount_ = sizeof...(Args);
         operands_ = {std::forward<Args>(args)...};
     }
+
+    const instruction &add_comment(const std::string &comment) { comment_ = comment; return *this; }
 
 	void dump(std::ostream &os) const;
     std::string dump() const;
