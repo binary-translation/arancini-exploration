@@ -22,6 +22,8 @@ function (get_keystone)
     # Populate keystone directory
     FetchContent_Populate(keystone)
     FetchContent_MakeAvailable(keystone)
+
+    set(BUILD_LIBS_ONLY ON CACHE BOOL "Disable test build" FORCE)
     add_subdirectory(${Keystone_DIR} ${Keystone_BINARY_DIR})
 endfunction ()
 
