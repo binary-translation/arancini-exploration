@@ -132,10 +132,10 @@ int execution_context::invoke(void *cpu_state)
 	std::cerr << "=================" << std::endl;
 
     std::cerr << *x86_state;
-    auto* memptr = reinterpret_cast<uint64_t*>(get_memory_ptr(0)) + x86_state->RSP;
+    //auto* memptr = reinterpret_cast<uint64_t*>(get_memory_ptr(0)) + x86_state->RSP;
     std::cerr << "--------------------------------------------\n";
     std::cerr << "STACK:\n";
-    x86::print_stack(std::cerr, memptr, 20);
+    //x86::print_stack(std::cerr, memptr, 20);
     std::cerr << "--------------------------------------------\n";
 #endif
 
