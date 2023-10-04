@@ -39,35 +39,38 @@ inline void add(InstructionBuilder &builder, TypedRegister &out, const TypedRegi
 				Register src_reg2 = rhs.reg1();
 				Register out_reg = out.reg1();
 
+				RegisterOperand temp1 = builder.next_register();
+				RegisterOperand temp2 = builder.next_register();
+
 				// Add upper half of lower register
-				builder.srli(CF, src_reg1, 32);
-				builder.srli(OF, src_reg2, 32);
-				builder.add(OF, OF, CF);
-				builder.slli(OF, OF, 32);
+				builder.srli(temp1, src_reg1, 32);
+				builder.srli(temp2, src_reg2, 32);
+				builder.add(temp2, temp2, temp1);
+				builder.slli(temp2, temp2, 32);
 
 				// Add lower half of lower register
 				builder.add(out_reg, src_reg1, src_reg2);
 				builder.slli(out_reg, out_reg, 32);
 				builder.srli(out_reg, out_reg, 32);
 
-				builder.or_(out_reg, out_reg, OF);
+				builder.or_(out_reg, out_reg, temp2);
 
 				Register src_reg12 = lhs.reg2();
 				Register src_reg22 = rhs.reg2();
 				Register out_reg2 = out.reg2();
 
 				// Add upper half of upper register
-				builder.srli(CF, src_reg12, 32);
-				builder.srli(OF, src_reg22, 32);
-				builder.add(OF, OF, CF);
-				builder.slli(OF, OF, 32);
+				builder.srli(temp1, src_reg12, 32);
+				builder.srli(temp2, src_reg22, 32);
+				builder.add(temp2, temp2, temp1);
+				builder.slli(temp2, temp2, 32);
 
 				// Add lower half of upper register
 				builder.add(out_reg2, src_reg12, src_reg22);
 				builder.slli(out_reg2, out_reg2, 32);
 				builder.srli(out_reg2, out_reg2, 32);
 
-				builder.or_(out_reg2, out_reg2, OF);
+				builder.or_(out_reg2, out_reg2, temp2);
 			}
 			break;
 		default:
@@ -131,35 +134,38 @@ inline void sub(InstructionBuilder &builder, TypedRegister &out, const TypedRegi
 				Register src_reg2 = rhs.reg1();
 				Register out_reg = out.reg1();
 
+				RegisterOperand temp1 = builder.next_register();
+				RegisterOperand temp2 = builder.next_register();
+
 				// Add upper half of lower register
-				builder.srli(CF, src_reg1, 32);
-				builder.srli(OF, src_reg2, 32);
-				builder.sub(OF, OF, CF);
-				builder.slli(OF, OF, 32);
+				builder.srli(temp1, src_reg1, 32);
+				builder.srli(temp2, src_reg2, 32);
+				builder.sub(temp2, temp2, temp1);
+				builder.slli(temp2, temp2, 32);
 
 				// Add lower half of lower register
 				builder.sub(out_reg, src_reg1, src_reg2);
 				builder.slli(out_reg, out_reg, 32);
 				builder.srli(out_reg, out_reg, 32);
 
-				builder.or_(out_reg, out_reg, OF);
+				builder.or_(out_reg, out_reg, temp2);
 
 				Register src_reg12 = lhs.reg2();
 				Register src_reg22 = rhs.reg2();
 				Register out_reg2 = out.reg2();
 
 				// Add upper half of upper register
-				builder.srli(CF, src_reg12, 32);
-				builder.srli(OF, src_reg22, 32);
-				builder.sub(OF, OF, CF);
-				builder.slli(OF, OF, 32);
+				builder.srli(temp1, src_reg12, 32);
+				builder.srli(temp2, src_reg22, 32);
+				builder.sub(temp2, temp2, temp1);
+				builder.slli(temp2, temp2, 32);
 
 				// Add lower half of upper register
 				builder.sub(out_reg2, src_reg12, src_reg22);
 				builder.slli(out_reg2, out_reg2, 32);
 				builder.srli(out_reg2, out_reg2, 32);
 
-				builder.or_(out_reg2, out_reg2, OF);
+				builder.or_(out_reg2, out_reg2, temp2);
 			}
 			break;
 		default:

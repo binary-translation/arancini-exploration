@@ -79,12 +79,13 @@ inline void bit_extract(InstructionBuilder &builder, TypedRegister &out, const T
 	out.set_type(value_type::u64());
 }
 
-inline void bit_insert(InstructionBuilder &builder, TypedRegister &out, const TypedRegister &src, const TypedRegister &bits, int to, const int length,
-	const TypedRegister &temp_reg)
+inline void bit_insert(InstructionBuilder &builder, TypedRegister &out, const TypedRegister &src, const TypedRegister &bits, int to, const int length)
 {
 	if (to < 64 && to + length > 64) {
 		throw std::runtime_error("Register crossing bit insert unsupported.");
 	}
+
+	RegisterOperand temp_reg = builder.next_register();
 
 	int64_t mask = ~(((1ll << length) - 1) << to);
 
@@ -101,8 +102,10 @@ inline void bit_insert(InstructionBuilder &builder, TypedRegister &out, const Ty
 			builder.andi(temp_reg, bits, ~mask);
 			builder.andi(out1, src1, mask);
 		} else {
-			gen_constant(builder, mask, temp_reg);
-			builder.and_(out1, src1, temp_reg);
+			RegisterOperand temp_reg1 = builder.next_register();
+			gen_constant(builder, mask, temp_reg1);
+			builder.and_(out1, src1, temp_reg1);
+
 			builder.slli(temp_reg, bits, 64 - length);
 			if (length + to != 64) {
 				builder.srli(temp_reg, temp_reg, 64 - (length + to));
