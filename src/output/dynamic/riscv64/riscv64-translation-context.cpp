@@ -405,9 +405,9 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 	if (!valid) {
 		return out_reg;
 	}
-	Label fail;
-	Label retry;
-	Label end;
+	Label *fail = builder_.alloc_label();
+	Label *retry = builder_.alloc_label();
+	Label *end = builder_.alloc_label();
 
 	auto [reg, _] = allocate_register();
 
@@ -435,12 +435,12 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 		case 64:
 		case 32: {
 			auto &temp = allocate_register().first;
-			builder_.Bind(&retry);
+			builder_.Bind(retry);
 
 			(builder_.*lr)(out_reg, addr, std::memory_order_acq_rel);
-			builder_.bne(out_reg, acc, &fail, Assembler::kNearJump);
+			builder_.bne(out_reg, acc, fail, Assembler::kNearJump);
 			(builder_.*sc)(temp, src, addr, std::memory_order_acq_rel); // Out_reg unused so use it here
-			builder_.bnez(temp, &retry, Assembler::kNearJump);
+			builder_.bnez(temp, retry, Assembler::kNearJump);
 
 			// Flags from comparison matching (i.e subtraction of equal values)
 			if (z_needed) {
@@ -456,9 +456,9 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 				builder_.li(SF, 0);
 			}
 
-			builder_.j(&end, Assembler::kNearJump);
+			builder_.j(end, Assembler::kNearJump);
 
-			builder_.Bind(&fail);
+			builder_.Bind(fail);
 
 			if (flags_needed) {
 				auto &temp_reg = allocate_register().first;
@@ -470,7 +470,7 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 			// Write back updated acc value
 			builder_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), out_reg);
 
-			builder_.Bind(&end);
+			builder_.Bind(end);
 		} break;
 		default:
 			throw std::runtime_error("unsupported cmpxchg width");
@@ -996,21 +996,22 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 				builder_.auipc(A1, 0);
 
 				reg_used_[A1.encoding()] = true; // Force keeping A1 unused
-				Label false_calc {}, end {};
+				Label *false_calc = builder_.alloc_label();
+				Label *end = builder_.alloc_label();
 
-				builder_.beqz(cond, &false_calc, Assembler::kNearJump);
+				builder_.beqz(cond, false_calc, Assembler::kNearJump);
 
 				builder_.auipc_keep(A1, 0);
 				TypedRegister &trueval = materialise_constant(*target2);
 				builder_.sd(trueval, AddressOperand { FP, static_cast<intptr_t>(reg_offsets::PC) });
-				builder_.j(&end, Assembler::kNearJump);
+				builder_.j(end, Assembler::kNearJump);
 
-				builder_.Bind(&false_calc);
+				builder_.Bind(false_calc);
 
 				TypedRegister &falseval = materialise_constant(*target1);
 				builder_.sd(falseval, AddressOperand { FP, static_cast<intptr_t>(reg_offsets::PC) });
 
-				builder_.Bind(&end);
+				builder_.Bind(end);
 				return;
 			}
 		}
@@ -1034,9 +1035,9 @@ void riscv64_translation_context::materialise_label(const label_node &n)
 	auto [it, not_exist] = labels_.try_emplace(&n, nullptr);
 
 	if (not_exist) {
-		it->second = std::make_unique<Label>();
+		it->second = builder_.alloc_label();
 	}
-	builder_.Bind(it->second.get());
+	builder_.Bind(it->second);
 }
 
 void riscv64_translation_context::materialise_br(const br_node &n)
@@ -1044,9 +1045,9 @@ void riscv64_translation_context::materialise_br(const br_node &n)
 	auto [it, not_exist] = labels_.try_emplace(n.target(), nullptr);
 
 	if (not_exist) {
-		it->second = std::make_unique<Label>();
+		it->second = builder_.alloc_label();
 	}
-	builder_.j(it->second.get());
+	builder_.j(it->second);
 }
 
 void riscv64_translation_context::materialise_cond_br(const cond_br_node &n)
@@ -1058,7 +1059,7 @@ void riscv64_translation_context::materialise_cond_br(const cond_br_node &n)
 	auto [it, not_exist] = labels_.try_emplace(n.target(), nullptr);
 
 	if (not_exist) {
-		it->second = std::make_unique<Label>();
+		it->second = builder_.alloc_label();
 	}
 	builder_.bnez(cond, it->second);
 }
@@ -1373,7 +1374,8 @@ TypedRegister &riscv64_translation_context::materialise_csel(const csel_node &n)
 		return out_reg;
 	}
 
-	Label false_calc {}, end {};
+	Label *false_calc = builder_.alloc_label();
+	Label *end = builder_.alloc_label();
 
 	TypedRegister &cond = *materialise(n.condition().owner());
 
@@ -1383,17 +1385,17 @@ TypedRegister &riscv64_translation_context::materialise_csel(const csel_node &n)
 
 	TypedRegister &falseval = *materialise(n.falseval().owner());
 
-	builder_.beqz(cond, &false_calc); // TODO Single instruction jump optimization
+	builder_.beqz(cond, false_calc); // TODO Single instruction jump optimization
 
 	builder_.mv(out_reg, trueval);
 
-	builder_.j(&end);
+	builder_.j(end);
 
-	builder_.Bind(&false_calc);
+	builder_.Bind(false_calc);
 
 	builder_.mv_keep(out_reg, falseval);
 
-	builder_.Bind(&end);
+	builder_.Bind(end);
 
 	// In-types might be wider than out-type so out accurate to narrower of the two
 	out_reg.set_type(get_minimal_type(trueval, falseval));

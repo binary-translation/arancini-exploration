@@ -44,7 +44,7 @@ private:
 
 	intptr_t ret_val_;
 
-	std::unordered_map<const ir::label_node *, std::unique_ptr<Label>> labels_;
+	std::unordered_map<const ir::label_node *, Label *> labels_;
 
 	std::unordered_map<const ir::port *, TypedRegister> treg_for_port_;
 	std::forward_list<TypedRegister> temporaries;

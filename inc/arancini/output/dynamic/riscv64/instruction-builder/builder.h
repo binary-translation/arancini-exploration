@@ -648,10 +648,15 @@ public:
 	{
 		reg_allocator_index_ = RegisterOperand::VIRTUAL_BASE;
 		instructions_.clear();
+		labels_.clear();
 	}
+
+	Label *alloc_label() { return labels_.emplace_back(std::make_unique<Label>()).get(); }
+
 
 private:
 	uint32_t reg_allocator_index_ { RegisterOperand::VIRTUAL_BASE };
 	std::vector<Instruction> instructions_;
+	std::vector<std::unique_ptr<Label>> labels_;
 };
 } // namespace arancini::output::dynamic::riscv64::builder
