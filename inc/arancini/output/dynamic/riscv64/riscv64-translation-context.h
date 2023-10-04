@@ -46,7 +46,6 @@ private:
 
 	std::unordered_map<const ir::label_node *, std::unique_ptr<Label>> labels_;
 
-	size_t reg_allocator_index_ { 0 };
 	std::unordered_map<const ir::port *, TypedRegister> treg_for_port_;
 	std::forward_list<TypedRegister> temporaries;
 	std::unordered_map<const ir::local_var *, std::reference_wrapper<TypedRegister>> locals_;
@@ -54,7 +53,6 @@ private:
 	std::bitset<32> reg_used_ {};
 	std::bitset<16> reg_written_ {};
 
-	RegisterOperand next_register();
 	std::pair<TypedRegister &, bool> allocate_register(
 		const ir::port *p = nullptr, std::optional<RegisterOperand> reg1 = std::nullopt, std::optional<RegisterOperand> reg2 = std::nullopt);
 

@@ -642,7 +642,16 @@ public:
 
 	*/
 
+	RegisterOperand next_register() { return RegisterOperand { reg_allocator_index_++ }; }
+
+	void reset()
+	{
+		reg_allocator_index_ = RegisterOperand::VIRTUAL_BASE;
+		instructions_.clear();
+	}
+
 private:
+	uint32_t reg_allocator_index_ { RegisterOperand::VIRTUAL_BASE };
 	std::vector<Instruction> instructions_;
 };
 } // namespace arancini::output::dynamic::riscv64::builder
