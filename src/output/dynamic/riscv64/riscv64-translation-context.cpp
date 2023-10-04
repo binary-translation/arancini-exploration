@@ -4,6 +4,7 @@
 #include <arancini/output/dynamic/riscv64/bitwise.h>
 #include <arancini/output/dynamic/riscv64/encoder/riscv64-constants.h>
 #include <arancini/output/dynamic/riscv64/flags.h>
+#include <arancini/output/dynamic/riscv64/instruction-builder/builder.h>
 #include <arancini/output/dynamic/riscv64/register_usage_identifier.h>
 #include <arancini/output/dynamic/riscv64/riscv64-translation-context.h>
 #include <arancini/output/dynamic/riscv64/shift.h>
@@ -35,9 +36,9 @@ static std::unordered_map<unsigned long, Register> flag_map {
 	{ (unsigned long)reg_offsets::SF, SF },
 };
 
-Register riscv64_translation_context::next_register()
+RegisterOperand riscv64_translation_context::next_register()
 {
-	constexpr static Register registers[] { S1, A0, A1, A2, A3, A4, A5, T0, T1, T2, A6, A7, S2, S3, S4, S5, S6, S7, T3, T4, T5, GP };
+	constexpr static RegisterOperand registers[] { S1, A0, A1, A2, A3, A4, A5, T0, T1, T2, A6, A7, S2, S3, S4, S5, S6, S7, T3, T4, T5, GP };
 
 	if (reg_allocator_index_ >= std::size(registers)) {
 		throw std::runtime_error("RISC-V DBT ran out of registers for packet at " + std::to_string(current_address_));
@@ -55,13 +56,14 @@ Register riscv64_translation_context::next_register()
  * @param reg2 Optional. Use this register for the upper half instead of allocating a new one.
  * @return A pair reference to the allocated Register and a boolean indicating whether the allocating was new.
  */
-std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(const port *p, std::optional<Register> reg1, std::optional<Register> reg2)
+std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(
+	const port *p, std::optional<RegisterOperand> reg1, std::optional<RegisterOperand> reg2)
 {
-	if (p && reg_for_port_.count(p)) {
-		return { reg_for_port_.at(p), false };
+	if (p && treg_for_port_.count(p)) {
+		return { treg_for_port_.at(p), false };
 	}
 	if (!p) {
-		Register r1 = reg1 ? *reg1 : next_register();
+		RegisterOperand r1 = reg1 ? *reg1 : next_register();
 		temporaries.emplace_front(r1);
 		return { temporaries.front(), true };
 	}
@@ -69,9 +71,9 @@ std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(
 	switch (p->type().width()) {
 	case 512: // FIXME proper
 	case 128: {
-		Register r1 = reg1 ? *reg1 : next_register();
-		Register r2 = reg2 ? *reg2 : next_register();
-		auto [a, b] = reg_for_port_.emplace(std::piecewise_construct, std::forward_as_tuple(p), std::forward_as_tuple(r1, r2));
+		RegisterOperand r1 = reg1 ? *reg1 : next_register();
+		RegisterOperand r2 = reg2 ? *reg2 : next_register();
+		auto [a, b] = treg_for_port_.emplace(std::piecewise_construct, std::forward_as_tuple(p), std::forward_as_tuple(r1, r2));
 		TypedRegister &tr = a->second;
 		tr.set_type(p->type());
 		return { tr, true };
@@ -81,8 +83,8 @@ std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(
 	case 16:
 	case 8:
 	case 1: {
-		Register r1 = reg1 ? *reg1 : next_register();
-		auto [a, b] = reg_for_port_.emplace(p, r1);
+		RegisterOperand r1 = reg1 ? *reg1 : next_register();
+		auto [a, b] = treg_for_port_.emplace(p, r1);
 		TypedRegister &tr = a->second;
 		tr.set_type(p->type());
 		return { tr, true };
@@ -92,35 +94,35 @@ std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(
 	}
 }
 
-Register riscv64_translation_context::get_or_assign_mapped_register(unsigned long idx)
+RegisterOperand riscv64_translation_context::get_or_assign_mapped_register(uint32_t idx)
 {
 	unsigned int &i = reg_map_[idx - 1];
 	if (!i) {
-		Register reg = next_register();
+		RegisterOperand reg = next_register();
 		i = reg.encoding();
 		reg_used_[i] = true;
 	}
 	reg_written_[idx - 1] = true; // Consider "assign" access as write
-	return Register { i };
+	return RegisterOperand { i };
 }
 
-Register riscv64_translation_context::get_or_load_mapped_register(unsigned long idx)
+RegisterOperand riscv64_translation_context::get_or_load_mapped_register(uint32_t idx)
 {
 	unsigned int &i = reg_map_[idx - 1];
 	if (!i) {
-		Register reg = next_register();
+		RegisterOperand reg = next_register();
 		i = reg.encoding();
 		reg_used_[i] = true;
-		assembler_.ld(reg, { FP, static_cast<intptr_t>(8 * idx) }); // FIXME hardcoded
+		builder_.ld(reg, AddressOperand { FP, static_cast<intptr_t>(8 * idx) }); // FIXME hardcoded
 	}
-	return Register { i };
+	return RegisterOperand { i };
 }
 
 void riscv64_translation_context::write_back_registers()
 {
 	for (size_t i = 0; i < reg_map_.size(); ++i) {
 		if (reg_map_[i] && reg_written_[i]) {
-			assembler_.sd(Register { reg_map_[i] }, { FP, static_cast<intptr_t>(8 * i + 8) }); // FIXME hardcoded offset
+			builder_.sd(RegisterOperand { reg_map_[i] }, AddressOperand { FP, static_cast<intptr_t>(8 * i + 8) }); // FIXME hardcoded offset
 		}
 	}
 }
@@ -134,14 +136,14 @@ bool insert_ebreak = false;
 void riscv64_translation_context::add_marker(int payload)
 {
 	// TODO Remove/only in debug
-	assembler_.li(ZERO, payload);
+	builder_.li(ZERO, payload);
 }
 
 void riscv64_translation_context::begin_block()
 {
 	// TODO Remove/only in debug
 	if (insert_ebreak) {
-		assembler_.ebreak();
+		builder_.ebreak();
 	}
 	reg_map_.fill(0);
 	reg_used_.reset();
@@ -154,7 +156,7 @@ void riscv64_translation_context::begin_instruction(off_t address, const std::st
 {
 	add_marker(2);
 	reg_allocator_index_ = 0;
-	reg_for_port_.clear();
+	treg_for_port_.clear();
 	temporaries.clear();
 	locals_.clear();
 	labels_.clear();
@@ -193,11 +195,11 @@ void riscv64_translation_context::end_block()
 {
 	// TODO Remove/only in debug
 	if (insert_ebreak) {
-		assembler_.ebreak();
+		builder_.ebreak();
 	}
 
-	assembler_.li(A0, ret_val_);
-	assembler_.ret();
+	builder_.li(A0, ret_val_);
+	builder_.ret();
 }
 
 void riscv64_translation_context::lower(ir::node *n)
@@ -206,22 +208,22 @@ void riscv64_translation_context::lower(ir::node *n)
 	nodes_.push_back(n);
 }
 
-using load_store_func_t = decltype(&Assembler::ld);
+using load_store_func_t = decltype(&InstructionBuilder::ld);
 
 static const std::unordered_map<std::size_t, load_store_func_t> load_instructions {
-	{ 1, &Assembler::lb },
-	{ 8, &Assembler::lb },
-	{ 16, &Assembler::lh },
-	{ 32, &Assembler::lw },
-	{ 64, &Assembler::ld },
+	{ 1, &InstructionBuilder::lb },
+	{ 8, &InstructionBuilder::lb },
+	{ 16, &InstructionBuilder::lh },
+	{ 32, &InstructionBuilder::lw },
+	{ 64, &InstructionBuilder::ld },
 };
 
 static const std::unordered_map<std::size_t, load_store_func_t> store_instructions {
-	{ 1, &Assembler::sb },
-	{ 8, &Assembler::sb },
-	{ 16, &Assembler::sh },
-	{ 32, &Assembler::sw },
-	{ 64, &Assembler::sd },
+	{ 1, &InstructionBuilder::sb },
+	{ 8, &InstructionBuilder::sb },
+	{ 16, &InstructionBuilder::sh },
+	{ 32, &InstructionBuilder::sw },
+	{ 64, &InstructionBuilder::sd },
 };
 
 std::optional<int64_t> riscv64_translation_context::get_as_int(const node *n)
@@ -382,15 +384,16 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 	case node_kinds::write_local: {
 		auto &node = *reinterpret_cast<const write_local_node *>(n);
 		TypedRegister &write_reg = *(materialise(node.write_value().owner()));
-		uint32_t reg_enc;
 		if (!locals_.count(node.local())) {
 			TypedRegister &local = allocate_register().first;
 			locals_.emplace(node.local(), std::ref(local));
-			reg_enc = local.encoding();
+			// First write to local (used register free for use before this)
+			builder_.mv(local, write_reg);
 		} else {
-			reg_enc = locals_.at(node.local()).get().encoding();
+			auto &reg_enc = locals_.at(node.local()).get();
+			// Successive write, keep available
+			builder_.mv_keep(reg_enc, write_reg);
 		}
-		assembler_.mv(Register { reg_enc }, write_reg);
 		return std::nullopt;
 	}
 	default:
@@ -418,7 +421,7 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 
 	auto [reg, _] = allocate_register();
 
-	assembler_.add(reg, dstAddr, MEM_BASE);
+	builder_.add(reg, dstAddr, MEM_BASE);
 
 	bool z_needed = !n.zero().targets().empty();
 	bool v_needed = !n.overflow().targets().empty();
@@ -426,14 +429,14 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 	bool n_needed = !n.negative().targets().empty();
 	bool flags_needed = z_needed || v_needed || c_needed || n_needed;
 
-	using load_reserve_type = decltype(&Assembler::lrd);
-	using store_conditional_type = decltype(&Assembler::scd);
+	using load_reserve_type = decltype(&InstructionBuilder::lrd);
+	using store_conditional_type = decltype(&InstructionBuilder::scd);
 
-	load_reserve_type lr = n.val().type().element_width() == 32 ? &Assembler::lrw : &Assembler::lrd;
-	store_conditional_type sc = n.val().type().element_width() == 32 ? &Assembler::scw : &Assembler::scd;
-	load_store_func_t store = n.val().type().element_width() == 32 ? &Assembler::sw : &Assembler::sd;
+	load_reserve_type lr = n.val().type().element_width() == 32 ? &InstructionBuilder::lrw : &InstructionBuilder::lrd;
+	store_conditional_type sc = n.val().type().element_width() == 32 ? &InstructionBuilder::scw : &InstructionBuilder::scd;
+	load_store_func_t store = n.val().type().element_width() == 32 ? &InstructionBuilder::sw : &InstructionBuilder::sd;
 
-	auto addr = Address { reg };
+	auto addr = AddressOperand { reg };
 	// FIXME Correct memory ordering?
 	switch (n.op()) {
 
@@ -441,42 +444,42 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 		switch (n.rhs().type().element_width()) {
 		case 64:
 		case 32: {
-			assembler_.Bind(&retry);
+			builder_.Bind(&retry);
 
-			(assembler_.*lr)(out_reg, addr, std::memory_order_acq_rel);
-			assembler_.bne(out_reg, acc, &fail, Assembler::kNearJump);
-			(assembler_.*sc)(out_reg, src, addr, std::memory_order_acq_rel);
-			assembler_.bnez(out_reg, &retry, Assembler::kNearJump);
+			(builder_.*lr)(out_reg, addr, std::memory_order_acq_rel);
+			builder_.bne(out_reg, acc, &fail, Assembler::kNearJump);
+			(builder_.*sc)(out_reg, src, addr, std::memory_order_acq_rel); // Out_reg unused so use it here
+			builder_.bnez(out_reg, &retry, Assembler::kNearJump);
 
 			// Flags from comparison matching (i.e subtraction of equal values)
 			if (z_needed) {
-				assembler_.li(ZF, 1);
+				builder_.li(ZF, 1);
 			}
 			if (c_needed) {
-				assembler_.li(CF, 0);
+				builder_.li(CF, 0);
 			}
 			if (v_needed) {
-				assembler_.li(OF, 0);
+				builder_.li(OF, 0);
 			}
 			if (n_needed) {
-				assembler_.li(SF, 0);
+				builder_.li(SF, 0);
 			}
 
-			assembler_.j(&end, Assembler::kNearJump);
+			builder_.j(&end, Assembler::kNearJump);
 
-			assembler_.Bind(&fail);
+			builder_.Bind(&fail);
 
 			if (flags_needed) {
 				TypedRegister temp_reg { SF };
 				temp_reg.set_type(n.val().type());
-				sub(assembler_, temp_reg, acc, out_reg);
-				sub_flags(assembler_, temp_reg, acc, out_reg, z_needed, v_needed, c_needed, n_needed);
+				sub(builder_, temp_reg, acc, out_reg);
+				sub_flags(builder_, temp_reg, acc, out_reg, z_needed, v_needed, c_needed, n_needed);
 			}
 
 			// Write back updated acc value
-			assembler_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), reg);
+			builder_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), out_reg);
 
-			assembler_.Bind(&end);
+			builder_.Bind(&end);
 		} break;
 		default:
 			throw std::runtime_error("unsupported cmpxchg width");
@@ -509,19 +512,20 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 
 	auto [reg, _] = allocate_register();
 
-	assembler_.add(reg, dstAddr, MEM_BASE);
+	builder_.add(reg, dstAddr, MEM_BASE);
 
-	auto addr = Address { reg };
+	auto addr = AddressOperand { reg };
+
 	// FIXME Correct memory ordering?
 	switch (n.op()) {
 	case binary_atomic_op::xadd:
 	case binary_atomic_op::add: {
 		switch (n.val().type().element_width()) {
 		case 64:
-			assembler_.amoaddd(out_reg, src, addr, std::memory_order_acq_rel);
+			builder_.amoaddd(out_reg, src, addr, std::memory_order_acq_rel);
 			break;
 		case 32:
-			assembler_.amoaddw(out_reg, src, addr, std::memory_order_acq_rel);
+			builder_.amoaddw(out_reg, src, addr, std::memory_order_acq_rel);
 			break;
 		default:
 			throw std::runtime_error("unsupported xadd width");
@@ -531,34 +535,35 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 			TypedRegister temp_result_reg { SF };
 			temp_result_reg.set_type(n.val().type());
 
-			add(assembler_, temp_result_reg, out_reg, src); // Actual sum for flag generation
-			add_flags(assembler_, temp_result_reg, out_reg, src, z_needed, v_needed, c_needed, n_needed);
+			add(builder_, temp_result_reg, out_reg, src); // Actual sum for flag generation
+			add_flags(builder_, temp_result_reg, out_reg, src, z_needed, v_needed, c_needed, n_needed);
 		}
 
 		if (n.op() == binary_atomic_op::xadd) {
-			switch (n.val().type().element_width()) { // FIXME This feels so wrong
-			case 32:
-				assembler_.slli(out_reg, out_reg, 32);
-				assembler_.srli(out_reg, out_reg, 32);
-				[[fallthrough]];
-			case 64:
-				assembler_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), reg);
-				break;
-			default:
-				throw std::runtime_error("unsupported xadd width");
-			}
+			//			Not needed anymore
+			//			switch (n.val().type().element_width()) { // FIXME This feels so wrong
+			//			case 32:
+			//				assembler_.slli(out_reg, out_reg, 32);
+			//				assembler_.srli(out_reg, out_reg, 32);
+			//				[[fallthrough]];
+			//			case 64:
+			//				assembler_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), out_reg);
+			//				break;
+			//			default:
+			//				throw std::runtime_error("unsupported xadd width");
+			//			}
 			return out_reg;
 		}
 		return std::nullopt;
 	}
 	case binary_atomic_op::sub:
-		assembler_.neg(out_reg, src);
+		builder_.neg(out_reg, src);
 		switch (n.val().type().element_width()) {
 		case 64:
-			assembler_.amoaddd(out_reg, out_reg, addr, std::memory_order_acq_rel);
+			builder_.amoaddd(out_reg, out_reg, addr, std::memory_order_acq_rel);
 			break;
 		case 32:
-			assembler_.amoaddw(out_reg, src, addr, std::memory_order_acq_rel);
+			builder_.amoaddw(out_reg, src, addr, std::memory_order_acq_rel);
 			break;
 		default:
 			throw std::runtime_error("unsupported lock sub width");
@@ -568,23 +573,23 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 			TypedRegister temp_result_reg { SF };
 			temp_result_reg.set_type(n.val().type());
 
-			sub(assembler_, temp_result_reg, out_reg, src); // Actual difference for flag generation
-			sub_flags(assembler_, temp_result_reg, out_reg, src, z_needed, v_needed, c_needed, n_needed);
+			sub(builder_, temp_result_reg, out_reg, src); // Actual difference for flag generation
+			sub_flags(builder_, temp_result_reg, out_reg, src, z_needed, v_needed, c_needed, n_needed);
 		}
 		return std::nullopt;
 	case binary_atomic_op::band: {
 		switch (n.val().type().element_width()) {
 		case 64:
-			assembler_.amoandd(out_reg, src, addr, std::memory_order_acq_rel);
+			builder_.amoandd(out_reg, src, addr, std::memory_order_acq_rel);
 			if (flags_needed) {
-				assembler_.and_(SF, out_reg, src); // Actual and for flag generation
+				builder_.and_(SF, out_reg, src); // Actual and for flag generation
 			}
 			break;
 		case 32:
-			assembler_.amoandw(out_reg, src, addr, std::memory_order_acq_rel);
+			builder_.amoandw(out_reg, src, addr, std::memory_order_acq_rel);
 			if (flags_needed) {
-				assembler_.and_(SF, out_reg, src); // Actual and for flag generation
-				assembler_.slli(SF, SF, 32); // Get rid of higher 32 bits
+				builder_.and_(SF, out_reg, src); // Actual and for flag generation
+				builder_.slli(SF, SF, 32); // Get rid of higher 32 bits
 			}
 			break;
 		default:
@@ -592,22 +597,22 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 		}
 
 		TypedRegister out = TypedRegister { SF };
-		zero_sign_flag(assembler_, out, z_needed, n_needed);
+		zero_sign_flag(builder_, out, z_needed, n_needed);
 		return std::nullopt;
 	}
 	case binary_atomic_op::bor: {
 		switch (n.val().type().element_width()) {
 		case 64:
-			assembler_.amoord(out_reg, src, addr, std::memory_order_acq_rel);
+			builder_.amoord(out_reg, src, addr, std::memory_order_acq_rel);
 			if (flags_needed) {
-				assembler_.or_(SF, out_reg, src); // Actual or for flag generation
+				builder_.or_(SF, out_reg, src); // Actual or for flag generation
 			}
 			break;
 		case 32:
-			assembler_.amoorw(out_reg, src, addr, std::memory_order_acq_rel);
+			builder_.amoorw(out_reg, src, addr, std::memory_order_acq_rel);
 			if (flags_needed) {
-				assembler_.or_(SF, out_reg, src); // Actual or for flag generation
-				assembler_.slli(SF, SF, 32); // Get rid of higher 32 bits
+				builder_.or_(SF, out_reg, src); // Actual or for flag generation
+				builder_.slli(SF, SF, 32); // Get rid of higher 32 bits
 			}
 			break;
 		default:
@@ -615,23 +620,23 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 		}
 
 		TypedRegister out = TypedRegister { SF };
-		zero_sign_flag(assembler_, out, z_needed, n_needed);
+		zero_sign_flag(builder_, out, z_needed, n_needed);
 		return std::nullopt;
 	}
 	case binary_atomic_op::bxor: {
 		switch (n.val().type().element_width()) {
 		case 64:
-			assembler_.amoxord(out_reg, src, addr, std::memory_order_acq_rel);
+			builder_.amoxord(out_reg, src, addr, std::memory_order_acq_rel);
 			if (flags_needed) {
-				assembler_.xor_(SF, out_reg, src); // Actual xor for flag generation
+				builder_.xor_(SF, out_reg, src); // Actual xor for flag generation
 			}
 			break;
 		case 32:
-			assembler_.amoxorw(out_reg, src, addr, std::memory_order_acq_rel);
+			builder_.amoxorw(out_reg, src, addr, std::memory_order_acq_rel);
 
 			if (flags_needed) {
-				assembler_.xor_(SF, out_reg, src); // Actual xor for flag generation
-				assembler_.slli(SF, SF, 32); // Get rid of higher 32 bits
+				builder_.xor_(SF, out_reg, src); // Actual xor for flag generation
+				builder_.slli(SF, SF, 32); // Get rid of higher 32 bits
 			}
 			break;
 		default:
@@ -639,16 +644,16 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 		}
 
 		TypedRegister out = TypedRegister { SF };
-		zero_sign_flag(assembler_, out, z_needed, n_needed);
+		zero_sign_flag(builder_, out, z_needed, n_needed);
 		return std::nullopt;
 	}
 	case binary_atomic_op::xchg:
 		switch (n.val().type().element_width()) {
 		case 64:
-			assembler_.amoswapd(out_reg, src, addr, std::memory_order_acq_rel);
+			builder_.amoswapd(out_reg, src, addr, std::memory_order_acq_rel);
 			break;
 		case 32:
-			assembler_.amoswapw(out_reg, src, addr, std::memory_order_acq_rel);
+			builder_.amoswapw(out_reg, src, addr, std::memory_order_acq_rel);
 			break;
 		default:
 			throw std::runtime_error("unsupported xchg width");
@@ -656,11 +661,11 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 
 		switch (n.val().type().element_width()) {
 		case 32:
-			assembler_.slli(out_reg, out_reg, 32);
-			assembler_.srli(out_reg, out_reg, 32);
+			builder_.slli(out_reg, out_reg, 32);
+			builder_.srli(out_reg, out_reg, 32);
 			[[fallthrough]];
 		case 64:
-			assembler_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), reg);
+			builder_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), reg);
 			break;
 		default:
 			throw std::runtime_error("unsupported xchg width");
@@ -702,9 +707,9 @@ TypedRegister &riscv64_translation_context::materialise_cast(const cast_node &n)
 					throw std::runtime_error("unsupported types on cast sx operation");
 				}
 			}
-			fixup(assembler_, src_reg, src_reg, value_type::s64());
+			fixup(builder_, src_reg, src_reg, value_type::s64());
 		}
-		fixup(assembler_, src_reg, src_reg, n.val().type().get_signed_type());
+		fixup(builder_, src_reg, src_reg, n.val().type().get_signed_type());
 		return src_reg;
 
 	case cast_op::zx: {
@@ -717,7 +722,7 @@ TypedRegister &riscv64_translation_context::materialise_cast(const cast_node &n)
 				if (!valid) {
 					return out_reg;
 				}
-				fixup(assembler_, out_reg, src_reg, n.val().type().get_unsigned_type());
+				fixup(builder_, out_reg, src_reg, n.val().type().get_unsigned_type());
 				return out_reg;
 			}
 		}
@@ -729,7 +734,7 @@ TypedRegister &riscv64_translation_context::materialise_cast(const cast_node &n)
 		if (!valid) {
 			return out_reg;
 		}
-		fixup(assembler_, out_reg, src_reg, n.val().type().get_unsigned_type());
+		fixup(builder_, out_reg, src_reg, n.val().type().get_unsigned_type());
 		return out_reg;
 	}
 	case cast_op::trunc: {
@@ -749,7 +754,7 @@ TypedRegister &riscv64_translation_context::materialise_cast(const cast_node &n)
 			return out_reg;
 		}
 
-		truncate(assembler_, out_reg, src_reg);
+		truncate(builder_, out_reg, src_reg);
 		return out_reg;
 	}
 	default:
@@ -778,7 +783,7 @@ TypedRegister &riscv64_translation_context::materialise_bit_extract(const bit_ex
 		return out_reg;
 	}
 
-	bit_extract(assembler_, out_reg, src, from, length);
+	bit_extract(builder_, out_reg, src, from, length);
 
 	return out_reg;
 }
@@ -801,14 +806,14 @@ TypedRegister &riscv64_translation_context::materialise_bit_insert(const bit_ins
 			// Map upper and insert into lower
 			auto [out_reg, valid] = allocate_register(&n.val(), std::nullopt, src.reg2());
 			if (valid) {
-				bit_insert(assembler_, out_reg, src, bits, to, length, allocate_register(nullptr).first);
+				bit_insert(builder_, out_reg, src, bits, to, length, allocate_register(nullptr).first);
 			}
 			return out_reg;
 		} else if (to >= 64) {
 			// Map lower and insert into upper
 			auto [out_reg, valid] = allocate_register(&n.val(), src.reg1());
 			if (valid) {
-				bit_insert(assembler_, out_reg, src, bits, to, length, allocate_register(nullptr).first);
+				bit_insert(builder_, out_reg, src, bits, to, length, allocate_register(nullptr).first);
 			}
 			return out_reg;
 		} else {
@@ -818,7 +823,7 @@ TypedRegister &riscv64_translation_context::materialise_bit_insert(const bit_ins
 		// Insert into 64B register
 		auto [out_reg, valid] = allocate_register(&n.val());
 		if (valid) {
-			bit_insert(assembler_, out_reg, src, bits, to, length, allocate_register(nullptr).first);
+			bit_insert(builder_, out_reg, src, bits, to, length);
 		}
 		return out_reg;
 	} else {
@@ -841,29 +846,29 @@ TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_
 	if (is_gpr(value)) {
 		if (n.regoff() > static_cast<unsigned long>(reg_offsets::R15)) { // Not GPR
 			auto load_instr = load_instructions.at(value.type().element_width());
-			(assembler_.*load_instr)(out_reg, { FP, static_cast<intptr_t>(n.regoff()) });
+			(builder_.*load_instr)(out_reg, AddressOperand { FP, static_cast<intptr_t>(n.regoff()) });
 			out_reg.set_actual_width();
 			out_reg.set_type(value_type::u64());
 		} else {
 			Register reg = get_or_load_mapped_register(n.regidx());
 			if (is_int(value, 32)) {
-				assembler_.sextw(out_reg, reg);
+				builder_.sextw(out_reg, reg);
 				out_reg.set_actual_width();
 				out_reg.set_type(value_type::u64());
 			} else {
-				assembler_.mv(out_reg, reg);
+				builder_.mv(out_reg, reg);
 			}
 		}
 
 		return out_reg;
 	}
 	if (is_flag(value)) {
-		assembler_.lb(out_reg, { FP, static_cast<intptr_t>(n.regoff()) });
+		builder_.lb(out_reg, AddressOperand { FP, static_cast<intptr_t>(n.regoff()) });
 		out_reg.set_type(value_type::u64());
 		return out_reg;
 	} else if (is_i128(value) || is_int(value, 512)) {
-		assembler_.ld(out_reg.reg1(), { FP, static_cast<intptr_t>(n.regoff()) });
-		assembler_.ld(out_reg.reg2(), { FP, static_cast<intptr_t>(n.regoff() + 8) });
+		builder_.ld(out_reg.reg1(), AddressOperand { FP, static_cast<intptr_t>(n.regoff()) });
+		builder_.ld(out_reg.reg2(), AddressOperand { FP, static_cast<intptr_t>(n.regoff() + 8) });
 		out_reg.set_type(value_type::u128());
 		return out_reg;
 	}
@@ -878,24 +883,25 @@ void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 		TypedRegister &reg = *(materialise(value.owner()));
 		if (n.regoff() > static_cast<unsigned long>(reg_offsets::R15)) { // Not GPR
 			auto store_instr = store_instructions.at(value.type().element_width());
-			(assembler_.*store_instr)(reg, { FP, static_cast<intptr_t>(n.regoff()) });
+			(builder_.*store_instr)(reg, AddressOperand { FP, static_cast<intptr_t>(n.regoff()) });
+		} else {
+			builder_.mv(get_or_assign_mapped_register(n.regidx()), reg);
 		}
-		assembler_.mv(get_or_assign_mapped_register(n.regidx()), reg);
 		return;
 	} else if (is_flag(value)) {
-		Register reg = (!is_flag_port(value)) ? (materialise(value.owner()))->get() : Register { flag_map.at(n.regoff()) };
-		if (is_flag_port(value) && !reg_for_port_.count(&value.owner()->val())) {
+		RegisterOperand reg = (!is_flag_port(value)) ? (materialise(value.owner()))->get() : RegisterOperand { flag_map.at(n.regoff()) };
+		if (is_flag_port(value) && !treg_for_port_.count(&value.owner()->val())) {
 			// Result of node not written only flags needed
 			materialise(value.owner());
 		}
-		assembler_.sb(reg, { FP, static_cast<intptr_t>(n.regoff()) });
+		builder_.sb(reg, AddressOperand { FP, static_cast<intptr_t>(n.regoff()) });
 		return;
 	} else if (is_i128(value) || is_int_vector(value, 2, 64) || is_int_vector(value, 4, 32) || is_int(value, 512) || is_int_vector(value, 4, 128)) {
 		// Treat 512 as 128 for now. Assuming it is just 128 bit instructions acting on 512 registers
 		TypedRegister &reg = *(materialise(value.owner())); // Will give lower 64bit
 
-		assembler_.sd(reg.reg1(), { FP, static_cast<intptr_t>(n.regoff()) });
-		assembler_.sd(reg.reg2(), { FP, static_cast<intptr_t>(n.regoff() + 8) });
+		builder_.sd(reg.reg1(), AddressOperand { FP, static_cast<intptr_t>(n.regoff()) });
+		builder_.sd(reg.reg2(), AddressOperand { FP, static_cast<intptr_t>(n.regoff() + 8) });
 		return;
 	}
 
@@ -912,13 +918,13 @@ TypedRegister &riscv64_translation_context::materialise_read_mem(const read_mem_
 
 	auto [reg, _] = allocate_register();
 
-	assembler_.add(reg, addr_reg, MEM_BASE);
+	builder_.add(reg, addr_reg, MEM_BASE);
 
-	Address addr { reg };
+	AddressOperand addr { reg };
 
 	if (is_i128(n.val())) {
-		assembler_.ld(out_reg.reg1(), addr);
-		assembler_.ld(out_reg.reg2(), Address { reg, 8 });
+		builder_.ld(out_reg.reg1(), addr);
+		builder_.ld(out_reg.reg2(), AddressOperand { reg, 8 });
 		return out_reg;
 	}
 
@@ -927,7 +933,7 @@ TypedRegister &riscv64_translation_context::materialise_read_mem(const read_mem_
 	}
 
 	auto load_instr = load_instructions.at(n.val().type().element_width());
-	(assembler_.*load_instr)(out_reg, addr);
+	(builder_.*load_instr)(out_reg, addr);
 	out_reg.set_actual_width();
 	out_reg.set_type(value_type::u64());
 
@@ -941,13 +947,13 @@ void riscv64_translation_context::materialise_write_mem(const write_mem_node &n)
 
 	auto [reg, _] = allocate_register(); // Temporary
 
-	assembler_.add(reg, addr_reg, MEM_BASE); // FIXME Assumes address has 64bit size in IR
+	builder_.add(reg, addr_reg, MEM_BASE); // FIXME Assumes address has 64bit size in IR
 
-	Address addr { reg };
+	AddressOperand addr { reg };
 
 	if (is_i128(n.value())) {
-		assembler_.sd(src_reg.reg1(), addr);
-		assembler_.sd(src_reg.reg2(), Address { reg, 8 });
+		builder_.sd(src_reg.reg1(), addr);
+		builder_.sd(src_reg.reg2(), AddressOperand { reg, 8 });
 		return;
 	}
 
@@ -956,7 +962,7 @@ void riscv64_translation_context::materialise_write_mem(const write_mem_node &n)
 	}
 
 	auto store_instr = store_instructions.at(n.value().type().element_width());
-	(assembler_.*store_instr)(src_reg, addr);
+	(builder_.*store_instr)(src_reg, addr);
 }
 
 TypedRegister &riscv64_translation_context::materialise_read_pc(const read_pc_node &n) { return materialise_constant(current_address_); }
@@ -978,11 +984,11 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 			// Now A1 register is available
 
 			// Save address to patch jump into when chaining (A1 second ret value)
-			assembler_.auipc(A1, 0);
+			builder_.auipc(A1, 0);
 
 			reg_used_[A1.encoding()] = true; // Force keeping A1 unused
 			TypedRegister &reg = materialise_constant(*target);
-			assembler_.sd(reg, { FP, static_cast<intptr_t>(reg_offsets::PC) });
+			builder_.sd(reg, AddressOperand { FP, static_cast<intptr_t>(reg_offsets::PC) });
 			return;
 		} else if (n.value().owner()->kind() == node_kinds::csel) {
 			const auto &node = *reinterpret_cast<const csel_node *>(n.value().owner());
@@ -991,7 +997,7 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 			if (target1 && target2) { // Conditional direct jump
 				TypedRegister &cond = *materialise(node.condition().owner());
 				TypedRegister &out = cond != A1 ? cond : allocate_register(nullptr).first;
-				extend_to_64(assembler_, out, cond);
+				extend_to_64(builder_, out, cond);
 
 				// Set up chain
 
@@ -1000,24 +1006,24 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 				// Now A1 register is available
 
 				// Save address to patch jump into when chaining (A1 second ret value)
-				assembler_.auipc(A1, 0);
+				builder_.auipc(A1, 0);
 
 				reg_used_[A1.encoding()] = true; // Force keeping A1 unused
 				Label false_calc {}, end {};
 
-				assembler_.beqz(out, &false_calc, Assembler::kNearJump);
+				builder_.beqz(cond, &false_calc, Assembler::kNearJump);
 
-				assembler_.auipc(A1, 0);
+				builder_.auipc_keep(A1, 0);
 				TypedRegister &trueval = materialise_constant(*target2);
-				assembler_.sd(trueval, { FP, static_cast<intptr_t>(reg_offsets::PC) });
-				assembler_.j(&end, Assembler::kNearJump);
+				builder_.sd(trueval, AddressOperand { FP, static_cast<intptr_t>(reg_offsets::PC) });
+				builder_.j(&end, Assembler::kNearJump);
 
-				assembler_.Bind(&false_calc);
+				builder_.Bind(&false_calc);
 
 				TypedRegister &falseval = materialise_constant(*target1);
-				assembler_.sd(falseval, { FP, static_cast<intptr_t>(reg_offsets::PC) });
+				builder_.sd(falseval, AddressOperand { FP, static_cast<intptr_t>(reg_offsets::PC) });
 
-				assembler_.Bind(&end);
+				builder_.Bind(&end);
 				return;
 			}
 		}
@@ -1026,14 +1032,14 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 	// FIXME maybe only support 64bit values for PC
 	TypedRegister &src_reg = *materialise(n.value().owner());
 
-	Address addr { FP, static_cast<intptr_t>(reg_offsets::PC) };
+	AddressOperand addr { FP, static_cast<intptr_t>(0) }; // FIXME hardcode
 	auto store_instr = store_instructions.at(n.value().type().element_width());
-	(assembler_.*store_instr)(src_reg, addr);
+	(builder_.*store_instr)(src_reg, addr);
 
 	// Write back all registers
 	write_back_registers();
 
-	assembler_.li(A1, 0); // 0 = No chain
+	builder_.li(A1, 0); // 0 = No chain
 }
 
 void riscv64_translation_context::materialise_label(const label_node &n)
@@ -1043,7 +1049,7 @@ void riscv64_translation_context::materialise_label(const label_node &n)
 	if (not_exist) {
 		it->second = std::make_unique<Label>();
 	}
-	assembler_.Bind(it->second.get());
+	builder_.Bind(it->second.get());
 }
 
 void riscv64_translation_context::materialise_br(const br_node &n)
@@ -1053,21 +1059,21 @@ void riscv64_translation_context::materialise_br(const br_node &n)
 	if (not_exist) {
 		it->second = std::make_unique<Label>();
 	}
-	assembler_.j(it->second.get());
+	builder_.j(it->second.get());
 }
 
 void riscv64_translation_context::materialise_cond_br(const cond_br_node &n)
 {
 	TypedRegister &cond = *materialise(n.cond().owner());
 
-	extend_to_64(assembler_, cond, cond);
+	extend_to_64(builder_, cond, cond);
 
 	auto [it, not_exist] = labels_.try_emplace(n.target(), nullptr);
 
 	if (not_exist) {
 		it->second = std::make_unique<Label>();
 	}
-	assembler_.bnez(cond, it->second.get());
+	builder_.bnez(cond, it->second);
 }
 
 TypedRegister &riscv64_translation_context::materialise_unary_arith(const unary_arith_node &n)
@@ -1083,7 +1089,7 @@ TypedRegister &riscv64_translation_context::materialise_unary_arith(const unary_
 	TypedRegister &src_reg = *(materialise(n.lhs().owner()));
 
 	if (n.op() == unary_arith_op::bnot) {
-		not_(assembler_, out_reg, src_reg);
+		not_(builder_, out_reg, src_reg);
 		return out_reg;
 	}
 
@@ -1118,33 +1124,33 @@ TypedRegister &riscv64_translation_context::materialise_ternary_arith(const tern
 	{
 		TypedRegister temp { CF };
 		temp.set_type(n.val().type());
-		add(assembler_, temp, src_reg2, src_reg3);
-		addi_flags(assembler_, temp, src_reg2, 1, false, v_needed, c_needed, false, SF, ZF);
-		add(assembler_, out_reg, src_reg1, temp);
-		add_flags(assembler_, out_reg, src_reg1, temp, false, v_needed, c_needed, false);
+		add(builder_, temp, src_reg2, src_reg3);
+		addi_flags(builder_, temp, src_reg2, 1, false, v_needed, c_needed, false, SF, ZF);
+		add(builder_, out_reg, src_reg1, temp);
+		add_flags(builder_, out_reg, src_reg1, temp, false, v_needed, c_needed, false);
 		if (c_needed) {
-			assembler_.or_(CF, CF, ZF); // Total carry out
+			builder_.or_(CF, CF, ZF); // Total carry out
 		}
 		if (v_needed) {
-			assembler_.xor_(OF, OF, SF); // Total overflow out
+			builder_.xor_(OF, OF, SF); // Total overflow out
 		}
-		zero_sign_flag(assembler_, out_reg, z_needed, n_needed);
+		zero_sign_flag(builder_, out_reg, z_needed, n_needed);
 		break;
 	}
 	case ternary_arith_op::sbb: {
 		TypedRegister temp { CF };
 		temp.set_type(n.val().type());
-		add(assembler_, temp, src_reg2, src_reg3);
-		addi_flags(assembler_, temp, src_reg2, 1, false, v_needed, c_needed, false, SF, ZF);
-		sub(assembler_, out_reg, src_reg1, temp);
-		sub_flags(assembler_, out_reg, src_reg1, temp, false, v_needed, c_needed, false);
+		add(builder_, temp, src_reg2, src_reg3);
+		addi_flags(builder_, temp, src_reg2, 1, false, v_needed, c_needed, false, SF, ZF);
+		sub(builder_, out_reg, src_reg1, temp);
+		sub_flags(builder_, out_reg, src_reg1, temp, false, v_needed, c_needed, false);
 		if (c_needed) {
-			assembler_.or_(CF, CF, ZF); // Total carry out
+			builder_.or_(CF, CF, ZF); // Total carry out
 		}
 		if (v_needed) {
-			assembler_.xor_(OF, OF, SF); // Total overflow out
+			builder_.xor_(OF, OF, SF); // Total overflow out
 		}
-		zero_sign_flag(assembler_, out_reg, z_needed, n_needed);
+		zero_sign_flag(builder_, out_reg, z_needed, n_needed);
 		break;
 	}
 	default:
@@ -1189,16 +1195,16 @@ TypedRegister &riscv64_translation_context::materialise_bit_shift(const bit_shif
 		}
 		switch (n.op()) {
 		case shift_op::lsl:
-			slli(assembler_, out_reg, src_reg, amt);
+			slli(builder_, out_reg, src_reg, amt);
 			break;
 		case shift_op::lsr:
-			srli(assembler_, out_reg, src_reg, amt);
+			srli(builder_, out_reg, src_reg, amt);
 			break;
 		case shift_op::asr:
-			srai(assembler_, out_reg, src_reg, amt);
+			srai(builder_, out_reg, src_reg, amt);
 			break;
 		}
-		zero_sign_flag(assembler_, out_reg, !n.zero().targets().empty(), !n.negative().targets().empty());
+		zero_sign_flag(builder_, out_reg, !n.zero().targets().empty(), !n.negative().targets().empty());
 
 		return out_reg;
 	}
@@ -1207,16 +1213,16 @@ TypedRegister &riscv64_translation_context::materialise_bit_shift(const bit_shif
 
 	switch (n.op()) {
 	case shift_op::lsl:
-		sll(assembler_, out_reg, src_reg, amount);
+		sll(builder_, out_reg, src_reg, amount);
 		break;
 	case shift_op::lsr:
-		srl(assembler_, out_reg, src_reg, amount);
+		srl(builder_, out_reg, src_reg, amount);
 		break;
 	case shift_op::asr:
-		sra(assembler_, out_reg, src_reg, amount);
+		sra(builder_, out_reg, src_reg, amount);
 		break;
 	}
-	zero_sign_flag(assembler_, out_reg, !n.zero().targets().empty(), !n.negative().targets().empty());
+	zero_sign_flag(builder_, out_reg, !n.zero().targets().empty(), !n.negative().targets().empty());
 
 	return out_reg;
 }
@@ -1255,32 +1261,32 @@ TypedRegister &riscv64_translation_context::materialise_binary_arith(const binar
 				if (imm == -2048) { // Can happen with inversion
 					goto standardPath;
 				}
-				addi(assembler_, out_reg, src_reg1, -imm);
-				subi_flags(assembler_, out_reg, src_reg1, imm, z_needed, v_needed, c_needed, n_needed);
+				addi(builder_, out_reg, src_reg1, -imm);
+				subi_flags(builder_, out_reg, src_reg1, imm, z_needed, v_needed, c_needed, n_needed);
 				break;
 			case binary_arith_op::add:
-				addi(assembler_, out_reg, src_reg1, imm);
-				addi_flags(assembler_, out_reg, src_reg1, imm, z_needed, v_needed, c_needed, n_needed);
+				addi(builder_, out_reg, src_reg1, imm);
+				addi_flags(builder_, out_reg, src_reg1, imm, z_needed, v_needed, c_needed, n_needed);
 				break;
 
 			// Binary operations preserve sign extension, so we keep the effective input type (even if larger)
 			case binary_arith_op::band:
-				assembler_.andi(out_reg, src_reg1, imm);
+				builder_.andi(out_reg, src_reg1, imm);
 				out_reg.set_actual_width();
 				out_reg.set_type(src_reg1.type());
-				zero_sign_flag(assembler_, out_reg, z_needed, n_needed);
+				zero_sign_flag(builder_, out_reg, z_needed, n_needed);
 				break;
 			case binary_arith_op::bor:
-				assembler_.ori(out_reg, src_reg1, imm);
+				builder_.ori(out_reg, src_reg1, imm);
 				out_reg.set_actual_width();
 				out_reg.set_type(src_reg1.type());
-				zero_sign_flag(assembler_, out_reg, z_needed, n_needed);
+				zero_sign_flag(builder_, out_reg, z_needed, n_needed);
 				break;
 			case binary_arith_op::bxor:
-				assembler_.xori(out_reg, src_reg1, imm);
+				builder_.xori(out_reg, src_reg1, imm);
 				out_reg.set_actual_width();
 				out_reg.set_type(src_reg1.type());
-				zero_sign_flag(assembler_, out_reg, z_needed, n_needed);
+				zero_sign_flag(builder_, out_reg, z_needed, n_needed);
 				break;
 			default:
 				// No-op Go to standard path
@@ -1295,60 +1301,60 @@ standardPath:
 	switch (n.op()) {
 
 	case binary_arith_op::add:
-		add(assembler_, out_reg, src_reg1, src_reg2);
-		add_flags(assembler_, out_reg, src_reg1, src_reg2, z_needed, v_needed, c_needed, n_needed);
+		add(builder_, out_reg, src_reg1, src_reg2);
+		add_flags(builder_, out_reg, src_reg1, src_reg2, z_needed, v_needed, c_needed, n_needed);
 		break;
 	case binary_arith_op::sub:
-		sub(assembler_, out_reg, src_reg1, src_reg2);
-		sub_flags(assembler_, out_reg, src_reg1, src_reg2, z_needed, v_needed, c_needed, n_needed);
+		sub(builder_, out_reg, src_reg1, src_reg2);
+		sub_flags(builder_, out_reg, src_reg1, src_reg2, z_needed, v_needed, c_needed, n_needed);
 		break;
 	// Binary operations preserve sign extension, so we can keep smaller of effective input types
 	case binary_arith_op::band:
-		assembler_.and_(out_reg, src_reg1, src_reg2);
+		builder_.and_(out_reg, src_reg1, src_reg2);
 		out_reg.set_actual_width();
 		out_reg.set_type(get_minimal_type(src_reg1, src_reg2));
-		zero_sign_flag(assembler_, out_reg, z_needed, n_needed);
+		zero_sign_flag(builder_, out_reg, z_needed, n_needed);
 		break;
 	case binary_arith_op::bor:
-		assembler_.or_(out_reg, src_reg1, src_reg2);
+		builder_.or_(out_reg, src_reg1, src_reg2);
 		out_reg.set_actual_width();
 		out_reg.set_type(get_minimal_type(src_reg1, src_reg2));
-		zero_sign_flag(assembler_, out_reg, z_needed, n_needed);
+		zero_sign_flag(builder_, out_reg, z_needed, n_needed);
 		break;
 	case binary_arith_op::bxor:
-		xor_(assembler_, out_reg, src_reg1, src_reg2);
-		zero_sign_flag(assembler_, out_reg, z_needed, n_needed);
+		xor_(builder_, out_reg, src_reg1, src_reg2);
+		zero_sign_flag(builder_, out_reg, z_needed, n_needed);
 		break;
 	case binary_arith_op::mul:
 		// FIXME
 		if (n.val().type().element_width() == 128 && (n.lhs().owner()->kind() != node_kinds::cast || n.rhs().owner()->kind() != node_kinds::cast)) {
 			throw std::runtime_error("128bit multiply without cast");
 		}
-		mul(assembler_, out_reg, src_reg1, src_reg2);
-		mul_flags(assembler_, out_reg, v_needed, c_needed);
+		mul(builder_, out_reg, src_reg1, src_reg2);
+		mul_flags(builder_, out_reg, v_needed, c_needed);
 		break;
 	case binary_arith_op::div:
-		div(assembler_, out_reg, src_reg1, src_reg2);
+		div(builder_, out_reg, src_reg1, src_reg2);
 		break;
 	case binary_arith_op::mod:
-		mod(assembler_, out_reg, src_reg1, src_reg2);
+		mod(builder_, out_reg, src_reg1, src_reg2);
 		break;
 	case binary_arith_op::cmpeq: {
-		Register tmp = static_cast<const Register>(src_reg2) != ZERO ? out_reg : src_reg1;
-		if (static_cast<const Register>(src_reg2) != ZERO) {
-			assembler_.xor_(out_reg, src_reg1, src_reg2);
+		RegisterOperand tmp = static_cast<const RegisterOperand>(src_reg2) != ZERO ? out_reg : src_reg1;
+		if (static_cast<const RegisterOperand>(src_reg2) != ZERO) {
+			builder_.xor_(out_reg, src_reg1, src_reg2);
 		}
-		assembler_.seqz(out_reg, tmp);
+		builder_.seqz(out_reg, tmp);
 		out_reg.set_actual_width(src_reg1.actual_width() < src_reg2.actual_width() ? src_reg1.actual_width_0() : src_reg2.actual_width_0());
 		out_reg.set_type(get_minimal_type(src_reg1, src_reg2));
 		return out_reg;
 	}
 	case binary_arith_op::cmpne: {
-		Register tmp = static_cast<const Register>(src_reg2) != ZERO ? out_reg : src_reg1;
-		if (static_cast<const Register>(src_reg2) != ZERO) {
-			assembler_.xor_(out_reg, src_reg1, src_reg2);
+		RegisterOperand tmp = static_cast<const RegisterOperand>(src_reg2) != ZERO ? out_reg : src_reg1;
+		if (static_cast<const RegisterOperand>(src_reg2) != ZERO) {
+			builder_.xor_(out_reg, src_reg1, src_reg2);
 		}
-		assembler_.snez(out_reg, tmp);
+		builder_.snez(out_reg, tmp);
 		out_reg.set_actual_width(src_reg1.actual_width() < src_reg2.actual_width() ? src_reg1.actual_width_0() : src_reg2.actual_width_0());
 		out_reg.set_type(get_minimal_type(src_reg1, src_reg2));
 		return out_reg;
@@ -1369,7 +1375,7 @@ TypedRegister &riscv64_translation_context::materialise_constant(int64_t imm)
 	}
 
 	TypedRegister &reg = allocate_register(nullptr).first;
-	gen_constant(assembler_, imm, reg);
+	gen_constant(builder_, imm, reg);
 	return reg;
 }
 
@@ -1387,20 +1393,23 @@ TypedRegister &riscv64_translation_context::materialise_csel(const csel_node &n)
 
 	TypedRegister &cond = *materialise(n.condition().owner());
 
-	extend_to_64(assembler_, cond, cond);
-	assembler_.beqz(cond, &false_calc);
+	extend_to_64(builder_, cond, cond);
 
 	TypedRegister &trueval = *materialise(n.trueval().owner());
-	assembler_.mv(out_reg, trueval);
-
-	assembler_.j(&end);
-
-	assembler_.Bind(&false_calc);
 
 	TypedRegister &falseval = *materialise(n.falseval().owner());
-	assembler_.mv(out_reg, falseval);
 
-	assembler_.Bind(&end);
+	builder_.beqz(cond, &false_calc); // TODO Single instruction jump optimization
+
+	builder_.mv(out_reg, trueval);
+
+	builder_.j(&end);
+
+	builder_.Bind(&false_calc);
+
+	builder_.mv_keep(out_reg, falseval);
+
+	builder_.Bind(&end);
 
 	// In-types might be wider than out-type so out accurate to narrower of the two
 	out_reg.set_type(get_minimal_type(trueval, falseval));
@@ -1462,7 +1471,7 @@ TypedRegister &riscv64_translation_context::materialise_vector_insert(const vect
 		case 1: {
 			auto [out_reg, valid] = allocate_register(&n.val(), std::nullopt, src.reg2());
 			if (valid) {
-				bit_insert(assembler_, out_reg, src, insert, 32 * n.index(), 32, allocate_register(nullptr).first);
+				bit_insert(builder_, out_reg, src, insert, 32 * n.index(), 32, allocate_register(nullptr).first);
 			}
 			return out_reg;
 		}
@@ -1470,7 +1479,7 @@ TypedRegister &riscv64_translation_context::materialise_vector_insert(const vect
 		case 3: {
 			auto [out_reg, valid] = allocate_register(&n.val(), src.reg1(), std::nullopt);
 			if (valid) {
-				bit_insert(assembler_, out_reg, src, insert, 32 * n.index(), 32, allocate_register(nullptr).first);
+				bit_insert(builder_, out_reg, src, insert, 32 * n.index(), 32, allocate_register(nullptr).first);
 			}
 			return out_reg;
 		}
@@ -1518,7 +1527,7 @@ TypedRegister &riscv64_translation_context::materialise_vector_extract(const vec
 			return out_reg;
 		}
 
-		bit_extract(assembler_, out_reg, src, 32 * n.index(), 32);
+		bit_extract(builder_, out_reg, src, 32 * n.index(), 32);
 		return out_reg;
 	}
 	default:
