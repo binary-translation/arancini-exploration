@@ -744,7 +744,7 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
 void arm64_translation_context::materialise_binary_atomic(const binary_atomic_node &n) {
 	const auto &dest_vregs = vregs_for_port(n.val());
     const auto &src_vregs = materialise_port(n.rhs());
-    const auto &addr_regs = vregs_for_port(n.lhs());
+    const auto &addr_regs = vregs_for_port(n.address());
 
     if (addr_regs.size() != 1)
         throw std::runtime_error("[ARM64-DBT] Binary atomic operation address cannot be > 64-bits");
@@ -976,7 +976,7 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
     // FIXME
 	const auto &dest_vregs = vregs_for_port(n.val());
     const auto &src_vregs = vregs_for_port(n.rhs());
-    const auto &addr_vregs = materialise_port(n.lhs());
+    const auto &addr_vregs = materialise_port(n.address());
 
     if (addr_vregs.size() != 1)
         throw std::runtime_error("[ARM64-DBT] Ternary atomic operation address cannot be > 64-bits");
