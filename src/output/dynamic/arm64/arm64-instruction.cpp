@@ -138,6 +138,9 @@ void instruction::dump(std::ostream &os) const {
 
     os << ' ';
     operands_[opcount_ - 1].dump(os);
+
+    if (!comment_.empty())
+        os << "// " << comment_;
 }
 
 // TODO: adapt all
