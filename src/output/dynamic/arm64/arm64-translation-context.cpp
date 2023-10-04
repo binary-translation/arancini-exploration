@@ -8,6 +8,7 @@
 
 #include <cmath>
 #include <cctype>
+#include <stdexcept>
 #include <string>
 #include <cstddef>
 #include <unordered_map>
@@ -245,6 +246,9 @@ void arm64_translation_context::materialise(const ir::node* n) {
         break;
     case node_kinds::bit_insert:
 		materialise_bit_insert(*reinterpret_cast<const bit_insert_node *>(n));
+        break;
+    case node_kinds::vector_insert:
+		materialise_vector_insert(*reinterpret_cast<const vector_insert_node *>(n));
         break;
     case node_kinds::constant:
         materialise_constant(*reinterpret_cast<const constant_node*>(n));
@@ -1399,6 +1403,21 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
         insert_len = std::min(n.length() - inserted, bits_vreg_width);
         bits_idx = inserted % bits_total_width;
     }
+}
+
+void arm64_translation_context::materialise_vector_insert(const vector_insert_node &n) {
+    if (n.val().type().element_width() > base_type().element_width())
+        throw std::runtime_error("[ARM64 DBT] Vector insertion not supported for vectors with elements > 64 bits");
+
+    const auto &dest_vregs = alloc_vregs(n.val()) ;
+    const auto &value_vreg = materialise_port(n.insert_value());
+
+    if (n.insert_value().type().element_width() > base_type().element_width() || value_vreg.size() > 1)
+        throw std::runtime_error("[ARM64 DBT] Vector insertion not supported with value > 64 bits");
+
+    // TODO: what if value_vreg is composed 2 32-bit regs?
+    // Does this occur in practice?
+    builder_.mov(value_vreg[n.index()], value_vreg[0]);
 }
 
 void arm64_translation_context::materialise_internal_call(const internal_call_node &n) {
