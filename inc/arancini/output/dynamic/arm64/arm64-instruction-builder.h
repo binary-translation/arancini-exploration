@@ -31,8 +31,9 @@ public:
               is_reg<T1> = 0, is_reg<T2> = 0, is_reg_or_immediate<T3> = 0> \
 	void name(const T1 &dst, \
               const T2 &src1, \
-              const T3 &src2) { \
-        append(instruction(#name, def(keep(dst)), use(src1), use(src2))); \
+              const T3 &src2, \
+              const std::string &comment = "") { \
+        append(instruction(#name, def(keep(dst)), use(src1), use(src2)).add_comment(comment)); \
     }
 
 #define ARITH_OP_SHIFT(name) \
@@ -254,7 +255,7 @@ public:
               is_reg<T1> = 0> \
     void name(const T1 &src, \
              const memory_operand &base, const std::string &comment = "") { \
-        append(instruction(#name, use(src), def(base)).add_comment(comment)); \
+        append(instruction(#name, use(src), use(base)).add_comment(comment)); \
     } \
 
     LDR_VARIANTS(ldr);
@@ -386,7 +387,7 @@ public:
     }
 
     void label(const std::string &label, const std::string &comment = "") {
-        append(instruction(label + ":"));
+        append(instruction(label + ":").add_comment(comment));
     }
 
     template <typename T1,
@@ -640,6 +641,10 @@ public:
     }
 
     void insert_sep(const std::string &sep) { label(sep); }
+
+    void insert_comment(const std::string &comment) {
+        append(instruction("// " + comment));
+    }
 
     bool has_label(const std::string &label) {
         auto label_str = label + ":";

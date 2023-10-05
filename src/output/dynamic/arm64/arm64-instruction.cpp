@@ -140,7 +140,7 @@ void instruction::dump(std::ostream &os) const {
     operands_[opcount_ - 1].dump(os);
 
     if (!comment_.empty())
-        os << "// " << comment_;
+        os << " // " << comment_;
 }
 
 // TODO: adapt all
