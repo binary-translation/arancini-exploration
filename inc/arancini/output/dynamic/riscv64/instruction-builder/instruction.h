@@ -249,7 +249,8 @@ struct Instruction {
 
 	bool is_mv()
 	{
-		return (type_ == InstructionType::RdRs1ImmKeepRs2 || type_ == InstructionType::RdRs1Imm) && rdRs1ImmFunc_ == &Assembler::addi_normal && imm == 0;
+		return ((type_ == InstructionType::RdRs1ImmKeepRs2 || type_ == InstructionType::RdRs1Imm) && rdRs1ImmFunc_ == &Assembler::addi_normal && imm == 0)
+			|| (type_ == InstructionType::RdRs1Rs2 && rdRs1Rs2Func_ == &Assembler::add && (rs1 == ZERO || rs2 == ZERO));
 	}
 
 	RegisterOperand rd, rs1, rs2;

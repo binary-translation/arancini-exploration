@@ -458,11 +458,19 @@ void Assembler::add(Register rd, Register rs1, Register rs2)
 	ASSERT(Supports(RV_I));
 	if (Supports(RV_C)) {
 		if (rd == rs1) {
-			c_add(rd, rs1, rs2);
+			if (rs2 == ZERO) {
+				c_mv(rd, rs1);
+			} else {
+				c_add(rd, rs1, rs2);
+			}
 			return;
 		}
 		if (rd == rs2) {
-			c_add(rd, rs2, rs1);
+			if (rs1 == ZERO) {
+				c_mv(rd, rs2);
+			} else {
+				c_add(rd, rs2, rs1);
+			}
 			return;
 		}
 	}
