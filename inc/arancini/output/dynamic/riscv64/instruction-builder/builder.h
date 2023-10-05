@@ -2,6 +2,9 @@
 
 #include <arancini/output/dynamic/riscv64/instruction-builder/instruction.h>
 
+#include <bitset>
+#include <unordered_map>
+
 namespace arancini::output::dynamic::riscv64::builder {
 
 class InstructionBuilder {
@@ -653,6 +656,158 @@ public:
 
 	Label *alloc_label() { return labels_.emplace_back(std::make_unique<Label>()).get(); }
 
+	void allocate()
+	{
+		// reverse linear scan allocator
+#ifdef DEBUG_REGALLOC
+		DEBUG_STREAM << "REGISTER ALLOCATION" << std::endl;
+#endif
+		// TODO: handle different sizes
+
+		std::unordered_map<unsigned int, unsigned int> vreg_to_preg;
+
+		// All registers can be used except:
+		// SP (x2),
+		// FP/RegFile Ptr (x8),
+		// zero (x0)
+		// Return to trampoline (x1)
+		// Memory base (x31),
+		// thread pointer (x4)
+		// Return value (x10 + x11) can be used once first def
+
+		std::bitset<32> avail_physregs = 0x7FFFF2E8;
+		//		std::bitset<32> avail_float_physregs = 0xFFFFFFFFF;
+
+		for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
+			auto &insn = *RI;
+
+#ifdef DEBUG_REGALLOC
+			DEBUG_STREAM << "considering instruction ";
+			insn.dump(DEBUG_STREAM);
+			DEBUG_STREAM << '\n';
+#endif
+
+			auto allocate = [&avail_physregs /*, &avail_float_physregs*/, &vreg_to_preg](RegisterOperand *o /*, size_t idx*/) -> void {
+				unsigned int vri;
+				//				ir::value_type type;
+				if (!o->is_physical()) {
+					vri = o->encoding();
+					//					type = o.vreg().type();
+				} else {
+					throw std::runtime_error("Trying to allocate non-virtual register operand");
+				}
+
+				size_t allocation = 0;
+				//				if (type.is_floating_point()) {
+				//					allocation = avail_float_physregs._Find_first();
+				//					avail_float_physregs.flip(allocation);
+				//				} else {
+				allocation = avail_physregs._Find_first(); // FIXME More efficient allocation scheme (Try to reuse rd for rs1, prioritize C regs)
+				avail_physregs.flip(allocation);
+				//				}
+
+				// TODO: register spilling
+				vreg_to_preg[vri] = allocation;
+
+				o->allocate(allocation /*, type*/);
+			};
+
+			// kill rd def first
+			if (insn.rd) {
+				if (!insn.rd.is_physical()) {
+#ifdef DEBUG_REGALLOC
+					DEBUG_STREAM << "  DEF ";
+					o.dump(DEBUG_STREAM);
+#endif
+
+					//					auto type = o.vreg().type();
+					unsigned int vri = insn.rd.encoding();
+
+					auto alloc = vreg_to_preg.find(vri);
+
+					if (alloc != vreg_to_preg.end()) {
+						int pri = alloc->second;
+						if (!insn.is_rd_use() && !insn.rd.is_functional()) { // Those stay active
+							//							if (type.is_floating_point()) {
+							//								avail_float_physregs.set(pri);
+							//							} else {
+							avail_physregs.set(pri);
+							vreg_to_preg.erase(alloc); // Clear allocations, so unrelated earlier usages of the same vreg don't interfere
+							//							}
+						}
+						insn.rd.allocate(pri /*, type*/);
+#ifdef DEBUG_REGALLOC
+						DEBUG_STREAM << " allocated to ";
+						o.dump(DEBUG_STREAM);
+						DEBUG_STREAM << " -- releasing\n";
+#endif
+					} else {
+#ifdef DEBUG_REGALLOC
+						DEBUG_STREAM << " not allocated - killing instruction" << std::endl;
+#endif
+						insn.kill();
+					}
+
+#ifdef DEBUG_REGALLOC
+					DEBUG_STREAM << std::endl;
+#endif
+				} else {
+					if ((insn.rd == A0 || insn.rd == A1) && !insn.is_rd_use()) {
+						// Assigning to ret value, so free the register
+						avail_physregs.set(insn.rd.encoding());
+					}
+				}
+			}
+
+			if (insn.is_dead()) {
+				continue;
+			}
+
+			// alloc uses next
+
+			RegisterOperand *ops[] { &insn.rs1, &insn.rs2 };
+
+			for (auto &o : ops) {
+				if (*o && !o->is_physical()) {
+#ifdef DEBUG_REGALLOC
+					DEBUG_STREAM << "  USE ";
+					o.dump(DEBUG_STREAM);
+					DEBUG_STREAM << '\n';
+#endif
+
+					//					auto type = o.vreg().type();
+					unsigned int vri = o->encoding();
+					if (!vreg_to_preg.count(vri)) {
+						allocate(o /*, i*/);
+#ifdef DEBUG_REGALLOC
+						DEBUG_STREAM << " allocating vreg to ";
+						o.dump(DEBUG_STREAM);
+						DEBUG_STREAM << '\n';
+#endif
+					} else {
+						o->allocate(vreg_to_preg.at(vri) /*, type*/);
+					}
+
+#ifdef DEBUG_REGALLOC
+					DEBUG_STREAM << std::endl;
+#endif
+				}
+			}
+
+			// Kill MOVs
+			// TODO: refactor
+			if (insn.is_mv()) {
+				RegisterOperand op1 = insn.rd;
+				RegisterOperand op2 = insn.rs1;
+
+				if (op1.is_physical() && op2.is_physical()) {
+					if (op1.encoding() == op2.encoding()) {
+						insn.kill();
+					}
+				}
+			}
+		}
+	}
 
 private:
 	uint32_t reg_allocator_index_ { RegisterOperand::VIRTUAL_BASE };
