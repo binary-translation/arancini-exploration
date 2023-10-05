@@ -255,6 +255,8 @@ public:
 
     cond_operand(const cond_operand &c): cond_(c.cond_) { }
 
+    const cond_operand &operator=(const cond_operand &c) { cond_ = c.cond_; return *this; }
+
     std::string& condition() { return cond_; }
     const std::string& condition() const { return cond_; }
 private:
