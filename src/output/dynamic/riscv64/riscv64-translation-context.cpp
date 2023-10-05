@@ -9,7 +9,6 @@
 #include <arancini/output/dynamic/riscv64/riscv64-translation-context.h>
 #include <arancini/output/dynamic/riscv64/shift.h>
 #include <arancini/output/dynamic/riscv64/utils.h>
-#include <arancini/runtime/exec/x86/x86-cpu-state.h>
 
 #include <unordered_map>
 
@@ -21,13 +20,6 @@ using namespace arancini::ir;
  * Flags are always stored in registers S8 (ZF), S9 (CF), S10 (OF), S11(SF).
  * Memory accesses need to use MEM_BASE.
  */
-
-#define X86_OFFSET_OF(reg) __builtin_offsetof(struct arancini::runtime::exec::x86::x86_cpu_state, reg)
-enum class reg_offsets : unsigned long {
-#define DEFREG(ctype, ltype, name) name = X86_OFFSET_OF(name),
-#include <arancini/input/x86/reg.def>
-#undef DEFREG
-};
 
 static std::unordered_map<unsigned long, Register> flag_map {
 	{ (unsigned long)reg_offsets::ZF, ZF },
@@ -821,7 +813,7 @@ TypedRegister &riscv64_translation_context::materialise_bit_insert(const bit_ins
 TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_node &n)
 {
 	const port &value = n.val();
-	if (is_int(value, 64) && value.targets().size() == 1 && n.regoff() <= static_cast<unsigned long>(reg_offsets::R15)) { // 64bit GPR only used once
+	if (is_int(value, 64) && value.targets().size() == 1 && n.regidx() <= static_cast<unsigned long>(reg_idx::R15)) { // 64bit GPR only used once
 		Register reg = get_or_load_mapped_register(n.regidx());
 		return allocate_register(&n.val(), reg).first;
 	}
@@ -831,7 +823,7 @@ TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_
 		return out_reg;
 	}
 	if (is_gpr(value)) {
-		if (n.regoff() > static_cast<unsigned long>(reg_offsets::R15)) { // Not GPR
+		if (n.regidx() > static_cast<unsigned long>(reg_idx::R15)) { // Not GPR
 			auto load_instr = load_instructions.at(value.type().element_width());
 			(builder_.*load_instr)(out_reg, AddressOperand { FP, static_cast<intptr_t>(n.regoff()) });
 			out_reg.set_actual_width();
@@ -868,7 +860,7 @@ void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 	const port &value = n.value();
 	if (is_gpr(value)) {
 		TypedRegister &reg = *(materialise(value.owner()));
-		if (n.regoff() > static_cast<unsigned long>(reg_offsets::R15)) { // Not GPR
+		if (n.regidx() > static_cast<unsigned long>(reg_idx::R15)) { // Not GPR
 			auto store_instr = store_instructions.at(value.type().element_width());
 			(builder_.*store_instr)(reg, AddressOperand { FP, static_cast<intptr_t>(n.regoff()) });
 		} else {
