@@ -687,7 +687,7 @@ public:
 			DEBUG_STREAM << '\n';
 #endif
 
-			auto allocate = [&avail_physregs /*, &avail_float_physregs*/, &vreg_to_preg](RegisterOperand *o /*, size_t idx*/) -> void {
+			auto allocate = [&avail_physregs /*, &avail_float_physregs*/, &vreg_to_preg](RegisterOperand *o, RegisterOperand preference) -> void {
 				unsigned int vri;
 				//				ir::value_type type;
 				if (!o->is_physical()) {
@@ -702,7 +702,14 @@ public:
 				//					allocation = avail_float_physregs._Find_first();
 				//					avail_float_physregs.flip(allocation);
 				//				} else {
-				allocation = avail_physregs._Find_first(); // FIXME More efficient allocation scheme (Try to reuse rd for rs1, prioritize C regs)
+				if (preference && avail_physregs.test(preference.encoding())) {
+					allocation = preference.encoding(); // Prefer reusing the destination register
+				} else {
+					allocation = avail_physregs._Find_next(7); // Try using the C registers (x8-x15 first)
+					if (allocation == 32) {
+						allocation = avail_physregs._Find_first();
+					}
+				}
 				avail_physregs.flip(allocation);
 				//				}
 
@@ -778,7 +785,7 @@ public:
 					//					auto type = o.vreg().type();
 					unsigned int vri = o->encoding();
 					if (!vreg_to_preg.count(vri)) {
-						allocate(o /*, i*/);
+						allocate(o, insn.rd);
 #ifdef DEBUG_REGALLOC
 						DEBUG_STREAM << " allocating vreg to ";
 						o.dump(DEBUG_STREAM);
