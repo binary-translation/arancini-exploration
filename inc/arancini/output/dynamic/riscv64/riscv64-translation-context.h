@@ -65,8 +65,7 @@ private:
 	std::unordered_map<const ir::port *, TypedRegister> treg_for_port_;
 	std::forward_list<TypedRegister> temporaries;
 	std::unordered_map<const ir::local_var *, std::reference_wrapper<TypedRegister>> locals_;
-	std::array<uint32_t, 16> reg_map_ {};
-	std::bitset<32> reg_used_ {};
+	std::bitset<16> reg_loaded_ {};
 	std::bitset<16> reg_written_ {};
 
 	std::pair<TypedRegister &, bool> allocate_register(

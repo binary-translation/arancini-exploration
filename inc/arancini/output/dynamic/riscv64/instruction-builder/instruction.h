@@ -215,6 +215,43 @@ struct Instruction {
 		}
 	}
 
+	[[nodiscard]] bool is_rd_use() const
+	{
+		switch (type_) {
+
+		case InstructionType::Label:
+		case InstructionType::RdImm:
+		case InstructionType::RdLabelNear:
+		case InstructionType::RdLabelFar:
+		case InstructionType::Rs1Rs2LabelNear:
+		case InstructionType::Rs1Rs2LabelFar:
+		case InstructionType::Rs1Rs2Label:
+		case InstructionType::Rs2Addr:
+		case InstructionType::None:
+		case InstructionType::Dead:
+			return false;
+		case InstructionType::RdRs1Imm:
+		case InstructionType::RdAddr:
+		case InstructionType::RdAddrOrder:
+		case InstructionType::RdImmKeepRs1:
+			return rd == rs1;
+		case InstructionType::RdRs1Rs2:
+		case InstructionType::RdRs2AddrOrder:
+		case InstructionType::RdRs1ImmKeepRs2:
+			return rd == rs1 || rd == rs2;
+		}
+		return false;
+	}
+
+	void kill() { type_ = InstructionType::Dead; }
+
+	[[nodiscard]] bool is_dead() const { return type_ == InstructionType::Dead; }
+
+	bool is_mv()
+	{
+		return (type_ == InstructionType::RdRs1ImmKeepRs2 || type_ == InstructionType::RdRs1Imm) && rdRs1ImmFunc_ == &Assembler::addi_normal && imm == 0;
+	}
+
 	RegisterOperand rd, rs1, rs2;
 
 	union {

@@ -88,33 +88,26 @@ std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(
 
 RegisterOperand riscv64_translation_context::get_or_assign_mapped_register(uint32_t idx)
 {
-	unsigned int &i = reg_map_[idx - 1];
-	if (!i) {
-		RegisterOperand reg = next_register();
-		i = reg.encoding();
-		reg_used_[i] = true;
-	}
-	reg_written_[idx - 1] = true; // Consider "assign" access as write
-	return RegisterOperand { i };
+	reg_written_[idx - 1] = reg_loaded_[idx - 1] = true; // Consider "assign" access as write
+	return RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + (idx - 1) };
 }
 
 RegisterOperand riscv64_translation_context::get_or_load_mapped_register(uint32_t idx)
 {
-	unsigned int &i = reg_map_[idx - 1];
-	if (!i) {
-		RegisterOperand reg = next_register();
-		i = reg.encoding();
-		reg_used_[i] = true;
+	if (!reg_loaded_[idx - 1]) {
+		RegisterOperand reg = RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + (idx - 1) };
+		reg_loaded_[idx - 1] = true;
 		builder_.ld(reg, AddressOperand { FP, static_cast<intptr_t>(8 * idx) }); // FIXME hardcoded
 	}
-	return RegisterOperand { i };
+	return RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + (idx - 1) };
 }
 
 void riscv64_translation_context::write_back_registers()
 {
-	for (size_t i = 0; i < reg_map_.size(); ++i) {
-		if (reg_map_[i] && reg_written_[i]) {
-			builder_.sd(RegisterOperand { reg_map_[i] }, AddressOperand { FP, static_cast<intptr_t>(8 * i + 8) }); // FIXME hardcoded offset
+	for (uint32_t i = 0; i < reg_written_.size(); ++i) {
+		if (reg_written_[i]) {
+			builder_.sd(
+				RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + i }, AddressOperand { FP, static_cast<intptr_t>(8 * i + 8) }); // FIXME hardcoded offset
 		}
 	}
 }
@@ -133,15 +126,14 @@ void riscv64_translation_context::add_marker(int payload)
 
 void riscv64_translation_context::begin_block()
 {
+	reg_loaded_.reset();
+	reg_written_.reset();
 	builder_.reset();
 
 	// TODO Remove/only in debug
 	if (insert_ebreak) {
 		builder_.ebreak();
 	}
-	reg_map_.fill(0);
-	reg_used_.reset();
-	reg_written_.reset();
 
 	add_marker(1);
 }
@@ -193,6 +185,8 @@ void riscv64_translation_context::end_block()
 
 	builder_.li(A0, ret_val_);
 	builder_.ret();
+
+	builder_.allocate();
 }
 
 void riscv64_translation_context::lower(ir::node *n)
@@ -967,7 +961,6 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 			// Save address to patch jump into when chaining (A1 second ret value)
 			builder_.auipc(A1, 0);
 
-			reg_used_[A1.encoding()] = true; // Force keeping A1 unused
 			TypedRegister &reg = materialise_constant(*target);
 			builder_.sd(reg, AddressOperand { FP, static_cast<intptr_t>(reg_offsets::PC) });
 			return;
@@ -977,8 +970,7 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 			const std::optional<int64_t> &target2 = get_as_int(node.trueval().owner());
 			if (target1 && target2) { // Conditional direct jump
 				TypedRegister &cond = *materialise(node.condition().owner());
-				TypedRegister &out = cond != A1 ? cond : allocate_register(nullptr).first;
-				extend_to_64(builder_, out, cond);
+				extend_to_64(builder_, cond, cond);
 
 				// Set up chain
 
@@ -989,7 +981,6 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 				// Save address to patch jump into when chaining (A1 second ret value)
 				builder_.auipc(A1, 0);
 
-				reg_used_[A1.encoding()] = true; // Force keeping A1 unused
 				Label *false_calc = builder_.alloc_label();
 				Label *end = builder_.alloc_label();
 
