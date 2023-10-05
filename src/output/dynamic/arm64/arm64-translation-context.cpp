@@ -471,11 +471,10 @@ void arm64_translation_context::materialise_br(const br_node &n) {
 
 void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
     const auto &cond_vregs = materialise_port(n.cond());
-    if (cond_vregs.size() != 1) {
+    if (cond_vregs.size() != 1)
         throw std::runtime_error("[ARM64-DBT] Condition vregs for branches cannot be > 64-bits");
-    }
 
-    builder_.cmp(cond_vregs[0], immediate_operand(0, value_type::u8()));
+    builder_.cmp(cond_vregs[0], immediate_operand(1, value_type::u8()));
     builder_.beq(n.target()->name());
 }
 
