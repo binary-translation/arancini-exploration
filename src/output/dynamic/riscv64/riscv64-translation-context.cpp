@@ -187,6 +187,8 @@ void riscv64_translation_context::end_block()
 	builder_.ret();
 
 	builder_.allocate();
+
+	builder_.emit(assembler_);
 }
 
 void riscv64_translation_context::lower(ir::node *n)

@@ -809,6 +809,13 @@ public:
 		}
 	}
 
+	void emit(Assembler &assembler)
+	{
+		for (const auto &item : instructions_) {
+			item.emit(assembler);
+		}
+	}
+
 private:
 	uint32_t reg_allocator_index_ { RegisterOperand::VIRTUAL_BASE };
 	std::vector<Instruction> instructions_;
