@@ -49,6 +49,7 @@ struct Instruction {
 		, type_(type)
 		, labelFunc_(labelFunc)
 	{
+		ASSERT(!(!rd && has_rd()));
 	}
 	Instruction(const InstructionType type, const RdImmFunc rdImmFunc, const RegisterOperand rd, const intptr_t imm)
 		: rd(rd)
@@ -58,6 +59,7 @@ struct Instruction {
 		, type_(type)
 		, rdImmFunc_(rdImmFunc)
 	{
+		ASSERT(!(!rd && has_rd()));
 	}
 	Instruction(const InstructionType type, const RdImmFunc rdImmFunc, const RegisterOperand rd, const RegisterOperand rs1, const intptr_t imm)
 		: rd(rd)
@@ -67,6 +69,7 @@ struct Instruction {
 		, type_(type)
 		, rdImmFunc_(rdImmFunc)
 	{
+		ASSERT(!(!rd && has_rd()));
 	}
 	Instruction(const InstructionType type, const RdLabelFunc rdLabelFunc, const RegisterOperand rd, Label *label)
 		: rd(rd)
@@ -76,6 +79,7 @@ struct Instruction {
 		, type_(type)
 		, rdLabelFunc_(rdLabelFunc)
 	{
+		ASSERT(!(!rd && has_rd()));
 	}
 	Instruction(const InstructionType type, const RdRs1ImmFunc rdRs1ImmFunc, const RegisterOperand rd, const RegisterOperand rs1, const intptr_t imm)
 		: rd(rd)
@@ -85,6 +89,7 @@ struct Instruction {
 		, type_(type)
 		, rdRs1ImmFunc_(rdRs1ImmFunc)
 	{
+		ASSERT(!(!rd && has_rd()));
 	}
 	Instruction(const InstructionType type, const RdRs1ImmFunc rdRs1ImmFunc, const RegisterOperand rd, const RegisterOperand rs1, const RegisterOperand rs2,
 		const intptr_t imm)
@@ -95,6 +100,7 @@ struct Instruction {
 		, type_(type)
 		, rdRs1ImmFunc_(rdRs1ImmFunc)
 	{
+		ASSERT(!(!rd && has_rd()));
 	}
 	Instruction(const InstructionType type, const Rs1Rs2LabelBoolFunc rs1Rs2LabelBoolFunc, const RegisterOperand rs1, const RegisterOperand rs2, Label *label)
 		: rd(none_reg)
@@ -104,6 +110,7 @@ struct Instruction {
 		, type_(type)
 		, rs1Rs2LabelBoolFunc_(rs1Rs2LabelBoolFunc)
 	{
+		ASSERT(!(!rd && has_rd()));
 	}
 	Instruction(const InstructionType type, const Rs1Rs2LabelFunc rs1Rs2LabelFunc, const RegisterOperand rs1, const RegisterOperand rs2, Label *label)
 		: rd(none_reg)
@@ -113,6 +120,7 @@ struct Instruction {
 		, type_(type)
 		, rs1Rs2LabelFunc_(rs1Rs2LabelFunc)
 	{
+		ASSERT(!(!rd && has_rd()));
 	}
 	Instruction(const InstructionType type, const RdAddrFunc rdAddrFunc, const RegisterOperand rd, const RegisterOperand rs1, const RegisterOperand rs2,
 		const intptr_t imm)
@@ -123,6 +131,7 @@ struct Instruction {
 		, type_(type)
 		, rdAddrFunc_(rdAddrFunc)
 	{
+		ASSERT(!(!rd && has_rd()));
 	}
 	Instruction(
 		const InstructionType type, const RdAddrOrderFunc rdAddrOrderFunc, const RegisterOperand rd, const RegisterOperand rs1, const std::memory_order order)
@@ -133,6 +142,7 @@ struct Instruction {
 		, type_(type)
 		, rdAddrOrderFunc_(rdAddrOrderFunc)
 	{
+		ASSERT(!(!rd && has_rd()));
 	}
 	Instruction(const InstructionType type, const RdRs2AddrOrderFunc rdRs2AddrOrderFunc, const RegisterOperand rd, const RegisterOperand rs1,
 		const RegisterOperand rs2, const std::memory_order order)
@@ -143,6 +153,7 @@ struct Instruction {
 		, type_(type)
 		, rdRs2AddrOrderFunc_(rdRs2AddrOrderFunc)
 	{
+		ASSERT(!(!rd && has_rd()));
 	}
 	Instruction(const InstructionType type, const RdRs1Rs2Func rdRs1Rs2Func, const RegisterOperand rd, const RegisterOperand rs1, const RegisterOperand rs2)
 		: rd(rd)
@@ -152,6 +163,7 @@ struct Instruction {
 		, type_(type)
 		, rdRs1Rs2Func_(rdRs1Rs2Func)
 	{
+		ASSERT(!(!rd && has_rd()));
 	}
 	Instruction(const InstructionType type, const NoneFunc noneFunc)
 		: rd(none_reg)
@@ -161,6 +173,7 @@ struct Instruction {
 		, type_(type)
 		, noneFunc_(noneFunc)
 	{
+		ASSERT(!(!rd && has_rd()));
 	}
 
 	void emit(Assembler &assembler) const
@@ -213,6 +226,33 @@ struct Instruction {
 		case InstructionType::Dead:
 			break;
 		}
+	}
+
+	[[nodiscard]] bool has_rd() const
+	{
+		switch (type_) {
+
+		case InstructionType::Dead:
+		case InstructionType::Label:
+		case InstructionType::Rs1Rs2LabelNear:
+		case InstructionType::Rs1Rs2LabelFar:
+		case InstructionType::Rs1Rs2Label:
+		case InstructionType::Rs2Addr:
+		case InstructionType::None:
+			return false;
+		case InstructionType::RdImm:
+		case InstructionType::RdLabelNear:
+		case InstructionType::RdLabelFar:
+		case InstructionType::RdRs1Imm:
+		case InstructionType::RdAddr:
+		case InstructionType::RdRs1Rs2:
+		case InstructionType::RdAddrOrder:
+		case InstructionType::RdRs2AddrOrder:
+		case InstructionType::RdImmKeepRs1:
+		case InstructionType::RdRs1ImmKeepRs2:
+			return true;
+		}
+		return false;
 	}
 
 	[[nodiscard]] bool is_rd_use() const

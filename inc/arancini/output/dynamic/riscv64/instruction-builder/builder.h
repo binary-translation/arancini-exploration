@@ -720,6 +720,10 @@ public:
 			};
 
 			// kill rd def first
+			if (!insn.rd && insn.has_rd()) {
+				std::cerr << "This should not happen?" << std::endl;
+			}
+
 			if (insn.rd) {
 				if (!insn.rd.is_physical()) {
 #ifdef DEBUG_REGALLOC
@@ -812,6 +816,10 @@ public:
 						insn.kill();
 					}
 				}
+			}
+
+			if (insn.has_rd() && !insn.rd) {
+				std::cerr << "This should not happen?" << std::endl;
 			}
 		}
 	}
