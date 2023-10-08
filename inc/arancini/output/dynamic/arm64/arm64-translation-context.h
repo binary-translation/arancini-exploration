@@ -89,7 +89,7 @@ private:
     void materialise_read_local(const ir::read_local_node &n);
     void materialise_write_local(const ir::write_local_node &n);
 
-    vreg_operand add_membase(const vreg_operand &addr);
+    vreg_operand add_membase(const vreg_operand &addr, const ir::value_type &t = ir::value_type::u64());
 
     template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
     vreg_operand mov_immediate(T imm, ir::value_type type);
