@@ -171,6 +171,10 @@ void operand::dump(std::ostream &os) const {
 		else
 			os << to_string(memory().preg_base());
 
+        if (!memory().offset().value()) {
+            os << "]";
+            break;
+        }
 
         if (!memory().post_index())
             os << ", #0x" << std::hex << memory().offset().value() << ']';
