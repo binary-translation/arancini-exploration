@@ -46,6 +46,11 @@ static ir::value_type u12() {
     return type;
 }
 
+static ir::value_type u8() {
+    static ir::value_type type(ir::value_type_class::unsigned_integer, 8, 1);
+    return type;
+}
+
 class vreg_operand {
 public:
     vreg_operand() = default;
@@ -56,17 +61,24 @@ public:
 		: index_(i)
         , type_(type)
 	{
+        if (type_.width() > 64)
+            throw std::runtime_error("[ARM64-DBT] Does not support virtual registers > 64-bit");
 	}
 
     vreg_operand(const vreg_operand &o)
         : index_(o.index_)
         , type_(o.type_)
     {
+        if (type_.width() > 64)
+            throw std::runtime_error("[ARM64-DBT] Does not support virtual registers > 64-bit");
     }
 
     vreg_operand &operator=(const vreg_operand &o) {
         type_ = o.type_;
         index_ = o.index_;
+
+        if (type_.width() > 64)
+            throw std::runtime_error("[ARM64-DBT] Does not support virtual registers > 64-bit");
 
         return *this;
     }

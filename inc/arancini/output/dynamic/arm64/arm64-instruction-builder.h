@@ -456,6 +456,12 @@ public:
         append(instruction("uxtw", def(dst), use(src)).add_comment(comment));
     }
 
+    template <typename T1, typename T2,
+              is_reg<T1> = 0, is_reg<T2> = 0>
+    void cas(const T1 &dst, const T2 &src, const memory_operand &mem_addr, const std::string &comment = "") {
+        append(instruction("cas", use(keep(dst)), use(src), use(mem_addr)).add_comment(comment));
+    }
+
 // ATOMICs
     // LDXR{size} {Rt}, [Rn]
 #define LD_A_XR(name, size) \
