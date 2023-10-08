@@ -155,6 +155,16 @@ public:
         append(instruction("bl", use(dest)).add_comment(comment));
     }
 
+    void bne(const label_operand &dest, const std::string &comment = "") {
+        append(instruction("bne", use(dest)).add_comment(comment));
+    }
+
+    template <typename T1,
+              is_reg<T1> = 0>
+    void cbz(const T1 &dest, const label_operand &label, const std::string &comment = "") {
+        append(instruction("cbz", def(keep(dest)), use(label)).add_comment(comment));
+    }
+
     // TODO: check if this allocated correctly
     template <typename T1,
               is_reg<T1> = 0>
@@ -467,15 +477,15 @@ public:
 #define LD_A_XR(name, size) \
     template <typename T1, \
               is_reg<T1> = 0> \
-    void name##size(const T1 &dst, const memory_operand &mem) { \
-        append(instruction(#name#size, def(dst), use(mem))); \
+    void name##size(const T1 &dst, const memory_operand &mem, const std::string &comment = "") { \
+        append(instruction(#name#size, def(dst), use(mem)).add_comment(comment)); \
     }
 
 #define ST_A_XR(name, size) \
     template <typename T1, typename T2, \
               is_reg<T1> = 0, is_reg<T2> = 0> \
-    void name##size(const T1 &status, const T2 &rt, const memory_operand &mem) { \
-        append(instruction(#name#size, def(status), use(rt), use(mem))); \
+    void name##size(const T1 &status, const T2 &rt, const memory_operand &mem, const std::string &comment = "") { \
+        append(instruction(#name#size, def(keep(status)), use(rt), use(mem)).add_comment(comment)); \
     }
 
 #define LD_A_XR_VARIANTS(name) \
