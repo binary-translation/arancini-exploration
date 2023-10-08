@@ -20,6 +20,8 @@ using namespace arancini::ir;
 preg_operand memory_base_reg(preg_operand::x18);
 preg_operand context_block_reg(preg_operand::x29);
 
+static constexpr bool supports_lse = false;
+
 #define X86_OFFSET_OF(reg) __builtin_offsetof(struct arancini::runtime::exec::x86::x86_cpu_state, reg)
 enum class reg_offsets {
 #define DEFREG(ctype, ltype, name) name = X86_OFFSET_OF(name),
@@ -1033,7 +1035,11 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
     flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg(n.overflow(), value_type::u1());
     flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg(n.carry(), value_type::u1());
 
-    auto mem_addr_vreg = add_membase(addr_vregs[0]);
+    auto mem_addr = memory_operand(add_membase(addr_vregs[0]));
+
+    const auto &dest_vreg = dest_vregs[0];
+    const auto &src_vreg = src_vregs[0];
+    const auto &acc_vreg = acc_vregs[0];
 
     // CMPXCHG:
     // dest_vreg = mem(mem_base + addr);
@@ -1043,9 +1049,24 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
     // end
     switch (n.op()) {
     case ternary_atomic_op::cmpxchg:
-        // if (mem(mem_addr) == acc_vregs) mem(mem_addr) = src_vregs
-        builder_.cas(acc_vregs[0], src_vregs[0], memory_operand(mem_addr_vreg), "write source to memory if source == accumulator, accumulator = source");
-        builder_.mov(dest_vregs[0], acc_vregs[0], "move result of accumulator into destination register");
+        if constexpr (supports_lse) {
+            builder_.insert_comment("Atomic CMPXCHG using CAS (enabled on systems with LSE support");
+            builder_.cas(acc_vreg, src_vreg, memory_operand(mem_addr),
+                          "write source to memory if source == accumulator, accumulator = source");
+            builder_.mov(acc_vreg, dest_vreg, "move result of accumulator into destination register");
+        } else {
+            builder_.insert_comment("Atomic CMPXCHG without CAS");
+            builder_.label("loop");
+            builder_.ldxr(dest_vreg, memory_operand(mem_addr), "load atomically");
+            builder_.cmp(dest_vreg, acc_vreg, "compare with accumulator");
+            builder_.bne(label_operand("failure"), "if loaded value != accumulator branch to failure");
+            builder_.stxr(dest_vreg, src_vreg, memory_operand(mem_addr), "store if not failure");
+            builder_.cbz(dest_vreg, label_operand("success"), "!= 0 represents success storing");
+            builder_.label("failure");
+            builder_.add(acc_vreg, dest_vreg, immediate_operand(0, acc_vreg.type()));
+            builder_.b(label_operand("loop"), "loop until failure or success");
+            builder_.label("success");
+        }
         break;
     case ternary_atomic_op::adc:
     case ternary_atomic_op::sbb:
@@ -1110,9 +1131,9 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         }
 
         builder_.insert_comment("Sign-extend from " +
-                                 std::to_string(n.val().type().nr_elements()) + "x" + std::to_string(n.val().type().element_width())
+                                std::to_string(n.source_value().type().nr_elements()) + "x" + std::to_string(n.source_value().type().element_width())
                                 + " to " +
-                                std::to_string(n.source_value().type().nr_elements()) + "x" + std::to_string(n.source_value().type().element_width()));
+                                std::to_string(n.val().type().nr_elements()) + "x" + std::to_string(n.val().type().element_width()));
 
         // IDEA:
         // 1. Sign-extend reasonably
