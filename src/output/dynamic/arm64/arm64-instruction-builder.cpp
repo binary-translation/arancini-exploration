@@ -42,9 +42,10 @@ void instruction_builder::emit(machine_code_writer &writer) {
     }
 
     dump(assembly);
-    std::cerr << assembly.str() << '\n';
 
     size = asm_.assemble(assembly.str().c_str(), &encode);
+
+    std::cerr << assembly.str() << '\n';
 
     // TODO: write directly
     writer.copy_in(encode, size);
