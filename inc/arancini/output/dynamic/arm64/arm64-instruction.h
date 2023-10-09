@@ -491,13 +491,22 @@ public:
         operands_ = {std::forward<Args>(args)...};
     }
 
-    const instruction &add_comment(const std::string &comment) { comment_ = comment; return *this; }
+    instruction(const label_operand &label)
+        : opcode_(label.name())
+        , label_(true)
+    {
+    }
+
+    instruction &add_comment(const std::string &comment) { comment_ = comment; return *this; }
+    instruction &set_branch(bool is_branch) { branch_ = is_branch; return *this; }
 
 	void dump(std::ostream &os) const;
     std::string dump() const;
 	void kill() { opcode_.clear(); }
 
 	bool is_dead() const { return opcode_.empty(); }
+    bool is_branch() const { return branch_; }
+    bool is_label() const { return label_; }
 
     std::string& opcode() { return opcode_; }
     const std::string& opcode() const { return opcode_; }
@@ -510,7 +519,10 @@ private:
     std::string opcode_;
     std::string comment_;
 
-    size_t opcount_;
+    bool branch_ = false;
+    bool label_ = false;
+
+    size_t opcount_ = 0;
     operand_array operands_;
 };
 
