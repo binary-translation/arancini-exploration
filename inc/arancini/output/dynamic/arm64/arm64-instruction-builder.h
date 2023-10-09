@@ -144,32 +144,32 @@ public:
     }
 
     void b(const label_operand &dest, const std::string &comment = "") {
-        append(instruction("b", use(dest)).add_comment(comment));
+        append(instruction("b", use(dest)).add_comment(comment).set_branch(true));
     }
 
     void beq(const label_operand &dest, const std::string &comment = "") {
-        append(instruction("beq", use(dest)).add_comment(comment));
+        append(instruction("beq", use(dest)).add_comment(comment).set_branch(true));
     }
 
     void bl(const label_operand &dest, const std::string &comment = "") {
-        append(instruction("bl", use(dest)).add_comment(comment));
+        append(instruction("bl", use(dest)).add_comment(comment).set_branch(true));
     }
 
     void bne(const label_operand &dest, const std::string &comment = "") {
-        append(instruction("bne", use(dest)).add_comment(comment));
+        append(instruction("bne", use(dest)).add_comment(comment).set_branch(true));
     }
 
     template <typename T1,
               is_reg<T1> = 0>
     void cbz(const T1 &dest, const label_operand &label, const std::string &comment = "") {
-        append(instruction("cbz", def(keep(dest)), use(label)).add_comment(comment));
+        append(instruction("cbz", def(keep(dest)), use(label)).add_comment(comment).set_branch(true));
     }
 
     // TODO: check if this allocated correctly
     template <typename T1,
               is_reg<T1> = 0>
     void cbnz(const T1 &rt, const label_operand &dest, const std::string &comment = "") {
-        append(instruction("cbnz", use(rt), use(dest)).add_comment(comment));
+        append(instruction("cbnz", use(rt), use(dest)).add_comment(comment).set_branch(true));
     }
 
     template <typename T1, typename T2,
@@ -397,7 +397,7 @@ public:
     }
 
     void label(const std::string &label, const std::string &comment = "") {
-        append(instruction(label + ":").add_comment(comment));
+        append(instruction(label_operand(label + ":")).add_comment(comment));
     }
 
     template <typename T1,
