@@ -30,3 +30,7 @@ target_include_directories(arancini-output-arm64
 target_link_libraries(arancini-output-arm64 PRIVATE arancini-ir keystone)
 target_compile_definitions(arancini-output-arm64 PUBLIC ARCH_AARCH64)
 
+if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+    target_compile_definitions(arancini-output-arm64 PUBLIC ENABLE_LOG)
+endif ()
+

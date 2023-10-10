@@ -1,5 +1,6 @@
-#include "arancini/output/dynamic/arm64/arm64-instruction.h"
+#include <arancini/output/dynamic/arm64/arm64-instruction.h>
 #include <arancini/output/dynamic/arm64/arm64-instruction-builder.h>
+#include <arancini/util/logger.h>
 #include <array>
 #include <bitset>
 #include <exception>
@@ -56,11 +57,7 @@ void instruction_builder::emit(machine_code_writer &writer) {
 
 void instruction_builder::allocate() {
 	// reverse linear scan allocator
-#ifdef DEBUG_REGALLOC
-	DEBUG_STREAM << "REGISTER ALLOCATION" << std::endl;
-#endif
-    // TODO: handle direct physical register usage
-    // TODO: handle different sizes
+    utils::logger.log("REGISTER ALLOCATION");
 
 	std::unordered_map<unsigned int, unsigned int> vreg_to_preg;
 
@@ -76,11 +73,7 @@ void instruction_builder::allocate() {
 	for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
 		auto &insn = *RI;
 
-#ifdef DEBUG_REGALLOC
-		DEBUG_STREAM << "considering instruction ";
-		insn.dump(DEBUG_STREAM);
-		DEBUG_STREAM << '\n';
-#endif
+        utils::logger.log("considering instruction:", [&]() { return insn.dump(); });
 
         std::array<std::pair<size_t, size_t>, 5> allocs;
         bool has_unused_keep = false;
@@ -128,10 +121,7 @@ void instruction_builder::allocate() {
 
 			// Only regs can be /real/ defs
 			if (o.is_def() && o.is_vreg() && !o.is_use()) {
-#ifdef DEBUG_REGALLOC
-				DEBUG_STREAM << "  DEF ";
-				o.dump(DEBUG_STREAM);
-#endif
+                utils::logger.log("  DEF ", [&]() { return o.dump(); });
 
                 auto type = o.vreg().type();
 				unsigned int vri = o.vreg().index();
@@ -148,26 +138,17 @@ void instruction_builder::allocate() {
                     }
 
 					o.allocate(pri, type);
-#ifdef DEBUG_REGALLOC
-					DEBUG_STREAM << " allocated to ";
-					o.dump(DEBUG_STREAM);
-					DEBUG_STREAM << " -- releasing\n";
-#endif
+
+                    utils::logger.log("  allocated to", [&]() { return o.dump(); }, "-- releasing");
                 } else if (o.is_keep()) {
                     has_unused_keep = true;
 
                     allocate(o, i);
 				} else {
-#ifdef DEBUG_REGALLOC
-					DEBUG_STREAM << " not allocated - killing instruction" << std::endl;
-#endif
+                    utils::logger.log("  not allocated - eliminating instruction");
 					insn.kill();
 					break;
 				}
-
-#ifdef DEBUG_REGALLOC
-				DEBUG_STREAM << std::endl;
-#endif
 			}
 		}
 
@@ -181,45 +162,25 @@ void instruction_builder::allocate() {
 
 			// We only care about REG uses - but we also need to consider REGs used in MEM expressions
 			if (o.is_use() && o.is_vreg()) {
-#ifdef DEBUG_REGALLOC
-				DEBUG_STREAM << "  USE ";
-				o.dump(DEBUG_STREAM);
-                DEBUG_STREAM << '\n';
-#endif
+                utils::logger.log("  USE", [&]() { return o.dump(); });
 
                 auto type = o.vreg().type();
                 unsigned int vri = o.vreg().index();
 				if (!vreg_to_preg.count(vri)) {
                     allocate(o, i);
-#ifdef DEBUG_REGALLOC
-					DEBUG_STREAM << " allocating vreg to ";
-					o.dump(DEBUG_STREAM);
-                    DEBUG_STREAM << '\n';
-#endif
+                    utils::logger.log(" allocating vreg to", [&]() { return o.dump(); });
 				} else {
 					o.allocate(vreg_to_preg.at(vri), type);
 				}
-
-#ifdef DEBUG_REGALLOC
-				DEBUG_STREAM << std::endl;
-#endif
 			} else if (o.is_mem()) {
-#ifdef DEBUG_REGALLOC
-				DEBUG_STREAM << "  USE ";
-				o.dump(DEBUG_STREAM);
-				DEBUG_STREAM << std::endl;
-#endif
+                    utils::logger.log("  USE", [&]() { return o.dump(); });
 
 				if (o.memory().is_virtual()) {
                     unsigned int vri = o.memory().vreg_base().index();
 
 					if (!vreg_to_preg.count(vri)) {
                         allocate(o, i);
-#ifdef DEBUG_REGALLOC
-						DEBUG_STREAM << " allocating vreg to ";
-						o.dump(DEBUG_STREAM);
-                        DEBUG_STREAM << '\n';
-#endif
+                        utils::logger.log(" allocating vreg to ", [&]() { return o.dump(); });
 					} else {
                         auto type = o.memory().vreg_base().type();
 						o.allocate_base(vreg_to_preg.at(vri), type);

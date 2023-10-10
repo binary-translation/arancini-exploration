@@ -439,6 +439,7 @@ struct operand {
         memory.set_base_reg(preg_operand(index, value_type));
 	}
 
+    std::string dump() const;
 	void dump(std::ostream &os) const;
 protected:
     operand_variant op_;

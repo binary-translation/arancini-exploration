@@ -1,11 +1,13 @@
 #include <arancini/runtime/exec/execution-context.h>
 #include <arancini/runtime/exec/execution-thread.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
+#include <arancini/util/logger.h>
 #include <cstring>
 #include <iostream>
 
 #include <mutex>
 #include <signal.h>
+#include <stdexcept>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -61,20 +63,18 @@ static void segv_handler(int signo, siginfo_t *info, void *context)
 	unsigned long rip = 0;
 #endif
 
-	std::cerr << "SEGMENTATION FAULT: code=" << std::hex << info->si_code << ", rip=" << std::hex << rip << ", host-virtual-address=" << std::hex
-			  << info->si_addr;
-
+    utils::logger.log("SEGMENTATION FAULT: code=", std::hex, info->si_code, ", rip =", rip, ", host-virtual-address =", info->si_addr);
 	uintptr_t emulated_base = (uintptr_t)ctx_->get_memory_ptr(0);
 	if ((uintptr_t)info->si_addr >= emulated_base) {
-		std::cerr << ", guest-virtual-address=" << std::hex << ((uintptr_t)info->si_addr - emulated_base) << std::endl;
+        utils::logger.log(", guest-virtual-address=", ((uintptr_t)info->si_addr - emulated_base));
 	}
 
 	unsigned i = 0;
 	auto range = ctx_->get_thread_range();
 	for (auto it  = range.first; it != range.second; it++) {
             auto state = (x86_cpu_state*)it->second->get_cpu_state();
-			std::cerr << "Thread[" << i << "] Guest PC: " << state->PC << std::endl;
-			std::cerr << "Thread[" << i << "] FS: " << state->FS << std::endl;
+            utils::logger.log("Thread[", i, "] Guest PC:", state->PC);
+		    utils::logger.log("Thread[", i, "] FS:", state->FS);
 			i++;
 	}
 
@@ -122,8 +122,9 @@ static void load_gph(execution_context *ctx, const guest_program_header_metadata
 	void *ptr = ctx->add_memory_region(md->load_address, md->memory_size);
 
 	// Debugging information
-	std::cerr << "loading gph load-addr=" << std::hex << md->load_address << ", mem-size=" << md->memory_size
-			  << ", end=" << (md->load_address + md->memory_size) << ", file-size=" << md->file_size << ", target=" << ptr << std::endl;
+    utils::logger.log("loading gph load-addr=", std::hex, md->load_address, ", mem-size=",
+                      md->memory_size, ", end=", (md->load_address + md->memory_size),
+                      ", file-size=", md->file_size, ", target=", ptr);
 
 	// Copy the data from the host binary into the new allocated region of emulated
 	// guest memory.  This should be only of the specified file size, because the file size
@@ -220,6 +221,18 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 {
 	std::cerr << "arancini: dbt: initialise" << std::endl;
 
+    const char* flag = getenv("ARANCINI_ENABLE_LOG");
+    bool log_status = false;
+    if (flag) {
+        if (!strcmp(flag, "true")) {
+            log_status = true;
+        } else if (!strcmp(flag, "false")) {
+            log_status = false;
+        } else throw std::runtime_error("ARANCINI_ENABLE_LOG must be set to either true or false");
+    }
+
+    std::cerr << "Logger status: " << std::boolalpha << log_status << ":" << utils::logger.enable(log_status) << '\n';
+
 	// Consume args until '--'
 	int start = 1;
 
@@ -257,8 +270,9 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	x86_state->GS = (unsigned long long)ctx_->get_memory_ptr(0);
 	x86_state->RSP = setup_guest_stack(argc, argv, 0x100000000, ctx_, start);
 	x86_state->X87_STACK_BASE = (intptr_t)mmap(NULL, 80, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0) - (intptr_t)ctx_->get_memory_ptr(0);
+
 	// Report on various information for useful debugging purposes.
-	std::cerr << "state @ " << (void *)x86_state << ", pc @ " << std::hex << x86_state->PC << ", stack @ " << std::hex << x86_state->RSP << std::endl;
+    utils::logger.log("state @", (void *)x86_state, ", pc @", std::hex, x86_state->PC, ", stack @", x86_state->RSP);
 
 	// Initialisation of the runtime is complete - return a pointer to the raw CPU state structure
 	// so that the static code can use it for emulation.
