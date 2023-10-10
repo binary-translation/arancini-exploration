@@ -677,6 +677,12 @@ public:
 
 	void dump(std::ostream &os) const;
 
+    std::string dump() const {
+        std::stringstream ss;
+        dump(ss);
+        return ss.str();
+    }
+
 	size_t nr_instructions() const { return instructions_.size(); }
 private:
 	std::vector<instruction> instructions_;

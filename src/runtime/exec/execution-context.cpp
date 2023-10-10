@@ -133,12 +133,12 @@ int execution_context::invoke(void *cpu_state) {
     //x86::print_stack(std::cerr, memptr, 20);
     util::global_logger.separator(util::basic_logging::levels::debug, '-');
 
-    std::cerr << *x86_state;
+    utils::logger.debug(*x86_state);
     //auto* memptr = reinterpret_cast<uint64_t*>(get_memory_ptr(0)) + x86_state->RSP;
-    std::cerr << "--------------------------------------------\n";
-    std::cerr << "STACK:\n";
+    utils::logger.debug("--------------------------------------------");
+    utils::logger.debug("STACK:");
     //x86::print_stack(std::cerr, memptr, 20);
-    std::cerr << "--------------------------------------------\n";
+    utils::logger.debug("--------------------------------------------");
 #endif
 
 	auto txln = te_.get_translation(x86_state->PC);
@@ -331,8 +331,6 @@ int execution_context::internal_call(void *cpu_state, int call)
             util::global_logger.debug("System call: ioctl()\n");
 
 			// Not sure how many actually needed
-            std::cerr << "Syscall ioctl()\n";
-
 			uint64_t arg = x86_state->RDX;
 			uint64_t request = x86_state->RSI;
 			switch (request) {
@@ -446,8 +444,6 @@ int execution_context::internal_call(void *cpu_state, int call)
 			case 0x1002: // ARCH_SET_FS
 				x86_state->FS = x86_state->RSI;
 				x86_state->RAX = 0;
-                std::cerr << "HELLO FS: " << x86_state->FS << '\n';
-                std::cerr << "Addr: " << &x86_state->FS << '\n';
 				break;
 			case 0x1003: // ARCH_GET_FS
 				(*((uint64_t *)(x86_state->RSI + (intptr_t)memory_))) = x86_state->FS;
@@ -492,7 +488,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 			et->clear_child_tid_ = (int *)(x86_state->RDI + (uintptr_t)memory_);
 			x86_state->RAX = gettid();
 			break;
-		}
+        }
 		case 231:
             util::global_logger.debug("System call: exit()\n");
 

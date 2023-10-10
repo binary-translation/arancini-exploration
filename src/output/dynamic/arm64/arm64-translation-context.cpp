@@ -5,6 +5,7 @@
 #include <arancini/output/dynamic/arm64/arm64-translation-context.h>
 
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
+#include <arancini/util/logger.h>
 
 #include <cmath>
 #include <cctype>
@@ -164,7 +165,7 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
 	instruction_index_to_guest_[builder_.nr_instructions()] = address;
 
 	this_pc_ = address;
-	std::cerr << "  " << std::hex << address << ": " << disasm << std::endl;
+    utils::logger.info(address, ":", disasm);
 
     instr_cnt_++;
 
@@ -185,9 +186,9 @@ void arm64_translation_context::end_instruction() {
         for (const auto* node : nodes_)
             materialise(node);
     } catch (std::exception &e) {
-        std::cerr << e.what() << '\n';
-        builder_.dump(std::cerr);
-        std::cerr << "Terminating exception raised; aborting\n";
+        utils::logger.fatal(e.what());
+        utils::logger.fatal(utils::lazy_eval<>(&instruction_builder::dump));
+        utils::logger.fatal("Terminating exception raised; aborting");
         std::abort();
     }
 }
@@ -204,9 +205,9 @@ void arm64_translation_context::end_block() {
 
         builder_.emit(writer());
     } catch (std::exception &e) {
-        std::cerr << e.what() << '\n';
-        builder_.dump(std::cerr);
-        std::cerr << "Terminating exception raised; aborting\n";
+        utils::logger.fatal(e.what());
+        utils::logger.fatal(utils::lazy_eval<>(&instruction_builder::dump));
+        utils::logger.fatal("Terminating exception raised; aborting");
         std::abort();
     }
 }
@@ -224,7 +225,7 @@ void arm64_translation_context::materialise(const ir::node* n) {
     if (materialised_nodes_.count(n))
         return;
 
-    /* std::cerr << "Handling " << n->to_string() << '\n'; */
+    utils::logger.info("Handling", utils::lazy_eval<>(&ir::node::to_string));
     switch (n->kind()) {
     case node_kinds::read_reg:
         materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));
@@ -318,9 +319,8 @@ static inline bool is_flag_port(const port &value) {
 void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
     // Sanity check
     auto type = n.val().type();
-    if (type.is_vector() && type.element_width() > base_type().element_width()) {
+    if (type.is_vector() && type.element_width() > base_type().element_width())
         throw std::runtime_error("[ARM64-DBT] Cannot load vectors with individual elements larger than 64-bits");
-    }
 
     std::string comment("read register: ");
     comment += n.regname();
@@ -350,9 +350,8 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
 void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     // Sanity check
     auto type = n.val().type();
-    if (type.is_vector() && type.element_width() > base_type().element_width()) {
+    if (type.is_vector() && type.element_width() > base_type().element_width())
         throw std::runtime_error("[ARM64-DBT] Cannot store vectors with individual elements larger than 64-bits");
-    }
 
     auto &src_vregs = materialise_port(n.value());
     if (is_flag_port(n.value())) {
