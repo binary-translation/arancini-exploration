@@ -3,6 +3,7 @@
 #include <arancini/runtime/exec/execution-thread.h>
 #include <arancini/runtime/exec/native_syscall.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
+#include <arancini/util/logger.h>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -123,13 +124,20 @@ int execution_context::invoke(void *cpu_state)
 
 	auto x86_state = (x86::x86_cpu_state *)cpu_state;
 
-	std::cerr << "=================" << std::endl;
-	std::cerr << "INVOKE PC=" << std::hex << x86_state->PC << std::endl;
-	std::cerr << "=================" << std::endl;
+#ifndef NDEBUG
+    utils::logger.debug("INVOKE PC =", x86_state->PC);
+
+    utils::logger.debug(*x86_state);
+    //auto* memptr = reinterpret_cast<uint64_t*>(get_memory_ptr(0)) + x86_state->RSP;
+    utils::logger.debug("--------------------------------------------");
+    utils::logger.debug("STACK:");
+    //x86::print_stack(std::cerr, memptr, 20);
+    utils::logger.debug("--------------------------------------------");
+#endif
 
 	auto txln = te_.get_translation(x86_state->PC);
 	if (txln == nullptr) {
-		std::cerr << "unable to translate" << std::endl;
+        utils::logger.error("Unable to translate");
 		return 1;
 	}
 
@@ -152,10 +160,11 @@ int execution_context::internal_call(void *cpu_state, int call)
 	//std::cerr << "Executing internal call via TEMPORARY interface" << std::endl;
 	if (call == 1) { // syscall
 		auto x86_state = (x86::x86_cpu_state *)cpu_state;
-		//std::cerr << "Syscall No " << std::dec << x86_state->RAX << std::endl;
+        utils::logger.debug("System call number: ", std::dec, x86_state->RAX);
 		switch (x86_state->RAX) {
 		case 2: // open
 		{
+            utils::logger.debug("System call: open()");
 			auto filename = (uintptr_t)get_memory_ptr((off64_t)x86_state->RDI);
 			uint64_t flags = x86_state->RSI;
 			uint64_t mode = x86_state->RDX;
@@ -163,12 +172,12 @@ int execution_context::internal_call(void *cpu_state, int call)
 			break;
 		}
 		case 3: // close
-		{
+            utils::logger.debug("System call: close()");
 			x86_state->RAX = native_syscall(__NR_close, x86_state->RDI);
 			break;
-		}
 		case 5: // fstat
 		{
+            utils::logger.debug("System call: fstat()");
 			uint64_t fd = x86_state->RDI;
 			uint64_t statp = x86_state->RSI;
 			struct stat tmp_struct { };
@@ -222,6 +231,8 @@ int execution_context::internal_call(void *cpu_state, int call)
 		}
 		case 9: // mmap
 		{
+           utils::logger.debug("System call: mmap()");
+
 			// Hint to higher than already mapped memory if no hint
 			auto addr = x86_state->RDI == 0 ? (uintptr_t)get_memory_ptr((off_t)memory_size_ + 4096) : (uintptr_t)get_memory_ptr((int64_t)x86_state->RDI);
 			uint64_t length = x86_state->RSI;
@@ -246,7 +257,9 @@ int execution_context::internal_call(void *cpu_state, int call)
 			break;
 		}
 		case 10: // mprotect
-		{
+        {
+           utils::logger.debug("System call: mprotect()");
+
 			auto addr = (uintptr_t)get_memory_ptr((int64_t)x86_state->RDI);
 			uint64_t length = x86_state->RSI;
 			uint64_t prot = x86_state->RDX;
@@ -254,9 +267,11 @@ int execution_context::internal_call(void *cpu_state, int call)
 			auto ret = native_syscall(__NR_mprotect, addr, length, prot);
 			x86_state->RAX = ret;
 			break;
-		}
+        }
 		case 11: // munmap
-		{
+        {
+            utils::logger.debug("System call: munmap()");
+
 			auto addr = (uintptr_t)get_memory_ptr((int64_t)x86_state->RDI);
 			uint64_t length = x86_state->RSI;
 
@@ -264,9 +279,11 @@ int execution_context::internal_call(void *cpu_state, int call)
 			x86_state->RAX = native_syscall(__NR_munmap, addr, length);
 
 			break;
-		}
+        }
 		case 12: // brk
-		{
+        {
+            utils::logger.debug("System call: brk()");
+
 			// 407bf7
 			uint64_t addr = x86_state->RDI;
 			if (addr == 0) {
@@ -290,9 +307,11 @@ int execution_context::internal_call(void *cpu_state, int call)
 				x86_state->RAX = brk_ - (uintptr_t)get_memory_ptr(0);
 			}
 			break;
-		}
+        }
 		case 14: // rt_sigprocmask
-		{
+        {
+            utils::logger.debug("System call: rt_sigprocmask()");
+
 			// Not sure if we should allow that
 			auto set = (uintptr_t)get_memory_ptr(x86_state->RSI);
 			auto oldset = x86_state->RDX ? (uintptr_t)get_memory_ptr(x86_state->RDX) : 0;
@@ -300,15 +319,15 @@ int execution_context::internal_call(void *cpu_state, int call)
 			auto ret = native_syscall(__NR_rt_sigprocmask, x86_state->RDI, set, oldset, x86_state->R10);
 			x86_state->RAX = ret;
 			break;
-		}
+        }
 		case 16: // ioctl
-		{
+        {
+            utils::logger.debug("System call: ioctl()");
+
 			// Not sure how many actually needed
 
 			uint64_t arg = x86_state->RDX;
-
 			uint64_t request = x86_state->RSI;
-
 			switch (request) {
 			case TIOCGWINSZ:
 				arg += (uintptr_t)memory_;
@@ -321,16 +340,14 @@ int execution_context::internal_call(void *cpu_state, int call)
 
 			x86_state->RAX = native_syscall(__NR_ioctl, x86_state->RDI, request, arg);
 			break;
-		}
+        }
 		case 20: // writev
-		{
+        {
+            utils::logger.debug("System call: writev()");
 
 			auto iovec = (const struct iovec *)(x86_state->RSI + (uintptr_t(memory_)));
-
 			auto iocnt = x86_state->RDX;
-
 			struct iovec iovec_new[iocnt];
-
 			for (auto i = 0ull; i < iocnt; ++i) {
 				iovec_new[i].iov_base = reinterpret_cast<void *>((uintptr_t)iovec[i].iov_base + (uintptr_t)memory_);
 				iovec_new[i].iov_len = iovec[i].iov_len;
@@ -338,15 +355,18 @@ int execution_context::internal_call(void *cpu_state, int call)
 
 			x86_state->RAX = native_syscall(__NR_writev, x86_state->RDI, (uintptr_t)iovec_new, iocnt);
 			break;
-		}
+        }
 		case 28: // madvise
-		{
+        {
+            utils::logger.debug("System call: madvise()");
 			auto start = (uintptr_t)get_memory_ptr(x86_state->RDI);
 			x86_state->RAX = native_syscall(__NR_madvise, start, x86_state->RSI, x86_state->RDX);
 			break;
-		}
+        }
 		case 56: // clone
-		{
+        {
+           utils::logger.debug("System call: clone()");
+
 			auto et = create_execution_thread();
 			auto new_x86_state = (x86::x86_cpu_state *)et->get_cpu_state();
 			memcpy(new_x86_state, x86_state, sizeof(*x86_state));
@@ -372,14 +392,17 @@ int execution_context::internal_call(void *cpu_state, int call)
 			pthread_cond_destroy(&rax_cond);
 			pthread_detach(child);
 			break;
-		}
+        }
 		case 77: // ftruncate
-		{
+        {
+            utils::logger.debug("System call: ftruncate()");
 			x86_state->RAX = native_syscall(__NR_ftruncate, x86_state->RDI, x86_state->RSI);
 			break;
-		}
+        }
 		case 25: // mremap
-		{
+        {
+            utils::logger.debug("System call: mremap()");
+
 			// Hint to higher than already mapped memory if no hint
 			auto old_addr = (uintptr_t)get_memory_ptr((int64_t)x86_state->RDI);
 			uint64_t old_size = x86_state->RSI;
@@ -401,9 +424,9 @@ int execution_context::internal_call(void *cpu_state, int call)
 			x86_state->RAX = ptr;
 
 			break;
-		}
+        }
 		case 158: // arch_prctl
-		{
+            utils::logger.debug("System call: arch_prctl()");
 			switch (x86_state->RDI) { // code
 			case 0x1001: // ARCH_SET_GS
 				x86_state->GS = x86_state->RSI;
@@ -425,59 +448,59 @@ int execution_context::internal_call(void *cpu_state, int call)
 				x86_state->RAX = -EINVAL;
 			}
 			break;
-		}
 		case 200: // tkill
-		{
+            utils::logger.debug("System call: kill()");
 			x86_state->RAX = native_syscall(__NR_tkill, x86_state->RDI, x86_state->RSI);
 			break;
-		}
 		case 202: // futex
-		{
+        {
+            utils::logger.debug("System call: futex()");
 			auto addr = (uint64_t)get_memory_ptr(x86_state->RDI);
 			auto timespec = x86_state->R10 ? (uint64_t)get_memory_ptr(x86_state->R10) : 0;
 			auto addr2 = (uint64_t)get_memory_ptr(x86_state->R8);
 			x86_state->RAX = native_syscall(__NR_futex, addr, x86_state->RSI, (uint64_t)x86_state->RDX, timespec, addr2, x86_state->R9);
 			break;
-		}
+        }
 		case 203: // sched_set_affinity
-		{
+            utils::logger.debug("System call: sched_set_affinity()");
 			x86_state->RAX = native_syscall(__NR_sched_setaffinity, x86_state->RDI, x86_state->RSI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RDX));
 			break;
-		}
 		case 204: // sched_get_affinity
-		{
+            utils::logger.debug("System call: sched_get_affinity()");
 			x86_state->RAX = native_syscall(__NR_sched_getaffinity, x86_state->RDI, x86_state->RSI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RDX));
 			break;
-		}
 		case 218: // set_tid_address
-		{
+        {
+            utils::logger.debug("System call: set_tid_address()");
+
 			// TODO Handle clear_child_tid in exit
 			auto et = threads_[cpu_state];
 			et->clear_child_tid_ = (int *)(x86_state->RDI + (uintptr_t)memory_);
 			x86_state->RAX = gettid();
 			break;
 		}
-		case 231://exit_group
-		{
-			std::cerr << "Exiting from emulated process with exit code " << std::dec << x86_state->RDI << std::endl;
-			//exit(x86_state->RDI) ?
+		case 231:
+            utils::logger.debug("System call: exit()");
+
+            utils::logger.info("Exiting from emulated process with exit code:", std::dec, x86_state->RDI);
+			exit(x86_state->RDI);
 			return 1;
-		}
 		case 228: // clock_gettime
 		{
+            utils::logger.debug("System call: clock_gettime()");
 			x86_state->RAX = native_syscall(__NR_clock_gettime, x86_state->RDI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RSI));
 			break;
-		}
+        }
 		case 60: //exit
-		{
+            utils::logger.debug("System call: exit()()");
 			native_syscall(__NR_exit, x86_state->RDI);
-		}
+            break;
 		default:
-			std::cerr << "Unsupported syscall id " << std::dec << x86_state->RAX << std::endl;
+            utils::logger.error("Unsupported system call:", std::dec, x86_state->RAX);
 			return 1;
 		}
 	} else {
-		std::cerr << "Unknown internal call id " << std::dec << call << std::endl;
+        utils::logger.error("Unsupported internal call:", std::dec, call);
 		return 1;
 	}
 	return 0;
@@ -486,3 +509,4 @@ int execution_context::internal_call(void *cpu_state, int call)
 std::pair<decltype(execution_context::threads_)::const_iterator, decltype(execution_context::threads_)::const_iterator> execution_context::get_thread_range() {
 	return std::make_pair(threads_.cbegin(), threads_.cend());
 }
+
