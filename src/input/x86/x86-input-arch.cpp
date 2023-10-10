@@ -1,7 +1,7 @@
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/input/x86/x86-input-arch.h>
 #include <arancini/ir/ir-builder.h>
-#include <iostream>
+#include <arancini/util/logger.h>
 #include <sstream>
 
 using namespace arancini::ir;
@@ -315,7 +315,7 @@ static translation_result translate_instruction(ir_builder &builder, size_t addr
 	if (t) {
 		return t->translate(address, xedd, disasm);
 	} else {
-		std::cerr << "Could not find a translator for: " << disasm << std::endl;
+        utils::logger.error("Could not find a translator for:", disasm);
 		return translation_result::fail;
 	}
 }
@@ -342,9 +342,8 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 	static uint nr_chunk = 1;
 
-#ifndef NDEBUG
-	std::cerr << "chunk[" << std::dec << nr_chunk << "] @ " << std::hex << base_address << " code=" << code << ", size=" << code_size << std::endl;
-#endif
+    utils::logger.info("chunk[", std::dec, nr_chunk, "] @", std::hex, base_address,
+                       "code =", code, ", size =", code_size);
 
 	nr_chunk++;
 
@@ -375,11 +374,9 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
             if (pos != disasm.npos) {
                 auto addr_str = disasm.substr(pos);
                 off_t addr = std::strtol(addr_str.c_str(), nullptr, 16);
-                if (addr > base_address && addr < base_address + offset + length) {
-#ifndef NDEBUG
-                    std::cerr << "Backwards branch @ " << addr_str << '\n';
-#endif
-                }
+
+                if (addr > base_address && addr < base_address + offset + length)
+                    utils::logger.info("Backwards branch @", addr_str);
             }
 			break;
 		}

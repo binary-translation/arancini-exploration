@@ -14,7 +14,7 @@ public:
     bool enable(bool status) { enabled_ = status; return enabled_; }
 
     template<typename... Args>
-    void log(Args... args) {
+    void log(Args&&... args) {
         if (enabled_) {
             ((std::cout << ' ' << (eval(args))), ...);
             std::cout << '\n';
@@ -22,28 +22,28 @@ public:
     }
 
     template<typename... Args>
-    void debug(Args... args) {
-        log(std::forward<Args...>(args...));
+    void debug(Args&&... args) {
+        log(std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    void info(Args... args) {
-        log(std::forward<Args...>(args...));
+    void info(Args&&... args) {
+        log(std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    void warn(Args... args) {
-        log(std::forward<Args...>(args...));
+    void warn(Args&&... args) {
+        log(std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    void error(Args... args) {
-        log(std::forward<Args...>(args...));
+    void error(Args&&... args) {
+        log(std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    void fatal(Args... args) {
-        log(std::forward<Args...>(args...));
+    void fatal(Args&&... args) {
+        log(std::forward<Args>(args)...);
     }
 private:
     bool enabled_ = true;
@@ -66,8 +66,32 @@ public:
     bool enable(bool) { return false; }
 
     template<typename... Args>
-    void log(Args... args) const { }
+    void log(Args&&... args) { }
 
+    template<typename... Args>
+    void debug(Args&&... args) {
+        log(std::forward<Args>(args)...);
+    }
+
+    template<typename... Args>
+    void info(Args&&... args) {
+        log(std::forward<Args>(args)...);
+    }
+
+    template<typename... Args>
+    void warn(Args&&... args) {
+        log(std::forward<Args>(args)...);
+    }
+
+    template<typename... Args>
+    void error(Args&&... args) {
+        log(std::forward<Args>(args)...);
+    }
+
+    template<typename... Args>
+    void fatal(Args&&... args) {
+        log(std::forward<Args>(args)...);
+    }
 private:
     template<typename T>
     static auto eval(const T& arg) -> std::enable_if_t<!std::is_invocable_v<T>, const T&> {
@@ -81,10 +105,42 @@ private:
     }
 };
 
-template <typename F, typename... Args>
-static auto lazy_eval(F&& f, Args&&... args) {
-    return std::bind(std::forward<F>(f), std::forward<Args>(args)...);
-}
+template <typename... Args>
+struct non_const_lazy_eval_impl {
+    template <typename R, typename T>
+    auto operator()(R (T::*ptr)(Args...)) const noexcept -> decltype(ptr)
+    { return ptr; }
+    template <typename R>
+    static constexpr auto of(R (*ptr)(Args...)) noexcept -> decltype(ptr)
+    { return ptr; }
+};
+
+template <typename... Args>
+struct const_lazy_eval_impl {
+    template <typename R, typename T>
+    auto operator()(R (T::*ptr)(Args...) const) const noexcept -> decltype(ptr)
+    { return ptr; }
+    template <typename R>
+    static constexpr auto of(R (*ptr)(Args...)) noexcept -> decltype(ptr)
+    { return ptr; }
+};
+
+template <typename... Args>
+struct lazy_eval_impl : const_lazy_eval_impl<Args...>, non_const_lazy_eval_impl<Args...>
+{
+    using const_lazy_eval_impl<Args...>::operator();
+    using non_const_lazy_eval_impl<Args...>::operator();
+    template <typename R>
+    auto operator()(R (*ptr)(Args...)) const noexcept -> decltype(ptr)
+    { return ptr; }
+    template <typename R>
+    static constexpr auto of(R (*ptr)(Args...)) noexcept -> decltype(ptr)
+    { return ptr; }
+};
+
+template <typename... Args> constexpr lazy_eval_impl<Args...> lazy_eval = {};
+template <typename... Args> constexpr const_lazy_eval_impl<Args...> const_lazy_eval = {};
+template <typename... Args> constexpr non_const_lazy_eval_impl<Args...> non_const_lazy_eval = {};
 
 #ifndef ENABLE_LOG
 #define ENABLE_LOG false
