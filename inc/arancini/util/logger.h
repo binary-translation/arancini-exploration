@@ -1,3 +1,4 @@
+#include <mutex>
 #include <memory>
 #include <iostream>
 #include <functional>
@@ -5,20 +6,36 @@
 
 namespace utils {
 
-template <bool enable>
+class no_lock_policy {
+public:
+    void lock() { }
+    void unlock() { }
+};
+
+class basic_lock_policy {
+public:
+    void lock() { mutex_.lock(); }
+    void unlock() { mutex_.unlock(); }
+private:
+    std::mutex mutex_;
+};
+
+template <bool enable, typename lock_policy>
 class logger_impl;
 
-template <>
-class logger_impl<true> {
+template <typename lock_policy>
+class logger_impl<true, lock_policy> : public lock_policy {
 public:
     bool enable(bool status) { enabled_ = status; return enabled_; }
 
     template<typename... Args>
     void log(Args&&... args) {
+        lock_policy().lock();
         if (enabled_) {
             ((std::cout << ' ' << (eval(args))), ...);
             std::cout << '\n';
         }
+        lock_policy().unlock();
     }
 
     template<typename... Args>
@@ -61,7 +78,7 @@ private:
 };
 
 template <>
-class logger_impl<false> {
+class logger_impl<false, no_lock_policy> {
 public:
     bool enable(bool) { return false; }
 
@@ -148,7 +165,7 @@ template <typename... Args> constexpr non_const_lazy_eval_impl<Args...> non_cons
 #define ENABLE_LOG true
 #endif // ENABLE_LOG
 
-inline logger_impl<ENABLE_LOG> logger;
+inline logger_impl<ENABLE_LOG, no_lock_policy> logger;
 
 } // namespace utils
 
