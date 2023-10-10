@@ -143,6 +143,12 @@ void instruction::dump(std::ostream &os) const {
         os << " // " << comment_;
 }
 
+std::string operand::dump() const {
+    std::stringstream ss;
+    dump(ss);
+    return ss.str();
+}
+
 // TODO: adapt all
 void operand::dump(std::ostream &os) const {
 	switch (type()) {

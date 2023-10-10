@@ -7,6 +7,7 @@
 
 #include <mutex>
 #include <signal.h>
+#include <stdexcept>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -257,6 +258,18 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
     util::global_logger.set_level(level);
 
     util::global_logger.info("arancini: dbt: initialise\n");
+
+    const char* flag = getenv("ARANCINI_ENABLE_LOG");
+    bool log_status = false;
+    if (flag) {
+        if (!strcmp(flag, "true")) {
+            log_status = true;
+        } else if (!strcmp(flag, "false")) {
+            log_status = false;
+        } else throw std::runtime_error("ARANCINI_ENABLE_LOG must be set to either true or false");
+    }
+
+    std::cerr << "Logger status: " << std::boolalpha << log_status << ":" << utils::logger.enable(log_status) << '\n';
 
 	// Consume args until '--'
 	int start = 1;
