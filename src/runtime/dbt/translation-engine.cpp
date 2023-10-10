@@ -1,4 +1,5 @@
 #include <arancini/input/x86/x86-input-arch.h>
+#include <arancini/util/logger.h>
 #include <arancini/ir/chunk.h>
 #include <arancini/ir/default-ir-builder.h>
 #include <arancini/ir/dot-graph-generator.h>
@@ -152,7 +153,7 @@ translation *translation_engine::translate(unsigned long pc)
 {
 	void *code = ec_.get_memory_ptr(pc);
 
-	std::cerr << "translating pc=" << std::hex << pc << std::endl;
+    utils::logger.debug("translating PC =", pc);
 
 	if (deadflags_) {
 		opt_dbt_ir_builder builder(ia_.get_internal_function_resolver(), ctx_, *deadflags_);
