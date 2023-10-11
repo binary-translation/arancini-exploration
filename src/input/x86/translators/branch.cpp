@@ -24,11 +24,14 @@ void branch_translator::do_translate()
 		auto target = read_operand(0);
 
 		if (target->kind() == ir::node_kinds::constant) {
+			auto const_val = ((constant_node *)target)->const_val_i();
 			auto call_target = builder().insert_add(target->val(), builder().insert_constant_u64(instruction_length)->val());
 			target = builder().insert_add(builder().insert_read_pc()->val(), call_target->val());
+			builder().insert_write_pc(target->val(), br_type::call, const_val+instruction_length);
+			break;
 		}
 
-		builder().insert_write_pc(target->val());
+		builder().insert_write_pc(target->val(), br_type::call);
 		break;
 	}
 
@@ -42,7 +45,7 @@ void branch_translator::do_translate()
 		auto new_rsp = builder().insert_add(rsp->val(), builder().insert_constant_u64(8)->val());
 		write_reg(reg_offsets::RSP, new_rsp->val());
 
-		builder().insert_write_pc(retaddr->val());
+		builder().insert_write_pc(retaddr->val(), br_type::ret);
 
 		break;
 	}
@@ -56,7 +59,7 @@ void branch_translator::do_translate()
 			target = builder().insert_add(builder().insert_read_pc()->val(), branch_target->val());
 		}
 
-		builder().insert_write_pc(target->val());
+		builder().insert_write_pc(target->val(), br_type::br);
 
 		break;
 	}

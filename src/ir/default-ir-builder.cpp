@@ -54,7 +54,7 @@ packet_type default_ir_builder::end_packet()
 		throw std::runtime_error("packet not in progress");
 	}
 
-	bool eob = current_pkt_->updates_pc();
+	bool eob = current_pkt_->updates_pc() != br_type::none;
 
 	current_chunk_->add_packet(current_pkt_);
 	current_pkt_ = nullptr;

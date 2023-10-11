@@ -48,6 +48,7 @@ public:
 
 	void generate();
 
+	unsigned long fixed_branches;
 private:
 	const llvm_static_output_engine &e_;
 	const std::vector<std::shared_ptr<ir::chunk>> &chunks_;
@@ -111,5 +112,6 @@ private:
 		std::shared_ptr<ir::packet> pkt, ir::port &p);
 	::llvm::Value *materialise_port(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
 		std::shared_ptr<ir::packet> pkt, ir::port &p);
+	::llvm::BasicBlock *get_static_fn(std::shared_ptr<ir::packet> pkt, std::shared_ptr<std::map<unsigned long, ::llvm::BasicBlock *>>);
 };
 } // namespace arancini::output::o_static::llvm

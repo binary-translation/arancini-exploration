@@ -13,6 +13,8 @@
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
+#include <llvm/Transforms/Scalar/JumpThreading.h>
+#include <llvm/IR/PassManager.h>
 #include <llvm/Support/TimeProfiler.h>
 #include <map>
 #include <memory>
@@ -41,6 +43,7 @@ llvm_static_output_engine_impl::llvm_static_output_engine_impl(const llvm_static
 	, llvm_context_(std::make_unique<LLVMContext>())
 	, module_(std::make_unique<Module>("generated", *llvm_context_))
 	, in_br(false)
+	, fixed_branches(0)
 {
 }
 
@@ -176,6 +179,9 @@ void llvm_static_output_engine_impl::build()
 
 	builder.SetInsertPoint(loop_block);
 
+	//DEBUG
+	//auto alert = module_->getOrInsertFunction("alert", types.finalize);
+	//builder.CreateCall(alert, { });
 	auto program_counter_val = builder.CreateLoad(types.i64, program_counter, "pc");
 	auto pcswitch = builder.CreateSwitch(program_counter_val, switch_to_dbt);
 
@@ -215,6 +221,17 @@ void llvm_static_output_engine_impl::build()
 void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlock *contblock)
 {
 	auto blocks = std::make_shared<std::map<unsigned long, BasicBlock *>>();
+
+	for (auto c : chunks_) {
+		for (auto p : c->packets()) {
+			std::stringstream block_name;
+			block_name << "INSN_" << std::hex << p->address();
+
+			BasicBlock *block = BasicBlock::Create(*llvm_context_, block_name.str(), contblock->getParent());
+			(*blocks)[p->address()] = block;
+		}
+	}
+
 	for (auto c : chunks_) {
 		lower_chunk(pcswitch, contblock, c, blocks);
 	}
@@ -1195,14 +1212,6 @@ void llvm_static_output_engine_impl::lower_chunk(SwitchInst *pcswitch, BasicBloc
 
 	auto state_arg = contblock->getParent()->getArg(0);
 
-	for (auto p : c->packets()) {
-		std::stringstream block_name;
-		block_name << "INSN_" << std::hex << p->address();
-
-		BasicBlock *block = BasicBlock::Create(*llvm_context_, block_name.str(), contblock->getParent());
-		(*blocks)[p->address()] = block;
-	}
-
 	BasicBlock *packet_block = nullptr;
 	for (auto p : c->packets()) {
 		auto next_block = (*blocks)[p->address()];
@@ -1221,9 +1230,26 @@ void llvm_static_output_engine_impl::lower_chunk(SwitchInst *pcswitch, BasicBloc
 			}
 		}
 
-		if (p->updates_pc()) {
-			builder.CreateBr(contblock);
-			packet_block = nullptr;
+		switch (p->updates_pc()) {
+			case br_type::none:
+				break;
+			case br_type::call: {
+				auto f = get_static_fn(p, blocks);
+				if (f) {
+					builder.CreateBr(f);
+				} else {
+					builder.CreateBr(contblock);
+				}
+				packet_block = nullptr;
+				break;
+			}
+			case br_type::br:
+			case br_type::csel:
+			case br_type::ret: {
+				builder.CreateBr(contblock);
+				packet_block = nullptr;
+				break;
+			}
 		}
 	}
 
@@ -1231,6 +1257,34 @@ void llvm_static_output_engine_impl::lower_chunk(SwitchInst *pcswitch, BasicBloc
 		builder.CreateBr(contblock);
 	}
 }
+
+BasicBlock *llvm_static_output_engine_impl::get_static_fn(std::shared_ptr<packet> pkt, std::shared_ptr<std::map<unsigned long, BasicBlock *>> blocks) {
+/*
+		auto target = read_operand(0);
+
+		if (target->kind() == ir::node_kinds::constant) {
+			auto call_target = builder().insert_add(target->val(), builder().insert_constant_u64(instruction_length)->val());
+			target = builder().insert_add(builder().insert_read_pc()->val(), call_target->val());
+		}
+ */
+	write_pc_node *node = nullptr;
+	for (auto a : pkt->actions()) {
+		if(a->kind() == node_kinds::write_pc && ((write_pc_node *)a)->updates_pc()==br_type::call)
+			node = (write_pc_node *)a;
+	}
+	if (!node)
+		return nullptr;
+	if (node->const_target()) {
+
+		auto it = blocks->find(node->const_target()+pkt->address());
+		auto ret = it != blocks->end() ? it->second : nullptr;
+		if (ret)
+			fixed_branches++;
+		return ret;
+	}
+
+	return nullptr;
+};
 
 void llvm_static_output_engine_impl::optimise()
 {
@@ -1247,17 +1301,21 @@ void llvm_static_output_engine_impl::optimise()
 	PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
 	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
-
+	PB.registerOptimizerLastEPCallback( [&](ModulePassManager &mpm, OptimizationLevel Level) {
+		mpm.addPass(createModuleToFunctionPassAdaptor(JumpThreadingPass())); }
+	);
 	MPM.run(*module_, MAM);
 
 	// Compiled modules now exists
 	if (e_.dbg_) {
+		std::cerr << "Fixed branches: " << fixed_branches << std::endl;
 		module_->print(outs(), nullptr);
 	}
 }
 
 void llvm_static_output_engine_impl::compile()
 {
+	std::cout << "Fixed branches: " << fixed_branches << std::endl;
 	auto TT = sys::getDefaultTargetTriple();
 	module_->setTargetTriple(TT);
 
