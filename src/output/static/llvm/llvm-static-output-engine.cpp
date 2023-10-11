@@ -675,7 +675,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 				case fp_convert_type::round: rm = ::llvm::RoundingMode::NearestTiesToEven; break;
 				case fp_convert_type::trunc: rm = ::llvm::RoundingMode::TowardZero; break;
 			}
-			
+
 			if (cn->target_type().is_floating_point()) {
 				switch (cn->target_type().width()) {
 					case 32: ty = types.f32; break;
@@ -838,7 +838,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 		if (dst_ty->isFloatingPointTy())
 			dst = builder.CreateBitCast(dst, IntegerType::get(*llvm_context_, dst_ty->getPrimitiveSizeInBits()));
-		
+
 		auto tmp = ConstantInt::get(dst->getType(), 1);
 		auto ones = builder.CreateSub(builder.CreateShl(tmp, ConstantInt::get(tmp->getType(), bin->length())), ConstantInt::get(tmp->getType(), 1));
 		auto mask = builder.CreateShl(ones, ConstantInt::get(tmp->getType(), bin->to()), "bit_insert gen mask");
@@ -870,12 +870,12 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		auto ban = (binary_atomic_node *)n;
 		if (p.kind() == port_kinds::value)
 			return lower_node(builder, state_arg, pkt, n);
-		
+
 		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
 		auto lhs = lower_port(builder, state_arg, pkt, ban->address());
 		lhs = builder.CreateLoad(rhs->getType(), builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256)), "Atomic LHS");
 		auto value_port = lower_port(builder, state_arg, pkt, n->val());
-		
+
 		if (p.kind() == port_kinds::zero) {
 			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
 		} else if (p.kind() == port_kinds::negative) {

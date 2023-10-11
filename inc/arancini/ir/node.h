@@ -458,8 +458,25 @@ private:
 	port zero_, negative_;
 };
 
-enum class cast_op { bitcast, zx, sx, trunc, convert };
-enum class fp_convert_type { none, round, trunc };
+enum class cast_op : uint8_t { bitcast, zx, sx, trunc, convert };
+enum class fp_convert_type : uint8_t { none, round, trunc };
+
+inline std::string to_string(cast_op op) {
+    switch (op) {
+    case cast_op::bitcast:
+        return "bitcast";
+    case cast_op::zx:
+        return "zero-extend";
+    case cast_op::sx:
+        return "sign-extend";
+    case cast_op::trunc:
+        return "truncate";
+    case cast_op::convert:
+        return "convert";
+    default:
+        return "unknown cast operation";
+    }
+}
 
 class cast_node : public value_node {
 public:

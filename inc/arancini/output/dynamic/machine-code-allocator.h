@@ -91,6 +91,8 @@ public:
 private:
 	arena &arena_;
 	void *next_allocation_, *current_allocation_;
-	size_t arena_size_, current_allocation_size_;
+
+	[[maybe_unused]] size_t arena_size_;
+    size_t current_allocation_size_;
 };
 } // namespace arancini::output::dynamic
