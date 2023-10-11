@@ -54,7 +54,7 @@ static std::mutex segv_lock;
 /*
  * The segfault handler.
  */
-static void segv_handler(int signo, siginfo_t *info, void *context)
+static void segv_handler([[maybe_unused]] int signo, [[maybe_unused]] siginfo_t *info, [[maybe_unused]] void *context)
 {
 	segv_lock.lock();
 #if defined(ARCH_X86_64)
@@ -232,6 +232,28 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
     }
 
     std::cerr << "Logger status: " << std::boolalpha << log_status << ":" << utils::logger.enable(log_status) << '\n';
+
+    // Determine logger level
+    flag = getenv("ARANCINI_LOG_LEVEL");
+    utils::logging::levels level = utils::logging::levels::info;
+    if (flag && utils::logger.is_enabled()) {
+        if (!strcmp(flag, "debug"))
+            level = utils::logging::levels::debug;
+        else if (!strcmp(flag, "info"))
+            level = utils::logging::levels::info;
+        else if (!strcmp(flag, "warn"))
+            level = utils::logging::levels::warn;
+        else if (!strcmp(flag, "error"))
+            level = utils::logging::levels::error;
+        else if (!strcmp(flag, "fatal"))
+            level = utils::logging::levels::fatal;
+        else throw std::runtime_error("ARANCINI_LOG_LEVEL must be set to one among: debug, info, warn, error or fatal");
+    } else if (utils::logger.is_enabled()) {
+        std::cerr << "Logger enabled without explicit log level; setting log level to default [info]\n";
+    }
+
+    // Set logger level
+    utils::logger.set_level(level);
 
 	// Consume args until '--'
 	int start = 1;

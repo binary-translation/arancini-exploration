@@ -11,7 +11,7 @@ class llvm_static_output_engine : public static_output_engine {
 
 public:
 	llvm_static_output_engine(const std::string &output_filename);
-	~llvm_static_output_engine();
+	virtual ~llvm_static_output_engine();
 
 	void generate() override;
 

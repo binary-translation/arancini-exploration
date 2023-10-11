@@ -29,11 +29,11 @@ class translation_engine {
 public:
 	translation_engine(execution_context &ec, input::input_arch &ia, output::dynamic::dynamic_output_engine &oe, bool optimise = true)
 		: ec_(ec)
-		, ia_(ia)
-		, oe_(oe)
 		, code_arena_(0x100000000)
 		, alloc_ { code_arena_ }
 		, writer_ { alloc_ }
+		, ia_(ia)
+		, oe_(oe)
 		, ctx_ { oe_.create_translation_context(writer_) }
 	{
 		// TODO properly add flag to disable

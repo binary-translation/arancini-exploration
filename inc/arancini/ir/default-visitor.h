@@ -146,7 +146,9 @@ public:
 
 	virtual bool seen_node(node *n) override { return seen_.count(n) > 0; }
 
+    virtual ~default_visitor() = default;
 private:
 	std::set<node *> seen_;
 };
+
 } // namespace arancini::ir

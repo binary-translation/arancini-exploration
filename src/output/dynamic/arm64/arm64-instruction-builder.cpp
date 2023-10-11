@@ -33,7 +33,7 @@ void instruction_builder::emit(machine_code_writer &writer) {
                 op.type() == operand_type::vreg ||
                 (op.type() == operand_type::mem && op.memory().is_virtual())) {
                 dump(assembly);
-                utils::logger.info(utils::lazy_eval<>(&std::stringstream::str));
+                utils::logger.error(utils::lazy_eval<>(&std::stringstream::str));
                 throw std::runtime_error("Virtual register after register allocation: "
                                          + insn.dump());
             }

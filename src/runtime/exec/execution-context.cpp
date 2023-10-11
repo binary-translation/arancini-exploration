@@ -46,7 +46,7 @@ void *MainLoopWrapper(void *args) {
 	auto parent_state = (x86::x86_cpu_state *)largs->parent_state;
 
 	pthread_mutex_lock(largs->lock);
-	std::cout << "Thread: " << gettid() << " - State: " << std::hex << x86_state << std::dec << std::endl;
+    utils::logger.info("Thread:", utils::lazy_eval<>(gettid), "- State:", std::hex, x86_state, std::dec);
 	parent_state->RAX = gettid();
 	pthread_cond_signal(largs->cond);
 	pthread_mutex_unlock(largs->lock);
@@ -115,30 +115,24 @@ std::shared_ptr<execution_thread> execution_context::create_execution_thread()
 	return et;
 }
 
-int execution_context::invoke(void *cpu_state)
-{
-    if (!cpu_state)
-        throw std::invalid_argument("invoke() received null CPU state");
+int execution_context::invoke(void *cpu_state) {
+    if (!cpu_state) throw std::invalid_argument("invoke() received null CPU state");
 
 	auto et = threads_[cpu_state];
-	if (!et) {
-		throw std::runtime_error("unable to resolve execution thread");
-	}
+	if (!et) throw std::runtime_error("unable to resolve execution thread");
 
 	auto x86_state = (x86::x86_cpu_state *)cpu_state;
 
-#ifndef NDEBUG
-    utils::logger.debug("=================");
-    utils::logger.debug("INVOKE PC =", x86_state->PC);
-    utils::logger.debug("=================");
+    utils::logger.info("=================");
+    utils::logger.info("INVOKE PC =", x86_state->PC);
+    utils::logger.info("=================");
 
-    utils::logger.debug(*x86_state);
-    //auto* memptr = reinterpret_cast<uint64_t*>(get_memory_ptr(0)) + x86_state->RSP;
-    utils::logger.debug("--------------------------------------------");
+    utils::logger.info(*x86_state);
+    utils::logger.info("--------------------------------------------");
     utils::logger.debug("STACK:");
+    //auto* memptr = reinterpret_cast<uint64_t*>(get_memory_ptr(0)) + x86_state->RSP;
     //x86::print_stack(std::cerr, memptr, 20);
     utils::logger.debug("--------------------------------------------");
-#endif
 
 	auto txln = te_.get_translation(x86_state->PC);
 	if (txln == nullptr) {

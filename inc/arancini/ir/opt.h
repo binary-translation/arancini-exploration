@@ -20,22 +20,20 @@ enum class reg_offsets : unsigned long {
 };
 
 namespace arancini::ir {
-  class deadflags_opt_visitor : public default_visitor {
+  class deadflags_opt_visitor final : public default_visitor {
   public:
     deadflags_opt_visitor(void) {
       nr_flags_total_ = nr_flags_opt_total_ = 0;
     }
 
-	~deadflags_opt_visitor(void)
-	{
+	virtual ~deadflags_opt_visitor(void) {
 		if (nr_flags_total_ != 0) {
 			std::cout << "Dead flags opt pass stats: optimised " << nr_flags_opt_total_ << "/" << nr_flags_total_ << " ("
 					  << 100 * nr_flags_opt_total_ / nr_flags_total_ << "%)" << std::endl;
 		}
 	}
 
-	void visit_chunk(chunk &c)
-	{
+	void visit_chunk(chunk &c) {
 		nr_flags_ = nr_flags_opt_ = 0;
 		last_se_packets_.clear();
 		live_flags_.clear();
@@ -142,7 +140,6 @@ namespace arancini::ir {
 		}
 		default_visitor::visit_write_reg_node(n);
 	}
-
 private:
 	std::vector<action_node *> delete_;
 	std::set<unsigned long> live_flags_, new_live_flags;

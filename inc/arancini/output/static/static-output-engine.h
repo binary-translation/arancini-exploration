@@ -28,6 +28,7 @@ public:
 
 	virtual void generate() = 0;
 
+    virtual ~static_output_engine() = default;
 private:
 	std::string output_filename_;
 	std::vector<std::shared_ptr<ir::chunk>> chunks_;

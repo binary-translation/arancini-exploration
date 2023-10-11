@@ -21,6 +21,6 @@ public:
 
 private:
 	void *code_ptr_;
-	size_t code_size_;
+	[[maybe_unused]] size_t code_size_;
 };
 } // namespace arancini::runtime::dbt
