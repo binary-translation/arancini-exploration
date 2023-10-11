@@ -1,6 +1,7 @@
 #include "arancini/ir/node.h"
 #include "arancini/ir/port.h"
 #include "arancini/ir/value-type.h"
+#include "arancini/output/dynamic/arm64/arm64-instruction-builder.h"
 #include "arancini/output/dynamic/arm64/arm64-instruction.h"
 #include <arancini/output/dynamic/arm64/arm64-translation-context.h>
 
@@ -165,7 +166,7 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
 	instruction_index_to_guest_[builder_.nr_instructions()] = address;
 
 	this_pc_ = address;
-    utils::logger.info(address, ":", disasm);
+    util::logger.info(address, ":", disasm);
 
     instr_cnt_++;
 
@@ -186,9 +187,9 @@ void arm64_translation_context::end_instruction() {
         for (const auto* node : nodes_)
             materialise(node);
     } catch (std::exception &e) {
-        utils::logger.fatal(e.what());
-        utils::logger.fatal(utils::lazy_eval<>(&instruction_builder::dump));
-        utils::logger.fatal("Terminating exception raised; aborting");
+        util::logger.fatal(e.what());
+        util::logger.fatal(util::lazy_eval<>(&instruction_builder::dump));
+        util::logger.fatal("Terminating exception raised; aborting");
         std::abort();
     }
 }
@@ -205,9 +206,9 @@ void arm64_translation_context::end_block() {
 
         builder_.emit(writer());
     } catch (std::exception &e) {
-        utils::logger.fatal(e.what());
-        utils::logger.fatal(utils::lazy_eval<>(&instruction_builder::dump));
-        utils::logger.fatal("Terminating exception raised; aborting");
+        util::logger.fatal(e.what());
+        util::logger.fatal(util::lazy_eval<>(&instruction_builder::dump));
+        util::logger.fatal("Terminating exception raised; aborting");
         std::abort();
     }
 }
@@ -225,7 +226,7 @@ void arm64_translation_context::materialise(const ir::node* n) {
     if (materialised_nodes_.count(n))
         return;
 
-    utils::logger.debug("Handling:", utils::const_lazy_eval<>(&ir::node::to_string));
+    util::logger.debug("Handling:", util::const_lazy_eval<>(&ir::node::to_string));
     switch (n->kind()) {
     case node_kinds::read_reg:
         materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));

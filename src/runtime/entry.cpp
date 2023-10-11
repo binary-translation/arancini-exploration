@@ -269,29 +269,29 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
         } else throw std::runtime_error("ARANCINI_ENABLE_LOG must be set to either true or false");
     }
 
-    std::cerr << "Logger status: " << std::boolalpha << log_status << ":" << utils::logger.enable(log_status) << '\n';
+    std::cerr << "Logger status: " << std::boolalpha << log_status << ":" << util::logger.enable(log_status) << '\n';
 
     // Determine logger level
     flag = getenv("ARANCINI_LOG_LEVEL");
-    utils::logging::levels level = utils::logging::levels::info;
-    if (flag && utils::logger.is_enabled()) {
+    util::logging::levels level = util::logging::levels::info;
+    if (flag && util::logger.is_enabled()) {
         if (!strcmp(flag, "debug"))
-            level = utils::logging::levels::debug;
+            level = util::logging::levels::debug;
         else if (!strcmp(flag, "info"))
-            level = utils::logging::levels::info;
+            level = util::logging::levels::info;
         else if (!strcmp(flag, "warn"))
-            level = utils::logging::levels::warn;
+            level = util::logging::levels::warn;
         else if (!strcmp(flag, "error"))
-            level = utils::logging::levels::error;
+            level = util::logging::levels::error;
         else if (!strcmp(flag, "fatal"))
-            level = utils::logging::levels::fatal;
+            level = util::logging::levels::fatal;
         else throw std::runtime_error("ARANCINI_LOG_LEVEL must be set to one among: debug, info, warn, error or fatal");
-    } else if (utils::logger.is_enabled()) {
+    } else if (util::logger.is_enabled()) {
         std::cerr << "Logger enabled without explicit log level; setting log level to default [info]\n";
     }
 
     // Set logger level
-    utils::logger.set_level(level);
+    util::logger.set_level(level);
 
 	// Consume args until '--'
 	int start = 1;

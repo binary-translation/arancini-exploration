@@ -5,6 +5,7 @@
 #include <keystone/keystone.h>
 
 #include <arancini/ir/value-type.h>
+#include <arancini/util/system-config.h>
 #include <arancini/output/dynamic/machine-code-writer.h>
 
 #include <array>
@@ -492,13 +493,17 @@ public:
         operands_ = {std::forward<Args>(args)...};
     }
 
-    instruction(const label_operand &label)
-        : opcode_(label.name())
-        , label_(true)
-    {
+    instruction(const label_operand &label) {
+        opcode_ = label.name();
+        label_ = true;
     }
 
-    instruction &add_comment(const std::string &comment) { comment_ = comment; return *this; }
+    instruction &add_comment(const std::string &comment) {
+        if constexpr (util::system_config::enable_verbose_code_gen)
+            comment_ = comment;
+        return *this;
+    }
+
     instruction &set_branch(bool is_branch) { branch_ = is_branch; return *this; }
 
 	void dump(std::ostream &os) const;

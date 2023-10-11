@@ -33,7 +33,7 @@ void instruction_builder::emit(machine_code_writer &writer) {
                 op.type() == operand_type::vreg ||
                 (op.type() == operand_type::mem && op.memory().is_virtual())) {
                 dump(assembly);
-                utils::logger.error(utils::lazy_eval<>(&std::stringstream::str));
+                util::logger.error(util::lazy_eval<>(&std::stringstream::str));
                 throw std::runtime_error("Virtual register after register allocation: "
                                          + insn.dump());
             }
@@ -44,7 +44,7 @@ void instruction_builder::emit(machine_code_writer &writer) {
 
     size = asm_.assemble(assembly.str().c_str(), &encode);
 
-    utils::logger.info(utils::lazy_eval<>(&std::stringstream::str));
+    util::logger.info(util::lazy_eval<>(&std::stringstream::str));
 
     // TODO: write directly
     writer.copy_in(encode, size);
@@ -55,7 +55,7 @@ void instruction_builder::emit(machine_code_writer &writer) {
 
 void instruction_builder::allocate() {
 	// reverse linear scan allocator
-    utils::logger.debug("REGISTER ALLOCATION");
+    util::logger.debug("REGISTER ALLOCATION");
 
 	std::unordered_map<unsigned int, unsigned int> vreg_to_preg;
 
@@ -71,7 +71,7 @@ void instruction_builder::allocate() {
 	for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
 		auto &insn = *RI;
 
-        utils::logger.debug("considering instruction:", utils::lazy_eval<>(&instruction::dump));
+        util::logger.debug("considering instruction:", util::lazy_eval<>(&instruction::dump));
 
         std::array<std::pair<size_t, size_t>, 5> allocs;
         bool has_unused_keep = false;
@@ -119,7 +119,7 @@ void instruction_builder::allocate() {
 
 			// Only regs can be /real/ defs
 			if (o.is_def() && o.is_vreg() && !o.is_use()) {
-                utils::logger.debug("  DEF ", utils::lazy_eval<>(&operand::dump));
+                util::logger.debug("  DEF ", util::lazy_eval<>(&operand::dump));
 
                 auto type = o.vreg().type();
 				unsigned int vri = o.vreg().index();
@@ -137,13 +137,13 @@ void instruction_builder::allocate() {
 
 					o.allocate(pri, type);
 
-                    utils::logger.debug("  allocated to", utils::lazy_eval<>(&operand::dump), "-- releasing");
+                    util::logger.debug("  allocated to", util::lazy_eval<>(&operand::dump), "-- releasing");
                 } else if (o.is_keep()) {
                     has_unused_keep = true;
 
                     allocate(o, i);
 				} else {
-                    utils::logger.debug("  not allocated - eliminating instruction");
+                    util::logger.debug("  not allocated - eliminating instruction");
 					insn.kill();
 					break;
 				}
@@ -160,25 +160,25 @@ void instruction_builder::allocate() {
 
 			// We only care about REG uses - but we also need to consider REGs used in MEM expressions
 			if (o.is_use() && o.is_vreg()) {
-                utils::logger.debug("  USE", utils::lazy_eval<>(&operand::dump));
+                util::logger.debug("  USE", util::lazy_eval<>(&operand::dump));
 
                 auto type = o.vreg().type();
                 unsigned int vri = o.vreg().index();
 				if (!vreg_to_preg.count(vri)) {
                     allocate(o, i);
-                    utils::logger.debug(" allocating vreg to", utils::lazy_eval<>(&operand::dump));
+                    util::logger.debug(" allocating vreg to", util::lazy_eval<>(&operand::dump));
 				} else {
 					o.allocate(vreg_to_preg.at(vri), type);
 				}
 			} else if (o.is_mem()) {
-                    utils::logger.debug("  USE", utils::lazy_eval<>(&operand::dump));
+                    util::logger.debug("  USE", util::lazy_eval<>(&operand::dump));
 
 				if (o.memory().is_virtual()) {
                     unsigned int vri = o.memory().vreg_base().index();
 
 					if (!vreg_to_preg.count(vri)) {
                         allocate(o, i);
-                        utils::logger.debug(" allocating vreg to ", utils::lazy_eval<>(&operand::dump));
+                        util::logger.debug(" allocating vreg to ", util::lazy_eval<>(&operand::dump));
 					} else {
                         auto type = o.memory().vreg_base().type();
 						o.allocate_base(vreg_to_preg.at(vri), type);
