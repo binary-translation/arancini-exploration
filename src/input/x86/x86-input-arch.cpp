@@ -341,7 +341,8 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 	const uint8_t *mc = (const uint8_t *)code;
 
 	static uint nr_chunk = 1;
-    util::logger.info("chunk[", std::dec, nr_chunk, "] @", std::hex, base_address,
+
+    util::logger.info("chunk [", nr_chunk, "] @", std::hex, base_address,
                        "code =", code, ", size =", code_size);
 
 	nr_chunk++;
