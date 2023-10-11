@@ -133,13 +133,12 @@ int execution_context::invoke(void *cpu_state) {
     //x86::print_stack(std::cerr, memptr, 20);
     util::global_logger.separator(util::basic_logging::levels::debug, '-');
 
-    utils::logger.debug(*x86_state);
-    //auto* memptr = reinterpret_cast<uint64_t*>(get_memory_ptr(0)) + x86_state->RSP;
-    utils::logger.debug("--------------------------------------------");
+    utils::logger.info(*x86_state);
+    utils::logger.info("--------------------------------------------");
     utils::logger.debug("STACK:");
+    //auto* memptr = reinterpret_cast<uint64_t*>(get_memory_ptr(0)) + x86_state->RSP;
     //x86::print_stack(std::cerr, memptr, 20);
     utils::logger.debug("--------------------------------------------");
-#endif
 
 	auto txln = te_.get_translation(x86_state->PC);
 	if (txln == nullptr) {

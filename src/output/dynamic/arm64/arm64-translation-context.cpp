@@ -225,7 +225,7 @@ void arm64_translation_context::materialise(const ir::node* n) {
     if (materialised_nodes_.count(n))
         return;
 
-    utils::logger.info("Handling", utils::lazy_eval<>(&ir::node::to_string));
+    utils::logger.debug("Handling:", utils::const_lazy_eval<>(&ir::node::to_string));
     switch (n->kind()) {
     case node_kinds::read_reg:
         materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));

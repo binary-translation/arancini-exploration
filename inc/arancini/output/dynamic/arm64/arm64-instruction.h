@@ -41,12 +41,12 @@ private:
 
 static assembler asm_;
 
-static ir::value_type u12() {
+[[maybe_unused]] static ir::value_type u12() {
     static ir::value_type type(ir::value_type_class::unsigned_integer, 12, 1);
     return type;
 }
 
-static ir::value_type u8() {
+[[maybe_unused]] static ir::value_type u8() {
     static ir::value_type type(ir::value_type_class::unsigned_integer, 8, 1);
     return type;
 }

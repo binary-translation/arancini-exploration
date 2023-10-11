@@ -212,6 +212,7 @@ public:
     template<typename... Args>
     base_type &log([[gnu::unused]] Args&&...) { return *this; }
 
+    // FIXME: add attribute to specify that it should be ignored
     template<typename... Args>
     base_type &log(FILE*, [[gnu::unused]] Args&&...) { return *this; }
 
