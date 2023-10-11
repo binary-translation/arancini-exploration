@@ -154,21 +154,15 @@ private:
 template <typename... Args>
 struct non_const_lazy_eval_impl {
     template <typename R, typename T>
-    auto operator()(R (T::*ptr)(Args...)) const noexcept -> decltype(ptr)
-    { return ptr; }
-    template <typename R>
-    static constexpr auto of(R (*ptr)(Args...)) noexcept -> decltype(ptr)
-    { return ptr; }
+    auto operator()(R (T::*ptr)(Args...), T* obj, Args&&... args) const noexcept
+    { return std::bind(ptr, obj, args...); }
 };
 
 template <typename... Args>
 struct const_lazy_eval_impl {
     template <typename R, typename T>
-    auto operator()(R (T::*ptr)(Args...) const) const noexcept -> decltype(ptr)
-    { return ptr; }
-    template <typename R>
-    static constexpr auto of(R (*ptr)(Args...)) noexcept -> decltype(ptr)
-    { return ptr; }
+    auto operator()(R (T::*ptr)(Args...) const, const T* obj, Args&&... args) const noexcept
+    { return std::bind(ptr, obj, args...); }
 };
 
 template <typename... Args>
@@ -177,11 +171,8 @@ struct lazy_eval_impl : const_lazy_eval_impl<Args...>, non_const_lazy_eval_impl<
     using const_lazy_eval_impl<Args...>::operator();
     using non_const_lazy_eval_impl<Args...>::operator();
     template <typename R>
-    auto operator()(R (*ptr)(Args...)) const noexcept -> decltype(ptr)
-    { return ptr; }
-    template <typename R>
-    static constexpr auto of(R (*ptr)(Args...)) noexcept -> decltype(ptr)
-    { return ptr; }
+    auto operator()(R (*ptr)(Args...), Args&&... args) const noexcept
+    { return std::bind(ptr, args...); }
 };
 
 } // namespace details
