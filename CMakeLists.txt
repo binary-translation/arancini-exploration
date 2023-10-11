@@ -47,6 +47,10 @@ if(NOT DEFINED ENV{FLAKE_BUILD})
 	include(cmake/fadec.cmake)
 endif () #NIX
 
+if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+    add_compile_definitions(ENABLE_LOG=true)
+endif ()
+
 # Build core
 add_subdirectory(src/core)
 add_subdirectory(src/ir)
