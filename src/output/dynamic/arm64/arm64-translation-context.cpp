@@ -188,7 +188,7 @@ void arm64_translation_context::end_instruction() {
             materialise(node);
     } catch (std::exception &e) {
         util::logger.fatal(e.what());
-        util::logger.fatal(util::lazy_eval<>(&instruction_builder::dump));
+        util::logger.fatal(util::lazy_eval<>(&instruction_builder::dump, &builder_));
         util::logger.fatal("Terminating exception raised; aborting");
         std::abort();
     }
@@ -207,7 +207,7 @@ void arm64_translation_context::end_block() {
         builder_.emit(writer());
     } catch (std::exception &e) {
         util::logger.fatal(e.what());
-        util::logger.fatal(util::lazy_eval<>(&instruction_builder::dump));
+        util::logger.fatal(util::lazy_eval<>(&instruction_builder::dump, &builder_));
         util::logger.fatal("Terminating exception raised; aborting");
         std::abort();
     }
@@ -226,7 +226,7 @@ void arm64_translation_context::materialise(const ir::node* n) {
     if (materialised_nodes_.count(n))
         return;
 
-    util::logger.debug("Handling:", util::const_lazy_eval<>(&ir::node::to_string));
+    util::logger.debug("Handling:", util::const_lazy_eval<>(&ir::node::to_string, n));
     switch (n->kind()) {
     case node_kinds::read_reg:
         materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));
