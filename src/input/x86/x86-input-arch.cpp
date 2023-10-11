@@ -315,7 +315,7 @@ static translation_result translate_instruction(ir_builder &builder, size_t addr
 	if (t) {
 		return t->translate(address, xedd, disasm);
 	} else {
-        utils::logger.error("Could not find a translator for:", disasm);
+        util::logger.error("Could not find a translator for:", disasm);
 		return translation_result::fail;
 	}
 }
@@ -341,7 +341,7 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 	const uint8_t *mc = (const uint8_t *)code;
 
 	static uint nr_chunk = 1;
-    utils::logger.info("chunk[", std::dec, nr_chunk, "] @", std::hex, base_address,
+    util::logger.info("chunk[", std::dec, nr_chunk, "] @", std::hex, base_address,
                        "code =", code, ", size =", code_size);
 
 	nr_chunk++;
@@ -374,7 +374,7 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
                 off_t addr = std::strtol(addr_str.c_str(), nullptr, 16);
 
                 if (addr > base_address && addr < base_address + offset + length)
-                    utils::logger.info("Backwards branch @", addr_str);
+                    util::logger.info("Backwards branch @", addr_str);
             }
 			break;
 		}

@@ -48,7 +48,8 @@ if(NOT DEFINED ENV{FLAKE_BUILD})
 endif () #NIX
 
 if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
-    add_compile_definitions(ENABLE_LOG=true)
+    add_compile_definitions(ENABLE_LOGGING=true)
+    add_compile_definitions(ENABLE_VERBOSE_CODE_GEN=true)
 endif ()
 
 # Build core
