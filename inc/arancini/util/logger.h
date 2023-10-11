@@ -1,10 +1,12 @@
+#include <arancini/util/system-config.h>
+
 #include <mutex>
 #include <memory>
 #include <iostream>
 #include <functional>
 #include <type_traits>
 
-namespace utils {
+namespace util {
 
 namespace details {
 
@@ -188,12 +190,8 @@ template <typename... Args> constexpr details::lazy_eval_impl<Args...> lazy_eval
 template <typename... Args> constexpr details::const_lazy_eval_impl<Args...> const_lazy_eval = {};
 template <typename... Args> constexpr details::non_const_lazy_eval_impl<Args...> non_const_lazy_eval = {};
 
-#ifndef ENABLE_LOG
-#define ENABLE_LOG false
-#endif // ENABLE_LOG
-
-using logging = details::logger_impl<ENABLE_LOG, details::no_lock_policy, details::level_policy>;
+using logging = details::logger_impl<util::system_config::enable_logging, details::no_lock_policy, details::level_policy>;
 inline logging logger;
 
-} // namespace utils
+} // namespace util
 

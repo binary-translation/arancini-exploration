@@ -146,7 +146,7 @@ translation *translation_engine::translate(unsigned long pc)
 {
 	void *code = ec_.get_memory_ptr(pc);
 
-    utils::logger.debug("translating PC =", pc);
+    util::logger.debug("translating PC =", pc);
 
 	if (deadflags_) {
 		opt_dbt_ir_builder builder(ia_.get_internal_function_resolver(), ctx_, *deadflags_);

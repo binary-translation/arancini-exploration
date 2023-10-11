@@ -1,5 +1,6 @@
 #pragma once
 
+#include <arancini/util/system-config.h>
 #include <arancini/output/dynamic/machine-code-writer.h>
 #include <arancini/output/dynamic/arm64/arm64-instruction.h>
 
@@ -659,7 +660,8 @@ public:
     void insert_sep(const std::string &sep) { label(sep); }
 
     void insert_comment(const std::string &comment) {
-        append(instruction("// " + comment));
+        if constexpr (util::system_config::enable_verbose_code_gen)
+            append(instruction("// " + comment));
     }
 
     bool has_label(const std::string &label) {

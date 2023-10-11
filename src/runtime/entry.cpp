@@ -63,18 +63,18 @@ static void segv_handler([[maybe_unused]] int signo, [[maybe_unused]] siginfo_t 
 	unsigned long rip = 0;
 #endif
 
-    utils::logger.log("SEGMENTATION FAULT: code=", std::hex, info->si_code, ", rip =", rip, ", host-virtual-address =", info->si_addr);
+    util::logger.log("SEGMENTATION FAULT: code=", std::hex, info->si_code, ", rip =", rip, ", host-virtual-address =", info->si_addr);
 	uintptr_t emulated_base = (uintptr_t)ctx_->get_memory_ptr(0);
 	if ((uintptr_t)info->si_addr >= emulated_base) {
-        utils::logger.log(", guest-virtual-address=", ((uintptr_t)info->si_addr - emulated_base));
+        util::logger.log(", guest-virtual-address=", ((uintptr_t)info->si_addr - emulated_base));
 	}
 
 	unsigned i = 0;
 	auto range = ctx_->get_thread_range();
 	for (auto it  = range.first; it != range.second; it++) {
             auto state = (x86_cpu_state*)it->second->get_cpu_state();
-            utils::logger.log("Thread[", i, "] Guest PC:", state->PC);
-		    utils::logger.log("Thread[", i, "] FS:", state->FS);
+            util::logger.log("Thread[", i, "] Guest PC:", state->PC);
+		    util::logger.log("Thread[", i, "] FS:", state->FS);
 			i++;
 	}
 
@@ -122,7 +122,7 @@ static void load_gph(execution_context *ctx, const guest_program_header_metadata
 	void *ptr = ctx->add_memory_region(md->load_address, md->memory_size);
 
 	// Debugging information
-    utils::logger.log("loading gph load-addr=", std::hex, md->load_address, ", mem-size=",
+    util::logger.log("loading gph load-addr=", std::hex, md->load_address, ", mem-size=",
                       md->memory_size, ", end=", (md->load_address + md->memory_size),
                       ", file-size=", md->file_size, ", target=", ptr);
 
@@ -231,29 +231,29 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
         } else throw std::runtime_error("ARANCINI_ENABLE_LOG must be set to either true or false");
     }
 
-    std::cerr << "Logger status: " << std::boolalpha << log_status << ":" << utils::logger.enable(log_status) << '\n';
+    std::cerr << "Logger status: " << std::boolalpha << log_status << ":" << util::logger.enable(log_status) << '\n';
 
     // Determine logger level
     flag = getenv("ARANCINI_LOG_LEVEL");
-    utils::logging::levels level = utils::logging::levels::info;
-    if (flag && utils::logger.is_enabled()) {
+    util::logging::levels level = util::logging::levels::info;
+    if (flag && util::logger.is_enabled()) {
         if (!strcmp(flag, "debug"))
-            level = utils::logging::levels::debug;
+            level = util::logging::levels::debug;
         else if (!strcmp(flag, "info"))
-            level = utils::logging::levels::info;
+            level = util::logging::levels::info;
         else if (!strcmp(flag, "warn"))
-            level = utils::logging::levels::warn;
+            level = util::logging::levels::warn;
         else if (!strcmp(flag, "error"))
-            level = utils::logging::levels::error;
+            level = util::logging::levels::error;
         else if (!strcmp(flag, "fatal"))
-            level = utils::logging::levels::fatal;
+            level = util::logging::levels::fatal;
         else throw std::runtime_error("ARANCINI_LOG_LEVEL must be set to one among: debug, info, warn, error or fatal");
-    } else if (utils::logger.is_enabled()) {
+    } else if (util::logger.is_enabled()) {
         std::cerr << "Logger enabled without explicit log level; setting log level to default [info]\n";
     }
 
     // Set logger level
-    utils::logger.set_level(level);
+    util::logger.set_level(level);
 
 	// Consume args until '--'
 	int start = 1;
@@ -294,7 +294,7 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	x86_state->X87_STACK_BASE = (intptr_t)mmap(NULL, 80, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0) - (intptr_t)ctx_->get_memory_ptr(0);
 
 	// Report on various information for useful debugging purposes.
-    utils::logger.log("state @", (void *)x86_state, ", pc @", std::hex, x86_state->PC, ", stack @", x86_state->RSP);
+    util::logger.log("state @", (void *)x86_state, ", pc @", std::hex, x86_state->PC, ", stack @", x86_state->RSP);
 
 	// Initialisation of the runtime is complete - return a pointer to the raw CPU state structure
 	// so that the static code can use it for emulation.
