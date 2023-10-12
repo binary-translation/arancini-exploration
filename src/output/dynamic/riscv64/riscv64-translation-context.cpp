@@ -52,7 +52,21 @@ std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(
 	const port *p, std::optional<RegisterOperand> reg1, std::optional<RegisterOperand> reg2)
 {
 	if (p && treg_for_port_.count(p)) {
-		return { treg_for_port_.at(p), false };
+		TypedRegister &treg = treg_for_port_.at(p);
+		if (!idxs_.empty()) {
+			// We are inside a branch
+			if (treg.type().width() <= 64) {
+				if (treg.encoding() < idxs_.top()) {
+					live_across_iteration_.push_front(treg.encoding());
+				}
+			} else {
+				if (treg.encoding2() < idxs_.top()) {
+					live_across_iteration_.push_front(treg.encoding1());
+					live_across_iteration_.push_front(treg.encoding2());
+				}
+			}
+		}
+		return { treg, false };
 	}
 	if (!p) {
 		RegisterOperand r1 = reg1 ? *reg1 : builder_.next_register();
@@ -173,6 +187,11 @@ void riscv64_translation_context::end_instruction()
 	for (const auto &item : nodes_) {
 		materialise(item);
 	}
+
+	for (const auto &item : locals_) {
+		builder_.mv(ZERO, item.second.get());
+	}
+
 	add_marker(-2);
 }
 
@@ -438,6 +457,11 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 			builder_.bne(out_reg, acc, fail, Assembler::kNearJump);
 			(builder_.*sc)(temp, src, addr, std::memory_order_acq_rel); // Out_reg unused so use it here
 			builder_.bnez(temp, retry, Assembler::kNearJump);
+
+			// Keep live across iterations
+			builder_.mv(ZERO, src);
+			builder_.mv(ZERO, addr.base());
+			builder_.mv(ZERO, acc);
 
 			// Flags from comparison matching (i.e. subtraction of equal values)
 			if (zf) {
@@ -1019,22 +1043,44 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 
 void riscv64_translation_context::materialise_label(const label_node &n)
 {
-	auto [it, not_exist] = labels_.try_emplace(&n, nullptr);
+	auto [it, not_exist] = labels_.try_emplace(&n, std::make_pair(nullptr, true));
 
 	if (not_exist) {
-		it->second = builder_.alloc_label();
+		it->second.first = builder_.alloc_label();
+		// BW label
+		idxs_.push(builder_.next_register().encoding());
+	} else {
+		it->second.second = true;
 	}
-	builder_.Bind(it->second);
+	builder_.Bind(it->second.first);
+}
+
+inline void riscv64_translation_context::bw_branch_vreg_helper(bool bw)
+{
+	if (bw) {
+		idxs_.pop();
+		for (auto it = live_across_iteration_.cbefore_begin(), it_next = std::next(it); it_next != live_across_iteration_.cend();) {
+			const RegisterOperand elem = RegisterOperand { *it_next };
+			if (idxs_.empty() || idxs_.top() < elem.encoding()) {
+				live_across_iteration_.erase_after(it);
+			} else {
+				++it;
+			}
+			it_next = std::next(it);
+			builder_.mv(ZERO, elem);
+		}
+	}
 }
 
 void riscv64_translation_context::materialise_br(const br_node &n)
 {
-	auto [it, not_exist] = labels_.try_emplace(n.target(), nullptr);
+	auto [it, not_exist] = labels_.try_emplace(n.target(), std::make_pair(nullptr, false));
 
 	if (not_exist) {
-		it->second = builder_.alloc_label();
+		it->second.first = builder_.alloc_label();
 	}
-	builder_.j(it->second);
+	builder_.j(it->second.first);
+	bw_branch_vreg_helper(it->second.second);
 }
 
 void riscv64_translation_context::materialise_cond_br(const cond_br_node &n)
@@ -1043,12 +1089,13 @@ void riscv64_translation_context::materialise_cond_br(const cond_br_node &n)
 
 	extend_to_64(builder_, cond, cond);
 
-	auto [it, not_exist] = labels_.try_emplace(n.target(), nullptr);
+	auto [it, not_exist] = labels_.try_emplace(n.target(), std::make_pair(nullptr, false));
 
 	if (not_exist) {
-		it->second = builder_.alloc_label();
+		it->second.first = builder_.alloc_label();
 	}
-	builder_.bnez(cond, it->second);
+	builder_.bnez(cond, it->second.first);
+	bw_branch_vreg_helper(it->second.second);
 }
 
 TypedRegister &riscv64_translation_context::materialise_unary_arith(const unary_arith_node &n)
