@@ -13,6 +13,7 @@
 #include <forward_list>
 #include <memory>
 #include <optional>
+#include <stack>
 #include <unordered_map>
 #include <variant>
 
@@ -60,7 +61,9 @@ private:
 
 	intptr_t ret_val_;
 
-	std::unordered_map<const ir::label_node *, Label *> labels_;
+	std::unordered_map<const ir::label_node *, std::pair<Label *, bool>> labels_;
+	std::stack<decltype(builder_.next_register().encoding()), std::vector<decltype(builder_.next_register().encoding())>> idxs_;
+	std::forward_list<decltype(builder_.next_register().encoding())> live_across_iteration_;
 
 	std::unordered_map<const ir::port *, TypedRegister> treg_for_port_;
 	std::forward_list<TypedRegister> temporaries;
@@ -106,5 +109,6 @@ private:
 
 	template <reg_idx... idx> std::tuple<to_type_t<reg_idx, idx, RegisterOperand>...> allocate_in_order(to_type_t<reg_idx, idx, const port *>... args);
 	template <const size_t order[], typename Tuple, size_t... idxs> auto reorder(Tuple tuple, std::index_sequence<idxs...>);
+	void bw_branch_vreg_helper(bool bw);
 };
 } // namespace arancini::output::dynamic::riscv64
