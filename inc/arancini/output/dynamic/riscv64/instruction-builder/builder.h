@@ -656,6 +656,16 @@ public:
 
 	Label *alloc_label() { return labels_.emplace_back(std::make_unique<Label>()).get(); }
 
+	void dump(std::ostream &out)
+	{
+		for (const auto &item : instructions_) {
+			item.dump(out);
+			if (!item.is_dead()) {
+				out << '\n';
+			}
+		}
+	}
+
 	void allocate()
 	{
 		// reverse linear scan allocator
@@ -727,8 +737,7 @@ public:
 			if (insn.rd) {
 				if (!insn.rd.is_physical()) {
 #ifdef DEBUG_REGALLOC
-					DEBUG_STREAM << "  DEF ";
-					o.dump(DEBUG_STREAM);
+					DEBUG_STREAM << "  DEF xV" << std::dec << insn.rd.encoding();
 #endif
 
 					//					auto type = o.vreg().type();
@@ -748,9 +757,7 @@ public:
 						}
 						insn.rd.allocate(pri /*, type*/);
 #ifdef DEBUG_REGALLOC
-						DEBUG_STREAM << " allocated to ";
-						o.dump(DEBUG_STREAM);
-						DEBUG_STREAM << " -- releasing\n";
+						DEBUG_STREAM << " allocated to x " << std::dec << insn.rd.encoding() << " -- releasing\n";
 #endif
 					} else {
 #ifdef DEBUG_REGALLOC
@@ -781,9 +788,7 @@ public:
 			for (auto &o : ops) {
 				if (*o && !o->is_physical()) {
 #ifdef DEBUG_REGALLOC
-					DEBUG_STREAM << "  USE ";
-					o.dump(DEBUG_STREAM);
-					DEBUG_STREAM << '\n';
+					DEBUG_STREAM << "  USE xV " << std::dec << *o.encoding();
 #endif
 
 					//					auto type = o.vreg().type();
@@ -791,9 +796,7 @@ public:
 					if (!vreg_to_preg.count(vri)) {
 						allocate(o, insn.rd);
 #ifdef DEBUG_REGALLOC
-						DEBUG_STREAM << " allocating vreg to ";
-						o.dump(DEBUG_STREAM);
-						DEBUG_STREAM << '\n';
+						DEBUG_STREAM << " allocating vreg to x " << std::dec << *o.encoding() << '\n';
 #endif
 					} else {
 						o->allocate(vreg_to_preg.at(vri) /*, type*/);
@@ -812,7 +815,7 @@ public:
 				RegisterOperand op2 = insn.rs1;
 
 				if (op1.is_physical() && op2.is_physical()) {
-					if (op1.encoding() == op2.encoding()) {
+					if (op1.encoding() == op2.encoding() || op1 == ZERO) {
 						insn.kill();
 					}
 				}

@@ -293,6 +293,278 @@ struct Instruction {
 			|| (type_ == InstructionType::RdRs1Rs2 && rdRs1Rs2Func_ == &Assembler::add && (rs1 == ZERO || rs2 == ZERO));
 	}
 
+	void dump(std::ostream &out) const
+	{
+		switch (type_) {
+#define handle_instr(type, opcode)                                                                                                                             \
+	if (type == &Assembler::opcode) {                                                                                                                          \
+		out << #opcode;                                                                                                                                        \
+	}
+#define ehandle_instr(type, opcode) else handle_instr(type, opcode)
+
+		case InstructionType::Dead:
+			return;
+		case InstructionType::Label:
+			if (labelFunc_ == &Assembler::Bind) {
+				out << "label" << std::hex << label << ":";
+			} else {
+				throw std::runtime_error("Unknown label function");
+			}
+			break;
+		case InstructionType::RdImm:
+			if (rdImmFunc_ == &Assembler::lui) {
+				out << "lui";
+			} else if (rdImmFunc_ == &Assembler::auipc) {
+				out << "auipc";
+			} else {
+				throw std::runtime_error("Unknown RdImm function");
+			}
+			out << " " << std::dec << "xV" << rd.encoding() << ", " << std::hex << "0x" << imm;
+			break;
+		case InstructionType::RdLabelNear:
+		case InstructionType::RdLabelFar:
+			if (rdLabelFunc_ == (RdLabelFunc)&Assembler::jal) {
+				out << "jal";
+			} else {
+				throw std::runtime_error("Unknown RdLabel function");
+			}
+			out << " " << std::dec << "xV" << rd.encoding() << ", " << std::hex << "label" << label;
+
+			break;
+		case InstructionType::RdRs1Imm:
+			if (rdRs1ImmFunc_ == &Assembler::addi_normal || rdRs1ImmFunc_ == &Assembler::addi_big) {
+				out << "addi";
+			} else if (rdRs1ImmFunc_ == &Assembler::addiw) {
+				out << "addiw";
+			} else if (rdRs1ImmFunc_ == &Assembler::andi) {
+				out << "andi";
+			} else if (rdRs1ImmFunc_ == (RdRs1ImmFunc)&Assembler::jalr) {
+				out << "jalr";
+			} else if (rdRs1ImmFunc_ == &Assembler::ori) {
+				out << "ori";
+			} else if (rdRs1ImmFunc_ == &Assembler::slli) {
+				out << "slli";
+			} else if (rdRs1ImmFunc_ == &Assembler::slliw) {
+				out << "slliw";
+			} else if (rdRs1ImmFunc_ == &Assembler::slti) {
+				out << "slti";
+			} else if (rdRs1ImmFunc_ == &Assembler::sltiu) {
+				out << "sltiu";
+			} else if (rdRs1ImmFunc_ == &Assembler::srai) {
+				out << "srai";
+			} else if (rdRs1ImmFunc_ == &Assembler::sraiw) {
+				out << "sraiw";
+			} else if (rdRs1ImmFunc_ == &Assembler::srli) {
+				out << "srli";
+			} else if (rdRs1ImmFunc_ == &Assembler::srliw) {
+				out << "srliw";
+			} else if (rdRs1ImmFunc_ == &Assembler::xori) {
+				out << "xori";
+			} else {
+				throw std::runtime_error("Unknown RdRs1Imm function");
+			}
+			out << " " << std::dec << "xV" << rd.encoding() << ", xV" << rs1.encoding() << ", " << std::hex << "0x" << imm;
+
+			break;
+		case InstructionType::Rs1Rs2LabelNear:
+		case InstructionType::Rs1Rs2LabelFar:
+			if (rs1Rs2LabelBoolFunc_ == (Rs1Rs2LabelBoolFunc)&Assembler::bne) {
+				out << "bne";
+			} else if (rs1Rs2LabelBoolFunc_ == (Rs1Rs2LabelBoolFunc)&Assembler::beq) {
+				out << "beq";
+			} else {
+				throw std::runtime_error("Unknown Rs1Rs2Label function");
+			}
+			out << " " << std::dec << "xV" << rs1.encoding() << ", xV" << rs2.encoding() << ", " << std::hex << "label" << label;
+			break;
+		case InstructionType::Rs1Rs2Label:
+			if (rs1Rs2LabelFunc_ == (Rs1Rs2LabelFunc)&Assembler::blt) {
+				out << "blt";
+			} else if (rs1Rs2LabelFunc_ == (Rs1Rs2LabelFunc)&Assembler::bltu) {
+				out << "bltu";
+			} else if (rs1Rs2LabelFunc_ == (Rs1Rs2LabelFunc)&Assembler::bge) {
+				out << "bge";
+			} else if (rs1Rs2LabelFunc_ == (Rs1Rs2LabelFunc)&Assembler::bgeu) {
+				out << "bgeu";
+			} else {
+				throw std::runtime_error("Unknown Rs1Rs2Label function");
+			}
+			out << " " << std::dec << "xV" << rd.encoding() << ", xV" << rs1.encoding() << ", xV" << rs2.encoding() << ", " << std::hex << "label" << label;
+			break;
+		case InstructionType::RdAddr:
+			if (rdAddrFunc_ == &Assembler::lb) {
+				out << "lb";
+			} else if (rdAddrFunc_ == &Assembler::lbu) {
+				out << "lbu";
+			} else if (rdAddrFunc_ == &Assembler::ld) {
+				out << "ld";
+			} else if (rdAddrFunc_ == &Assembler::lh) {
+				out << "lh";
+			} else if (rdAddrFunc_ == &Assembler::lhu) {
+				out << "lhu";
+			} else if (rdAddrFunc_ == &Assembler::lw) {
+				out << "lw";
+			} else if (rdAddrFunc_ == &Assembler::lwu) {
+				out << "lwu";
+			} else {
+				throw std::runtime_error("Unknown RdAddr function");
+			}
+			out << " " << std::dec << "xV" << rd.encoding() << ", " << imm << "(xV" << rs1.encoding() << ")";
+			break;
+		case InstructionType::Rs2Addr:
+			if (rdAddrFunc_ == &Assembler::sb) {
+				out << "sb";
+			} else if (rdAddrFunc_ == &Assembler::sh) {
+				out << "sh";
+			} else if (rdAddrFunc_ == &Assembler::sw) {
+				out << "sw";
+			} else if (rdAddrFunc_ == &Assembler::sd) {
+				out << "sd";
+			} else {
+				throw std::runtime_error("Unknown Rs2Addr function");
+			}
+			out << " " << std::dec << "xV" << rs2.encoding() << ", " << imm << "(xV" << rs1.encoding() << ")";
+			break;
+		case InstructionType::RdRs1Rs2:
+			// clang-format off
+			handle_instr(rdRs1Rs2Func_, add)
+			ehandle_instr(rdRs1Rs2Func_, addw)
+			ehandle_instr(rdRs1Rs2Func_, and_)
+			ehandle_instr(rdRs1Rs2Func_, div)
+			ehandle_instr(rdRs1Rs2Func_, divu)
+			ehandle_instr(rdRs1Rs2Func_, divuw)
+			ehandle_instr(rdRs1Rs2Func_, divw)
+			ehandle_instr(rdRs1Rs2Func_, mul)
+			ehandle_instr(rdRs1Rs2Func_, mulh)
+			ehandle_instr(rdRs1Rs2Func_, mulhsu)
+			ehandle_instr(rdRs1Rs2Func_, mulhu)
+			ehandle_instr(rdRs1Rs2Func_, mulw)
+			ehandle_instr(rdRs1Rs2Func_, or_)
+			ehandle_instr(rdRs1Rs2Func_, rem)
+			ehandle_instr(rdRs1Rs2Func_, remu)
+			ehandle_instr(rdRs1Rs2Func_, remuw)
+			ehandle_instr(rdRs1Rs2Func_, remw)
+			ehandle_instr(rdRs1Rs2Func_, sll)
+			ehandle_instr(rdRs1Rs2Func_, sllw)
+			ehandle_instr(rdRs1Rs2Func_, slt)
+			ehandle_instr(rdRs1Rs2Func_, sltu)
+			ehandle_instr(rdRs1Rs2Func_, sra)
+			ehandle_instr(rdRs1Rs2Func_, sraw)
+			ehandle_instr(rdRs1Rs2Func_, srl)
+			ehandle_instr(rdRs1Rs2Func_, srlw)
+			ehandle_instr(rdRs1Rs2Func_, sub)
+			ehandle_instr(rdRs1Rs2Func_, subw)
+			ehandle_instr(rdRs1Rs2Func_, xor_)
+			else {
+				// clang-format on
+				throw std::runtime_error("Unknown RdRs1Rs2 function");
+			}
+			out << " " << std::dec << "xV" << rd.encoding() << ", xV" << rs1.encoding() << ", xV" << rs2.encoding();
+			break;
+		case InstructionType::None:
+			// clang-format off
+			handle_instr(noneFunc_, ebreak)
+			ehandle_instr(noneFunc_, ecall)
+			ehandle_instr(noneFunc_, fencei)
+			ehandle_instr(noneFunc_, trap)
+			else {
+				// clang-format on
+				throw std::runtime_error("Unknown None function");
+			}
+			break;
+		case InstructionType::RdAddrOrder:
+			// clang-format off
+			handle_instr(rdAddrOrderFunc_, lrw)
+			ehandle_instr(rdAddrOrderFunc_, lrd)
+			else {
+				// clang-format on
+				throw std::runtime_error("Unknown RdAddrOrder function");
+			}
+
+			switch (order) {
+			case std::memory_order_relaxed:
+			case std::memory_order_consume:
+			case std::memory_order_seq_cst:
+				break;
+			case std::memory_order_acquire:
+				out << ".aq";
+				break;
+			case std::memory_order_release:
+				out << ".rl";
+				break;
+			case std::memory_order_acq_rel:
+				out << ".aq.rl";
+				break;
+			}
+			out << " " << std::dec << "xV" << rd.encoding() << ", (xV" << rs1.encoding() << ")";
+			break;
+		case InstructionType::RdRs2AddrOrder:
+			// clang-format off
+			handle_instr(rdRs2AddrOrderFunc_, amoaddd)
+			ehandle_instr(rdRs2AddrOrderFunc_, amoaddw)
+			ehandle_instr(rdRs2AddrOrderFunc_, amoandd)
+			ehandle_instr(rdRs2AddrOrderFunc_, amoandw)
+			ehandle_instr(rdRs2AddrOrderFunc_, amomaxd)
+			ehandle_instr(rdRs2AddrOrderFunc_, amomaxw)
+			ehandle_instr(rdRs2AddrOrderFunc_, amomaxud)
+			ehandle_instr(rdRs2AddrOrderFunc_, amomaxuw)
+			ehandle_instr(rdRs2AddrOrderFunc_, amomind)
+			ehandle_instr(rdRs2AddrOrderFunc_, amominw)
+			ehandle_instr(rdRs2AddrOrderFunc_, amominud)
+			ehandle_instr(rdRs2AddrOrderFunc_, amominuw)
+			ehandle_instr(rdRs2AddrOrderFunc_, amoord)
+			ehandle_instr(rdRs2AddrOrderFunc_, amoorw)
+			ehandle_instr(rdRs2AddrOrderFunc_, amoxord)
+			ehandle_instr(rdRs2AddrOrderFunc_, amoxorw)
+			ehandle_instr(rdRs2AddrOrderFunc_, amoswapd)
+			ehandle_instr(rdRs2AddrOrderFunc_, amoswapw)
+			ehandle_instr(rdRs2AddrOrderFunc_, scd)
+			ehandle_instr(rdRs2AddrOrderFunc_, scw)
+			else {
+				// clang-format on
+				throw std::runtime_error("Unknown RdRs2AddrOrder function");
+			}
+
+			switch (order) {
+			case std::memory_order_relaxed:
+			case std::memory_order_consume:
+			case std::memory_order_seq_cst:
+				break;
+			case std::memory_order_acquire:
+				out << ".aq";
+				break;
+			case std::memory_order_release:
+				out << ".rl";
+				break;
+			case std::memory_order_acq_rel:
+				out << ".aq.rl";
+				break;
+			}
+			out << " " << std::dec << "xV" << rd.encoding() << ", xV" << rs2.encoding() << ", (xV" << rs1.encoding() << ")";
+			break;
+		case InstructionType::RdImmKeepRs1:
+			// clang-format off
+			handle_instr(rdImmFunc_, auipc)
+			else {
+				// clang-format on
+				throw std::runtime_error("Unknown RdImmKeepRs1 function");
+			}
+			out << " " << std::dec << "xV" << rd.encoding() << ", " << std::hex << "0x" << imm << std::dec << ", keep xV" << rs1.encoding();
+			break;
+		case InstructionType::RdRs1ImmKeepRs2:
+			if (rdRs1ImmFunc_ == &Assembler::addi_normal) {
+				out << "addi";
+			} else {
+				throw std::runtime_error("Unknown RdRs1ImmKeepRs2 function");
+			}
+			out << " " << std::dec << "xV" << rd.encoding() << ", xV" << rs1.encoding() << ", " << std::hex << "0x" << imm << std::dec << ", keep xV"
+				<< rs2.encoding();
+			break;
+		}
+#undef handle_instr
+#undef ehandle_instr
+	}
+
 	RegisterOperand rd, rs1, rs2;
 
 	union {
