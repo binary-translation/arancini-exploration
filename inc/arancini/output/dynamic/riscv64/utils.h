@@ -187,9 +187,13 @@ static bool is_gpr_t(const value_type &type)
 	return (width == 8 || width == 16 || width == 32 || width == 64) && (!type.is_vector()) && type.is_integer();
 }
 static inline bool is_gpr(const port &value) { return is_gpr_t(value.type()); }
-static inline bool is_gpr_or_flag(const port &value) { return (is_gpr(value) || is_flag(value)); }
-static inline bool is_int(const port &value, const int w) { return value.type().element_width() == w && value.type().is_integer() && !value.type().is_vector(); }
-static inline bool is_i128(const port &value) { return is_int(value, 128); }
+static inline bool is_gpr_or_flag_t(const value_type &type) { return (is_gpr_t(type) || is_flag_t(type)); }
+static inline bool is_gpr_or_flag(const port &value) { return is_gpr_or_flag_t(value.type()); }
+static inline bool is_int_t(const value_type &type, const int w) { return type.element_width() == w && type.is_integer() && !type.is_vector(); }
+static inline bool is_int(const port &value, const int w) { return is_int_t(value.type(), w); }
+static inline bool is_i128_t(const value_type &type) { return is_int_t(type, 128); }
+static inline bool is_i128(const port &value) { return is_i128_t(value.type()); }
+static inline bool is_scalar_int_t(const value_type &type) { return is_gpr_or_flag_t(type) || is_i128_t(type); }
 static inline bool is_scalar_int(const port &value) { return is_gpr_or_flag(value) || is_i128(value); }
 static inline bool is_int_vector_t(const value_type &type, int nr_elements, int element_width)
 {
