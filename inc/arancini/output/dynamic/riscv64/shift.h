@@ -29,6 +29,8 @@ inline void slli(Assembler &assembler, TypedRegister &out_reg, const TypedRegist
 		// TODO (Could possibly save 1 instruction by doing extension here (with other shift amounts) instead of later)
 		assembler.slli(out_reg, src_reg, amt);
 		break;
+	default:
+		throw std::runtime_error("unimplemented");
 	}
 }
 
@@ -54,6 +56,8 @@ inline void srli(Assembler &assembler, TypedRegister &out_reg, const TypedRegist
 		if (!fixup(assembler, out_reg, src_reg, value_type::u32(), -amt))
 			assembler.srliw(out_reg, out_reg, amt);
 		break;
+	default:
+		throw std::runtime_error("unimplemented");
 	}
 }
 
@@ -73,6 +77,8 @@ inline void srai(Assembler &assembler, TypedRegister &out_reg, const TypedRegist
 		if (!fixup(assembler, out_reg, src_reg, value_type::s32(), -amt))
 			assembler.sraiw(out_reg, out_reg, amt);
 		break;
+	default:
+		throw std::runtime_error("unimplemented");
 	}
 }
 
@@ -91,6 +97,8 @@ inline void sll(Assembler &assembler, TypedRegister &out_reg, const TypedRegiste
 	case 16:
 		assembler.sll(out_reg, src_reg, amt_reg);
 		break;
+	default:
+		throw std::runtime_error("unimplemented");
 	}
 }
 
@@ -110,6 +118,8 @@ inline void srl(Assembler &assembler, TypedRegister &out_reg, const TypedRegiste
 		fixup(assembler, out_reg, src_reg, value_type::u32());
 		assembler.srlw(out_reg, out_reg, amt_reg);
 		break;
+	default:
+		throw std::runtime_error("unimplemented");
 	}
 }
 
@@ -129,5 +139,7 @@ inline void sra(Assembler &assembler, TypedRegister &out_reg, const TypedRegiste
 		fixup(assembler, out_reg, src_reg, value_type::s32());
 		assembler.sraw(out_reg, out_reg, amt_reg);
 		break;
+	default:
+		throw std::runtime_error("unimplemented");
 	}
 }
