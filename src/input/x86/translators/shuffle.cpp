@@ -9,18 +9,16 @@ void shuffle_translator::do_translate()
 {
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
   case XED_ICLASS_PSHUFD: {
-    auto dst = read_operand(0);
-    auto src = read_operand(1);
-    auto order = read_operand(2);
+	auto slct = ((constant_node *)read_operand(2))->const_val_i();
+	auto dst_vec = builder().insert_bitcast(value_type::vector(value_type::u32(), 4), read_operand(0)->val());
+	auto src_vec = builder().insert_bitcast(value_type::vector(value_type::u32(), 4), read_operand(1)->val());
 
     for (int i = 0; i < 4; i++) {
-		auto shift_val = builder().insert_zx(value_type::u32(), builder().insert_bit_extract(order->val(), 2 * i, 2)->val());
-		auto shift = builder().insert_asr(src->val(), builder().insert_lsl(shift_val->val(), builder().insert_constant_u32(5)->val())->val());
-		auto res = builder().insert_trunc(value_type::u32(), shift->val());
-		dst = builder().insert_bit_insert(dst->val(), res->val(), 32 * i, 32);
+		auto res = builder().insert_vector_extract(src_vec->val(), (int)(slct >> (2 * i) & 0b11));
+		dst_vec = builder().insert_vector_insert(dst_vec->val(), i, res->val());
 	}
 
-    write_operand(0, dst->val());
+    write_operand(0, dst_vec->val());
     break;
   }
 
