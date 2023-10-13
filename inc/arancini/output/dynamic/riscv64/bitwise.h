@@ -33,7 +33,7 @@ inline void truncate(Assembler &assembler, TypedRegister &out, const TypedRegist
 	}
 }
 
-inline void bit_extract(Assembler &assembler, TypedRegister &out, const TypedRegister& src, int from, int length)
+inline void bit_extract(Assembler &assembler, TypedRegister &out, const TypedRegister &src, int from, int length)
 {
 	if (is_flag_t(out.type()) && is_gpr_t(src.type())) {
 		if (from == 0) {
@@ -50,20 +50,29 @@ inline void bit_extract(Assembler &assembler, TypedRegister &out, const TypedReg
 		return;
 	}
 
-	if (!(is_gpr_t(out.type()) && is_gpr_t(src.type()))) {
+	if (!(is_gpr_t(out.type()) && src.type().is_integer())) {
 		throw std::runtime_error("Unsupported bit extract width.");
 	}
 
+	if (from < 64 && from + length > 64) {
+		throw std::runtime_error("Register crossing bit extract unsupported.");
+	}
+
+	const Register src1 = src.type().width() != 128 ? src : from < 64 ? src.reg1() : src.reg2();
+	if (from >= 64) {
+		from -= 64;
+	}
+
 	if (from == 0 && length == 32) {
-		assembler.sextw(out, src);
+		assembler.sextw(out, src1);
 		out.set_actual_width(32);
 		out.set_type(value_type::u64());
 		return;
 	}
 
-	Register temp = length + from < 64 ? out : src;
+	Register temp = length + from < 64 ? out : src1;
 	if (length + from < 64) {
-		assembler.slli(out, src, 64 - (from + length));
+		assembler.slli(out, src1, 64 - (from + length));
 	}
 	assembler.srai(out, temp, 64 - length); // Use arithmetic shift to keep sign extension up
 	out.set_actual_width();
@@ -71,14 +80,21 @@ inline void bit_extract(Assembler &assembler, TypedRegister &out, const TypedReg
 }
 
 inline void bit_insert(
-	Assembler &assembler, TypedRegister &out, const TypedRegister& src, const TypedRegister& bits, const int to, const int length, const TypedRegister& temp_reg)
+	Assembler &assembler, TypedRegister &out, const TypedRegister &src, const TypedRegister &bits, int to, const int length, const TypedRegister &temp_reg)
 {
+	if (to < 64 && to + length > 64) {
+		throw std::runtime_error("Register crossing bit insert unsupported.");
+	}
+
 	int64_t mask = ~(((1ll << length) - 1) << to);
 
-	if (!out.type().is_vector() && out.type().is_integer()) {
-		const Register &src1 = out.type().element_width() == 128 ? src.reg1() : src;
-		const Register &out1 = out.type().element_width() == 128 ? out.reg1() : out;
-		//TODO Might be able to save masking of src or bits in some cases
+	if (out.type().is_integer()) {
+		const Register src1 = src.type().width() != 128 ? src : to < 64 ? src.reg1() : src.reg2();
+		const Register out1 = out.type().width() != 128 ? out : to < 64 ? out.reg1() : out.reg2();
+		if (to >= 64) {
+			to -= 64;
+		}
+		// TODO Might be able to save masking of src or bits in some cases
 		if (to == 0 && IsITypeImm(mask)) {
 			// Since to==0 no shift necessary and just masking both is enough
 			// `~mask` also fits IType since `mask` has all but lower bits set

@@ -743,9 +743,16 @@ TypedRegister &riscv64_translation_context::materialise_bit_insert(const bit_ins
 			// Only map don't modify registers
 			auto [out_reg, _] = allocate_register(&n.val(), src.reg1(), bits);
 			return out_reg;
-		} else if (to + length < 64) {
+		} else if (to + length <= 64) {
 			// Map upper and insert into lower
 			auto [out_reg, valid] = allocate_register(&n.val(), std::nullopt, src.reg2());
+			if (valid) {
+				bit_insert(assembler_, out_reg, src, bits, to, length, allocate_register(nullptr).first);
+			}
+			return out_reg;
+		} else if (to >= 64) {
+			// Map lower and insert into upper
+			auto [out_reg, valid] = allocate_register(&n.val(), src.reg1());
 			if (valid) {
 				bit_insert(assembler_, out_reg, src, bits, to, length, allocate_register(nullptr).first);
 			}
