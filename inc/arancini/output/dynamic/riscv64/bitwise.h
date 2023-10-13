@@ -3,24 +3,25 @@
 #include <arancini/output/dynamic/riscv64/register.h>
 #include <arancini/output/dynamic/riscv64/utils.h>
 
-inline void truncate(Assembler &assembler, TypedRegister &out, const Register src)
+inline void truncate(Assembler &assembler, TypedRegister &out, const TypedRegister &src)
 {
 	if (!out.type().is_vector() && out.type().is_integer()) {
+		const Register src_reg = is_i128_t(src.type()) ? src.reg1() : src;
 		switch (out.type().element_width()) {
 		case 1:
 			// Flags are always zero extended
-			assembler.andi(out, src, 1);
+			assembler.andi(out, src_reg, 1);
 			out.set_type(value_type::u64());
 			break;
 		case 8:
 		case 16:
 			// No op FIXME not sure if good idea
-			if (src == out) {
-				assembler.mv(out, src);
+			if (src_reg == out) {
+				assembler.mv(out, src_reg);
 			}
 			break;
 		case 32:
-			assembler.sextw(out, src);
+			assembler.sextw(out, src_reg);
 			out.set_actual_width();
 			out.set_type(value_type::u64());
 			break;
