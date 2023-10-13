@@ -1289,27 +1289,62 @@ void riscv64_translation_context::materialise_internal_call(const internal_call_
 // FIXME 512
 TypedRegister &riscv64_translation_context::materialise_vector_insert(const vector_insert_node &n)
 {
-	if (n.val().type().width() != 128 && n.val().type().width() != 512) {
+	if (!(n.val().type().width() == 128 || n.val().type().width() == 512)) {
 		throw std::runtime_error("Unsupported vector insert width");
 	}
-	if (n.val().type().element_width() != 64 && n.val().type().element_width() != 128) {
+	if (!(n.val().type().element_width() == 64 || n.val().type().element_width() == 128 || n.val().type().element_width() == 32)) {
 		throw std::runtime_error("Unsupported vector insert element width");
 	}
-	if (n.insert_value().type().width() != 64 && n.insert_value().type().width() != 128) {
+	if (!(n.insert_value().type().width() == 64 || n.insert_value().type().width() == 128 || n.insert_value().type().width() == 32)) {
 		throw std::runtime_error("Unsupported vector insert insert_value width");
 	}
 
 	TypedRegister &insert = *materialise(n.insert_value().owner());
 	TypedRegister &src = *materialise(n.source_vector().owner());
 
-	if (n.index() == 0) {
-		// No value modification just map correctly
-		return allocate_register(&n.val(), insert.reg1(), src.reg2()).first;
-	} else if (n.index() == 1) {
-		// No value modification just map correctly
-		return allocate_register(&n.val(), src.reg1(), insert.reg2()).first;
-	} else {
-		throw std::runtime_error("Unsupported vector insert index");
+	switch (n.source_vector().type().element_width()) {
+	case 128: {
+		if (n.index() == 0) {
+			return insert;
+		} else {
+			throw std::runtime_error("Unsupported index for 512bit insert");
+		}
+	}
+	case 64:
+		if (n.index() == 0) {
+			// No value modification just map correctly
+			return allocate_register(&n.val(), insert.reg1(), src.reg2()).first;
+		} else if (n.index() == 1) {
+			// No value modification just map correctly
+			return allocate_register(&n.val(), src.reg1(), insert.reg2()).first;
+		} else {
+			throw std::runtime_error("Unsupported vector insert index");
+		}
+		break;
+	case 32: {
+		switch (n.index()) {
+		case 0:
+		case 1: {
+			auto [out_reg, valid] = allocate_register(&n.val(), std::nullopt, src.reg2());
+			if (valid) {
+				bit_insert(assembler_, out_reg, src, insert, 32 * n.index(), 32, allocate_register(nullptr).first);
+			}
+			return out_reg;
+		}
+		case 2:
+		case 3: {
+			auto [out_reg, valid] = allocate_register(&n.val(), src.reg1(), std::nullopt);
+			if (valid) {
+				bit_insert(assembler_, out_reg, src, insert, 32 * n.index(), 32, allocate_register(nullptr).first);
+			}
+			return out_reg;
+		}
+		default:
+			throw std::runtime_error("Unsupported vector extract index");
+		}
+	}
+	default:
+		throw std::runtime_error("Unsupported vector insert element width");
 	}
 }
 
@@ -1318,23 +1353,40 @@ TypedRegister &riscv64_translation_context::materialise_vector_extract(const vec
 	if (n.source_vector().type().width() != 128) {
 		throw std::runtime_error("Unsupported vector extract width");
 	}
-	if (n.source_vector().type().element_width() != 64) {
+	if (!(n.source_vector().type().element_width() == 64 || n.source_vector().type().element_width() == 32)) {
 		throw std::runtime_error("Unsupported vector extract element width");
 	}
-	if (n.val().type().width() != 64) {
+	if (!(n.val().type().width() == 64 || n.val().type().width() == 32)) {
 		throw std::runtime_error("Unsupported vector extract value width");
 	}
 
 	TypedRegister &src = *materialise(n.source_vector().owner());
 
 	// When adding other widths, remember to set correct type
-	if (n.index() == 0) {
-		// No value modification just map correctly
-		return allocate_register(&n.val(), src.reg1()).first;
-	} else if (n.index() == 1) {
-		// No value modification just map correctly
-		return allocate_register(&n.val(), src.reg2()).first;
-	} else {
-		throw std::runtime_error("Unsupported vector extract index");
+
+	switch (n.source_vector().type().element_width()) {
+	case 64:
+		if (n.index() == 0) {
+			// No value modification just map correctly
+			return allocate_register(&n.val(), src.reg1()).first;
+		} else if (n.index() == 1) {
+			// No value modification just map correctly
+			return allocate_register(&n.val(), src.reg2()).first;
+		} else {
+			throw std::runtime_error("Unsupported vector extract index");
+		}
+		break;
+	case 32: {
+
+		auto [out_reg, valid] = allocate_register(&n.val());
+		if (!valid) {
+			return out_reg;
+		}
+
+		bit_extract(assembler_, out_reg, src, 32 * n.index(), 32);
+		return out_reg;
+	}
+	default:
+		throw std::runtime_error("Unsupported vector extract element width");
 	}
 }
