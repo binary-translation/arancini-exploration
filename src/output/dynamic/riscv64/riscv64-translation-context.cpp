@@ -624,7 +624,7 @@ TypedRegister &riscv64_translation_context::materialise_cast(const cast_node &n)
 	bool works = (is_scalar_int(n.val())
 					 || ((is_int_vector(n.val(), 2, 64) || is_int_vector(n.val(), 4, 32) || is_int_vector(n.val(), 4, 128)) && n.op() == cast_op::bitcast))
 		&& (is_gpr_or_flag(n.source_value())
-			|| ((is_i128(n.source_value()) || is_int(n.source_value(), 512) || is_int_vector(n.source_value(), 4, 32))
+			|| ((is_i128(n.source_value()) || is_int(n.source_value(), 512) || is_int_vector(n.source_value(), 4, 32) || is_int_vector(n.source_value(), 2, 64))
 				&& (n.op() == cast_op::trunc || n.op() == cast_op::bitcast)));
 	if (!works) {
 		throw std::runtime_error("unsupported types on cast operation");
@@ -694,7 +694,6 @@ TypedRegister &riscv64_translation_context::materialise_cast(const cast_node &n)
 		if (!valid) {
 			return out_reg;
 		}
-		out_reg.set_type(n.val().type());
 
 		truncate(assembler_, out_reg, src_reg);
 		return out_reg;
