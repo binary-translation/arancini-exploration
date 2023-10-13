@@ -1083,7 +1083,7 @@ TypedRegister &riscv64_translation_context::materialise_binary_arith(const binar
 	bool works = (is_gpr_or_flag(n.val()) && is_gpr_or_flag(n.lhs()) && is_gpr_or_flag(n.rhs()))
 		|| ((n.op() == binary_arith_op::mul || n.op() == binary_arith_op::div || n.op() == binary_arith_op::mod || n.op() == binary_arith_op::bxor)
 			&& is_i128(n.val()) && is_i128(n.lhs()) && is_i128(n.rhs()))
-		|| ((is_int_vector(n.val(), 4, 32)) && n.op() == binary_arith_op::add);
+		|| ((is_int_vector(n.val(), 4, 32)) && (n.op() == binary_arith_op::add || n.op() == binary_arith_op::sub));
 	if (!works) {
 		throw std::runtime_error("unsupported width on binary arith operation");
 	}
