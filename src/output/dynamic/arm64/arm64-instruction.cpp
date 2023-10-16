@@ -151,7 +151,7 @@ std::string operand::dump() const {
 
 // TODO: adapt all
 void operand::dump(std::ostream &os) const {
-	switch (type()) {
+	switch (op_type()) {
     case operand_type::cond:
         // TODO: rename
         os << cond().condition();

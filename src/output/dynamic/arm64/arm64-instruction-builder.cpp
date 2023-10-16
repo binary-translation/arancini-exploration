@@ -1,15 +1,23 @@
+#include "arancini/ir/value-type.h"
 #include <arancini/output/dynamic/arm64/arm64-instruction.h>
 #include <arancini/output/dynamic/arm64/arm64-instruction-builder.h>
 #include <arancini/util/logger.h>
 #include <array>
 #include <bitset>
 #include <exception>
+#include <optional>
 #include <sstream>
 #include <utility>
 #include <stdexcept>
 #include <unordered_map>
 
 using namespace arancini::output::dynamic::arm64;
+
+static const vreg_operand *get_vreg_or_base(const operand &o) {
+    if (o.is_vreg()) return &o.vreg();
+    if (o.is_mem() && o.memory().is_virtual()) return &o.memory().vreg_base();
+    else return nullptr;
+}
 
 void instruction_builder::spill() {
 }
@@ -29,9 +37,9 @@ void instruction_builder::emit(machine_code_writer &writer) {
 
         for (size_t i = 0; i < insn.operand_count(); ++i) {
             const auto &op = operands[i];
-            if (op.type() == operand_type::invalid ||
-                op.type() == operand_type::vreg ||
-                (op.type() == operand_type::mem && op.memory().is_virtual())) {
+            if (op.op_type() == operand_type::invalid ||
+                op.op_type() == operand_type::vreg ||
+                (op.op_type() == operand_type::mem && op.memory().is_virtual())) {
                 dump(assembly);
                 util::logger.error(util::lazy_eval<>(&std::stringstream::str, &assembly));
                 throw std::runtime_error("Virtual register after register allocation: "
@@ -53,6 +61,50 @@ void instruction_builder::emit(machine_code_writer &writer) {
     asm_.free(encode);
 }
 
+class physical_registers {
+public:
+    physical_registers(size_t available_physical_registers_mask,
+                       size_t available_float_physical_registers_mask):
+        avail_physregs_(available_physical_registers_mask),
+        avail_float_physregs_(available_float_physical_registers_mask)
+    { }
+
+    size_t allocate(const arancini::ir::value_type &type) {
+        std::bitset<32> *mask;
+        if (type.is_floating_point())
+            mask = &avail_float_physregs_;
+        else
+            mask = &avail_physregs_;
+
+        size_t allocation = mask->_Find_first();
+        if (allocation >= mask->size())
+            throw std::runtime_error("No registers available to allocate; register spilling required");
+
+        mask->flip(allocation);
+
+        return allocation;
+    }
+
+    size_t allocate(size_t index, const arancini::ir::value_type &type) {
+        if (type.is_floating_point()) {
+            avail_float_physregs_.flip(index);
+        } else {
+            avail_physregs_.flip(index);
+        }
+
+        return index;
+    }
+
+    size_t deallocate(size_t index, const arancini::ir::value_type &type) {
+        if (type.is_floating_point()) avail_float_physregs_.flip(index);
+        else avail_physregs_.flip(index);
+        return index;
+    }
+private:
+	std::bitset<32> avail_physregs_;
+	std::bitset<32> avail_float_physregs_;
+};
+
 void instruction_builder::allocate() {
 	// reverse linear scan allocator
     util::logger.debug("REGISTER ALLOCATION");
@@ -65,52 +117,28 @@ void instruction_builder::allocate() {
     // zero (x31)
     // Return to trampoline (x30)
     // Memory base (x18)
-	std::bitset<32> avail_physregs = 0x1FFBFFFFF;
-	std::bitset<32> avail_float_physregs = 0xFFFFFFFFF;
+    physical_registers physregs(0x1FFBFFFFF, 0xFFFFFFFFF);
 
 	for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
 		auto &insn = *RI;
 
         util::logger.debug("considering instruction:", util::lazy_eval<>(&instruction::dump, &insn));
 
-        std::array<std::pair<size_t, size_t>, 5> allocs;
         bool has_unused_keep = false;
+        std::array<std::pair<size_t, size_t>, 5> allocs;
 
-        auto allocate = [&allocs, &avail_physregs,
-                         &avail_float_physregs, &vreg_to_preg]
-                                  (operand &o, size_t idx) -> void
+        auto allocate = [&allocs, &physregs, &vreg_to_preg] (operand &o, size_t idx) -> void
         {
-                unsigned int vri;
-                ir::value_type type;
-                if (o.is_vreg()) {
-                    vri = o.vreg().index();
-                    type = o.vreg().type();
-                } else if (o.is_mem()) {
-                    auto vreg = o.memory().vreg_base();
-                    vri = vreg.index();
-                    type = vreg.type();
-                } else {
+                const vreg_operand *vreg = get_vreg_or_base(o);
+                if (vreg == nullptr)
                     throw std::runtime_error("Trying to allocate non-virtual register operand");
-                }
-
-                size_t allocation = 0;
-                if (type.is_floating_point()) {
-                    allocation = avail_float_physregs._Find_first();
-                    avail_float_physregs.flip(allocation);
-                } else {
-                    allocation = avail_physregs._Find_first();
-                    avail_physregs.flip(allocation);
-                }
 
                 // TODO: register spilling
-                vreg_to_preg[vri] = allocation;
+                size_t allocation = physregs.allocate(vreg->type());
+                vreg_to_preg[vreg->index()] = allocation;
 
-                if (o.is_mem())
-                    o.allocate_base(allocation, type);
-                else
-                    o.allocate(allocation, type);
-
-                allocs[idx] = std::make_pair(vri, allocation);
+                o.allocate(allocation, vreg->type());
+                allocs[idx] = std::make_pair(vreg->index(), allocation);
         };
 
 		// kill defs first
@@ -125,18 +153,14 @@ void instruction_builder::allocate() {
 				unsigned int vri = o.vreg().index();
 
 				auto alloc = vreg_to_preg.find(vri);
-
 				if (alloc != vreg_to_preg.end()) {
 					int pri = alloc->second;
-
-                    if (type.is_floating_point()) {
-                        avail_float_physregs.set(pri);
-                    } else {
-                        avail_physregs.set(pri);
-                    }
-
+                    physregs.allocate(pri, type);
 					o.allocate(pri, type);
 
+                    // No need to track this virtual register anymore, it is
+                    // overwritten here by the def()
+                    vreg_to_preg.erase(vri);
                     util::logger.debug("  allocated to", util::lazy_eval<>(&operand::dump, &o), "-- releasing");
                 } else if (o.is_keep()) {
                     has_unused_keep = true;
@@ -150,56 +174,41 @@ void instruction_builder::allocate() {
 			}
 		}
 
-		if (insn.is_dead()) {
-			continue;
-		}
+        // Instruction has been eliminated; will not be allocated
+		if (insn.is_dead()) continue;
 
 		// alloc uses next
 		for (size_t i = 0; i < insn.operand_count(); i++) {
 			auto &o = insn.operands()[i];
 
 			// We only care about REG uses - but we also need to consider REGs used in MEM expressions
-			if (o.is_use() && o.is_vreg()) {
+            const vreg_operand *vreg = nullptr;
+            if (o.is_use() && (vreg = get_vreg_or_base(o)) != nullptr) {
                 util::logger.debug("  USE", util::lazy_eval<>(&operand::dump, &o));
-
-                auto type = o.vreg().type();
-                unsigned int vri = o.vreg().index();
+                auto type = vreg->type();
+                unsigned int vri = vreg->index();
 				if (!vreg_to_preg.count(vri)) {
                     allocate(o, i);
                     util::logger.debug(" allocating vreg to", util::lazy_eval<>(&operand::dump, &o));
 				} else {
 					o.allocate(vreg_to_preg.at(vri), type);
 				}
-			} else if (o.is_mem()) {
-                    util::logger.debug("  USE", util::lazy_eval<>(&operand::dump, &o));
-
-				if (o.memory().is_virtual()) {
-                    unsigned int vri = o.memory().vreg_base().index();
-
-					if (!vreg_to_preg.count(vri)) {
-                        allocate(o, i);
-                        util::logger.debug(" allocating vreg to ", util::lazy_eval<>(&operand::dump, &o));
-					} else {
-                        auto type = o.memory().vreg_base().type();
-						o.allocate_base(vreg_to_preg.at(vri), type);
-					}
-				}
-			}
-		}
+            }
+        }
 
         if (has_unused_keep) {
             for (size_t i = 0; i < insn.operand_count(); i++) {
                 const auto &op = insn.operands()[i];
                 if (op.is_keep()) {
                     vreg_to_preg.erase(allocs[i].first);
-                    avail_physregs.flip(allocs[i].second);
+                    physregs.deallocate(allocs[i].second, op.type());
                 }
             }
         }
 
 		// Kill MOVs
         // TODO: refactor
-        if (insn.opcode().find("mov") != std::string::npos) {
+        if (insn.is_copy()) {
             operand op1 = insn.operands()[0];
             operand op2 = insn.operands()[1];
 
