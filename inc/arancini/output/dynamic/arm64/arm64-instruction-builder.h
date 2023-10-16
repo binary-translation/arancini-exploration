@@ -140,7 +140,7 @@ public:
     template <typename T1, typename T2,
               is_reg<T1> = 0, is_reg_or_immediate<T2> = 0>
     void mov(const T1 &dst, const T2 &src, const std::string &comment = "") {
-        append(instruction("mov", def(dst), use(src)).add_comment(comment));
+        append(instruction("mov", def(dst), use(src)).set_copy(true).add_comment(comment));
     }
 
     void b(const label_operand &dest, const std::string &comment = "") {

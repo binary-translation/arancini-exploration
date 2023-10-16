@@ -363,17 +363,13 @@ struct operand {
     {
     }
 
-    operand_type type() const {
-        return static_cast<operand_type>(op_.index());
-    }
-
-	bool is_preg() const { return type() == operand_type::preg; }
-	bool is_vreg() const { return type() == operand_type::vreg; }
-	bool is_mem() const { return type() == operand_type::mem; }
-	bool is_imm() const { return type() == operand_type::imm; }
-    bool is_shift() const { return type() == operand_type::shift; }
-    bool is_cond() const { return type() == operand_type::cond; }
-    bool is_label() const { return type() == operand_type::label; }
+	bool is_preg() const { return op_type() == operand_type::preg; }
+	bool is_vreg() const { return op_type() == operand_type::vreg; }
+	bool is_mem() const { return op_type() == operand_type::mem; }
+	bool is_imm() const { return op_type() == operand_type::imm; }
+    bool is_shift() const { return op_type() == operand_type::shift; }
+    bool is_cond() const { return op_type() == operand_type::cond; }
+    bool is_label() const { return op_type() == operand_type::label; }
 
     preg_operand &preg() { return std::get<preg_operand>(op_); }
     const preg_operand &preg() const { return std::get<preg_operand>(op_); }
@@ -406,38 +402,39 @@ struct operand {
     void set_keep() { keep_ = true; }
     void set_usedef() { set_use(); set_def(); }
 
-    size_t width() const {
-        switch (type()) {
+    ir::value_type type() const {
+        switch (op_type()) {
         case operand_type::preg:
-            return preg().width();
+            return preg().type();
         case operand_type::vreg:
-            return vreg().width();
+            return vreg().type();
         case operand_type::mem:
-            return memory().base_width();
+            return memory().is_virtual() ? memory().vreg_base().type() : memory().preg_base().type();
         case operand_type::imm:
-            return immediate().width();
+            return immediate().type();
         default:
-            return 0;
+            return ir::value_type();
         }
     }
 
+    size_t width() const {
+        return type().width();
+    }
+
 	void allocate(int index, ir::value_type value_type) {
-		if (type() != operand_type::vreg)
-			throw std::runtime_error("trying to allocate non-vreg");
-
-		op_ = preg_operand(index, value_type);
+        if (op_type() == operand_type::vreg) {
+            op_ = preg_operand(index, value_type);
+        } else if (op_type() == operand_type::mem && memory().is_virtual()) {
+            auto &memory = std::get<memory_operand>(op_);
+            memory.set_base_reg(preg_operand(index, value_type));
+        } else {
+			throw std::runtime_error("trying to allocate non-virtual-register");
+        }
 	}
 
-	void allocate_base(int index, ir::value_type value_type) {
-		if (type() != operand_type::mem)
-			throw std::runtime_error("trying to allocate non-mem");
-
-        auto &memory = std::get<memory_operand>(op_);
-		if (!memory.is_virtual())
-			throw std::runtime_error("trying to allocate non-virtual membase ");
-
-        memory.set_base_reg(preg_operand(index, value_type));
-	}
+    operand_type op_type() const {
+        return static_cast<operand_type>(op_.index());
+    }
 
 	void dump(std::ostream &os) const;
 protected:
@@ -499,6 +496,7 @@ public:
 
     instruction &add_comment(const std::string &comment) { comment_ = comment; return *this; }
     instruction &set_branch(bool is_branch) { branch_ = is_branch; return *this; }
+    instruction &set_copy(bool is_copy) { copy_ = is_copy; return *this; }
 
 	void dump(std::ostream &os) const;
     std::string dump() const;
@@ -507,6 +505,7 @@ public:
 	bool is_dead() const { return opcode_.empty(); }
     bool is_branch() const { return branch_; }
     bool is_label() const { return label_; }
+    bool is_copy() const { return copy_; }
 
     std::string& opcode() { return opcode_; }
     const std::string& opcode() const { return opcode_; }
@@ -521,6 +520,7 @@ private:
 
     bool branch_ = false;
     bool label_ = false;
+    bool copy_ = false;
 
     size_t opcount_ = 0;
     operand_array operands_;
