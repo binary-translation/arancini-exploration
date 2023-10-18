@@ -5,9 +5,13 @@
 **/*.out
 **/*-txl
 **/*.zip
+**/*.txt
+**/*.dump
+**/*.log
 out/
 tags
 build/
+bench/
 build*/
 .cache/
 .vscode/

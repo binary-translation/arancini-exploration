@@ -486,6 +486,12 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
     if (new_pc_vregs.size() != 1) {
         throw std::runtime_error("[ARM64-DBT] Program counter cannot be > 64-bits");
     }
+	
+	if (n.updates_pc() == br_type::call)
+		ret_ = 3;
+
+	if (n.updates_pc() == br_type::ret)
+		ret_ = 4;
 
     builder_.str(new_pc_vregs[0],
                  guestreg_memory_operand(static_cast<int>(reg_offsets::PC)),
