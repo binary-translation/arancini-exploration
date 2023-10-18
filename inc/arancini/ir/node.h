@@ -39,6 +39,8 @@ enum class node_kinds {
 	internal_call
 };
 
+enum br_type { none, br, csel, call, ret };
+
 class node {
 public:
 	node(node_kinds kind)
@@ -122,7 +124,7 @@ public:
 
 	virtual bool is_action() const override { return true; }
 
-	virtual bool updates_pc() const { return false; }
+	virtual br_type updates_pc() const { return br_type::none; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -221,16 +223,18 @@ public:
 
 class write_pc_node : public action_node {
 public:
-	write_pc_node(port &value)
+	write_pc_node(port &value, br_type br_type, unsigned long target)
 		: action_node(node_kinds::write_pc)
 		, value_(value)
+		, br_type_(br_type)
+		, target_(target)
 	{
 		value.add_target(this);
 	}
 
 	port &value() const { return value_; }
 
-	virtual bool updates_pc() const override { return true; }
+	virtual br_type updates_pc() const override { return br_type_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -238,8 +242,11 @@ public:
 		v.visit_write_pc_node(*this);
 	}
 
+	unsigned long const_target() { return target_; };
 private:
 	port &value_;
+	br_type br_type_;
+	unsigned long target_;
 };
 
 class constant_node : public value_node {
@@ -1012,7 +1019,7 @@ public:
 	const internal_function &fn() const { return fn_; }
 	const std::vector<port *> &args() const { return args_; }
 
-	virtual bool updates_pc() const override { return true; }
+	virtual br_type updates_pc() const override { return br_type::br; }
 
 	virtual void accept(visitor &v) override
 	{

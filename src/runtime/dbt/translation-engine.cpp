@@ -82,7 +82,7 @@ public:
 protected:
 	virtual void insert_action(action_node *a) override
 	{
-		if (a->updates_pc()) {
+		if (a->updates_pc() != br_type::none) {
 			is_eob_ = true;
 		}
 
