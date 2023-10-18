@@ -83,7 +83,7 @@
 				src = self;
 				nativeBuildInputs = [
 					#graphviz
-					#gdb
+					gdb
 					python3
 					#valgrind
 					git
@@ -109,7 +109,7 @@
 					export FLAKE_BUILD=1
 					cmakeConfigurePhase
 				'';
-				cmakeFlags = [ "-DBUILD_TESTS=1" ] ++ lib.optionals (system == "riscv64-linux") ["--toolchain riscv64-toolchain-nix.cmake"];
+				cmakeFlags = [ "-DBUILD_TESTS=1" "-DCMAKE_BUILD_TYPE=Release" ] ++ lib.optionals (system == "riscv64-linux") ["--toolchain riscv64-toolchain-nix.cmake"];
 			}
 		) {};
 	});

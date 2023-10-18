@@ -12,8 +12,12 @@
 #include <llvm/ADT/FloatingPointMode.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/Function.h>
+#include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
+#include <llvm/Transforms/Scalar/JumpThreading.h>
+#include <llvm/IR/PassManager.h>
 #include <llvm/Support/TimeProfiler.h>
 #include <map>
 #include <memory>
@@ -52,6 +56,7 @@ llvm_static_output_engine_impl::llvm_static_output_engine_impl(const llvm_static
 	, llvm_context_(std::make_unique<LLVMContext>())
 	, module_(std::make_unique<Module>("generated", *llvm_context_))
 	, in_br(false)
+	, fixed_branches(0)
 {
 }
 
@@ -173,8 +178,12 @@ void llvm_static_output_engine_impl::build()
 	auto entry_block = BasicBlock::Create(*llvm_context_, "entry", loop_fn);
 	auto loop_block = BasicBlock::Create(*llvm_context_, "loop", loop_fn);
 	auto switch_to_dbt = BasicBlock::Create(*llvm_context_, "switch_to_dbt", loop_fn);
+	auto check_for_call_block = BasicBlock::Create(*llvm_context_, "check_for_call", loop_fn);
+	auto check_for_ret_block = BasicBlock::Create(*llvm_context_, "check_for_ret", loop_fn);
 	auto check_for_int_call_block = BasicBlock::Create(*llvm_context_, "check_for_internal_call", loop_fn);
 	auto internal_call_block = BasicBlock::Create(*llvm_context_, "internal_call", loop_fn);
+	auto call_block = BasicBlock::Create(*llvm_context_, "check_for_internal_call", loop_fn);
+	auto ret_block = BasicBlock::Create(*llvm_context_, "check_for_internal_call", loop_fn);
 	auto exit_block = BasicBlock::Create(*llvm_context_, "exit", loop_fn);
 
 	IRBuilder<> builder(*llvm_context_);
@@ -187,6 +196,9 @@ void llvm_static_output_engine_impl::build()
 
 	builder.SetInsertPoint(loop_block);
 
+	//DEBUG
+	//auto alert = module_->getOrInsertFunction("alert", types.finalize);
+	//builder.CreateCall(alert, { });
 	auto program_counter_val = builder.CreateLoad(types.i64, program_counter, "pc");
 	auto pcswitch = builder.CreateSwitch(program_counter_val, switch_to_dbt);
 
@@ -196,8 +208,22 @@ void llvm_static_output_engine_impl::build()
 
 	auto switch_callee = module_->getOrInsertFunction("invoke_code", types.dbt_invoke);
 	auto invoke_result = builder.CreateCall(switch_callee, { state_arg });
-	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 0)), loop_block, check_for_int_call_block);
+	/*
+	 * RETURN CODES:
+	 * 4: last instr was a ret  -> emit a return
+	 * 3: last instr was a call -> call MainLoop to figure out the next Fn
+	 * 2: do internal call
+	 * 1: do syscall
+	 * 0: all other instr		-> we did not leave the current unknown function
+	 */
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 0)), loop_block, check_for_call_block);
 
+	builder.SetInsertPoint(check_for_call_block);
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 3)), call_block, check_for_ret_block);
+	
+	builder.SetInsertPoint(check_for_ret_block);
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 4)), ret_block, check_for_int_call_block);
+	
 	builder.SetInsertPoint(check_for_int_call_block);
 	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_SGT, invoke_result, ConstantInt::get(types.i32, 0)), internal_call_block, exit_block);
 
@@ -214,6 +240,13 @@ void llvm_static_output_engine_impl::build()
 
 	builder.CreateRetVoid();
 
+	builder.SetInsertPoint(call_block);
+	builder.CreateCall(loop_fn, { state_arg });
+	builder.CreateBr(loop_block);
+
+	builder.SetInsertPoint(ret_block);
+	builder.CreateRetVoid();
+
 	if (e_.dbg_) {
 		module_->print(outs(), nullptr);
 	}
@@ -225,12 +258,26 @@ void llvm_static_output_engine_impl::build()
 
 void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlock *contblock)
 {
-	auto blocks = std::make_shared<std::map<unsigned long, BasicBlock *>>();
+	IRBuilder<> builder(*llvm_context_);
+	auto fns = std::make_shared<std::map<unsigned long, Function *>>();
+
 	for (auto c : chunks_) {
-		lower_chunk(pcswitch, contblock, c, blocks);
+		std::stringstream fn_name;
+		fn_name << "FN_" << std::hex << c->packets()[0]->address();
+
+		auto fn = Function::Create(types.loop_fn, GlobalValue::LinkageTypes::ExternalLinkage, fn_name.str(), *module_);
+			(*fns)[c->packets()[0]->address()] = fn;
 	}
-	for (auto b : *blocks) {
-		pcswitch->addCase(ConstantInt::get(types.i64, b.first), b.second);
+
+	for (auto c : chunks_) {
+		lower_chunk(&builder, contblock, c, fns);
+	}
+	for (auto f : *fns) {
+		auto b = BasicBlock::Create(*llvm_context_, "", contblock->getParent());
+		builder.SetInsertPoint(b);
+		builder.CreateCall(f.second, { contblock->getParent()->getArg(0) });
+		builder.CreateRetVoid();
+		pcswitch->addCase(ConstantInt::get(types.i64, f.first), b);
 	}
 }
 
@@ -940,6 +987,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 	        ::llvm::Type *ty;
 	        switch (rln->local()->type().width()) {
 	                case 80: ty = types.f80; break;
+	                case 64: ty = types.f80; break;
 	                default: throw std::runtime_error("unsupported read_local width"+std::to_string(rln->local()->type().width()));
 	        }
 	        auto load = builder.CreateLoad(ty, address, "read_local");
@@ -1181,6 +1229,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
         ::llvm::Type *ty;
         switch (wln->write_value().type().width()) {
                 case 80: ty = types.f80; break;
+                case 64: ty = types.f80; break;
                 default: throw std::runtime_error("unsupported alloca width");
         }
         auto var_ptr = builder.CreateAlloca(ty, nullptr, "local var");
@@ -1195,36 +1244,46 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 	}
 }
 
-void llvm_static_output_engine_impl::lower_chunk(SwitchInst *pcswitch, BasicBlock *contblock, std::shared_ptr<chunk> c, std::shared_ptr<std::map<unsigned long, BasicBlock *>> blocks)
+void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBlock *contblock, std::shared_ptr<chunk> c, std::shared_ptr<std::map<unsigned long, Function *>> fns)
 {
-	IRBuilder<> builder(*llvm_context_);
-	//std::map<unsigned long, BasicBlock *> blocks;
+	std::map<unsigned long, BasicBlock *> blocks;
 
-	if (c->packets().empty()) {
-		return;
-	}
+	auto fn = fns->at(c->packets()[0]->address());
 
-	auto state_arg = contblock->getParent()->getArg(0);
+	auto state_arg = fn->getArg(0);
+
+	auto pre = BasicBlock::Create(*llvm_context_, fn->getName()+"-pre", fn);
+	auto mid = BasicBlock::Create(*llvm_context_, fn->getName()+"-mid", fn);
+	//auto pst = BasicBlock::Create(*llvm_context_, fn->getName()+"-pst", fn);
+	auto dyn = BasicBlock::Create(*llvm_context_, fn->getName()+"-dyn", fn);
+
+	builder->SetInsertPoint(pre);
+	auto pc_ptr = builder->CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 0) });
+	builder->CreateBr(mid);
+
+	builder->SetInsertPoint(mid);
+	auto pc = builder->CreateLoad(types.i64, pc_ptr, "local-pc");
+	auto fnswitch = builder->CreateSwitch(pc, dyn);
 
 	for (auto p : c->packets()) {
 		std::stringstream block_name;
 		block_name << "INSN_" << std::hex << p->address();
-
-		BasicBlock *block = BasicBlock::Create(*llvm_context_, block_name.str(), contblock->getParent());
-		(*blocks)[p->address()] = block;
+		auto b = BasicBlock::Create(*llvm_context_, block_name.str(), fn);
+		blocks[p->address()] = b;
+		fnswitch->addCase(ConstantInt::get(types.i64,p->address()), b);
 	}
 
 	BasicBlock *packet_block = nullptr;
 	for (auto p : c->packets()) {
-		auto next_block = (*blocks)[p->address()];
+		auto next_block = blocks[p->address()];
 
 		if (packet_block != nullptr) {
-			builder.CreateBr(next_block);
+			builder->CreateBr(next_block);
 		}
 
 		packet_block = next_block;
 
-		builder.SetInsertPoint(packet_block);
+		builder->SetInsertPoint(packet_block);
 
 		if (!p->actions().empty()) {
 			for (const auto& a : p->actions()) {
@@ -1232,16 +1291,65 @@ void llvm_static_output_engine_impl::lower_chunk(SwitchInst *pcswitch, BasicBloc
 			}
 		}
 
-		if (p->updates_pc()) {
-			builder.CreateBr(contblock);
-			packet_block = nullptr;
+		switch (p->updates_pc()) {
+			case br_type::none:
+				break;
+			case br_type::call: {
+				auto f = get_static_fn(p, fns);
+				if (f) {
+					builder->CreateCall(f, { state_arg });
+				} else {
+					builder->CreateCall(contblock->getParent(), { state_arg });
+				}
+				break;
+			}
+			case br_type::br:
+			case br_type::csel: {
+				builder->CreateBr(mid);
+				packet_block = nullptr;
+				break;
+			}
+			case br_type::ret: {
+				builder->CreateRetVoid();
+				packet_block = nullptr;
+				break;
+			}
 		}
 	}
 
 	if (packet_block != nullptr) {
-		builder.CreateBr(contblock);
+		builder->CreateRetVoid();
+	}
+
+	builder->SetInsertPoint(dyn);
+	builder->CreateCall(contblock->getParent(), { state_arg });
+	builder->CreateRetVoid();
+
+	if (verifyFunction(*fn, &errs())) {
+		throw std::runtime_error("function verification failed");
 	}
 }
+
+Function *llvm_static_output_engine_impl::get_static_fn(std::shared_ptr<packet> pkt, std::shared_ptr<std::map<unsigned long, Function *>> fns) {
+
+	write_pc_node *node = nullptr;
+	for (auto a : pkt->actions()) {
+		if(a->kind() == node_kinds::write_pc && ((write_pc_node *)a)->updates_pc()==br_type::call)
+			node = (write_pc_node *)a;
+	}
+	if (!node)
+		return nullptr;
+	if (node->const_target()) {
+
+		auto it = fns->find(node->const_target()+pkt->address());
+		auto ret = it != fns->end() ? it->second : nullptr;
+		if (ret)
+			fixed_branches++;
+		return ret;
+	}
+
+	return nullptr;
+};
 
 void llvm_static_output_engine_impl::optimise()
 {
@@ -1258,17 +1366,21 @@ void llvm_static_output_engine_impl::optimise()
 	PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
 	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
-
+	PB.registerOptimizerLastEPCallback( [&](ModulePassManager &mpm, OptimizationLevel Level) {
+		mpm.addPass(createModuleToFunctionPassAdaptor(JumpThreadingPass())); }
+	);
 	MPM.run(*module_, MAM);
 
 	// Compiled modules now exists
 	if (e_.dbg_) {
+		std::cerr << "Fixed branches: " << fixed_branches << std::endl;
 		module_->print(outs(), nullptr);
 	}
 }
 
 void llvm_static_output_engine_impl::compile()
 {
+	std::cout << "Fixed branches: " << fixed_branches << std::endl;
 	auto TT = sys::getDefaultTargetTriple();
 	module_->setTargetTriple(TT);
 

@@ -422,3 +422,4 @@ extern "C" int execute_internal_call(void *cpu_state, int call) { return ctx_->i
 
 extern "C" void finalize() { delete ctx_; }
 
+extern "C" void alert() { std::cout << "Top of MainLoop!\n"; }
