@@ -1271,32 +1271,27 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 	auto state_arg = fn->getArg(0);
 
 	auto pre = BasicBlock::Create(*llvm_context_, fn->getName()+"-pre", fn);
-	auto mid = BasicBlock::Create(*llvm_context_, fn->getName()+"-mid", fn);
+	auto mid = BasicBlock::Create(*llvm_context_, fn->getName()+"-mid");
 	//auto pst = BasicBlock::Create(*llvm_context_, fn->getName()+"-pst", fn);
-	auto dyn = BasicBlock::Create(*llvm_context_, fn->getName()+"-dyn", fn);
+	auto dyn = BasicBlock::Create(*llvm_context_, fn->getName()+"-dyn");
 
 	builder->SetInsertPoint(pre);
 	auto pc_ptr = builder->CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 0) });
-	builder->CreateBr(mid);
-
-	builder->SetInsertPoint(mid);
-	auto pc = builder->CreateLoad(types.i64, pc_ptr, "local-pc");
-	auto fnswitch = builder->CreateSwitch(pc, dyn);
 
 	for (auto p : c->packets()) {
 		std::stringstream block_name;
 		block_name << "INSN_" << std::hex << p->address();
 		auto b = BasicBlock::Create(*llvm_context_, block_name.str(), fn);
 		blocks[p->address()] = b;
-		fnswitch->addCase(ConstantInt::get(types.i64,p->address()), b);
 	}
 
-	BasicBlock *packet_block = nullptr;
+	BasicBlock *packet_block = pre;
 	for (auto p : c->packets()) {
 		auto next_block = blocks[p->address()];
 
 		if (packet_block != nullptr) {
-			builder->CreateBr(next_block);
+			//falltrhough!
+			auto ft = builder->CreateBr(next_block);
 		}
 
 		packet_block = next_block;
@@ -1339,6 +1334,17 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 
 	if (packet_block != nullptr) {
 		builder->CreateRetVoid();
+	}
+
+	mid->insertInto(fn);
+	dyn->insertInto(fn);
+
+	builder->SetInsertPoint(mid);
+	auto pc = builder->CreateLoad(types.i64, pc_ptr, "local-pc");
+	auto fnswitch = builder->CreateSwitch(pc, dyn);
+	
+	for (auto p : blocks) {
+		fnswitch->addCase(ConstantInt::get(types.i64,p.first), p.second);
 	}
 
 	builder->SetInsertPoint(dyn);
