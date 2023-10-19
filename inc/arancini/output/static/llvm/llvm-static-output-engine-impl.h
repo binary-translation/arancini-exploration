@@ -1,6 +1,7 @@
 #pragma once
 #include <arancini/ir/node.h>
 
+#include <llvm/IR/BasicBlock.h>
 #include <map>
 #include <memory>
 #include <unordered_map>
@@ -113,5 +114,6 @@ private:
 	::llvm::Value *materialise_port(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
 		std::shared_ptr<ir::packet> pkt, ir::port &p);
 	::llvm::Function *get_static_fn(std::shared_ptr<ir::packet> pkt, std::shared_ptr<std::map<unsigned long, ::llvm::Function *>>);
+	::llvm::Instruction *create_static_condbr(::llvm::IRBuilder<> *builder, std::shared_ptr<ir::packet> pkt, std::map<unsigned long, ::llvm::BasicBlock *> *blocks, ::llvm::BasicBlock *mid);
 };
 } // namespace arancini::output::o_static::llvm
