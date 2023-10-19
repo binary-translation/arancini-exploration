@@ -107,6 +107,7 @@
 				depsTargetTarget = [ gcc ];
 				configurePhase = ''
 					export FLAKE_BUILD=1
+					export NDEBUG=1
 					cmakeConfigurePhase
 				'';
 				cmakeFlags = [ "-DBUILD_TESTS=1" "-DCMAKE_BUILD_TYPE=Release" ] ++ lib.optionals (system == "riscv64-linux") ["--toolchain riscv64-toolchain-nix.cmake"];

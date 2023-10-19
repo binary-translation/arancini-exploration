@@ -11,10 +11,13 @@
 #include <cstdlib>
 #include <iostream>
 #include <llvm/ADT/FloatingPointMode.h>
+#include <llvm/IR/ConstantFolder.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalValue.h>
+#include <llvm/IR/InstrTypes.h>
+#include <llvm/IR/Instruction.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/Transforms/Scalar/JumpThreading.h>
@@ -1320,7 +1323,9 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 			}
 			case br_type::br:
 			case br_type::csel: {
-				builder->CreateBr(mid);
+				auto condbr = create_static_condbr(builder, p, &blocks, mid);
+				if (!condbr)
+					builder->CreateBr(mid);
 				packet_block = nullptr;
 				break;
 			}
@@ -1344,6 +1349,37 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 		throw std::runtime_error("function verification failed");
 	}
 }
+Instruction *llvm_static_output_engine_impl::create_static_condbr(IRBuilder<> *builder, std::shared_ptr<packet> pkt, std::map<unsigned long, BasicBlock *> *blocks, BasicBlock *mid) {
+	auto it = builder->GetInsertPoint();
+	if ((--it)->getOpcode() != Instruction::Store)
+		return nullptr;
+	
+	if ((--it)->getOpcode() != Instruction::Select)
+		return nullptr;
+
+	auto cond = it->getOperand(0);
+	auto true_addr = dyn_cast<ConstantInt>(it->getOperand(1));
+	auto false_addr = dyn_cast<ConstantInt>(it->getOperand(2));
+
+	BasicBlock *true_block = mid;
+	BasicBlock *false_block = mid;
+	std::map<unsigned long, BasicBlock *>::iterator bb_it;
+
+	// Add can constant fold on creation
+	if (true_addr) {
+		bb_it = blocks->find(true_addr->getZExtValue());
+		true_block = bb_it != blocks->end() ? bb_it->second : mid;
+	}
+
+	if (false_addr) {
+		bb_it = blocks->find(false_addr->getZExtValue());
+		false_block = bb_it != blocks->end() ? bb_it->second : mid;
+	}
+
+	if (true_block != mid && false_block != mid)
+		fixed_branches++;
+	return builder->CreateCondBr(cond, true_block, false_block);
+};
 
 Function *llvm_static_output_engine_impl::get_static_fn(std::shared_ptr<packet> pkt, std::shared_ptr<std::map<unsigned long, Function *>> fns) {
 
