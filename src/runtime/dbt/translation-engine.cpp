@@ -145,7 +145,7 @@ translation *translation_engine::translate(unsigned long pc)
 {
 	void *code = ec_.get_memory_ptr(pc);
 
-	std::cerr << "translating pc=" << std::hex << pc << std::endl;
+//        std::cerr << "translating pc=" << std::hex << pc << std::endl;
 
 	if (deadflags_) {
 		opt_dbt_ir_builder builder(ia_.get_internal_function_resolver(), ctx_, *deadflags_);

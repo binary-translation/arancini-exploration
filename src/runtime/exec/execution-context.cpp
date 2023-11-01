@@ -78,8 +78,8 @@ void *execution_context::add_memory_region(off_t base_address, size_t size, bool
 	uintptr_t base_ptr_off = base_ptr & 0xfffull;
 	uintptr_t aligned_size = (size + base_ptr_off + 0xfff) & ~0xfffull;
 
-	std::cerr << "amr: base-pointer=" << std::hex << base_ptr << ", aligned-base-ptr=" << aligned_base_ptr << ", base-ptr-off=" << base_ptr_off
-			  << ", size=" << size << ", aligned-size=" << aligned_size << std::endl;
+//		std::cerr << "amr: base-pointer=" << std::hex << base_ptr << ", aligned-base-ptr=" << aligned_base_ptr << ", base-ptr-off=" << base_ptr_off
+//				  << ", size=" << size << ", aligned-size=" << aligned_size << std::endl;
 
 	mprotect((void *)aligned_base_ptr, aligned_size, PROT_READ | PROT_WRITE);
 
@@ -123,10 +123,7 @@ int execution_context::invoke(void *cpu_state)
 
 	auto x86_state = (x86::x86_cpu_state *)cpu_state;
 
-	std::cerr << "=================" << std::endl;
-	std::cerr << "INVOKE PC=" << std::hex << x86_state->PC << std::endl;
-	std::cerr << "=================" << std::endl;
-
+//		std::cerr << "INVOKE PC=" << std::hex << x86_state->PC << std::endl;
 	auto txln = te_.get_translation(x86_state->PC);
 	if (txln == nullptr) {
 		std::cerr << "unable to translate" << std::endl;
