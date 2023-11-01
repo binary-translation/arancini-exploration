@@ -802,7 +802,11 @@ TypedRegister &riscv64_translation_context::materialise_bit_insert(const bit_ins
 	TypedRegister &bits = *materialise(n.bits().owner());
 
 	if (is_i128(n.val()) && is_i128(n.source_value()) && is_gpr(n.bits())) {
-		if (to == 64 && length == 64) {
+		if (to == 0 && length == 64) {
+			// Only map don't modify registers
+			auto [out_reg, _] = allocate_register(&n.val(), bits, src.reg2());
+			return out_reg;
+		} else if (to == 64 && length == 64) {
 			// Only map don't modify registers
 			auto [out_reg, _] = allocate_register(&n.val(), src.reg1(), bits);
 			return out_reg;
