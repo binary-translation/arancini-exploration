@@ -1470,10 +1470,10 @@ TypedRegister &riscv64_translation_context::materialise_vector_insert(const vect
 	case 64:
 		if (n.index() == 0) {
 			// No value modification just map correctly
-			return allocate_register(&n.val(), insert.reg1(), src.reg2()).first;
+			return allocate_register(&n.val(), insert, src.reg2()).first;
 		} else if (n.index() == 1) {
 			// No value modification just map correctly
-			return allocate_register(&n.val(), src.reg1(), insert.reg2()).first;
+			return allocate_register(&n.val(), src.reg1(), insert).first;
 		} else {
 			throw std::runtime_error("Unsupported vector insert index");
 		}
@@ -1497,7 +1497,7 @@ TypedRegister &riscv64_translation_context::materialise_vector_insert(const vect
 			return out_reg;
 		}
 		default:
-			throw std::runtime_error("Unsupported vector extract index");
+			throw std::runtime_error("Unsupported vector insert index");
 		}
 	}
 	default:
