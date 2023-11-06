@@ -47,10 +47,10 @@ void *MainLoopWrapper(void *args) {
 	pthread_mutex_lock(largs->lock);
 	std::cout << "Thread: " << gettid() << " - State: " << std::hex << x86_state << std::dec << std::endl;
 	parent_state->RAX = gettid();
+	x86_state->RSP = x86_state->RSI;
 	pthread_cond_signal(largs->cond);
 	pthread_mutex_unlock(largs->lock);
 
-	x86_state->RSP = x86_state->RSI;
 	MainLoop(x86_state);
 	return NULL;
 };
@@ -63,9 +63,12 @@ execution_context::execution_context(input::input_arch &ia, output::dynamic::dyn
 	, te_(*this, ia, oe, optimise)
 {
 	allocate_guest_memory();
+	pthread_mutex_init(&big_fat_lock, NULL);
 }
 
-execution_context::~execution_context() { }
+execution_context::~execution_context() {
+	pthread_mutex_destroy(&big_fat_lock);
+}
 
 void *execution_context::add_memory_region(off_t base_address, size_t size, bool ignore_brk)
 {
@@ -127,7 +130,9 @@ int execution_context::invoke(void *cpu_state)
 	std::cerr << "INVOKE PC=" << std::hex << x86_state->PC << std::endl;
 	std::cerr << "=================" << std::endl;
 
+	pthread_mutex_lock(&big_fat_lock);
 	auto txln = te_.get_translation(x86_state->PC);
+	pthread_mutex_unlock(&big_fat_lock);
 	if (txln == nullptr) {
 		std::cerr << "unable to translate" << std::endl;
 		return 1;
