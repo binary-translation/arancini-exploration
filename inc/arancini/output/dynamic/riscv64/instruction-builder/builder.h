@@ -1,6 +1,8 @@
 #pragma once
 
+#include <arancini/output/dynamic/riscv64/encoder/riscv64-constants.h>
 #include <arancini/output/dynamic/riscv64/instruction-builder/instruction.h>
+#include <arancini/output/dynamic/riscv64/instruction-builder/register-operand.h>
 
 #include <bitset>
 #include <unordered_map>
@@ -688,50 +690,61 @@ public:
 		std::bitset<32> avail_physregs = 0x7FFFF2E8;
 		//		std::bitset<32> avail_float_physregs = 0xFFFFFFFFF;
 
-		for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
-			auto &insn = *RI;
+		Instruction *linked_instruction { nullptr };
+		RegisterOperand link_reg { none_reg };
 
+		auto allocate = [&avail_physregs /*, &avail_float_physregs*/, &vreg_to_preg](RegisterOperand *o, RegisterOperand preference) -> void {
+			unsigned int vri;
+			//				ir::value_type type;
+			if (!o->is_physical()) {
+				vri = o->encoding();
+				//					type = o.vreg().type();
+			} else {
+				throw std::runtime_error("Trying to allocate non-virtual register operand");
+			}
+
+			size_t allocation = 0;
+			//				if (type.is_floating_point()) {
+			//					allocation = avail_float_physregs._Find_first();
+			//					avail_float_physregs.flip(allocation);
+			//				} else {
+			if (preference && avail_physregs.test(preference.encoding())) {
+				allocation = preference.encoding(); // Prefer reusing the destination register
+			} else {
+				allocation = avail_physregs._Find_next(7); // Try using the C registers (x8-x15 first)
+				if (allocation == 32) {
+					allocation = avail_physregs._Find_first();
+				}
+			}
+			avail_physregs.flip(allocation);
+			//				}
+
+			// TODO: register spilling
+			vreg_to_preg[vri] = allocation;
+
+			o->allocate(allocation /*, type*/);
+		};
+
+		auto allocate_instruction = [&avail_physregs, &vreg_to_preg, &allocate, &linked_instruction, &link_reg](
+										Instruction &insn, auto &&allocate_instruction, bool set_linked = true) -> void {
 #ifdef DEBUG_REGALLOC
 			DEBUG_STREAM << "considering instruction ";
 			insn.dump(DEBUG_STREAM);
 			DEBUG_STREAM << '\n';
 #endif
 
-			auto allocate = [&avail_physregs /*, &avail_float_physregs*/, &vreg_to_preg](RegisterOperand *o, RegisterOperand preference) -> void {
-				unsigned int vri;
-				//				ir::value_type type;
-				if (!o->is_physical()) {
-					vri = o->encoding();
-					//					type = o.vreg().type();
-				} else {
-					throw std::runtime_error("Trying to allocate non-virtual register operand");
-				}
-
-				size_t allocation = 0;
-				//				if (type.is_floating_point()) {
-				//					allocation = avail_float_physregs._Find_first();
-				//					avail_float_physregs.flip(allocation);
-				//				} else {
-				if (preference && avail_physregs.test(preference.encoding())) {
-					allocation = preference.encoding(); // Prefer reusing the destination register
-				} else {
-					allocation = avail_physregs._Find_next(7); // Try using the C registers (x8-x15 first)
-					if (allocation == 32) {
-						allocation = avail_physregs._Find_first();
-					}
-				}
-				avail_physregs.flip(allocation);
-				//				}
-
-				// TODO: register spilling
-				vreg_to_preg[vri] = allocation;
-
-				o->allocate(allocation /*, type*/);
-			};
-
 			// kill rd def first
 			if (!insn.rd && insn.has_rd()) {
 				std::cerr << "This should not happen?" << std::endl;
+			}
+
+			if (insn.is_control_flow()) {
+				if (linked_instruction) {
+					// Conflict: Controlflow in between
+					Instruction &instruction = *linked_instruction;
+					linked_instruction = nullptr;
+					allocate_instruction(instruction, allocate_instruction, false);
+				}
 			}
 
 			if (insn.rd) {
@@ -739,15 +752,14 @@ public:
 #ifdef DEBUG_REGALLOC
 					DEBUG_STREAM << "  DEF xV" << std::dec << insn.rd.encoding();
 #endif
+					if (linked_instruction && link_reg == insn.rd) {
+						// No conflicting read/write
+						// "Inline" the moved-to register and kill the mv
 
-					//					auto type = o.vreg().type();
-					unsigned int vri = insn.rd.encoding();
-
-					auto alloc = vreg_to_preg.find(vri);
-
-					if (alloc != vreg_to_preg.end()) {
-						int pri = alloc->second;
-						if (!insn.is_rd_use() && !insn.rd.is_functional()) { // Those stay active
+						// Free the not needed temporary target reg
+						auto alloc = vreg_to_preg.find(insn.rd.encoding());
+						if (alloc != vreg_to_preg.end()) {
+							unsigned int pri = alloc->second;
 							//							if (type.is_floating_point()) {
 							//								avail_float_physregs.set(pri);
 							//							} else {
@@ -755,20 +767,60 @@ public:
 							vreg_to_preg.erase(alloc); // Clear allocations, so unrelated earlier usages of the same vreg don't interfere
 							//							}
 						}
-						insn.rd.allocate(pri /*, type*/);
-#ifdef DEBUG_REGALLOC
-						DEBUG_STREAM << " allocated to x " << std::dec << insn.rd.encoding() << " -- releasing\n";
-#endif
+
+						insn.rd.set_encoding(linked_instruction->rd.encoding());
+						linked_instruction->kill();
+						linked_instruction = nullptr;
+					}
+
+					if (auto in_reg = insn.rs1 == ZERO ? insn.rs2 ?: insn.rs1 : insn.rs1;
+						set_linked && insn.is_mv() && insn.rd != ZERO && in_reg.is_virtual() && !vreg_to_preg.count(in_reg.encoding())) {
+						if (linked_instruction) {
+							// Conflict: Another Mv before discovering link_reg
+							Instruction &instruction = *linked_instruction;
+							linked_instruction = nullptr;
+							allocate_instruction(instruction, allocate_instruction, false);
+						}
+						link_reg = in_reg;
+						linked_instruction = &insn;
 					} else {
+						if (linked_instruction && insn.rd == linked_instruction->rd) {
+							// Conflict: overwrite of moved-to reg
+							Instruction &instruction = *linked_instruction;
+							linked_instruction = nullptr;
+							allocate_instruction(instruction, allocate_instruction, false);
+						}
+						//					auto type = o.vreg().type();
+						unsigned int vri = insn.rd.encoding();
+
+						auto alloc = vreg_to_preg.find(vri);
+
+						if (alloc != vreg_to_preg.end()) {
+							unsigned int pri = alloc->second;
+							if (!insn.is_rd_use() && !insn.rd.is_functional()) { // Those stay active
+								//							if (type.is_floating_point()) {
+								//								avail_float_physregs.set(pri);
+								//							} else {
+								avail_physregs.set(pri);
+								vreg_to_preg.erase(alloc); // Clear allocations, so unrelated earlier usages of the same vreg don't interfere
+								//							}
+							}
+							insn.rd.allocate(pri /*, type*/);
 #ifdef DEBUG_REGALLOC
-						DEBUG_STREAM << " not allocated - killing instruction" << std::endl;
+							DEBUG_STREAM << " allocated to x " << std::dec << insn.rd.encoding() << " -- releasing\n";
 #endif
-						insn.kill();
+						} else {
+#ifdef DEBUG_REGALLOC
+							DEBUG_STREAM << " not allocated - killing instruction" << std::endl;
+#endif
+							insn.kill();
+						}
 					}
 
 #ifdef DEBUG_REGALLOC
 					DEBUG_STREAM << std::endl;
 #endif
+
 				} else {
 					if ((insn.rd == A0 || insn.rd == A1) && !insn.is_rd_use()) {
 						// Assigning to ret value, so free the register
@@ -778,7 +830,7 @@ public:
 			}
 
 			if (insn.is_dead()) {
-				continue;
+				return;
 			}
 
 			// alloc uses next
@@ -790,11 +842,17 @@ public:
 #ifdef DEBUG_REGALLOC
 					DEBUG_STREAM << "  USE xV " << std::dec << *o.encoding();
 #endif
+					if (linked_instruction && (*o == link_reg || *o == linked_instruction->rd) && linked_instruction != &insn) {
+						// Conflict: read of the moved reg or the moved-to reg
+						Instruction &instruction = *linked_instruction;
+						linked_instruction = nullptr;
+						allocate_instruction(instruction, allocate_instruction, false);
+					}
 
 					//					auto type = o.vreg().type();
 					unsigned int vri = o->encoding();
 					if (!vreg_to_preg.count(vri)) {
-						allocate(o, insn.rd);
+						allocate(o, insn.rd.is_physical() ? insn.rd : none_reg);
 #ifdef DEBUG_REGALLOC
 						DEBUG_STREAM << " allocating vreg to x " << std::dec << *o.encoding() << '\n';
 #endif
@@ -812,7 +870,7 @@ public:
 			// TODO: refactor
 			if (insn.is_mv()) {
 				RegisterOperand op1 = insn.rd;
-				RegisterOperand op2 = insn.rs1;
+				RegisterOperand op2 = insn.rs1 == ZERO ? insn.rs2 ?: insn.rs1 : insn.rs1;
 
 				if (op1.is_physical() && op2.is_physical()) {
 					if (op1.encoding() == op2.encoding() || op1 == ZERO) {
@@ -824,6 +882,9 @@ public:
 			if (insn.has_rd() && !insn.rd) {
 				std::cerr << "This should not happen?" << std::endl;
 			}
+		};
+		for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
+			allocate_instruction(*RI, allocate_instruction);
 		}
 	}
 

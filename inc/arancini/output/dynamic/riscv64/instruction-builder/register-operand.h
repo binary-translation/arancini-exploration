@@ -43,6 +43,8 @@ public:
 		encoding_ = encoding;
 	}
 
+	void set_encoding(uint32_t encoding) { encoding_ = encoding; }
+
 private:
 	uint32_t encoding_;
 };

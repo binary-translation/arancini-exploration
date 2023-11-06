@@ -565,6 +565,32 @@ struct Instruction {
 #undef ehandle_instr
 	}
 
+	bool is_control_flow()
+	{
+		switch (type_) {
+
+		case InstructionType::Label:
+		case InstructionType::RdLabelNear:
+		case InstructionType::RdLabelFar:
+		case InstructionType::Rs1Rs2LabelNear:
+		case InstructionType::Rs1Rs2LabelFar:
+		case InstructionType::Rs1Rs2Label:
+			return true;
+		case InstructionType::Dead:
+		case InstructionType::RdImm:
+		case InstructionType::RdRs1Imm:
+		case InstructionType::RdAddr:
+		case InstructionType::Rs2Addr:
+		case InstructionType::RdRs1Rs2:
+		case InstructionType::None:
+		case InstructionType::RdAddrOrder:
+		case InstructionType::RdRs2AddrOrder:
+		case InstructionType::RdImmKeepRs1:
+		case InstructionType::RdRs1ImmKeepRs2:
+			return false;
+		}
+	}
+
 	RegisterOperand rd, rs1, rs2;
 
 	union {
