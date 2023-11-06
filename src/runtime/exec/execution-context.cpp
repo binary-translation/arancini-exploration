@@ -48,10 +48,10 @@ void *MainLoopWrapper(void *args) {
 	pthread_mutex_lock(largs->lock);
     util::global_logger.info("Thread: {}\nState:\n\t{}", util::lazy_eval<>(gettid), *x86_state);
 	parent_state->RAX = gettid();
+	x86_state->RSP = x86_state->RSI;
 	pthread_cond_signal(largs->cond);
 	pthread_mutex_unlock(largs->lock);
 
-	x86_state->RSP = x86_state->RSI;
 	MainLoop(x86_state);
 	return NULL;
 };
@@ -65,9 +65,12 @@ execution_context::execution_context(input::input_arch &ia, output::dynamic::dyn
 {
 	allocate_guest_memory();
 	brk_ = reinterpret_cast<uintptr_t>(memory_);
+	pthread_mutex_init(&big_fat_lock, NULL);
 }
 
-execution_context::~execution_context() { }
+execution_context::~execution_context() {
+	pthread_mutex_destroy(&big_fat_lock);
+}
 
 void *execution_context::add_memory_region(off_t base_address, size_t size, bool ignore_brk)
 {
@@ -134,7 +137,9 @@ int execution_context::invoke(void *cpu_state) {
     //auto* memptr = reinterpret_cast<uint64_t*>(get_memory_ptr(0)) + x86_state->RSP;
     //x86::print_stack(std::cerr, memptr, 20);
 
+	pthread_mutex_lock(&big_fat_lock);
 	auto txln = te_.get_translation(x86_state->PC);
+	pthread_mutex_unlock(&big_fat_lock);
 	if (txln == nullptr) {
         util::global_logger.error("Unable to translate\n");
 		return 1;
