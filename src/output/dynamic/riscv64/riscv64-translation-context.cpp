@@ -889,7 +889,7 @@ void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 	const port &value = n.value();
 	if (is_gpr(value)) {
 		TypedRegister &reg = *(materialise(value.owner()));
-		if (n.regidx() > static_cast<unsigned long>(reg_idx::R15)) { // Not GPR
+		if (n.regidx() > static_cast<unsigned long>(reg_idx::R15) || n.regidx() < static_cast<unsigned long>(reg_idx::RAX)) { // Not GPR
 			auto store_instr = store_instructions.at(value.type().element_width());
 			(builder_.*store_instr)(reg, AddressOperand { FP, static_cast<intptr_t>(n.regoff()) });
 		} else {
@@ -1436,6 +1436,9 @@ TypedRegister &riscv64_translation_context::materialise_csel(const csel_node &n)
 
 void riscv64_translation_context::materialise_internal_call(const internal_call_node &n)
 {
+	write_back_registers();
+	assembler_.li(A1, 0);
+
 	const auto &function = n.fn();
 	if (function.name() == "handle_syscall") {
 		ret_val_ = 1;
