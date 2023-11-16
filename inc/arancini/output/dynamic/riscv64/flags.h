@@ -1,24 +1,24 @@
 #pragma once
 
-#include <arancini/output/dynamic/riscv64/encoder/riscv64-assembler.h>
+#include <arancini/output/dynamic/riscv64/instruction-builder/builder.h>
 #include <arancini/output/dynamic/riscv64/register.h>
 #include <arancini/output/dynamic/riscv64/utils.h>
 
 /**
  * Generate zero and sign flags based on the result in the given register
- * @param z whether zero flag should be generated
- * @param n whether sign flag should be generated
+ * @param zf Destination register of zero flag, pass none_reg to skip
+ * @param sf Destination register of sign flag, pass none_reg to skip
  */
-void zero_sign_flag(Assembler &assembler, TypedRegister &out, bool z, bool n)
+void zero_sign_flag(InstructionBuilder &builder, TypedRegister &out, RegisterOperand zf, RegisterOperand sf)
 {
-	if (z || n) {
+	if (zf || sf) {
 		if (!out.type().is_vector() && out.type().is_integer()) {
-			extend_to_64(assembler, out, out);
-			if (z) {
-				assembler.seqz(ZF, out); // ZF
+			extend_to_64(builder, out, out);
+			if (zf) {
+				builder.seqz(zf, out); // ZF
 			}
-			if (n) {
-				assembler.sltz(SF, out); // SF
+			if (sf) {
+				builder.sltz(sf, out); // SF
 			}
 		} else {
 			throw std::runtime_error("not implemented");
@@ -28,30 +28,32 @@ void zero_sign_flag(Assembler &assembler, TypedRegister &out, bool z, bool n)
 
 /**
  * Generate zero, overflow, carry and sign flags based on the result in the given register and the given input registers assuming the operation was an addition.
- * @param z whether zero flag should be generated
- * @param v whether overflow flag should be generated
- * @param c whether carry flag should be generated
- * @param n whether sign flag should be generated
+ * @param zf Destination register of zero flag, pass none_reg to skip
+ * @param of Destination register of overflow flag, pass none_reg to skip
+ * @param cf Destination register of carry flag, pass none_reg to skip
+ * @param sf Destination register of sign flag, pass none_reg to skip
  */
-inline void add_flags(Assembler &assembler, TypedRegister &out, TypedRegister &lhs, TypedRegister &rhs, bool z, bool v, bool c, bool n)
+inline void add_flags(InstructionBuilder &builder, TypedRegister &out, TypedRegister &lhs, TypedRegister &rhs, RegisterOperand zf, RegisterOperand of,
+	RegisterOperand cf, RegisterOperand sf)
 {
-	if (v || c || z || n) {
+	if (of || cf || zf || sf) {
 		if (!out.type().is_vector() && out.type().is_integer()) {
-			extend_to_64(assembler, out, out);
-			if (v) {
-				extend_to_64(assembler, lhs, lhs);
-				extend_to_64(assembler, rhs, rhs);
+			extend_to_64(builder, out, out);
+			if (of) {
+				extend_to_64(builder, lhs, lhs);
+				extend_to_64(builder, rhs, rhs);
 
-				assembler.sltz(CF, lhs);
-				assembler.slt(OF, out, rhs);
-				assembler.xor_(OF, OF, CF); // OF FIXME Assumes out!=lhs && out!=rhs
+				RegisterOperand temp = builder.next_register();
+				builder.sltz(temp, lhs);
+				builder.slt(of, out, rhs);
+				builder.xor_(of, of, temp); // OF FIXME Assumes out!=lhs && out!=rhs
 			}
-			if (c) {
-				extend_to_64(assembler, rhs, rhs);
+			if (cf) {
+				extend_to_64(builder, rhs, rhs);
 
-				assembler.sltu(CF, out, rhs); // CF (Allows typical x86 case of lhs==out) FIXME Assumes out!=rhs
+				builder.sltu(cf, out, rhs); // CF (Allows typical x86 case of lhs==out) FIXME Assumes out!=rhs
 			}
-			zero_sign_flag(assembler, out, z, n);
+			zero_sign_flag(builder, out, zf, sf);
 		} else {
 			throw std::runtime_error("not implemented");
 		}
@@ -61,33 +63,31 @@ inline void add_flags(Assembler &assembler, TypedRegister &out, TypedRegister &l
 /**
  * Generate zero, overflow, carry and sign flags based on the result in the given register and the given input register and immediate assuming the operation was
  * an addition.
- * @param z whether zero flag should be generated
- * @param v whether overflow flag should be generated
- * @param c whether carry flag should be generated
- * @param n whether sign flag should be generated
- * @param of Optional. Register override for overflow flag
- * @param cf Optional. Register override for carry flag
+ * @param zf Destination register of zero flag, pass none_reg to skip
+ * @param of Destination register of overflow flag, pass none_reg to skip
+ * @param cf Destination register of carry flag, pass none_reg to skip
+ * @param sf Destination register of sign flag, pass none_reg to skip
  */
-inline void addi_flags(
-	Assembler &assembler, TypedRegister &out, TypedRegister &lhs, intptr_t imm, bool z, bool v, bool c, bool n, Register of = OF, Register cf = CF)
+inline void addi_flags(InstructionBuilder &builder, TypedRegister &out, TypedRegister &lhs, intptr_t imm, RegisterOperand zf, RegisterOperand of,
+	RegisterOperand cf, RegisterOperand sf)
 {
-	if (v || c || z || n) {
+	if (of || cf || zf || sf) {
 		if (!out.type().is_vector() && out.type().is_integer()) {
-			extend_to_64(assembler, out, out);
-			if (v) {
-				extend_to_64(assembler, lhs, lhs);
+			extend_to_64(builder, out, out);
+			if (of) {
+				extend_to_64(builder, lhs, lhs);
 
-				assembler.slt(of, out, lhs); // OF FIXME Assumes out!=lhs
+				builder.slt(of, out, lhs); // OF FIXME Assumes out!=lhs
 				if (imm < 0) {
-					assembler.xori(of, of, 1); // Invert on negative
+					builder.xori(of, of, 1); // Invert on negative
 				}
 			}
-			if (c) {
-				extend_to_64(assembler, lhs, lhs);
+			if (cf) {
+				extend_to_64(builder, lhs, lhs);
 
-				assembler.sltu(cf, out, lhs); // CF FIXME Assumes out!=lhs
+				builder.sltu(cf, out, lhs); // CF FIXME Assumes out!=lhs
 			}
-			zero_sign_flag(assembler, out, z, n);
+			zero_sign_flag(builder, out, zf, sf);
 		} else {
 			throw std::runtime_error("not implemented");
 		}
@@ -97,30 +97,32 @@ inline void addi_flags(
 /**
  * Generate zero, overflow, carry and sign flags based on the result in the given register and the given input registers assuming the operation was a
  * subtraction.
- * @param z whether zero flag should be generated
- * @param v whether overflow flag should be generated
- * @param c whether carry flag should be generated
- * @param n whether sign flag should be generated
+ * @param zf Destination register of zero flag, pass none_reg to skip
+ * @param of Destination register of overflow flag, pass none_reg to skip
+ * @param cf Destination register of carry flag, pass none_reg to skip
+ * @param sf Destination register of sign flag, pass none_reg to skip
  */
-inline void sub_flags(Assembler &assembler, TypedRegister &out, TypedRegister &lhs, TypedRegister &rhs, bool z, bool v, bool c, bool n)
+inline void sub_flags(InstructionBuilder &builder, TypedRegister &out, TypedRegister &lhs, TypedRegister &rhs, RegisterOperand zf, RegisterOperand of,
+	RegisterOperand cf, RegisterOperand sf)
 {
-	if (v || c || z || n) {
+	if (of || cf || zf || sf) {
 		if (!out.type().is_vector() && out.type().is_integer()) {
-			extend_to_64(assembler, out, out);
-			if (v) {
-				extend_to_64(assembler, lhs, lhs);
-				extend_to_64(assembler, rhs, rhs);
+			extend_to_64(builder, out, out);
+			if (of) {
+				extend_to_64(builder, lhs, lhs);
+				extend_to_64(builder, rhs, rhs);
 
-				assembler.sgtz(CF, rhs);
-				assembler.slt(OF, out, lhs);
-				assembler.xor_(OF, OF, CF); // OF FIXME Assumes out!=lhs && out!=rhs
+				RegisterOperand temp = builder.next_register();
+				builder.sgtz(temp, rhs);
+				builder.slt(of, out, lhs);
+				builder.xor_(of, of, temp); // OF FIXME Assumes out!=lhs && out!=rhs
 			}
-			if (c) {
-				extend_to_64(assembler, lhs, lhs);
+			if (cf) {
+				extend_to_64(builder, lhs, lhs);
 
-				assembler.sltu(CF, lhs, out); // CF FIXME Assumes out!=lhs
+				builder.sltu(cf, lhs, out); // CF FIXME Assumes out!=lhs
 			}
-			zero_sign_flag(assembler, out, z, n);
+			zero_sign_flag(builder, out, zf, sf);
 		} else {
 			throw std::runtime_error("not implemented");
 		}
@@ -130,33 +132,31 @@ inline void sub_flags(Assembler &assembler, TypedRegister &out, TypedRegister &l
 /**
  * Generate zero, overflow, carry and sign flags based on the result in the given register and the given input register and immediate assuming the operation was
  * a subtraction.
- * @param z whether zero flag should be generated
- * @param v whether overflow flag should be generated
- * @param c whether carry flag should be generated
- * @param n whether sign flag should be generated
- * @param of Optional. Register override for overflow flag
- * @param cf Optional. Register override for carry flag
+ * @param zf Destination register of zero flag, pass none_reg to skip
+ * @param of Destination register of overflow flag, pass none_reg to skip
+ * @param cf Destination register of carry flag, pass none_reg to skip
+ * @param sf Destination register of sign flag, pass none_reg to skip
  */
-inline void subi_flags(
-	Assembler &assembler, TypedRegister &out, TypedRegister &lhs, intptr_t imm, bool z, bool v, bool c, bool n, Register of = OF, Register cf = CF)
+inline void subi_flags(InstructionBuilder &builder, TypedRegister &out, TypedRegister &lhs, intptr_t imm, RegisterOperand zf, RegisterOperand of,
+	RegisterOperand cf, RegisterOperand sf)
 {
-	if (v || c || z || n) {
+	if (of || cf || zf || sf) {
 		if (!out.type().is_vector() && out.type().is_integer()) {
-			extend_to_64(assembler, out, out);
-			if (v) {
-				extend_to_64(assembler, lhs, lhs);
+			extend_to_64(builder, out, out);
+			if (of) {
+				extend_to_64(builder, lhs, lhs);
 
-				assembler.slt(of, out, lhs); // OF FIXME Assumes out!=lhs
+				builder.slt(of, out, lhs); // OF FIXME Assumes out!=lhs
 				if (imm > 0) {
-					assembler.xori(of, of, 1); // Invert on positive
+					builder.xori(of, of, 1); // Invert on positive
 				}
 			}
-			if (c) {
-				extend_to_64(assembler, lhs, lhs);
+			if (cf) {
+				extend_to_64(builder, lhs, lhs);
 
-				assembler.sltu(cf, lhs, out); // CF FIXME Assumes out!=lhs
+				builder.sltu(cf, lhs, out); // CF FIXME Assumes out!=lhs
 			}
-			zero_sign_flag(assembler, out, z, n);
+			zero_sign_flag(builder, out, zf, sf);
 		} else {
 			throw std::runtime_error("not implemented");
 		}
@@ -166,23 +166,25 @@ inline void subi_flags(
 /**
  * Generate overflow and carry flags based on the result in the given register and the given input register and immediate assuming the operation was a
  * multiplication.
- * @param v whether overflow flag should be generated
- * @param c whether carry flag should be generated
+ * @param of Destination register of overflow flag, pass none_reg to skip
+ * @param cf Destination register of carry flag, pass none_reg to skip
  */
-inline void mul_flags(Assembler &assembler, TypedRegister &out, bool v, bool c)
+inline void mul_flags(InstructionBuilder &builder, TypedRegister &out, RegisterOperand of, RegisterOperand cf)
 {
-	if (c || v) {
+	RegisterOperand flag_reg = cf ?: of;
+
+	if (flag_reg) {
 		if (!out.type().is_vector() && out.type().is_integer()) {
 			switch (out.type().element_width()) {
 			case 128: {
 				switch (out.type().element_type().type_class()) {
 				case value_type_class::signed_integer:
-					assembler.srai(CF, out.reg1(), 63);
-					assembler.xor_(CF, CF, out.reg2());
-					assembler.snez(CF, CF);
+					builder.srai(flag_reg, out.reg1(), 63);
+					builder.xor_(flag_reg, flag_reg, out.reg2());
+					builder.snez(flag_reg, flag_reg);
 					break;
 				case value_type_class::unsigned_integer: {
-					assembler.snez(CF, out.reg2());
+					builder.snez(flag_reg, out.reg2());
 				} break;
 				default:
 					throw std::runtime_error("Unsupported value type for multiply");
@@ -194,17 +196,17 @@ inline void mul_flags(Assembler &assembler, TypedRegister &out, bool v, bool c)
 				switch (out.type().element_type().type_class()) {
 				case value_type_class::signed_integer:
 					if (out.type().element_width() == 64) {
-						assembler.sextw(CF, out);
+						builder.sextw(flag_reg, out);
 					} else {
-						assembler.slli(CF, out, 64 - (out.type().element_width()) / 2);
-						assembler.srai(CF, out, 64 - (out.type().element_width()) / 2);
+						builder.slli(flag_reg, out, 64 - (out.type().element_width()) / 2);
+						builder.srai(flag_reg, out, 64 - (out.type().element_width()) / 2);
 					}
-					assembler.xor_(CF, CF, out);
-					assembler.snez(CF, CF);
+					builder.xor_(flag_reg, flag_reg, out);
+					builder.snez(flag_reg, flag_reg);
 					break;
 				case value_type_class::unsigned_integer:
-					assembler.srli(CF, out, out.type().element_width() / 2);
-					assembler.snez(CF, CF);
+					builder.srli(flag_reg, out, out.type().element_width() / 2);
+					builder.snez(flag_reg, flag_reg);
 					break;
 				default:
 					throw std::runtime_error("Unsupported value type for multiply");
@@ -214,7 +216,9 @@ inline void mul_flags(Assembler &assembler, TypedRegister &out, bool v, bool c)
 			default:
 				throw std::runtime_error("Unsupported width for sub immediate");
 			}
-			assembler.mv(OF, CF);
+			if (cf && of) {
+				builder.mv(of, flag_reg);
+			}
 		} else {
 			throw std::runtime_error("not implemented");
 		}

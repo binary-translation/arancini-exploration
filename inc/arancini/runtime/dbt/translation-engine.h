@@ -44,6 +44,7 @@ public:
 
 	translation *get_translation(unsigned long pc);
 	translation *translate(unsigned long pc);
+	void chain(uint64_t chain_address, void *chain_target);
 
 private:
 	execution_context &ec_;

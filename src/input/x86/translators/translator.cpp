@@ -403,32 +403,52 @@ value_node *translator::compute_address(int mem_idx)
 	auto index = xed_decoded_inst_get_index_reg(xed_inst(), mem_idx);
 	auto scale = xed_decoded_inst_get_scale(xed_inst(), mem_idx);
 
+	auto i = scale == 1 ? 0 : scale == 2 ? 1 : scale == 4 ? 2 : scale == 8 ? 3 : 0;
+
 	auto seg = xed_decoded_inst_get_seg_reg(xed_inst(), mem_idx);
 
 	if (xed_get_register_width_bits(base_reg) != 64 && base_reg != XED_REG_INVALID) {
 		throw std::runtime_error("base reg invalid size");
 	}
 
-	value_node *address_base;
+	value_node *address_base { nullptr };
 
-	if (base_reg == XED_REG_INVALID) {
-		address_base = builder_.insert_constant_u64(0);
-	} else if (base_reg == XED_REG_RIP) {
-		address_base = builder_.insert_read_pc();
-		xed_uint_t instruction_length = xed_decoded_inst_get_length(xed_inst());
-		address_base = builder_.insert_add(address_base->val(), builder().insert_constant_u64(instruction_length)->val());
-	} else {
-		address_base = read_reg(value_type::u64(), xedreg_to_offset(base_reg));
+	if (base_reg != XED_REG_INVALID) {
+		if (base_reg == XED_REG_RIP) {
+			address_base = builder_.insert_read_pc();
+			xed_uint_t instruction_length = xed_decoded_inst_get_length(xed_inst());
+			address_base = builder_.insert_add(address_base->val(), builder().insert_constant_u64(instruction_length)->val());
+		} else {
+			address_base = read_reg(value_type::u64(), xedreg_to_offset(base_reg));
+		}
 	}
 
 	if (index != XED_REG_INVALID) {
-		auto scaled_index = builder_.insert_mul(read_reg(value_type::u64(), xedreg_to_offset(index))->val(), builder_.insert_constant_u64(scale)->val());
+		value_node *scaled_index;
+		if (i != 0) {
+			scaled_index = builder_.insert_lsl(read_reg(value_type::u64(), xedreg_to_offset(index))->val(), builder_.insert_constant_u64(i)->val());
+		} else {
+			scaled_index = read_reg(value_type::u64(), xedreg_to_offset(index));
+		}
 
-		address_base = builder_.insert_add(address_base->val(), scaled_index->val());
+		if (!address_base) {
+			address_base = scaled_index;
+		} else {
+			address_base = builder_.insert_add(address_base->val(), scaled_index->val());
+		}
 	}
 
 	if (displ) {
-		address_base = builder_.insert_add(address_base->val(), builder_.insert_constant_u64(displ)->val());
+		value_node *displ_node = builder_.insert_constant_u64(displ);
+		if (!address_base) {
+			address_base = displ_node;
+		} else {
+			address_base = builder_.insert_add(address_base->val(), displ_node->val());
+		}
+	}
+
+	if (!address_base) {
+		address_base = builder_.insert_constant_u64(0);
 	}
 
 	if (seg == XED_REG_FS) {

@@ -174,6 +174,10 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
     std::string cxx_compiler = cmdline.at("cxx-compiler-path").as<std::string>();
 
+	if (cmdline.count("wrapper")) {
+		cxx_compiler = cmdline.at("wrapper").as<std::string>() + " " + cxx_compiler;
+	}
+
 	std::string debug_info = cmdline.count("debug-gen") ? " -g" : "";
 
 	if (!cmdline.count("static-binary")) {

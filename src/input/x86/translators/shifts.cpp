@@ -47,7 +47,7 @@ void shifts_translator::do_translate()
             write_reg(reg_offsets::OF, of->val());
           } else if (inst == XED_ICLASS_SAR) {
             // for SAR, OF is cleared
-            write_reg(reg_offsets::OF, builder().insert_constant_u8(0)->val());
+            write_reg(reg_offsets::OF, builder().insert_constant_u1(0)->val());
           } else {
             // for SHR, OF is set to most significant bit of original operand
             auto msb = builder().insert_bit_extract(src->val(), src->val().type().width() - 1, 1);
@@ -96,7 +96,7 @@ void shifts_translator::do_translate()
         write_reg(reg_offsets::OF, of->val());
       } else if (inst == XED_ICLASS_SAR) {
         // for SAR, OF is cleared
-        write_reg(reg_offsets::OF, builder().insert_constant_u8(0)->val());
+        write_reg(reg_offsets::OF, builder().insert_constant_u1(0)->val());
       } else {
         // for SHR, OF is set to most significant bit of original operand
         auto msb = builder().insert_bit_extract(src->val(), src->val().type().width() - 1, 1);

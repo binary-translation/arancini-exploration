@@ -111,9 +111,15 @@ void mov_translator::do_translate()
 
 	case XED_ICLASS_MOVD: {
 		auto input = read_operand(1);
-		auto cast = builder().insert_zx(value_type::u32(), input->val());
+		auto dst_width = get_operand_width(0);
+		auto src_width = input->val().type().width();
 
-		write_operand(0, cast->val());
+		if (dst_width == 32) { // movd r/m32, xmm
+			input = builder().insert_bit_extract(input->val(), 0, 32);
+		} else if (src_width == 32) { // movd xmm, r/m32
+			input = builder().insert_zx(value_type::u128(), input->val());
+		}
+		write_operand(0, input->val());
 		break;
 	}
 

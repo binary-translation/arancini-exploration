@@ -30,7 +30,9 @@ namespace arancini::input::x86::translators {
     {
     }
 
-    translation_result translate(off_t address, xed_decoded_inst_t *xed_inst, const std::string& disasm);
+	virtual ~translator() = default;
+
+	translation_result translate(off_t address, xed_decoded_inst_t *xed_inst, const std::string &disasm);
 
   protected:
     virtual void do_translate() = 0;

@@ -1,10 +1,12 @@
 #include <arancini/ir/value-type.h>
 #include <arancini/output/dynamic/riscv64/encoder/riscv64-constants.h>
+#include <arancini/output/dynamic/riscv64/instruction-builder/register-operand.h>
 #pragma once
 
 using namespace arancini::ir;
 using namespace arancini::output::dynamic;
 using namespace arancini::output::dynamic::riscv64;
+using arancini::output::dynamic::riscv64::builder::RegisterOperand;
 /**
  *
  * This tags the Register with the type they represent.
@@ -26,15 +28,16 @@ public:
 		, encoding1_(reg1.encoding())
 		, encoding2_(reg2.encoding()) {};
 
-	operator Register() const { return Register { encoding_ }; } // NOLINT(google-explicit-constructor)
+	operator RegisterOperand() const { return RegisterOperand { encoding_ }; } // NOLINT(google-explicit-constructor)
 	[[nodiscard]] const value_type &type() const { return vt_; }
 
 	void set_type(const value_type vt) { vt_ = vt; }
 	void set_actual_width(int8_t w) { actual_width_ = w; }
 	void set_actual_width() { actual_width_ = (int8_t)vt_.element_width(); }
 
-	[[nodiscard]] Register reg1() const { return Register { encoding1_ }; }
-	[[nodiscard]] Register reg2() const { return Register { encoding2_ }; }
+	[[nodiscard]] RegisterOperand reg() const { return RegisterOperand { encoding_ }; }
+	[[nodiscard]] RegisterOperand reg1() const { return RegisterOperand { encoding1_ }; }
+	[[nodiscard]] RegisterOperand reg2() const { return RegisterOperand { encoding2_ }; }
 
 	[[nodiscard]] uint32_t encoding() const { return encoding_; }
 	[[nodiscard]] uint32_t encoding1() const { return encoding1_; }
@@ -53,13 +56,18 @@ public:
 	bool operator==(const TypedRegister &other) const { return encoding_ == other.encoding(); }
 	bool operator!=(const TypedRegister &other) const { return encoding_ != other.encoding(); }
 
-	bool operator==(const Register other) const { return encoding_ == other.encoding(); }
-	bool operator!=(const Register other) const { return encoding_ != other.encoding(); }
+	bool operator==(const RegisterOperand other) const { return encoding_ == other.encoding(); }
+	bool operator!=(const RegisterOperand other) const { return encoding_ != other.encoding(); }
 
 	TypedRegister &operator=(const TypedRegister &) = delete;
 	TypedRegister(const TypedRegister &) = delete;
 	TypedRegister &operator=(TypedRegister &&) = delete;
 	TypedRegister(TypedRegister &&) = delete;
+
+	[[nodiscard]] RegisterOperand flag(uint32_t flag_type) const
+	{
+		return type().element_width() == 128 ? RegisterOperand { encoding2_ + flag_type + 1 } : RegisterOperand { encoding_ + flag_type + 1 };
+	}
 
 private:
 	/**

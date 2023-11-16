@@ -2,21 +2,45 @@
 
 #include <arancini/ir/node.h>
 #include <arancini/output/dynamic/riscv64/encoder/riscv64-assembler.h>
+#include <arancini/output/dynamic/riscv64/instruction-builder/builder.h>
 #include <arancini/output/dynamic/riscv64/register.h>
 #include <arancini/output/dynamic/translation-context.h>
+#include <arancini/runtime/exec/x86/x86-cpu-state.h>
+#include <arancini/util/ordering.h>
 
+#include <array>
+#include <bitset>
 #include <forward_list>
 #include <memory>
 #include <optional>
+#include <stack>
 #include <unordered_map>
 #include <variant>
 
 namespace arancini::output::dynamic::riscv64 {
+
+using builder::AddressOperand;
+using builder::InstructionBuilder;
+
+static constexpr unsigned long counter_base_ = __COUNTER__;
+enum class reg_idx : unsigned long {
+#define DEFREG(ctype, ltype, name) name = __COUNTER__ - counter_base_ - 1,
+#include <arancini/input/x86/reg.def>
+#undef DEFREG
+};
+
+#define X86_OFFSET_OF(reg) __builtin_offsetof(struct arancini::runtime::exec::x86::x86_cpu_state, reg)
+enum class reg_offsets : unsigned long {
+#define DEFREG(ctype, ltype, name) name = X86_OFFSET_OF(name),
+#include <arancini/input/x86/reg.def>
+#undef DEFREG
+};
+
 class riscv64_translation_context : public translation_context {
 public:
 	riscv64_translation_context(machine_code_writer &writer)
 		: translation_context(writer)
-		, assembler_(&writer, RV_GC)
+		, assembler_(&writer, true, RV_GC)
 	{
 	}
 
@@ -26,25 +50,36 @@ public:
 	virtual void end_block() override;
 	virtual void lower(ir::node *n) override;
 
+	virtual void chain(uint64_t chain_address, void *chain_target) override;
+
 private:
+	InstructionBuilder builder_;
 	Assembler assembler_;
 
 	off_t current_address_;
-	std::vector<const ir::node *> nodes_;
+	std::vector<ir::node *> nodes_;
 
 	intptr_t ret_val_;
 
-	std::unordered_map<const ir::label_node *, std::unique_ptr<Label>> labels_;
+	std::unordered_map<const ir::label_node *, std::pair<Label *, bool>> labels_;
+	std::stack<decltype(builder_.next_register().encoding()), std::vector<decltype(builder_.next_register().encoding())>> idxs_;
+	std::forward_list<decltype(builder_.next_register().encoding())> live_across_iteration_;
 
-	size_t reg_allocator_index_ { 0 };
-	std::unordered_map<const ir::port *, TypedRegister> reg_for_port_;
+	std::unordered_map<const ir::port *, TypedRegister> treg_for_port_;
 	std::forward_list<TypedRegister> temporaries;
 	std::unordered_map<const ir::local_var *, std::reference_wrapper<TypedRegister>> locals_;
+	std::bitset<16> reg_loaded_ {};
+	std::bitset<16> reg_written_ {};
 
 	std::pair<TypedRegister &, bool> allocate_register(
-		const ir::port *p = nullptr, std::optional<Register> reg1 = std::nullopt, std::optional<Register> reg2 = std::nullopt);
+		const ir::port *p = nullptr, std::optional<RegisterOperand> reg1 = std::nullopt, std::optional<RegisterOperand> reg2 = std::nullopt);
+
+	RegisterOperand get_or_assign_mapped_register(uint32_t idx);
+	RegisterOperand get_or_load_mapped_register(uint32_t idx);
+	void write_back_registers();
 
 	std::optional<std::reference_wrapper<TypedRegister>> materialise(const ir::node *n);
+	std::optional<int64_t> get_as_int(const node *n);
 
 	TypedRegister &materialise_read_reg(const ir::read_reg_node &n);
 	void materialise_write_reg(const ir::write_reg_node &n);
@@ -71,5 +106,9 @@ private:
 	TypedRegister &materialise_vector_extract(const ir::vector_extract_node &n);
 
 	void add_marker(int payload);
+
+	template <reg_idx... idx> std::tuple<to_type_t<reg_idx, idx, RegisterOperand>...> allocate_in_order(to_type_t<reg_idx, idx, const port *>... args);
+	template <const size_t order[], typename Tuple, size_t... idxs> auto reorder(Tuple tuple, std::index_sequence<idxs...>);
+	void bw_branch_vreg_helper(bool bw);
 };
 } // namespace arancini::output::dynamic::riscv64

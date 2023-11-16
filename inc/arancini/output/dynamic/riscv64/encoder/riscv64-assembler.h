@@ -73,7 +73,7 @@ class Assembler {
   static const bool kNearJump = true;
   static const bool kFarJump = false;
 
-  explicit Assembler(machine_code_writer*, ExtensionSet extensions = RV_G);
+  explicit Assembler(machine_code_writer *, bool track_usage, ExtensionSet extensions = RV_G);
   ~Assembler();
 
   bool Supports(Extension extension) const {
@@ -109,6 +109,23 @@ class Assembler {
   void bgtu(Register rs1, Register rs2, Label* label) { bltu(rs2, rs1, label); }
   void bleu(Register rs1, Register rs2, Label* label) { bgeu(rs2, rs1, label); }
 
+  intptr_t offset_from_target(intptr_t target);
+
+  void jal(Register rd, intptr_t offset);
+  void jal(intptr_t offset) { jal(RA, offset); }
+  void j(intptr_t offset) { jal(ZERO, offset); }
+
+  void beq(Register rs1, Register rs2, intptr_t offset);
+  void bne(Register rs1, Register rs2, intptr_t offset);
+  void blt(Register rs1, Register rs2, intptr_t offset);
+  void bge(Register rs1, Register rs2, intptr_t offset);
+  void bgt(Register rs1, Register rs2, intptr_t offset) { blt(rs2, rs1, offset); }
+  void ble(Register rs1, Register rs2, intptr_t offset) { bge(rs2, rs1, offset); }
+  void bltu(Register rs1, Register rs2, intptr_t offset);
+  void bgeu(Register rs1, Register rs2, intptr_t offset);
+  void bgtu(Register rs1, Register rs2, intptr_t offset) { bltu(rs2, rs1, offset); }
+  void bleu(Register rs1, Register rs2, intptr_t offset) { bgeu(rs2, rs1, offset); }
+
   void lb(Register rd, Address addr);
   void lh(Register rd, Address addr);
   void lw(Register rd, Address addr);
@@ -119,7 +136,9 @@ class Assembler {
   void sh(Register rs2, Address addr);
   void sw(Register rs2, Address addr);
 
-  void addi(Register rd, Register rs1, intptr_t imm);
+  void addi(Register rd, Register rs1, intptr_t imm, bool force_big = false);
+  void addi_big(Register rd, Register rs1, intptr_t imm) { addi(rd, rs1, imm, true); }
+  void addi_normal(Register rd, Register rs1, intptr_t imm) { addi(rd, rs1, imm, false); }
   void subi(Register rd, Register rs1, intptr_t imm) { addi(rd, rs1, -imm); }
   void slti(Register rd, Register rs1, intptr_t imm);
   void sltiu(Register rd, Register rs1, intptr_t imm);
@@ -163,7 +182,7 @@ class Assembler {
 
   void trap();  // Permanently reserved illegal instruction.
 
-  void nop() { addi(ZERO, ZERO, 0); }
+  void nop(bool force_big = false) { addi(ZERO, ZERO, 0, force_big); }
   void li(Register rd, intptr_t imm) { addi(rd, ZERO, imm); }
   void mv(Register rd, Register rs) { addi(rd, rs, 0); }
   void not_(Register rd, Register rs) { xori(rd, rs, -1); }
@@ -184,6 +203,13 @@ class Assembler {
   void bgez(Register rs, Label* label) { bge(rs, ZERO, label); }
   void bltz(Register rs, Label* label) { blt(rs, ZERO, label); }
   void bgtz(Register rs, Label* label) { blt(ZERO, rs, label); }
+
+  void beqz(Register rs, intptr_t offset) { beq(rs, ZERO, offset); }
+  void bnez(Register rs, intptr_t offset) { bne(rs, ZERO, offset); }
+  void blez(Register rs, intptr_t offset) { bge(ZERO, rs, offset); }
+  void bgez(Register rs, intptr_t offset) { bge(rs, ZERO, offset); }
+  void bltz(Register rs, intptr_t offset) { blt(rs, ZERO, offset); }
+  void bgtz(Register rs, intptr_t offset) { blt(ZERO, rs, offset); }
 
   // ==== RV64I ====
 #if XLEN >= 64
@@ -615,6 +641,8 @@ class Assembler {
   void c_fsd(FRegister rs2, Address addr);
 
   void c_j(Label* label);
+
+  void c_j(intptr_t offset);
 #if XLEN == 32
   void c_jal(Label* label);
 #endif
@@ -622,7 +650,9 @@ class Assembler {
   void c_jalr(Register rs1);
 
   void c_beqz(Register rs1p, Label* label);
+  void c_beqz(Register rs1p, intptr_t offset);
   void c_bnez(Register rs1p, Label* label);
+  void c_bnez(Register rs1p, intptr_t offset);
 
   void c_li(Register rd, intptr_t imm);
   void c_lui(Register rd, uintptr_t imm);
@@ -661,9 +691,14 @@ class Assembler {
 
   intptr_t Position() { return writer->size(); }
   void EmitBranch(Register rs1, Register rs2, Label* label, Funct3 func);
+  void EmitBranch(Register rs1, Register rs2, intptr_t offset, Funct3 func);
   void EmitJump(Register rd, Label* label, Opcode op);
+  void EmitJump(Register rd, intptr_t offset, Opcode op);
   void EmitCBranch(Register rs1p, Label* label, COpcode op);
+  void EmitCBranch(Register rs1p, intptr_t offset, COpcode op);
   void EmitCJump(Label* label, COpcode op);
+
+  void EmitCJump(intptr_t offset, COpcode op);
 
   void EmitRType(Funct5 funct5,
                  std::memory_order order,
@@ -791,8 +826,9 @@ class Assembler {
   const ExtensionSet extensions_;
   arancini::output::dynamic::machine_code_writer* writer;
 
-  long instructions16, instructions32;
+  long instructions16 {}, instructions32 {};
 
+  bool track_usage_;
 };
 
 }  // namespace arancini::output::dynamic::riscv64
