@@ -70,6 +70,8 @@ private:
 	std::unordered_map<const ir::local_var *, std::reference_wrapper<TypedRegister>> locals_;
 	std::bitset<16> reg_loaded_ {};
 	std::bitset<16> reg_written_ {};
+	std::bitset<8> flag_loaded_ {};
+	std::bitset<8> flag_written_ {};
 
 	std::pair<TypedRegister &, bool> allocate_register(
 		const ir::port *p = nullptr, std::optional<RegisterOperand> reg1 = std::nullopt, std::optional<RegisterOperand> reg2 = std::nullopt);

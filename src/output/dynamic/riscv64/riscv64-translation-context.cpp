@@ -22,6 +22,8 @@ using namespace arancini::ir;
  */
 
 static constexpr const unsigned long flag_idx = static_cast<const unsigned long>(std::min({ reg_idx::ZF, reg_idx::CF, reg_idx::OF, reg_idx::SF }));
+static constexpr const unsigned long flag_off
+	= static_cast<const unsigned long>(std::min({ reg_offsets::ZF, reg_offsets::CF, reg_offsets::OF, reg_offsets::SF }));
 
 template <const size_t order[], typename Tuple, size_t... idxs> auto riscv64_translation_context::reorder(Tuple tuple, std::index_sequence<idxs...>)
 {
@@ -102,18 +104,38 @@ std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(
 
 RegisterOperand riscv64_translation_context::get_or_assign_mapped_register(uint32_t idx)
 {
-	reg_written_[idx - 1] = reg_loaded_[idx - 1] = true; // Consider "assign" access as write
-	return RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + (idx - 1) };
+	if (idx >= static_cast<unsigned long>(reg_idx::RAX) && idx <= static_cast<unsigned long>(reg_idx::R15)) { // GPR
+		uint32_t i = idx - 1;
+		reg_written_[i] = reg_loaded_[i] = true; // Consider "assign" access as write
+		RegisterOperand reg = RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + i };
+		return reg;
+	} else { // FLAG
+		uint32_t i = idx - flag_idx;
+		flag_written_[i] = flag_loaded_[i] = true; // Consider "assign" access as write
+		RegisterOperand reg = RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + 16 + i };
+		return reg;
+	}
 }
 
 RegisterOperand riscv64_translation_context::get_or_load_mapped_register(uint32_t idx)
 {
-	if (!reg_loaded_[idx - 1]) {
-		RegisterOperand reg = RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + (idx - 1) };
-		reg_loaded_[idx - 1] = true;
-		builder_.ld(reg, AddressOperand { FP, static_cast<intptr_t>(8 * idx) }); // FIXME hardcoded
+	if (idx >= static_cast<unsigned long>(reg_idx::RAX) && idx <= static_cast<unsigned long>(reg_idx::R15)) { // GPR
+		uint32_t i = idx - 1;
+		RegisterOperand reg = RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + i };
+		if (!reg_loaded_[i]) {
+			reg_loaded_[i] = true;
+			builder_.ld(reg, AddressOperand { FP, static_cast<intptr_t>(8 * idx) }); // FIXME hardcoded
+		}
+		return reg;
+	} else { // FLAG
+		uint32_t i = idx - flag_idx;
+		RegisterOperand reg = RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + 16 + i };
+		if (!flag_loaded_[i]) {
+			flag_loaded_[i] = true;
+			builder_.lb(reg, AddressOperand { FP, static_cast<intptr_t>(flag_off + i) }); // FIXME hardcoded
+		}
+		return reg;
 	}
-	return RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + (idx - 1) };
 }
 
 void riscv64_translation_context::write_back_registers()
@@ -122,6 +144,13 @@ void riscv64_translation_context::write_back_registers()
 		if (reg_written_[i]) {
 			builder_.sd(
 				RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + i }, AddressOperand { FP, static_cast<intptr_t>(8 * i + 8) }); // FIXME hardcoded offset
+		}
+	}
+
+	for (uint32_t i = 0; i < flag_written_.size(); ++i) {
+		if (flag_written_[i]) {
+			builder_.sb(RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + 16 + i },
+				AddressOperand { FP, static_cast<intptr_t>(flag_off + i) });
 		}
 	}
 }
@@ -142,6 +171,8 @@ void riscv64_translation_context::begin_block()
 {
 	reg_loaded_.reset();
 	reg_written_.reset();
+	flag_loaded_.reset();
+	flag_written_.reset();
 	builder_.reset();
 
 	// TODO Remove/only in debug
@@ -181,6 +212,11 @@ void riscv64_translation_context::end_instruction()
 	for (size_t i = 0; i < std::size(v.reg_used_); ++i) {
 		if (v.reg_used_[i]) {
 			get_or_load_mapped_register(i + 1);
+		}
+	}
+	for (size_t i = 0; i < std::size(v.flag_used_); ++i) {
+		if (v.flag_used_[i]) {
+			get_or_load_mapped_register(i + flag_idx);
 		}
 	}
 
@@ -842,9 +878,14 @@ TypedRegister &riscv64_translation_context::materialise_bit_insert(const bit_ins
 TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_node &n)
 {
 	const port &value = n.val();
-	if (is_int(value, 64) && value.targets().size() == 1 && n.regidx() <= static_cast<unsigned long>(reg_idx::R15)) { // 64bit GPR only used once
+	if (value.targets().size() == 1
+		&& ((is_int(value, 64) && n.regidx() <= static_cast<unsigned long>(reg_idx::R15)) || is_flag(value))) { // 64bit GPR or flag only used once
 		Register reg = get_or_load_mapped_register(n.regidx());
-		return allocate_register(&n.val(), reg).first;
+		TypedRegister &out_reg = allocate_register(&n.val(), reg).first;
+		if (is_flag(value)) {
+			out_reg.set_type(value_type::u64());
+		}
+		return out_reg;
 	}
 
 	auto [out_reg, valid] = allocate_register(&n.val());
@@ -858,7 +899,7 @@ TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_
 			out_reg.set_actual_width();
 			out_reg.set_type(value_type::u64());
 		} else {
-			Register reg = get_or_load_mapped_register(n.regidx());
+			RegisterOperand reg = get_or_load_mapped_register(n.regidx());
 			if (is_int(value, 32)) {
 				builder_.sextw(out_reg, reg);
 				out_reg.set_actual_width();
@@ -871,8 +912,9 @@ TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_
 		return out_reg;
 	}
 	if (is_flag(value)) {
-		builder_.lb(out_reg, AddressOperand { FP, static_cast<intptr_t>(n.regoff()) });
 		out_reg.set_type(value_type::u64());
+		RegisterOperand reg = get_or_load_mapped_register(n.regidx());
+		builder_.mv(out_reg, reg);
 		return out_reg;
 	} else if (is_i128(value) || is_int(value, 512)) {
 		builder_.ld(out_reg.reg1(), AddressOperand { FP, static_cast<intptr_t>(n.regoff()) });
@@ -899,7 +941,7 @@ void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 	} else if (is_flag(value)) {
 		TypedRegister &reg_in = *(materialise(value.owner()));
 		RegisterOperand reg = (!is_flag_port(value)) ? reg_in : reg_in.flag(n.regidx() - flag_idx);
-		builder_.sb(reg, AddressOperand { FP, static_cast<intptr_t>(n.regoff()) });
+		builder_.mv(get_or_assign_mapped_register(n.regidx()), reg);
 		return;
 	} else if (is_i128(value) || is_int_vector(value, 2, 64) || is_int_vector(value, 4, 32) || is_int(value, 512) || is_int_vector(value, 4, 128)) {
 		// Treat 512 as 128 for now. Assuming it is just 128 bit instructions acting on 512 registers
