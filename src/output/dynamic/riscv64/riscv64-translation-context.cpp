@@ -108,11 +108,17 @@ RegisterOperand riscv64_translation_context::get_or_assign_mapped_register(uint3
 		uint32_t i = idx - 1;
 		reg_written_[i] = reg_loaded_[i] = true; // Consider "assign" access as write
 		RegisterOperand reg = RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + i };
+		if (!idxs_.empty()) {
+			live_across_iteration_.push_front(reg.encoding());
+		}
 		return reg;
 	} else { // FLAG
 		uint32_t i = idx - flag_idx;
 		flag_written_[i] = flag_loaded_[i] = true; // Consider "assign" access as write
 		RegisterOperand reg = RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + 16 + i };
+		if (!idxs_.empty()) {
+			live_across_iteration_.push_front(reg.encoding());
+		}
 		return reg;
 	}
 }
@@ -126,6 +132,9 @@ RegisterOperand riscv64_translation_context::get_or_load_mapped_register(uint32_
 			reg_loaded_[i] = true;
 			builder_.ld(reg, AddressOperand { FP, static_cast<intptr_t>(8 * idx) }); // FIXME hardcoded
 		}
+		if (!idxs_.empty()) {
+			live_across_iteration_.push_front(reg.encoding());
+		}
 		return reg;
 	} else { // FLAG
 		uint32_t i = idx - flag_idx;
@@ -133,6 +142,9 @@ RegisterOperand riscv64_translation_context::get_or_load_mapped_register(uint32_
 		if (!flag_loaded_[i]) {
 			flag_loaded_[i] = true;
 			builder_.lb(reg, AddressOperand { FP, static_cast<intptr_t>(flag_off + i) }); // FIXME hardcoded
+		}
+		if (!idxs_.empty()) {
+			live_across_iteration_.push_front(reg.encoding());
 		}
 		return reg;
 	}
@@ -1107,7 +1119,7 @@ inline void riscv64_translation_context::bw_branch_vreg_helper(bool bw)
 		idxs_.pop();
 		for (auto it = live_across_iteration_.cbefore_begin(), it_next = std::next(it); it_next != live_across_iteration_.cend();) {
 			const RegisterOperand elem = RegisterOperand { *it_next };
-			if (idxs_.empty() || idxs_.top() < elem.encoding()) {
+			if (idxs_.empty() || (elem.encoding() >= RegisterOperand::VIRTUAL_BASE && idxs_.top() < elem.encoding())) {
 				live_across_iteration_.erase_after(it);
 			} else {
 				++it;
