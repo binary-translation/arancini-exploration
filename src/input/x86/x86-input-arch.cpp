@@ -178,6 +178,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_PSRLQ:
 	case XED_ICLASS_PSLLDQ:
 	case XED_ICLASS_PSRLDQ:
+	case XED_ICLASS_PSLLD:
 		return std::make_unique<shifts_translator>(builder);
 
   case XED_ICLASS_INC:
