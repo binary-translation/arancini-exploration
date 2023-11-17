@@ -1468,8 +1468,8 @@ void llvm_static_output_engine_impl::compile()
 	//Specify abi as 64 bits using double float registers
 	TO.MCOptions.ABIName="lp64d";
 #elif defined(ARCH_AARCH64)
-	const char *features = "+fp-armv8,+v8.5a";
-	const char *cpu = "neoverse-n2";
+	const char *features = "+fp-armv8,+v8.5a,+lse,+ls64";
+	const char *cpu = "thunderx2t99";
 #else
 	const char *features = "+avx";
 	const char *cpu = "generic";
