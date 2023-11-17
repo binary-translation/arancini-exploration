@@ -37,6 +37,7 @@ struct loop_args {
 	void *parent_state;
 	pthread_mutex_t *lock;
 	pthread_cond_t *cond;
+	uintptr_t mem_base;
 };
 
 void *MainLoopWrapper(void *args) {
@@ -48,6 +49,7 @@ void *MainLoopWrapper(void *args) {
 	std::cout << "Thread: " << gettid() << " - State: " << std::hex << x86_state << std::dec << std::endl;
 	parent_state->RAX = gettid();
 	x86_state->RSP = x86_state->RSI;
+	x86_state->FS = x86_state->R8;
 	pthread_cond_signal(largs->cond);
 	pthread_mutex_unlock(largs->lock);
 
@@ -389,7 +391,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 			pthread_mutex_init(&rax_lock, NULL);
 			pthread_cond_init(&rax_cond, NULL);
 
-			loop_args args = { new_x86_state, x86_state, &rax_lock, &rax_cond };
+			loop_args args = { new_x86_state, x86_state, &rax_lock, &rax_cond, (uintptr_t)get_memory_ptr(0) };
 			pthread_mutex_lock(&rax_lock);
 
 			pthread_create(&child, &attr, &MainLoopWrapper, &args);
