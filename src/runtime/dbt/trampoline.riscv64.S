@@ -57,9 +57,9 @@ call_native:
 
     // Restore callee-saved registers from stack
     // TODO: handle float regs
-    sd gp,104(sp)      // Restore the callee-saved registers
-    sd s11,96(sp)
-    sd s10,88(sp)
+    ld gp,104(sp)      // Restore the callee-saved registers
+    ld s11,96(sp)
+    ld s10,88(sp)
     ld s9, 80(sp)
     ld s8, 72(sp)
     ld s7, 64(sp)
