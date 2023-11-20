@@ -676,7 +676,16 @@ public:
 #endif
 		// TODO: handle different sizes
 
-		std::unordered_map<unsigned int, unsigned int> vreg_to_preg;
+		std::unordered_map<unsigned int, unsigned int> vreg_to_preg {
+			{ RegisterOperand::FUNCTIONAL_BASE, 16 },
+			{ RegisterOperand::FUNCTIONAL_BASE + 1, 17 },
+			{ RegisterOperand::FUNCTIONAL_BASE + 2, 18 },
+			{ RegisterOperand::FUNCTIONAL_BASE + 3, 19 },
+			{ RegisterOperand::FUNCTIONAL_BASE + 4, 20 },
+			{ RegisterOperand::FUNCTIONAL_BASE + 5, 21 },
+			{ RegisterOperand::FUNCTIONAL_BASE + 6, 22 },
+			{ RegisterOperand::FUNCTIONAL_BASE + 7, 23 },
+		};
 
 		// All registers can be used except:
 		// SP (x2),
@@ -687,7 +696,7 @@ public:
 		// thread pointer (x4)
 		// Return value (x10 + x11) can be used once first def
 
-		std::bitset<32> avail_physregs = 0x7FFFF2E8;
+		std::bitset<32> avail_physregs = 0x7F00F2E8;
 		//		std::bitset<32> avail_float_physregs = 0xFFFFFFFFF;
 
 		Instruction *linked_instruction { nullptr };

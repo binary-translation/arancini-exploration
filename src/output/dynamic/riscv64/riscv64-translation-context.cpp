@@ -152,7 +152,7 @@ RegisterOperand riscv64_translation_context::get_or_load_mapped_register(uint32_
 
 void riscv64_translation_context::write_back_registers()
 {
-	for (uint32_t i = 0; i < reg_written_.size(); ++i) {
+	for (uint32_t i = 8; i < reg_written_.size(); ++i) {
 		if (reg_written_[i]) {
 			builder_.sd(
 				RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + i }, AddressOperand { FP, static_cast<intptr_t>(8 * i + 8) }); // FIXME hardcoded offset
@@ -181,7 +181,7 @@ void riscv64_translation_context::add_marker(int payload)
 
 void riscv64_translation_context::begin_block()
 {
-	reg_loaded_.reset();
+	reg_loaded_ = 0x00ff;
 	reg_written_.reset();
 	flag_loaded_.reset();
 	flag_written_.reset();
