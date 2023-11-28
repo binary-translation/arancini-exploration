@@ -52,6 +52,7 @@ public:
 
 	virtual void accept(visitor &v) { v.visit_node(*this); }
 
+#ifndef NDEBUG
 	void set_metadata(const std::string &key, std::shared_ptr<metadata> value) { md_[key] = value; }
 
 	std::shared_ptr<metadata> get_metadata(const std::string &key) const { return md_.at(key); }
@@ -81,13 +82,17 @@ public:
 	}
 
 	bool has_metadata(const std::string &key) const { return md_.count(key) > 0; }
+#endif
 
 	virtual ~node() = default;
 
 private:
 	node_kinds kind_;
+#ifndef NDEBUG
 	std::map<std::string, std::shared_ptr<metadata>> md_;
+#endif
 };
+
 
 class value_node : public node {
 public:

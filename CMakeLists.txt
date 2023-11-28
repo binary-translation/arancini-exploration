@@ -5,7 +5,6 @@ project(arancini LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD_REQUIRED 17)
 set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 # Generate the compile commands for development
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
