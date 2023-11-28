@@ -86,7 +86,9 @@ void default_ir_builder::insert_action(std::shared_ptr<action_node> a)
 
 void default_ir_builder::process_node(node *n)
 {
+#ifndef NDEBUG
 	if (debug_ && current_pkt_) {
 		n->set_metadata("guest-address", std::make_shared<numeric_value_metadata>(current_pkt_->address()));
 	}
+#endif
 }
