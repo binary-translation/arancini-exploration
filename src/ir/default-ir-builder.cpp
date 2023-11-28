@@ -7,6 +7,8 @@ using namespace arancini::ir;
 
 void default_ir_builder::begin_chunk()
 {
+	ir_builder::begin_chunk();
+
 	if (current_chunk_ != nullptr) {
 		throw std::runtime_error("chunk already in progress");
 	}
@@ -16,6 +18,8 @@ void default_ir_builder::begin_chunk()
 
 void default_ir_builder::end_chunk()
 {
+	ir_builder::end_chunk();
+
 	if (current_pkt_ != nullptr) {
 		throw std::runtime_error("packet in progress");
 	}
@@ -71,7 +75,7 @@ const local_var *default_ir_builder::alloc_local(const value_type &type)
 	return current_pkt_->alloc_local(type);
 }
 
-void default_ir_builder::insert_action(action_node *a)
+void default_ir_builder::insert_action(std::shared_ptr<action_node> a)
 {
 	if (!current_pkt_) {
 		throw std::runtime_error("packet not in progress");

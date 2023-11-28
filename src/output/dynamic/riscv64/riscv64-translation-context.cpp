@@ -185,7 +185,7 @@ void riscv64_translation_context::end_instruction()
 	}
 
 	for (const auto &item : nodes_) {
-		materialise(item);
+		materialise(item.get());
 	}
 
 	for (const auto &item : locals_) {
@@ -210,7 +210,7 @@ void riscv64_translation_context::end_block()
 	builder_.emit(assembler_);
 }
 
-void riscv64_translation_context::lower(ir::node *n)
+void riscv64_translation_context::lower(const std::shared_ptr<action_node> &n)
 {
 	// Defer until end of block (when generation is finished)
 	nodes_.push_back(n);

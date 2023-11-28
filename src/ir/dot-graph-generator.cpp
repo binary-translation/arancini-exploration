@@ -22,7 +22,7 @@ void dot_graph_generator::visit_packet(packet &p)
 	os_ << "label = \"@0x" << std::hex << p.address() << ": " << p.disassembly() << "\";" << std::endl;
 
 	if (current_packet_ && !current_packet_->actions().empty() && !p.actions().empty()) {
-		add_edge(current_packet_->actions().back(), p.actions().front(), "blue2");
+		add_edge(current_packet_->actions().back().get(), p.actions().front().get(), "blue2");
 	}
 
 	current_packet_ = &p;

@@ -1,15 +1,15 @@
 #pragma once
 
-#include <arancini/ir/node.h>
 #include <arancini/ir/chunk.h>
-#include <arancini/ir/packet.h>
 #include <arancini/ir/default-visitor.h>
+#include <arancini/ir/node.h>
+#include <arancini/ir/packet.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
 
+#include <algorithm>
 #include <cstring>
 #include <iostream>
 #include <set>
-#include <algorithm>
 #include <unordered_map>
 
 #define X86_OFFSET_OF(reg) __builtin_offsetof(struct arancini::runtime::exec::x86::x86_cpu_state, reg)
@@ -20,11 +20,9 @@ enum class reg_offsets : unsigned long {
 };
 
 namespace arancini::ir {
-  class deadflags_opt_visitor : public default_visitor {
-  public:
-    deadflags_opt_visitor(void) {
-      nr_flags_total_ = nr_flags_opt_total_ = 0;
-    }
+class deadflags_opt_visitor : public default_visitor {
+public:
+	deadflags_opt_visitor(void) { nr_flags_total_ = nr_flags_opt_total_ = 0; }
 
 	~deadflags_opt_visitor(void)
 	{
@@ -40,21 +38,23 @@ namespace arancini::ir {
 		last_se_packets_.clear();
 		live_flags_.clear();
 
-		  auto packets = c.packets();
-		  for (auto p = packets.rbegin(); p != packets.rend(); ++p) {
-			  (*p)->accept(*this);
-		  }
-		  //std::cout << "Dead flags opt pass @ " << c.address() << ": optimised out " << nr_flags_opt_ << "/" << nr_flags_ << " flags" << std::endl;
-		  nr_flags_total_ += nr_flags_;
-		  nr_flags_opt_total_ += nr_flags_opt_;
-	  }
+		auto packets = c.packets();
+		for (auto p = packets.rbegin(); p != packets.rend(); ++p) {
 
-	  void visit_packet(packet & p) {
-		  current_packet_ = &p;
-		  auto actions = p.actions();
-		  for (auto a = actions.rbegin(); a != actions.rend(); ++a) {
-			  (*a)->accept(*this);
-		  }
+			(*p)->accept(*this);
+		}
+		// std::cout << "Dead flags opt pass @ " << c.address() << ": optimised out " << nr_flags_opt_ << "/" << nr_flags_ << " flags" << std::endl;
+		nr_flags_total_ += nr_flags_;
+		nr_flags_opt_total_ += nr_flags_opt_;
+	}
+
+	void visit_packet(packet &p)
+	{
+		current_packet_ = &p;
+		auto &actions = p.actions();
+		for (auto a = actions.rbegin(); a != actions.rend(); ++a) {
+			(*a)->accept(*this);
+		}
 
 		// delete all write reg nodes marked for deletion
 		if (!delete_.empty()) {
@@ -101,22 +101,21 @@ namespace arancini::ir {
 				}
 
 				// remove node from the action_node list
-				end = std::remove(begin, end, n);
+				end = std::remove_if(begin, end, [n](const auto &v) { return v.get() == n; });
 				nr_flags_opt_++;
 			}
 			actions.erase(end, actions.end());
 			p.set_actions(actions);
 			delete_.clear();
-
 		}
 		live_flags_.insert(new_live_flags.begin(), new_live_flags.end());
 		new_live_flags.clear();
 	}
 
-	  void visit_read_reg_node(read_reg_node & n)
-	  {
+	void visit_read_reg_node(read_reg_node &n)
+	{
 		if (!flag_regs_offsets_.count(static_cast<reg_offsets>(n.regoff())))
-			  return;
+			return;
 
 		// If the flag register is also written in this packet, deferring insertion ensures later writes in the same packet don't "satisfy" the read
 		new_live_flags.insert(n.regoff());
@@ -151,5 +150,5 @@ private:
 	std::set<enum reg_offsets> flag_regs_offsets_
 		= { reg_offsets::ZF, reg_offsets::CF, reg_offsets::OF, reg_offsets::SF, reg_offsets::PF /*, reg_offsets::AF FIXME not included in reg.def */ };
 	unsigned int nr_flags_, nr_flags_opt_, nr_flags_total_, nr_flags_opt_total_;
-  };
-}
+};
+} // namespace arancini::ir

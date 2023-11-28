@@ -1195,8 +1195,8 @@ void llvm_static_output_engine_impl::lower_chunk(SwitchInst *pcswitch, BasicBloc
 		builder.SetInsertPoint(packet_block);
 
 		if (!p->actions().empty()) {
-			for (auto a : p->actions()) {
-				lower_node(builder, state_arg, p, a);
+			for (const auto& a : p->actions()) {
+				lower_node(builder, state_arg, p, a.get());
 			}
 		}
 

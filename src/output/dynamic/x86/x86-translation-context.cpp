@@ -67,7 +67,7 @@ void x86_translation_context::end_block()
 	}
 }
 
-void x86_translation_context::lower(node *n) { materialise(n); }
+void x86_translation_context::lower(const std::shared_ptr<action_node> &n) { materialise(n.get()); }
 
 void x86_translation_context::materialise(node *n)
 {
