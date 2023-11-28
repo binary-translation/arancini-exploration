@@ -27,11 +27,12 @@ public:
 		return lcl;
 	}
 
-	void append_action(action_node *node) { actions_.push_back(node); }
+	void append_action(const std::shared_ptr<action_node>& node) { actions_.push_back(node); }
 
-	const std::vector<action_node *> &actions() const { return actions_; }
+	const std::vector<std::shared_ptr<action_node>> &actions() const { return actions_; }
+	std::vector<std::shared_ptr<action_node>> &actions()  { return actions_; }
 
-  void set_actions(std::vector<action_node *> actions) { actions_ = actions;}
+	void set_actions(std::vector<std::shared_ptr<action_node>> actions) { actions_ = std::move(actions);}
 
 	void accept(visitor &v) { v.visit_packet(*this); }
 
@@ -39,7 +40,7 @@ public:
 
 	bool updates_pc() const
 	{
-		for (action_node *a : actions_) {
+		for (const auto& a : actions_) {
 			if (a->updates_pc()) {
 				return true;
 			}
@@ -54,6 +55,6 @@ private:
 	off_t address_;
 	std::string disasm_;
 	std::vector<local_var *> locals_;
-	std::vector<action_node *> actions_;
+	std::vector<std::shared_ptr<action_node>> actions_;
 };
 } // namespace arancini::ir

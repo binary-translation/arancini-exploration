@@ -82,6 +82,8 @@ public:
 
 	bool has_metadata(const std::string &key) const { return md_.count(key) > 0; }
 
+	virtual ~node() = default;
+
 private:
 	node_kinds kind_;
 	std::map<std::string, std::shared_ptr<metadata>> md_;
@@ -329,7 +331,7 @@ private:
 
 class write_reg_node : public action_node {
 public:
-	write_reg_node(unsigned long regoff, unsigned long regidx, const char *regname, port &val) 
+	write_reg_node(unsigned long regoff, unsigned long regidx, const char *regname, port &val)
 		: action_node(node_kinds::write_reg)
 		, regoff_(regoff)
 		, regidx_(regidx)
@@ -436,7 +438,7 @@ public:
 	port &negative() { return negative_; }
 
 	[[nodiscard]] const port &zero() const { return zero_; }
-	[[nodiscard]] const port &negative() const{ return negative_; }
+	[[nodiscard]] const port &negative() const { return negative_; }
 
 	virtual void accept(visitor &v) override
 	{

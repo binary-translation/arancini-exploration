@@ -81,5 +81,7 @@ public:
 	virtual void visit_port(port &p) = 0;
 
 	virtual bool seen_node(node *n) = 0;
+
+	virtual void reset() = 0;
 };
 } // namespace arancini::ir

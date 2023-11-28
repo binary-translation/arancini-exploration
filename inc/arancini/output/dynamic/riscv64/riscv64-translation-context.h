@@ -48,7 +48,7 @@ public:
 	virtual void begin_instruction(off_t address, const std::string &disasm) override;
 	virtual void end_instruction() override;
 	virtual void end_block() override;
-	virtual void lower(ir::node *n) override;
+	virtual void lower(const std::shared_ptr<ir::action_node> &n) override;
 
 	virtual void chain(uint64_t chain_address, void *chain_target) override;
 
@@ -57,7 +57,7 @@ private:
 	Assembler assembler_;
 
 	off_t current_address_;
-	std::vector<ir::node *> nodes_;
+	std::vector<std::shared_ptr<action_node>> nodes_;
 
 	intptr_t ret_val_;
 
