@@ -1,6 +1,8 @@
 #pragma once
+#include "arancini/output/static/llvm/llvm-static-visitor.h"
 #include <arancini/ir/node.h>
 
+#include <llvm/ADT/ArrayRef.h>
 #include <llvm/IR/BasicBlock.h>
 #include <map>
 #include <memory>
@@ -34,6 +36,8 @@ class node;
 class port;
 class packet;
 class label_node;
+class llvm_ret_visitor;
+class llvm_arg_visitor;
 } // namespace arancini::ir
 
 namespace arancini::output {
@@ -115,5 +119,8 @@ private:
 		std::shared_ptr<ir::packet> pkt, ir::port &p);
 	::llvm::Function *get_static_fn(std::shared_ptr<ir::packet> pkt, std::shared_ptr<std::map<unsigned long, ::llvm::Function *>>);
 	::llvm::Instruction *create_static_condbr(::llvm::IRBuilder<> *builder, std::shared_ptr<ir::packet> pkt, std::map<unsigned long, ::llvm::BasicBlock *> *blocks, ::llvm::BasicBlock *mid);
+	::llvm::FunctionType *get_fn_type(std::shared_ptr<ir::chunk>, ir::llvm_ret_visitor& ret, ir::llvm_arg_visitor& arg);
+	::llvm::ArrayRef<::llvm::Type *> get_fn_argv(std::shared_ptr<ir::chunk>);
+	::llvm::Type *get_fn_ret_type(std::shared_ptr<ir::chunk>);
 };
 } // namespace arancini::output::o_static::llvm

@@ -2,12 +2,14 @@
 #include "arancini/ir/opt.h"
 #include "arancini/ir/port.h"
 #include "arancini/ir/visitor.h"
+#include "arancini/output/static/llvm/llvm-static-visitor.h"
 #include "llvm/Support/raw_ostream.h"
 #include <arancini/ir/chunk.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine-impl.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
 #include <cstdint>
 #include <iostream>
+#include <llvm/ADT/ArrayRef.h>
 #include <llvm/ADT/FloatingPointMode.h>
 #include <llvm/IR/ConstantFolder.h>
 #include <llvm/IR/Constants.h>
@@ -253,11 +255,26 @@ void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlo
 	IRBuilder<> builder(*llvm_context_);
 	auto fns = std::make_shared<std::map<unsigned long, Function *>>();
 
+	auto ret = llvm_ret_visitor();
+	auto arg = llvm_arg_visitor();
+
+	for (auto c : chunks_) {
+		c->accept(ret);
+		c->accept(arg);
+	}
+
+	/*
+	std::cout << "#### return types ####\n";
+	ret.debug_print();
+	std::cout << "#### arg counts ####\n";
+	arg.debug_print();
+	*/	
 	for (auto c : chunks_) {
 		std::stringstream fn_name;
 		fn_name << "FN_" << std::hex << c->packets()[0]->address();
 
-		auto fn = Function::Create(types.loop_fn, GlobalValue::LinkageTypes::ExternalLinkage, fn_name.str(), *module_);
+		auto fn_type = get_fn_type(c, ret, arg);
+		auto fn = Function::Create(fn_type, GlobalValue::LinkageTypes::ExternalLinkage, fn_name.str(), *module_);
 			(*fns)[c->packets()[0]->address()] = fn;
 	}
 
@@ -1336,37 +1353,35 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 		throw std::runtime_error("function verification failed");
 	}
 }
-Instruction *llvm_static_output_engine_impl::create_static_condbr(IRBuilder<> *builder, std::shared_ptr<packet> pkt, std::map<unsigned long, BasicBlock *> *blocks, BasicBlock *mid) {
-	auto it = builder->GetInsertPoint();
-	if ((--it)->getOpcode() != Instruction::Store)
-		return nullptr;
-	
-	if ((--it)->getOpcode() != Instruction::Select)
-		return nullptr;
+ArrayRef<Type *> llvm_static_output_engine_impl::get_fn_argv(std::shared_ptr<chunk> c) {
+}
 
-	auto cond = it->getOperand(0);
-	auto true_addr = dyn_cast<ConstantInt>(it->getOperand(1));
-	auto false_addr = dyn_cast<ConstantInt>(it->getOperand(2));
+Type *llvm_static_output_engine_impl::get_fn_ret_type(std::shared_ptr<chunk> c) {
+}
 
-	BasicBlock *true_block = mid;
-	BasicBlock *false_block = mid;
-	std::map<unsigned long, BasicBlock *>::iterator bb_it;
+FunctionType *llvm_static_output_engine_impl::get_fn_type(std::shared_ptr<chunk> c, llvm_ret_visitor& ret, llvm_arg_visitor& arg) {
 
-	// Add can constant fold on creation
-	if (true_addr) {
-		bb_it = blocks->find(true_addr->getZExtValue());
-		true_block = bb_it != blocks->end() ? bb_it->second : mid;
+	auto rets = ret.get_type(c->packets()[0]->address());
+	auto args = arg.get_type(c->packets()[0]->address());
+
+	ArrayRef<Type*> argv;
+	StructType* retv;
+	for (auto r : rets) {
+		if (r < reg_offsets::ZMM0) {
+			//TODO
+		}
 	}
 
-	if (false_addr) {
-		bb_it = blocks->find(false_addr->getZExtValue());
-		false_block = bb_it != blocks->end() ? bb_it->second : mid;
-	}
-
-	if (true_block != mid && false_block != mid)
-		fixed_branches++;
-	return builder->CreateCondBr(cond, true_block, false_block);
-};
+	retv = StructType::get(*llvm_context_, { types.i64, types.i64, types.i128, types.i128}, false);
+	argv = {
+		types.i64,
+		types.i64, types.i64, types.i64, types.i64, types.i64, types.i64,
+		types.i128, types.i128, types.i128, types.i128,
+		types.i128, types.i128, types.i128, types.i128,
+		types.cpu_state_ptr
+	}; // PC, 6 int args, 8 float args, cpu_struct
+	return FunctionType::get(retv, argv, false);
+}
 
 Function *llvm_static_output_engine_impl::get_static_fn(std::shared_ptr<packet> pkt, std::shared_ptr<std::map<unsigned long, Function *>> fns) {
 
