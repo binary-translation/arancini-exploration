@@ -7,6 +7,7 @@
 #include <arancini/output/static/llvm/llvm-static-output-engine-impl.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
 #include <cstdint>
+#include <fstream>
 #include <iostream>
 #include <llvm/ADT/FloatingPointMode.h>
 #include <llvm/IR/ConstantFolder.h>
@@ -236,8 +237,17 @@ void llvm_static_output_engine_impl::build()
 	builder.SetInsertPoint(ret_block);
 	builder.CreateRetVoid();
 
-	if (e_.dbg_) {
-		module_->print(outs(), nullptr);
+	if (e_.debug_dump_filename.has_value()) {
+		std::error_code EC;
+		std::string filename = e_.debug_dump_filename.value() + ".ll";
+		raw_fd_ostream file(filename, EC);
+
+		if (EC) {
+			errs() << "Error opening file '" << filename << "': " << EC.message() << "\n";
+		}
+
+		module_->print(file, nullptr);
+		file.close();
 	}
 
 	if (verifyFunction(*loop_fn, &errs())) {
@@ -1502,7 +1512,18 @@ void llvm_static_output_engine_impl::optimise()
 	// Compiled modules now exists
 	if (e_.dbg_) {
 		std::cerr << "Fixed branches: " << fixed_branches << std::endl;
-		module_->print(outs(), nullptr);
+	}
+	if (e_.debug_dump_filename.has_value()) {
+		std::error_code EC;
+		std::string filename = e_.debug_dump_filename.value() + ".opt.ll";
+		raw_fd_ostream file(filename, EC);
+
+		if (EC) {
+			errs() << "Error opening file '" << filename << "': " << EC.message() << "\n";
+		}
+
+		module_->print(file, nullptr);
+		file.close();
 	}
 }
 
