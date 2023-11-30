@@ -12,3 +12,5 @@ compile_commands.json
 
 **.dot
 **.dot.*
+
+*.ll
