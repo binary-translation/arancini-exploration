@@ -10,6 +10,7 @@
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
 #include <cstdint>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <llvm/ADT/ArrayRef.h>
 #include <llvm/ADT/FloatingPointMode.h>
@@ -257,8 +258,17 @@ void llvm_static_output_engine_impl::build()
 	builder.SetInsertPoint(ret_block);
 	builder.CreateRetVoid();
 
-	if (e_.dbg_) {
-		module_->print(outs(), nullptr);
+	if (e_.debug_dump_filename.has_value()) {
+		std::error_code EC;
+		std::string filename = e_.debug_dump_filename.value() + ".ll";
+		raw_fd_ostream file(filename, EC);
+
+		if (EC) {
+			errs() << "Error opening file '" << filename << "': " << EC.message() << "\n";
+		}
+
+		module_->print(file, nullptr);
+		file.close();
 	}
 
 	if (verifyFunction(*loop_fn, &errs())) {
@@ -306,7 +316,7 @@ void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlo
 		auto fn_type = get_fn_type(c, ret, arg);
 		//auto fn_type = types.loop_fn;
 		auto fn = Function::Create(fn_type, GlobalValue::LinkageTypes::ExternalLinkage, fn_name.str(), *module_);
-			(*fns)[c->packets()[0]->address()] = fn;
+		(*fns)[c->packets()[0]->address()] = fn;
 	}
 
 	for (auto c : chunks_) {
@@ -1390,6 +1400,8 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 	//auto pst = BasicBlock::Create(*llvm_context_, fn->getName()+"-pst", fn);
 	auto dyn = BasicBlock::Create(*llvm_context_, fn->getName()+"-dyn");
 
+	bool has_dyn_br = false;
+
 	builder->SetInsertPoint(pre);
 	init_regs(*builder);
 	builder->CreateStore(fn->getArg(0), reg_to_alloca_.at(reg_offsets::PC));
@@ -1457,8 +1469,10 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 			case br_type::br:
 			case br_type::csel: {
 				auto condbr = create_static_condbr(builder, p, &blocks, mid);
-				if (!condbr)
+				if (!condbr) {
+					has_dyn_br = true;
 					builder->CreateBr(mid);
+				}
 				packet_block = nullptr;
 				break;
 			}
@@ -1474,22 +1488,25 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 		builder->CreateAggregateRet(wrap_ret(builder).data(), 5);
 	}
 
-	mid->insertInto(fn);
-	dyn->insertInto(fn);
+	//if (has_dyn_br) {
+	if (true) {
+		mid->insertInto(fn);
+		dyn->insertInto(fn);
 
-	builder->SetInsertPoint(mid);
-	auto pc = builder->CreateLoad(types.i64, pc_ptr, "local-pc");
-	auto fnswitch = builder->CreateSwitch(pc, dyn);
-	
-	for (auto p : blocks) {
-		fnswitch->addCase(ConstantInt::get(types.i64,p.first), p.second);
+		builder->SetInsertPoint(mid);
+		auto pc = builder->CreateLoad(types.i64, pc_ptr, "local-pc");
+		auto fnswitch = builder->CreateSwitch(pc, dyn);
+
+		for (auto p : blocks) {
+			fnswitch->addCase(ConstantInt::get(types.i64,p.first), p.second);
+		}
+
+		builder->SetInsertPoint(dyn);
+		save_all_regs(*builder, state_arg);
+		builder->CreateCall(contblock->getParent(), { state_arg });
+		restore_all_regs(*builder, state_arg);
+		builder->CreateAggregateRet(wrap_ret(builder).data(), 5);
 	}
-
-	builder->SetInsertPoint(dyn);
-	save_all_regs(*builder, state_arg);
-	builder->CreateCall(contblock->getParent(), { state_arg });
-	restore_all_regs(*builder, state_arg);
-	builder->CreateAggregateRet(wrap_ret(builder).data(), 5);
 
 	if (verifyFunction(*fn, &errs())) {
 		throw std::runtime_error("function verification failed");
@@ -1589,7 +1606,18 @@ void llvm_static_output_engine_impl::optimise()
 	// Compiled modules now exists
 	if (e_.dbg_) {
 		std::cerr << "Fixed branches: " << fixed_branches << std::endl;
-		module_->print(outs(), nullptr);
+	}
+	if (e_.debug_dump_filename.has_value()) {
+		std::error_code EC;
+		std::string filename = e_.debug_dump_filename.value() + ".opt.ll";
+		raw_fd_ostream file(filename, EC);
+
+		if (EC) {
+			errs() << "Error opening file '" << filename << "': " << EC.message() << "\n";
+		}
+
+		module_->print(file, nullptr);
+		file.close();
 	}
 }
 

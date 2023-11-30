@@ -58,6 +58,7 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 		("debug", "Enable debugging output") //
 		("verbose-link", "Enable verbose output of the linker (-Wl,--verbose)") //
 		("no-script", "Do not use a linker script. Also does not include any data from the input binary. Mainly useful as a step to generate a linker script.");
+		("dump-llvm", po::value<std::string>(), "Dump generated LLVM IR");
 
     po::variables_map vm;
 	try {
