@@ -18,5 +18,7 @@ generated.S
 cmake-build-*
 compile_commands.json
 
-**.dot
-**.dot.*
+**/*.dot
+**/*.dot.*
+
+*.ll
