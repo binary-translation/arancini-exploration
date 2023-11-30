@@ -1,4 +1,3 @@
-#include <arancini/output/static/static-output-engine.h>
 #include <arancini/elf/elf-reader.h>
 #include <arancini/input/x86/x86-input-arch.h>
 #include <arancini/ir/chunk.h>
@@ -6,6 +5,7 @@
 #include <arancini/ir/dot-graph-generator.h>
 #include <arancini/ir/opt.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
+#include <arancini/output/static/static-output-engine.h>
 #include <arancini/txlat/txlat-engine.h>
 #include <arancini/util/tempfile-manager.h>
 #include <arancini/util/tempfile.h>
@@ -24,7 +24,7 @@ using namespace arancini::output::o_static::llvm;
 using namespace arancini::util;
 
 static std::set<std::string> allowed_symbols
-= { "cmpstr", "cmpnum", "swap", "_qsort", "_start", "test", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
+	= { "cmpstr", "cmpnum", "swap", "_qsort", "_start", "test", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
 
 void txlat_engine::process_options(arancini::output::o_static::static_output_engine &oe, const boost::program_options::variables_map &cmdline)
 {
@@ -69,22 +69,22 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
 	oe->set_entrypoint(elf.get_entrypoint());
 
-  // Ahead-of-time translation
-  std::set<unsigned long> translated_addrs;
-  std::list<symbol> zero_size_symbol;
-  auto static_size = 0;
+	// Ahead-of-time translation
+	std::set<unsigned long> translated_addrs;
+	std::list<symbol> zero_size_symbol;
+	auto static_size = 0;
 	if (!cmdline.count("no-static")) {
 		// Loop over each symbol table, and translate the symbol.
 		for (auto s : elf.sections()) {
 			if (s->type() == section_type::symbol_table) {
 				auto st = std::static_pointer_cast<symbol_table>(s);
 				for (const auto &sym : st->symbols()) {
-          if (!sym.is_func())
-            continue;
+					if (!sym.is_func())
+						continue;
 					std::cerr << "[DEBUG] PASS1: looking at symbol '" << sym.name() << "' @ 0x" << std::hex << sym.value() << std::endl;
 					if (sym.is_func() && !translated_addrs.count(sym.value())) {
 						translated_addrs.insert(sym.value());
-            // Don't translate symbols with a size of 0, we'll do this in a second pass.
+						// Don't translate symbols with a size of 0, we'll do this in a second pass.
 						if (!sym.size()) {
 							std::cerr << "[DEBUG] PASS1: selecting for PASS2 (0 size), symbol '" << sym.name() << "'" << std::endl;
 							zero_size_symbol.push_front(sym);
@@ -92,41 +92,41 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 						}
 						std::cerr << "[DEBUG] PASS1: translating symbol '" << sym.name() << "' [" << std::dec << sym.size() << " bytes]" << std::endl;
 						oe->add_chunk(translate_symbol(*ia, elf, sym));
-            static_size += sym.size();
+						static_size += sym.size();
 					} else {
-            std::cerr << "[DEBUG] PASS1: address already seen for '" << sym.name() << "' @ 0x" << std::hex << sym.value() << std::endl;
-          }
+						std::cerr << "[DEBUG] PASS1: address already seen for '" << sym.name() << "' @ 0x" << std::hex << sym.value() << std::endl;
+					}
 				}
 			}
 		}
-    // Loop over symbols of size zero and optimistically translate
+		// Loop over symbols of size zero and optimistically translate
 		for (auto s : zero_size_symbol) {
 			std::cerr << "[DEBUG] PASS2: looking at symbol '" << s.name() << "' @ 0x" << std::hex << s.value() << std::endl;
 			// find the address of the symbol after s in the text section, and assume that the size of s is until there
 			auto next = *(std::next(translated_addrs.find(s.value()), 1));
 			auto size = next - s.value();
 			auto fixed_sym = symbol(s.name(), s.value(), size, s.section_index(), s.info());
-			std::cerr << "[DEBUG] PASS2: translating symbol '" << s.name() << "' [" << std::dec << size << " bytes]"  << std::endl;
+			std::cerr << "[DEBUG] PASS2: translating symbol '" << s.name() << "' [" << std::dec << size << " bytes]" << std::endl;
 			oe->add_chunk(translate_symbol(*ia, elf, fixed_sym));
 			static_size += size;
 		}
 	}
-  std::cout << "ahead-of-time: translated " << std::dec << static_size << " bytes" << std::endl;
+	std::cout << "ahead-of-time: translated " << std::dec << static_size << " bytes" << std::endl;
 
 	// Generate a dot graph of the IR if required
 	if (cmdline.count("graph")) {
-    generate_dot_graph(*oe, cmdline.at("graph").as<std::string>());
+		generate_dot_graph(*oe, cmdline.at("graph").as<std::string>());
 	}
 
-  // Execute required optimisations from the command line
-  optimise(*oe, cmdline);
+	// Execute required optimisations from the command line
+	optimise(*oe, cmdline);
 
 	// Generate a dot graph of the optimized IR if required
 	if (cmdline.count("graph")) {
-    std::string opt_filename = cmdline.at("graph").as<std::string>();
-    opt_filename = opt_filename.substr(0, opt_filename.find_last_of('.'));
-    opt_filename += ".opt.dot";
-    generate_dot_graph(*oe, opt_filename);
+		std::string opt_filename = cmdline.at("graph").as<std::string>();
+		opt_filename = opt_filename.substr(0, opt_filename.find_last_of('.'));
+		opt_filename += ".opt.dot";
+		generate_dot_graph(*oe, opt_filename);
 	}
 
 	// If the main output command-line option was not specified, then don't go any further.
@@ -218,18 +218,16 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		std::string arancini_runtime_lib_dir = arancini_runtime_lib_path.substr(0, dir_start);
 
 		// Generate the final output binary by compiling everything together.
-		run_or_fail(
-			cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie -latomic " +
-				intermediate_file->name() + " " + phobjsrc->name() + " " + arancini_runtime_lib_path
-				+ " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info);
+		run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie -latomic " + intermediate_file->name() + " " + phobjsrc->name()
+			+ " " + arancini_runtime_lib_path + " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info);
 	} else {
 		std::string arancini_runtime_lib_dir = cmdline.at("static-binary").as<std::string>();
 
 		// Generate the final output binary by compiling everything together.
-		run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie -latomic -static-libgcc -static-libstdc++ " + intermediate_file->name()
-			+ " " + phobjsrc->name() + " -L " + arancini_runtime_lib_dir
+		run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie -latomic -static-libgcc -static-libstdc++ "
+			+ intermediate_file->name() + " " + phobjsrc->name() + " -L " + arancini_runtime_lib_dir
 			+ " -l arancini-runtime-static -l arancini-input-x86-static -l arancini-output-riscv64-static -l arancini-ir-static" + " -L "
-			+ arancini_runtime_lib_dir + "/../../obj -l xed" + debug_info +" -Wl,-rpath=" + arancini_runtime_lib_dir);
+			+ arancini_runtime_lib_dir + "/../../obj -l xed" + debug_info + " -Wl,-rpath=" + arancini_runtime_lib_dir);
 	}
 }
 
@@ -240,7 +238,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arch &ia, elf_reader &reader, const symbol &sym)
 {
 	std::cerr << "translating symbol " << sym.name() << ", value=" << std::hex << sym.value() << ", size=" << sym.size() << ", section=" << sym.section_index()
-            << std::endl;
+			  << std::endl;
 
 	auto section = reader.get_section(sym.section_index());
 	if (!section) {
@@ -261,12 +259,11 @@ std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arc
 	return irb.get_chunk();
 }
 
-
 void txlat_engine::generate_dot_graph(arancini::output::o_static::static_output_engine &oe, std::string filename)
 {
 	std::ostream *o;
 
-  std::cout << "Generating dot graph to: " << filename << std::endl;
+	std::cout << "Generating dot graph to: " << filename << std::endl;
 
 	if (filename == "-") {
 		o = &std::cout;
@@ -289,11 +286,12 @@ void txlat_engine::generate_dot_graph(arancini::output::o_static::static_output_
 
 void txlat_engine::optimise(arancini::output::o_static::static_output_engine &oe, const boost::program_options::variables_map &cmdline)
 {
-  auto start = std::chrono::high_resolution_clock::now();
-  deadflags_opt_visitor deadflags;
-  for (auto c : oe.chunks()) {
-    c->accept(deadflags);
-  }
+	auto start = std::chrono::high_resolution_clock::now();
+	deadflags_opt_visitor deadflags;
+	for (auto c : oe.chunks()) {
+		c->accept(deadflags);
+	}
 	auto dur = std::chrono::high_resolution_clock::now() - start;
-  std::cerr << "Optimisation: dead flags elimination pass: " << std::dec << std::chrono::duration_cast<std::chrono::microseconds>(dur).count() << " us" << std::endl;
+	std::cerr << "Optimisation: dead flags elimination pass: " << std::dec << std::chrono::duration_cast<std::chrono::microseconds>(dur).count() << " us"
+			  << std::endl;
 }

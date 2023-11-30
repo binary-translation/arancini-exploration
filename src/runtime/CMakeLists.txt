@@ -8,51 +8,51 @@ set(RUNTIME_SRCS
         entry.cpp
         exec/execution-thread.cpp
         exec/execution-context.cpp
-		exec/x86/x86-cpu-state.cpp
+        exec/x86/x86-cpu-state.cpp
         dbt/translation-engine.cpp)
 
 set(INCLUDE_PATH ../../inc)
 
 add_library(arancini-runtime
-            SHARED
-            ${RUNTIME_SRCS})
+        SHARED
+        ${RUNTIME_SRCS})
 add_library(arancini-runtime-static
-            STATIC
-            ${RUNTIME_SRCS})
+        STATIC
+        ${RUNTIME_SRCS})
 
 if (TARGET arancini-output-x86)
     add_library(arancini-trampoline OBJECT dbt/trampoline.x86_64.S)
     target_link_libraries(arancini-runtime
-                          PUBLIC
-                          arancini-output-x86)
+            PUBLIC
+            arancini-output-x86)
 elseif (TARGET arancini-output-arm64)
     add_library(arancini-trampoline OBJECT dbt/trampoline.arm64.S)
     target_link_libraries(arancini-runtime
-                          PUBLIC
-                          arancini-output-arm64)
+            PUBLIC
+            arancini-output-arm64)
 elseif (TARGET arancini-output-riscv64)
     add_library(arancini-trampoline OBJECT dbt/trampoline.riscv64.S)
     target_link_libraries(arancini-runtime
-                          PUBLIC
-                          arancini-output-riscv64)
+            PUBLIC
+            arancini-output-riscv64)
     target_link_libraries(arancini-runtime-static
-                          PRIVATE
-                          arancini-output-riscv64-static)
+            PRIVATE
+            arancini-output-riscv64-static)
 else ()
     message(FATAL_ERROR "No output DBT library was built; set ARCH correctly")
 endif ()
 
 target_link_libraries(arancini-runtime
-                      PRIVATE
-                      xed
-                      arancini-ir
-                      arancini-input-x86
-                      arancini-trampoline)
+        PRIVATE
+        xed
+        arancini-ir
+        arancini-input-x86
+        arancini-trampoline)
 target_link_libraries(arancini-runtime-static
-                      PRIVATE
-                      xed
-                      arancini-ir-static
-                      arancini-input-x86-static
-                      arancini-trampoline)
+        PRIVATE
+        xed
+        arancini-ir-static
+        arancini-input-x86-static
+        arancini-trampoline)
 
 install(TARGETS arancini-runtime LIBRARY)

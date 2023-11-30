@@ -1,9 +1,9 @@
 #pragma once
 
+#include <iomanip>
+#include <sstream>
 #include <string>
 #include <vector>
-#include <sstream>
-#include <iomanip>
 
 namespace arancini::ir {
 enum class value_type_class { none, signed_integer, unsigned_integer, floating_point };
@@ -26,14 +26,14 @@ public:
 	static value_type s128() { return value_type(value_type_class::signed_integer, 128, 1); }
 	static value_type f32() { return value_type(value_type_class::floating_point, 32, 1); }
 	static value_type f64() { return value_type(value_type_class::floating_point, 64, 1); }
-    static value_type f80() { return value_type(value_type_class::floating_point, 80, 1); } // x87 double extended-precision
+	static value_type f80() { return value_type(value_type_class::floating_point, 80, 1); } // x87 double extended-precision
 
 	static value_type vector(const value_type &underlying_type, int nr_elements)
 	{
 		return value_type(underlying_type.tc_, underlying_type.element_width_, nr_elements);
 	}
 
-    value_type() = default;
+	value_type() = default;
 
 	value_type(value_type_class tc, int element_width, int nr_elements = 1)
 		: tc_(tc)

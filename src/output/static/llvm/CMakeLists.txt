@@ -15,11 +15,11 @@ message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
 set(INCLUDE_PATH ../../../inc)
 add_library(arancini-output-llvm
-			llvm-optimisations.cpp
-            llvm-static-output-engine.cpp)
+        llvm-optimisations.cpp
+        llvm-static-output-engine.cpp)
 
 target_include_directories(arancini-output-llvm PUBLIC ${INCLUDE_PATH}
-                                                       ${LLVM_INCLUDE_DIRS})
+        ${LLVM_INCLUDE_DIRS})
 
 llvm_config(arancini-output-llvm USE_SHARED all)
 target_link_libraries(arancini-output-llvm PRIVATE xed arancini-ir)

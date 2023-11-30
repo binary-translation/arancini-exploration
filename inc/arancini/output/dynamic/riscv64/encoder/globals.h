@@ -7,11 +7,11 @@
 
 #if defined(_WIN32)
 #include <windows.h>
-#endif  // defined(_WIN32)
+#endif // defined(_WIN32)
 
+#include <cinttypes>
 #include <cstddef>
 #include <cstdint>
-#include <cinttypes>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -42,7 +42,6 @@
 #error Automatic OS detection failed.
 #endif
 
-
 #if defined(_M_X64) || (__SIZEOF_POINTER__ == 8)
 #define ARCH_IS_64_BIT 1
 #elif defined(_M_IX86) || (__SIZEOF_POINTER__ == 4)
@@ -51,7 +50,6 @@
 #error Unknown architecture.
 #endif
 
-
 // ATTRIBUTE_UNUSED indicates to the compiler that a variable/typedef is
 // expected to be unused and disables the related warning.
 #ifdef __GNUC__
@@ -59,7 +57,6 @@
 #else
 #define ATTRIBUTE_UNUSED
 #endif
-
 
 // Short form printf format specifiers
 #if defined(OS_EMSCRIPTEN)
@@ -75,7 +72,6 @@
 #define Pu64 PRIu64
 #define Px64 PRIx64
 
-
 // Suffixes for 64-bit integer literals.
 #ifdef _MSC_VER
 #define PSOUP_INT64_C(x) x##I64
@@ -85,13 +81,10 @@
 #define PSOUP_UINT64_C(x) x##ULL
 #endif
 
-
 // The following macro works on both 32 and 64-bit platforms.
 // Usage: instead of writing 0x1234567890123456ULL
 //      write PSOUP_2PART_UINT64_C(0x12345678,90123456);
-#define PSOUP_2PART_UINT64_C(a, b)                                             \
-                 (((static_cast<uint64_t>(a) << 32) + 0x##b##u))
-
+#define PSOUP_2PART_UINT64_C(a, b) (((static_cast<uint64_t>(a) << 32) + 0x##b##u))
 
 // Integer constants.
 const int32_t kMinInt32 = 0x80000000;
@@ -102,19 +95,17 @@ const int64_t kMaxInt64 = PSOUP_INT64_C(0x7FFFFFFFFFFFFFFF);
 const uint64_t kMaxUint64 = PSOUP_2PART_UINT64_C(0xFFFFFFFF, FFFFFFFF);
 const int64_t kSignBitDouble = PSOUP_INT64_C(0x8000000000000000);
 
-
 // Types for native machine words. Guaranteed to be able to hold pointers and
 // integers.
 typedef intptr_t word;
 typedef uintptr_t uword;
 
-
 // Byte sizes.
 const int kWordSize = sizeof(word);
-const int kDoubleSize = sizeof(double);  // NOLINT
-const int kFloatSize = sizeof(float);  // NOLINT
-const int kInt32Size = sizeof(int32_t);  // NOLINT
-const int kInt16Size = sizeof(int16_t);  // NOLINT
+const int kDoubleSize = sizeof(double); // NOLINT
+const int kFloatSize = sizeof(float); // NOLINT
+const int kInt32Size = sizeof(int32_t); // NOLINT
+const int kInt16Size = sizeof(int16_t); // NOLINT
 #if defined(ARCH_IS_32_BIT)
 const int kWordSizeLog2 = 2;
 const uword kUwordMax = kMaxUint32;
@@ -138,22 +129,19 @@ const intptr_t GBLog2 = MBLog2 + KBLog2;
 // Time constants.
 const int kMillisecondsPerSecond = 1000;
 const int kMicrosecondsPerMillisecond = 1000;
-const int kMicrosecondsPerSecond = (kMicrosecondsPerMillisecond *
-                                    kMillisecondsPerSecond);
+const int kMicrosecondsPerSecond = (kMicrosecondsPerMillisecond * kMillisecondsPerSecond);
 const int kNanosecondsPerMicrosecond = 1000;
-const int kNanosecondsPerMillisecond = (kNanosecondsPerMicrosecond *
-                                        kMicrosecondsPerMillisecond);
-const int kNanosecondsPerSecond = (kNanosecondsPerMicrosecond *
-                                   kMicrosecondsPerSecond);
+const int kNanosecondsPerMillisecond = (kNanosecondsPerMicrosecond * kMicrosecondsPerMillisecond);
+const int kNanosecondsPerSecond = (kNanosecondsPerMicrosecond * kMicrosecondsPerSecond);
 
 // A macro to disallow the copy constructor and operator= functions.
 // This should be used in the private: declarations for a class.
 #if !defined(DISALLOW_COPY_AND_ASSIGN)
-#define DISALLOW_COPY_AND_ASSIGN(TypeName)                                     \
-private:                                                                       \
-  TypeName(const TypeName&);                                                   \
-  void operator=(const TypeName&)
-#endif  // !defined(DISALLOW_COPY_AND_ASSIGN)
+#define DISALLOW_COPY_AND_ASSIGN(TypeName)                                                                                                                     \
+private:                                                                                                                                                       \
+	TypeName(const TypeName &);                                                                                                                                \
+	void operator=(const TypeName &)
+#endif // !defined(DISALLOW_COPY_AND_ASSIGN)
 
 // A macro to disallow all the implicit constructors, namely the default
 // constructor, copy constructor and operator= functions. This should be
@@ -161,27 +149,28 @@ private:                                                                       \
 // anyone from instantiating it. This is especially useful for classes
 // containing only static methods.
 #if !defined(DISALLOW_IMPLICIT_CONSTRUCTORS)
-#define DISALLOW_IMPLICIT_CONSTRUCTORS(TypeName)                               \
-private:                                                                       \
-  TypeName();                                                                  \
-  DISALLOW_COPY_AND_ASSIGN(TypeName)
-#endif  // !defined(DISALLOW_IMPLICIT_CONSTRUCTORS)
+#define DISALLOW_IMPLICIT_CONSTRUCTORS(TypeName)                                                                                                               \
+private:                                                                                                                                                       \
+	TypeName();                                                                                                                                                \
+	DISALLOW_COPY_AND_ASSIGN(TypeName)
+#endif // !defined(DISALLOW_IMPLICIT_CONSTRUCTORS)
 
 // Macro to disallow allocation in the C++ heap. This should be used
 // in the private section for a class. Don't use UNREACHABLE here to
 // avoid circular dependencies between platform/globals.h and
 // platform/assert.h.
 #if !defined(DISALLOW_ALLOCATION)
-#define DISALLOW_ALLOCATION()                                                  \
-public:                                                                        \
-  void operator delete(void* pointer) {                                        \
-    fprintf(stderr, "unreachable code\n");                                     \
-    abort();                                                                   \
-  }                                                                            \
-private:                                                                       \
-  void* operator new(size_t size)
-#endif  // !defined(DISALLOW_ALLOCATION)
-
+#define DISALLOW_ALLOCATION()                                                                                                                                  \
+public:                                                                                                                                                        \
+	void operator delete(void *pointer)                                                                                                                        \
+	{                                                                                                                                                          \
+		fprintf(stderr, "unreachable code\n");                                                                                                                 \
+		abort();                                                                                                                                               \
+	}                                                                                                                                                          \
+                                                                                                                                                               \
+private:                                                                                                                                                       \
+	void *operator new(size_t size)
+#endif // !defined(DISALLOW_ALLOCATION)
 
 // The type-based aliasing rule allows the compiler to assume that
 // pointers of different types (for some definition of different)
@@ -208,19 +197,18 @@ private:                                                                       \
 // can use bit_cast to cast one pointer type to another. This confuses
 // gcc enough that it can no longer see that you have cast one pointer
 // type to another thus avoiding the warning.
-template <class D, class S>
-inline D bit_cast(const S& source) {
-  // Compile time assertion: sizeof(D) == sizeof(S). A compile error
-  // here means your D and S have different sizes.
-  ATTRIBUTE_UNUSED
-  typedef char VerifySizesAreEqual[sizeof(D) == sizeof(S) ? 1 : -1];
+template <class D, class S> inline D bit_cast(const S &source)
+{
+	// Compile time assertion: sizeof(D) == sizeof(S). A compile error
+	// here means your D and S have different sizes.
+	ATTRIBUTE_UNUSED
+	typedef char VerifySizesAreEqual[sizeof(D) == sizeof(S) ? 1 : -1];
 
-  D destination;
-  // This use of memcpy is safe: source and destination cannot overlap.
-  memcpy(&destination, &source, sizeof(destination));
-  return destination;
+	D destination;
+	// This use of memcpy is safe: source and destination cannot overlap.
+	memcpy(&destination, &source, sizeof(destination));
+	return destination;
 }
-
 
 #if defined(__GNUC__) || defined(__clang__)
 // Tell the compiler to do printf format string checking if the
@@ -230,8 +218,7 @@ inline D bit_cast(const S& source) {
 // N.B.: As the GCC manual states, "[s]ince non-static C++ methods
 // have an implicit 'this' argument, the arguments of such methods
 // should be counted from two, not one."
-#define PRINTF_ATTRIBUTE(string_index, first_to_check) \
-  __attribute__((__format__(__printf__, string_index, first_to_check)))
+#define PRINTF_ATTRIBUTE(string_index, first_to_check) __attribute__((__format__(__printf__, string_index, first_to_check)))
 #else
 #define PRINTF_ATTRIBUTE(string_index, first_to_check)
 #endif
@@ -272,4 +259,4 @@ inline D bit_cast(const S& source) {
 #define NO_SANITIZE_UNDEFINED(check)
 #endif
 
-#endif  // VM_GLOBALS_H_
+#endif // VM_GLOBALS_H_

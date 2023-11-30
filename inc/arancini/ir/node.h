@@ -85,64 +85,66 @@ public:
 
 	bool has_metadata(const std::string &key) const { return md_.count(key) > 0; }
 
-    const char *to_string() const {
-        switch (kind()) {
-        case node_kinds::label:
-            return "label node";
-        case node_kinds::read_pc:
-            return "read PC node";
-        case node_kinds::write_pc:
-            return "write PC node";
-        case node_kinds::constant:
-            return "constant node";
-        case node_kinds::unary_arith:
-            return "unary arithmetic node";
-        case node_kinds::binary_arith:
-            return "binary arithmetic node";
-        case node_kinds::ternary_arith:
-            return "ternary arithmetic node";
-        case node_kinds::unary_atomic:
-            return "unary atomic node";
-        case node_kinds::binary_atomic:
-            return "binary atomic node";
-        case node_kinds::ternary_atomic:
-            return "ternary atomic node";
-        case node_kinds::read_reg:
-            return "read register node";
-        case node_kinds::read_mem:
-            return "read memory node";
-        case node_kinds::write_reg:
-            return "write memory node";
-        case node_kinds::write_mem:
-            return "write memory node";
-        case node_kinds::cast:
-            return "cast node";
-        case node_kinds::csel:
-            return "conditional select node";
-        case node_kinds::bit_shift:
-            return "bit shift node";
-        case node_kinds::br:
-            return "branch node";
-        case node_kinds::cond_br:
-            return "conditional branch node";
-        case node_kinds::bit_extract:
-            return "bit extract node";
-        case node_kinds::bit_insert:
-            return "bit insert node";
-        case node_kinds::vector_extract:
-            return "vector extract node";
-        case node_kinds::vector_insert:
-            return "vector insert node";
-        case node_kinds::read_local:
-            return "read local node";
-        case node_kinds::write_local:
-            return "write local node";
-        case node_kinds::internal_call:
-            return "internal call node";
-        default:
-            return "Unknown node";
-        }
-    }
+	const char *to_string() const
+	{
+		switch (kind()) {
+		case node_kinds::label:
+			return "label node";
+		case node_kinds::read_pc:
+			return "read PC node";
+		case node_kinds::write_pc:
+			return "write PC node";
+		case node_kinds::constant:
+			return "constant node";
+		case node_kinds::unary_arith:
+			return "unary arithmetic node";
+		case node_kinds::binary_arith:
+			return "binary arithmetic node";
+		case node_kinds::ternary_arith:
+			return "ternary arithmetic node";
+		case node_kinds::unary_atomic:
+			return "unary atomic node";
+		case node_kinds::binary_atomic:
+			return "binary atomic node";
+		case node_kinds::ternary_atomic:
+			return "ternary atomic node";
+		case node_kinds::read_reg:
+			return "read register node";
+		case node_kinds::read_mem:
+			return "read memory node";
+		case node_kinds::write_reg:
+			return "write memory node";
+		case node_kinds::write_mem:
+			return "write memory node";
+		case node_kinds::cast:
+			return "cast node";
+		case node_kinds::csel:
+			return "conditional select node";
+		case node_kinds::bit_shift:
+			return "bit shift node";
+		case node_kinds::br:
+			return "branch node";
+		case node_kinds::cond_br:
+			return "conditional branch node";
+		case node_kinds::bit_extract:
+			return "bit extract node";
+		case node_kinds::bit_insert:
+			return "bit insert node";
+		case node_kinds::vector_extract:
+			return "vector extract node";
+		case node_kinds::vector_insert:
+			return "vector insert node";
+		case node_kinds::read_local:
+			return "read local node";
+		case node_kinds::write_local:
+			return "write local node";
+		case node_kinds::internal_call:
+			return "internal call node";
+		default:
+			return "Unknown node";
+		}
+	}
+
 private:
 	node_kinds kind_;
 	std::map<std::string, std::shared_ptr<metadata>> md_;
@@ -207,7 +209,7 @@ public:
 	{
 	}
 
-	const std::string& name() const { return name_; }
+	const std::string &name() const { return name_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -302,6 +304,7 @@ public:
 	}
 
 	unsigned long const_target() { return target_; };
+
 private:
 	port &value_;
 	br_type br_type_;
@@ -502,7 +505,7 @@ public:
 	port &negative() { return negative_; }
 
 	[[nodiscard]] const port &zero() const { return zero_; }
-	[[nodiscard]] const port &negative() const{ return negative_; }
+	[[nodiscard]] const port &negative() const { return negative_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -520,21 +523,22 @@ private:
 enum class cast_op : uint8_t { bitcast, zx, sx, trunc, convert };
 enum class fp_convert_type : uint8_t { none, round, trunc };
 
-static std::string to_string(cast_op op) {
-    switch (op) {
-    case cast_op::bitcast:
-        return "bitcast";
-    case cast_op::zx:
-        return "zero-extend";
-    case cast_op::sx:
-        return "sign-extend";
-    case cast_op::trunc:
-        return "truncate";
-    case cast_op::convert:
-        return "convert";
-    default:
-        return "unknown cast operation";
-    }
+static std::string to_string(cast_op op)
+{
+	switch (op) {
+	case cast_op::bitcast:
+		return "bitcast";
+	case cast_op::zx:
+		return "zero-extend";
+	case cast_op::sx:
+		return "sign-extend";
+	case cast_op::trunc:
+		return "truncate";
+	case cast_op::convert:
+		return "convert";
+	default:
+		return "unknown cast operation";
+	}
 }
 
 class cast_node : public value_node {

@@ -10,15 +10,16 @@
 
 namespace arancini::output::dynamic::riscv64 {
 
-void Assert::Fail(const char* format, ...) {
-  fprintf(stderr, "%s:%d: error: ", file_, line_);
-  va_list arguments;
-  va_start(arguments, format);
-  vfprintf(stderr, format, arguments);
-  va_end(arguments);
-  fprintf(stderr, "\n");
-  fflush(stderr);
-  abort();
+void Assert::Fail(const char *format, ...)
+{
+	fprintf(stderr, "%s:%d: error: ", file_, line_);
+	va_list arguments;
+	va_start(arguments, format);
+	vfprintf(stderr, format, arguments);
+	va_end(arguments);
+	fprintf(stderr, "\n");
+	fflush(stderr);
+	abort();
 }
 
-}  // namespace arancini::output::dynamic::riscv64
+} // namespace arancini::output::dynamic::riscv64

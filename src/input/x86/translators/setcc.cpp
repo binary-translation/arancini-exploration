@@ -1,6 +1,6 @@
 #include <arancini/input/x86/translators/translators.h>
-#include <arancini/ir/node.h>
 #include <arancini/ir/ir-builder.h>
+#include <arancini/ir/node.h>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;

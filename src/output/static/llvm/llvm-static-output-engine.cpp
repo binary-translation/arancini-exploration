@@ -18,9 +18,9 @@
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
-#include <llvm/Transforms/Scalar/JumpThreading.h>
 #include <llvm/IR/PassManager.h>
 #include <llvm/Support/TimeProfiler.h>
+#include <llvm/Transforms/Scalar/JumpThreading.h>
 #include <map>
 #include <memory>
 #include <ostream>
@@ -65,8 +65,6 @@ void llvm_static_output_engine_impl::generate()
 	compile();
 }
 
-
-
 void llvm_static_output_engine_impl::initialise_types()
 {
 	// Primitives
@@ -103,7 +101,7 @@ void llvm_static_output_engine_impl::initialise_types()
 #undef DEFREG
 	});
 
-	types.cpu_state = StructType::get(*llvm_context_, state_elements,true);
+	types.cpu_state = StructType::get(*llvm_context_, state_elements, true);
 	if (!types.cpu_state->isLiteral())
 		types.cpu_state->setName("cpu_state_struct");
 	types.cpu_state_ptr = PointerType::get(types.cpu_state, 0);
@@ -111,7 +109,7 @@ void llvm_static_output_engine_impl::initialise_types()
 	// Functions
 	types.main_fn = FunctionType::get(types.i32, { types.i32, PointerType::get(Type::getInt8PtrTy(*llvm_context_), 0) }, false);
 	types.loop_fn = FunctionType::get(types.vd, { types.cpu_state_ptr }, false);
-	types.init_dbt = FunctionType::get(types.cpu_state_ptr, { types.i64, types.i32, PointerType::get(Type::getInt8PtrTy(*llvm_context_),0) }, false);
+	types.init_dbt = FunctionType::get(types.cpu_state_ptr, { types.i64, types.i32, PointerType::get(Type::getInt8PtrTy(*llvm_context_), 0) }, false);
 	types.dbt_invoke = FunctionType::get(types.i32, { types.cpu_state_ptr }, false);
 	types.internal_call_handler = FunctionType::get(types.i32, { types.cpu_state_ptr, types.i32 }, false);
 	types.finalize = FunctionType::get(types.vd, {}, false);
@@ -188,9 +186,9 @@ void llvm_static_output_engine_impl::build()
 
 	builder.SetInsertPoint(loop_block);
 
-	//DEBUG
-	//auto alert = module_->getOrInsertFunction("alert", types.finalize);
-	//builder.CreateCall(alert, { });
+	// DEBUG
+	// auto alert = module_->getOrInsertFunction("alert", types.finalize);
+	// builder.CreateCall(alert, { });
 	auto program_counter_val = builder.CreateLoad(types.i64, program_counter, "pc");
 	auto pcswitch = builder.CreateSwitch(program_counter_val, switch_to_dbt);
 
@@ -212,10 +210,10 @@ void llvm_static_output_engine_impl::build()
 
 	builder.SetInsertPoint(check_for_call_block);
 	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 3)), call_block, check_for_ret_block);
-	
+
 	builder.SetInsertPoint(check_for_ret_block);
 	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 4)), ret_block, check_for_int_call_block);
-	
+
 	builder.SetInsertPoint(check_for_int_call_block);
 	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_SGT, invoke_result, ConstantInt::get(types.i32, 0)), internal_call_block, exit_block);
 
@@ -223,7 +221,6 @@ void llvm_static_output_engine_impl::build()
 	auto internal_call_callee = module_->getOrInsertFunction("execute_internal_call", types.internal_call_handler);
 	auto internal_call_result = builder.CreateCall(internal_call_callee, { state_arg, invoke_result });
 	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, internal_call_result, ConstantInt::get(types.i32, 0)), loop_block, exit_block);
-
 
 	builder.SetInsertPoint(exit_block);
 
@@ -258,7 +255,7 @@ void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlo
 		fn_name << "FN_" << std::hex << c->packets()[0]->address();
 
 		auto fn = Function::Create(types.loop_fn, GlobalValue::LinkageTypes::ExternalLinkage, fn_name.str(), *module_);
-			(*fns)[c->packets()[0]->address()] = fn;
+		(*fns)[c->packets()[0]->address()] = fn;
 	}
 
 	for (auto c : chunks_) {
@@ -361,7 +358,8 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		}
 
 #ifndef ARCH_X86_64
-		auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
+		auto gs_reg = builder.CreateGEP(
+			types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); // TODO: move offset_2_idx into a common header
 		address = builder.CreateAdd(address, builder.CreateLoad(types.i64, gs_reg));
 #endif
 		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(ty, 256));
@@ -377,8 +375,8 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 	case node_kinds::read_reg: {
 		auto rrn = (read_reg_node *)n;
-		auto src_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, rrn->regidx()) },
-			reg_name(rrn->regidx()));
+		auto src_reg = builder.CreateGEP(
+			types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, rrn->regidx()) }, reg_name(rrn->regidx()));
 
 		if (auto src_reg_i = ::llvm::dyn_cast<Instruction>(src_reg)) {
 			src_reg_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, reg_file_alias_scope_));
@@ -441,22 +439,26 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 			if (lhs->getType()->isFloatingPointTy()) {
 				switch (ban->op()) {
-					case binary_arith_op::bxor:
-					case binary_arith_op::band:
-					case binary_arith_op::bor: {
-						lhs = builder.CreateBitCast(lhs, IntegerType::get(*llvm_context_, lhs->getType()->getPrimitiveSizeInBits())); break;
-					default: break;
-					}
+				case binary_arith_op::bxor:
+				case binary_arith_op::band:
+				case binary_arith_op::bor: {
+					lhs = builder.CreateBitCast(lhs, IntegerType::get(*llvm_context_, lhs->getType()->getPrimitiveSizeInBits()));
+					break;
+				default:
+					break;
+				}
 				}
 			}
 			if (rhs->getType()->isFloatingPointTy()) {
 				switch (ban->op()) {
-					case binary_arith_op::bxor:
-					case binary_arith_op::band:
-					case binary_arith_op::bor: {
-						rhs = builder.CreateBitCast(lhs, IntegerType::get(*llvm_context_, rhs->getType()->getPrimitiveSizeInBits())); break;
-					default: break;
-					}
+				case binary_arith_op::bxor:
+				case binary_arith_op::band:
+				case binary_arith_op::bor: {
+					rhs = builder.CreateBitCast(lhs, IntegerType::get(*llvm_context_, rhs->getType()->getPrimitiveSizeInBits()));
+					break;
+				default:
+					break;
+				}
 				}
 			}
 
@@ -542,9 +544,12 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		} else if (p.kind() == port_kinds::carry) {
 			auto value_port = lower_port(builder, state_arg, pkt, n->val());
 			switch (ban->op()) {
-			case binary_arith_op::sub: return builder.CreateZExt(builder.CreateICmpULT(lhs, rhs, "borrow"), types.i8);
-			case binary_arith_op::add: return builder.CreateZExt(builder.CreateICmpUGT(lhs, value_port, "carry"), types.i8);
-			default: return ConstantInt::get(types.i8, 0);
+			case binary_arith_op::sub:
+				return builder.CreateZExt(builder.CreateICmpULT(lhs, rhs, "borrow"), types.i8);
+			case binary_arith_op::add:
+				return builder.CreateZExt(builder.CreateICmpUGT(lhs, value_port, "carry"), types.i8);
+			default:
+				return ConstantInt::get(types.i8, 0);
 			}
 		} else if (p.kind() == port_kinds::overflow) {
 			auto value_port = lower_port(builder, state_arg, pkt, n->val());
@@ -553,17 +558,22 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 				auto z = ConstantInt::get(value_port->getType(), 0);
 				rhs = builder.CreateNeg(rhs);
 				auto sum = builder.CreateAdd(lhs, rhs);
-				auto pos_args = builder.CreateAnd(builder.CreateICmpSGE(lhs, z, "LHS pos"), builder.CreateAnd(builder.CreateICmpSGE(rhs, z, "RHS pos"), builder.CreateICmpSLT(sum, z, "SUM neg")));
-				auto neg_args = builder.CreateAnd(builder.CreateICmpSLT(lhs, z, "LHS neg"), builder.CreateAnd(builder.CreateICmpSLT(rhs, z, "RHS neg"), builder.CreateICmpSGE(sum, z, "SUM pos")));
+				auto pos_args = builder.CreateAnd(builder.CreateICmpSGE(lhs, z, "LHS pos"),
+					builder.CreateAnd(builder.CreateICmpSGE(rhs, z, "RHS pos"), builder.CreateICmpSLT(sum, z, "SUM neg")));
+				auto neg_args = builder.CreateAnd(builder.CreateICmpSLT(lhs, z, "LHS neg"),
+					builder.CreateAnd(builder.CreateICmpSLT(rhs, z, "RHS neg"), builder.CreateICmpSGE(sum, z, "SUM pos")));
 				return builder.CreateZExt(builder.CreateOr(pos_args, neg_args, "overflow"), types.i8);
 			}
 			case binary_arith_op::add: {
 				auto z = ConstantInt::get(value_port->getType(), 0);
-				auto pos_args = builder.CreateAnd(builder.CreateICmpSGT(lhs, z), builder.CreateAnd(builder.CreateICmpSGT(rhs, z), builder.CreateICmpSLT(value_port, z)));
-				auto neg_args = builder.CreateAnd(builder.CreateICmpSLT(lhs, z), builder.CreateAnd(builder.CreateICmpSLT(rhs, z), builder.CreateICmpSGE(value_port, z)));
+				auto pos_args
+					= builder.CreateAnd(builder.CreateICmpSGT(lhs, z), builder.CreateAnd(builder.CreateICmpSGT(rhs, z), builder.CreateICmpSLT(value_port, z)));
+				auto neg_args
+					= builder.CreateAnd(builder.CreateICmpSLT(lhs, z), builder.CreateAnd(builder.CreateICmpSLT(rhs, z), builder.CreateICmpSGE(value_port, z)));
 				return builder.CreateZExt(builder.CreateOr(pos_args, neg_args, "overflow"), types.i8);
 			}
-			default: return ConstantInt::get(types.i8, 0);
+			default:
+				return ConstantInt::get(types.i8, 0);
 			}
 		} else {
 			throw std::runtime_error("unsupported port kind");
@@ -682,7 +692,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 					break;
 				}
 				case 128: {
-						ty = types.i128;
+					ty = types.i128;
 					break;
 				}
 				default:
@@ -720,22 +730,31 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 					throw std::runtime_error("unsupported bitcast element width");
 				}
 				return builder.CreateBitCast(val, ty);
-
 			}
 			return val;
 		}
 		case cast_op::convert: {
 			::llvm::RoundingMode rm;
 			switch (cn->convert_type()) {
-				case fp_convert_type::round: rm = ::llvm::RoundingMode::NearestTiesToEven; break;
-				case fp_convert_type::trunc: rm = ::llvm::RoundingMode::TowardZero; break;
+			case fp_convert_type::round:
+				rm = ::llvm::RoundingMode::NearestTiesToEven;
+				break;
+			case fp_convert_type::trunc:
+				rm = ::llvm::RoundingMode::TowardZero;
+				break;
 			}
-			
+
 			if (cn->target_type().is_floating_point()) {
 				switch (cn->target_type().width()) {
-					case 32: ty = types.f32; break;
-					case 64: ty = types.f64; break;
-					case 80: ty = types.f80; break;
+				case 32:
+					ty = types.f32;
+					break;
+				case 64:
+					ty = types.f64;
+					break;
+				case 80:
+					ty = types.f80;
+					break;
 				}
 				if (val->getType()->isFloatingPointTy()) {
 					if (val->getType()->getPrimitiveSizeInBits() > ty->getPrimitiveSizeInBits())
@@ -743,23 +762,39 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 					return builder.CreateFPExt(val, ty);
 				}
 
-				//TODO: Valid rounding mode!
+				// TODO: Valid rounding mode!
 				if (((IntegerType *)val->getType())->getSignBit())
 					return builder.CreateConstrainedFPCast(Intrinsic::experimental_constrained_sitofp, val, ty);
 				return builder.CreateConstrainedFPCast(Intrinsic::experimental_constrained_uitofp, val, ty);
 			}
 			switch (cn->target_type().width()) {
-				case 1: ty = types.i1; break;
-				case 8: ty = types.i8; break;
-				case 16: ty = types.i16; break;
-				case 32: ty = types.i32; break;
-				case 64: ty = types.i64; break;
-				case 128: ty = types.i128; break;
-				case 256: ty = types.i256; break;
-				case 512: ty = types.i512; break;
+			case 1:
+				ty = types.i1;
+				break;
+			case 8:
+				ty = types.i8;
+				break;
+			case 16:
+				ty = types.i16;
+				break;
+			case 32:
+				ty = types.i32;
+				break;
+			case 64:
+				ty = types.i64;
+				break;
+			case 128:
+				ty = types.i128;
+				break;
+			case 256:
+				ty = types.i256;
+				break;
+			case 512:
+				ty = types.i512;
+				break;
 			}
 			return builder.CreateFPToSI(val, ty);
-							   }
+		}
 		default:
 			throw std::runtime_error("unsupported cast op");
 		}
@@ -792,9 +827,12 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 				throw std::runtime_error("unsupported unary operator");
 			}
 		}
-		case port_kinds::zero: return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, v, ConstantInt::get(v->getType(), 0)), types.i8);
-		case port_kinds::negative: return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_SLT, v, ConstantInt::get(v->getType(), 0)), types.i8);
-		default: return ConstantInt::get(types.i8, 0);
+		case port_kinds::zero:
+			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, v, ConstantInt::get(v->getType(), 0)), types.i8);
+		case port_kinds::negative:
+			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_SLT, v, ConstantInt::get(v->getType(), 0)), types.i8);
+		default:
+			return ConstantInt::get(types.i8, 0);
 		}
 	}
 
@@ -826,24 +864,32 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		} else if (p.kind() == port_kinds::carry) {
 			auto input_bits = builder.CreateBitCast(input, VectorType::get(types.i1, input->getType()->getIntegerBitWidth(), false));
 			switch (bsn->op()) {
-				case shift_op::asr:
-				case shift_op::lsr: {
-					return builder.CreateZExt(builder.CreateExtractVector(types.i1, input_bits, builder.CreateSub(amount, ConstantInt::get(amount->getType(), 1))), types.i8);
-				}
-				case shift_op::lsl: {
-					return builder.CreateZExt(builder.CreateExtractVector(types.i1, input_bits, builder.CreateSub(ConstantInt::get(amount->getType(), input->getType()->getIntegerBitWidth()), amount)), types.i8);
-				}
+			case shift_op::asr:
+			case shift_op::lsr: {
+				return builder.CreateZExt(
+					builder.CreateExtractVector(types.i1, input_bits, builder.CreateSub(amount, ConstantInt::get(amount->getType(), 1))), types.i8);
+			}
+			case shift_op::lsl: {
+				return builder.CreateZExt(builder.CreateExtractVector(types.i1, input_bits,
+											  builder.CreateSub(ConstantInt::get(amount->getType(), input->getType()->getIntegerBitWidth()), amount)),
+					types.i8);
+			}
 			}
 		} else if (p.kind() == port_kinds::overflow) {
 			// asusming there are no 0 shifts
 			auto input_bits = builder.CreateBitCast(input, VectorType::get(types.i1, input->getType()->getIntegerBitWidth(), false));
-			auto msb = builder.CreateExtractVector(types.i1, input_bits, builder.CreateSub(ConstantInt::get(types.i64, input->getType()->getIntegerBitWidth()), ConstantInt::get(types.i64, 1)));
-			auto smsb = builder.CreateExtractVector(types.i1, input_bits, builder.CreateSub(ConstantInt::get(types.i64, input->getType()->getIntegerBitWidth()), ConstantInt::get(types.i64, 2)));
-			auto undefined_or_cleared =  ConstantInt::get(types.i8, 0);
-			switch(bsn->op()) {
-				case shift_op::lsl: return builder.CreateZExt(builder.CreateXor(msb, smsb), types.i8);
-				case shift_op::lsr: return builder.CreateZExt(msb, types.i8);
-				default: return undefined_or_cleared;
+			auto msb = builder.CreateExtractVector(
+				types.i1, input_bits, builder.CreateSub(ConstantInt::get(types.i64, input->getType()->getIntegerBitWidth()), ConstantInt::get(types.i64, 1)));
+			auto smsb = builder.CreateExtractVector(
+				types.i1, input_bits, builder.CreateSub(ConstantInt::get(types.i64, input->getType()->getIntegerBitWidth()), ConstantInt::get(types.i64, 2)));
+			auto undefined_or_cleared = ConstantInt::get(types.i8, 0);
+			switch (bsn->op()) {
+			case shift_op::lsl:
+				return builder.CreateZExt(builder.CreateXor(msb, smsb), types.i8);
+			case shift_op::lsr:
+				return builder.CreateZExt(msb, types.i8);
+			default:
+				return undefined_or_cleared;
 			}
 		}
 	}
@@ -875,14 +921,14 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 	case node_kinds::bit_extract: {
 		auto uncle = (bit_extract_node *)n;
 		auto val = lower_port(builder, state_arg, pkt, uncle->source_value());
-/*
-		auto val_bit = builder.CreateBitCast(val, VectorType::get(types.i1, val->getType()->getIntegerBitWidth(), false));
+		/*
+				auto val_bit = builder.CreateBitCast(val, VectorType::get(types.i1, val->getType()->getIntegerBitWidth(), false));
 
-		auto result = builder.CreateExtractVector(VectorType::get(types.i1, uncle->length(), false), val_bit, ConstantInt::get( types.i64, uncle->from()));
-		return builder.CreateBitCast(result, Type::getIntNTy(*llvm_context_, uncle->length()));
-*/
-		auto tmp = builder.CreateShl(val, ConstantInt::get(val->getType(), val->getType()->getPrimitiveSizeInBits() - (uncle->from()+uncle->length()) ));
-		tmp = builder.CreateAShr(tmp, ConstantInt::get(val->getType(), val->getType()->getPrimitiveSizeInBits() - uncle->length()) );
+				auto result = builder.CreateExtractVector(VectorType::get(types.i1, uncle->length(), false), val_bit, ConstantInt::get( types.i64,
+		   uncle->from())); return builder.CreateBitCast(result, Type::getIntNTy(*llvm_context_, uncle->length()));
+		*/
+		auto tmp = builder.CreateShl(val, ConstantInt::get(val->getType(), val->getType()->getPrimitiveSizeInBits() - (uncle->from() + uncle->length())));
+		tmp = builder.CreateAShr(tmp, ConstantInt::get(val->getType(), val->getType()->getPrimitiveSizeInBits() - uncle->length()));
 		return builder.CreateTruncOrBitCast(tmp, IntegerType::getIntNTy(*llvm_context_, uncle->length()));
 	}
 	case node_kinds::bit_insert: {
@@ -893,7 +939,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 		if (dst_ty->isFloatingPointTy())
 			dst = builder.CreateBitCast(dst, IntegerType::get(*llvm_context_, dst_ty->getPrimitiveSizeInBits()));
-		
+
 		auto tmp = ConstantInt::get(dst->getType(), 1);
 		auto ones = builder.CreateSub(builder.CreateShl(tmp, ConstantInt::get(tmp->getType(), bin->length())), ConstantInt::get(tmp->getType(), 1));
 		auto mask = builder.CreateShl(ones, ConstantInt::get(tmp->getType(), bin->to()), "bit_insert gen mask");
@@ -901,8 +947,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 		auto insert = builder.CreateAnd(
 			builder.CreateShl(
-				builder.CreateZExtOrTrunc(
-					builder.CreateBitCast(val, IntegerType::getIntNTy(*llvm_context_, val->getType()->getPrimitiveSizeInBits())),
+				builder.CreateZExtOrTrunc(builder.CreateBitCast(val, IntegerType::getIntNTy(*llvm_context_, val->getType()->getPrimitiveSizeInBits())),
 					IntegerType::getIntNTy(*llvm_context_, dst->getType()->getPrimitiveSizeInBits())),
 				ConstantInt::get(dst->getType(), bin->to())),
 			mask, "bit_insert apply mask");
@@ -913,58 +958,67 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		return out;
 	}
 
-        case node_kinds::vector_insert: {
-			return lower_node(builder, state_arg, pkt, n);
-        }
+	case node_kinds::vector_insert: {
+		return lower_node(builder, state_arg, pkt, n);
+	}
 
-        case node_kinds::vector_extract: {
-			return lower_node(builder, state_arg, pkt, n);
-        }
+	case node_kinds::vector_extract: {
+		return lower_node(builder, state_arg, pkt, n);
+	}
 
 	case node_kinds::binary_atomic: {
 		auto ban = (binary_atomic_node *)n;
 		if (p.kind() == port_kinds::value)
 			return lower_node(builder, state_arg, pkt, n);
-		
+
 		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
 		auto lhs = lower_port(builder, state_arg, pkt, ban->address());
 #ifndef ARCH_X86_64
-		auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
+		auto gs_reg = builder.CreateGEP(
+			types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); // TODO: move offset_2_idx into a common header
 		lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, gs_reg));
 #endif
 		lhs = builder.CreateLoad(rhs->getType(), builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256)), "Atomic LHS");
 		auto value_port = lower_port(builder, state_arg, pkt, n->val());
-		
+
 		if (p.kind() == port_kinds::zero) {
 			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
 		} else if (p.kind() == port_kinds::negative) {
 			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_SLT, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
 		} else if (p.kind() == port_kinds::carry) {
 			switch (ban->op()) {
-			case binary_atomic_op::sub: return builder.CreateZExt(builder.CreateICmpULT(lhs, rhs, "borrow"), types.i8);
+			case binary_atomic_op::sub:
+				return builder.CreateZExt(builder.CreateICmpULT(lhs, rhs, "borrow"), types.i8);
 			case binary_atomic_op::xadd:
-			case binary_atomic_op::add: return builder.CreateZExt(builder.CreateICmpUGT(lhs, value_port, "carry"), types.i8);
-			default: return ConstantInt::get(types.i8, 0);
+			case binary_atomic_op::add:
+				return builder.CreateZExt(builder.CreateICmpUGT(lhs, value_port, "carry"), types.i8);
+			default:
+				return ConstantInt::get(types.i8, 0);
 			}
 		} else if (p.kind() == port_kinds::overflow) {
 			switch (ban->op()) {
 			case binary_atomic_op::sub: {
 				auto z = ConstantInt::get(value_port->getType(), 0);
 				auto sum = builder.CreateAdd(lhs, builder.CreateNeg(rhs));
-				auto pos_args = builder.CreateAnd(builder.CreateICmpSGT(lhs, z), builder.CreateAnd(builder.CreateICmpSGT(rhs, z), builder.CreateICmpSLT(sum, z)));
-				auto neg_args = builder.CreateAnd(builder.CreateICmpSLT(lhs, z), builder.CreateAnd(builder.CreateICmpSLT(rhs, z), builder.CreateICmpSGE(sum, z)));
+				auto pos_args
+					= builder.CreateAnd(builder.CreateICmpSGT(lhs, z), builder.CreateAnd(builder.CreateICmpSGT(rhs, z), builder.CreateICmpSLT(sum, z)));
+				auto neg_args
+					= builder.CreateAnd(builder.CreateICmpSLT(lhs, z), builder.CreateAnd(builder.CreateICmpSLT(rhs, z), builder.CreateICmpSGE(sum, z)));
 				return builder.CreateZExt(builder.CreateOr(pos_args, neg_args, "overflow"), types.i8);
 			}
 			case binary_atomic_op::xadd:
 			case binary_atomic_op::add: {
 				auto z = ConstantInt::get(value_port->getType(), 0);
-				auto pos_args = builder.CreateAnd(builder.CreateICmpSGT(lhs, z), builder.CreateAnd(builder.CreateICmpSGT(rhs, z), builder.CreateICmpSLT(value_port, z)));
-				auto neg_args = builder.CreateAnd(builder.CreateICmpSLT(lhs, z), builder.CreateAnd(builder.CreateICmpSLT(rhs, z), builder.CreateICmpSGE(value_port, z)));
+				auto pos_args
+					= builder.CreateAnd(builder.CreateICmpSGT(lhs, z), builder.CreateAnd(builder.CreateICmpSGT(rhs, z), builder.CreateICmpSLT(value_port, z)));
+				auto neg_args
+					= builder.CreateAnd(builder.CreateICmpSLT(lhs, z), builder.CreateAnd(builder.CreateICmpSLT(rhs, z), builder.CreateICmpSGE(value_port, z)));
 				return builder.CreateZExt(builder.CreateOr(pos_args, neg_args, "overflow"), types.i8);
 			}
-			default: return ConstantInt::get(types.i8, 0);
+			default:
+				return ConstantInt::get(types.i8, 0);
 			}
-		return ConstantInt::get(types.i8, 0);
+			return ConstantInt::get(types.i8, 0);
 		}
 	}
 	case node_kinds::ternary_atomic: {
@@ -974,17 +1028,22 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		return ConstantInt::get(types.i8, 0);
 	}
 	case node_kinds::read_local: {
-	        auto rln = (read_local_node *)n;
-	        auto address = local_var_to_llvm_addr_.at(rln->local());
-	        ::llvm::Type *ty;
-	        switch (rln->local()->type().width()) {
-	                case 80: ty = types.f80; break;
-	                case 64: ty = types.f80; break;
-	                default: throw std::runtime_error("unsupported read_local width"+std::to_string(rln->local()->type().width()));
-	        }
-	        auto load = builder.CreateLoad(ty, address, "read_local");
-	        load->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(load->getContext(), guest_mem_alias_scope_));
-	        return load;
+		auto rln = (read_local_node *)n;
+		auto address = local_var_to_llvm_addr_.at(rln->local());
+		::llvm::Type *ty;
+		switch (rln->local()->type().width()) {
+		case 80:
+			ty = types.f80;
+			break;
+		case 64:
+			ty = types.f80;
+			break;
+		default:
+			throw std::runtime_error("unsupported read_local width" + std::to_string(rln->local()->type().width()));
+		}
+		auto load = builder.CreateLoad(ty, address, "read_local");
+		load->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(load->getContext(), guest_mem_alias_scope_));
+		return load;
 	}
 	default:
 		throw std::runtime_error("materialize_port: unsupported port node kind " + std::to_string((int)n->kind()));
@@ -1014,7 +1073,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 		auto intermediate_block = label_nodes_to_llvm_blocks_[ln];
 		if (!intermediate_block) {
-			intermediate_block = BasicBlock::Create(*llvm_context_, "LABEL-"+ln->name(), current_block->getParent());
+			intermediate_block = BasicBlock::Create(*llvm_context_, "LABEL-" + ln->name(), current_block->getParent());
 			label_nodes_to_llvm_blocks_[ln] = intermediate_block;
 		}
 		if (!in_br) {
@@ -1032,10 +1091,10 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 		// std::cerr << "wreg name=" << wrn->regname() << std::endl;
 
-		auto dest_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, wrn->regidx()) },
-			reg_name(wrn->regidx()));
+		auto dest_reg = builder.CreateGEP(
+			types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, wrn->regidx()) }, reg_name(wrn->regidx()));
 
-		auto *reg_type = ((GetElementPtrInst*)dest_reg)->getResultElementType();
+		auto *reg_type = ((GetElementPtrInst *)dest_reg)->getResultElementType();
 
 		if (auto dest_reg_i = ::llvm::dyn_cast<Instruction>(dest_reg)) {
 			dest_reg_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, reg_file_alias_scope_));
@@ -1043,10 +1102,10 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 		auto val = lower_port(builder, state_arg, pkt, wrn->value());
 
-		//Bitcast the resulting value to the type of the register
-		//since the operations can happen on different type after
-		//other casting operations
-		if(val->getType()->isVectorTy())
+		// Bitcast the resulting value to the type of the register
+		// since the operations can happen on different type after
+		// other casting operations
+		if (val->getType()->isVectorTy())
 			val = builder.CreateBitCast(val, IntegerType::get(*llvm_context_, val->getType()->getPrimitiveSizeInBits()));
 		auto reg_val = builder.CreateZExtOrBitCast(val, reg_type);
 
@@ -1060,7 +1119,8 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto value = lower_port(builder, state_arg, pkt, wmn->value());
 
 #ifndef ARCH_X86_64
-		auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
+		auto gs_reg = builder.CreateGEP(
+			types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); // TODO: move offset_2_idx into a common header
 		address = builder.CreateAdd(address, builder.CreateLoad(types.i64, gs_reg));
 #endif
 		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(value->getType(), 256));
@@ -1100,62 +1160,69 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		builder.SetInsertPoint(intermediate_block);
 
 		return br;
+	}
+	case node_kinds::br: {
+		auto bn = (br_node *)a;
+
+		auto current_block = builder.GetInsertBlock();
+		auto intermediate_block = BasicBlock::Create(*llvm_context_, "br next", current_block->getParent());
+
+		in_br = true;
+		lower_node(builder, state_arg, pkt, bn->target());
+		in_br = false;
+		auto br = builder.CreateBr(label_nodes_to_llvm_blocks_[bn->target()]);
+
+		builder.SetInsertPoint(intermediate_block);
+
+		return br;
+	}
+	case node_kinds::vector_insert: {
+		auto vin = (vector_insert_node *)a;
+
+		auto vec = lower_port(builder, state_arg, pkt, vin->source_vector());
+		auto val = lower_port(builder, state_arg, pkt, vin->insert_value());
+
+		if (!vec->getType()->isVectorTy()) {
+			auto v_len = vec->getType()->getPrimitiveSizeInBits();
+			vec = builder.CreateBitCast(vec, VectorType::get(val->getType(), v_len / val->getType()->getPrimitiveSizeInBits(), false));
 		}
-		case node_kinds::br: {
-	        auto bn = (br_node *)a;
 
-			auto current_block = builder.GetInsertBlock();
-			auto intermediate_block = BasicBlock::Create(*llvm_context_, "br next", current_block->getParent());
-
-			in_br = true;
-			lower_node(builder, state_arg, pkt, bn->target());
-			in_br = false;
-			auto br = builder.CreateBr(label_nodes_to_llvm_blocks_[bn->target()]);
-
-			builder.SetInsertPoint(intermediate_block);
-
-			return br;
+		auto ve_type = ((VectorType *)(vec->getType()))->getElementType();
+		if (ve_type->isFloatingPointTy() && !val->getType()->isFloatingPointTy()) {
+			switch (ve_type->getPrimitiveSizeInBits()) {
+			case 32:
+				val = builder.CreateBitCast(val, types.f32);
+				break;
+			case 64:
+				val = builder.CreateBitCast(val, types.f64);
+				break;
+			case 80:
+				val = builder.CreateBitCast(val, types.f80);
+				break;
+			}
 		}
-        case node_kinds::vector_insert: {
-                auto vin = (vector_insert_node *)a;
 
-                auto vec = lower_port(builder, state_arg, pkt, vin->source_vector());
-                auto val = lower_port(builder, state_arg, pkt, vin->insert_value());
+		auto insert = builder.CreateInsertElement(vec, val, vin->index(), "vector_insert");
 
-				if (!vec->getType()->isVectorTy()) {
-					auto v_len = vec->getType()->getPrimitiveSizeInBits();
-					vec = builder.CreateBitCast(vec, VectorType::get(val->getType(), v_len/val->getType()->getPrimitiveSizeInBits(), false));
-				}
+		return insert;
+	}
 
-				auto ve_type = ((VectorType *)(vec->getType()))->getElementType();
-				if (ve_type->isFloatingPointTy() && !val->getType()->isFloatingPointTy()) {
-					switch(ve_type->getPrimitiveSizeInBits()) {
-						case 32: val = builder.CreateBitCast(val, types.f32); break;
-						case 64: val = builder.CreateBitCast(val, types.f64); break;
-						case 80: val = builder.CreateBitCast(val, types.f80); break;
-					}
-				}
+	case node_kinds::vector_extract: {
+		auto ven = (vector_extract_node *)a;
 
-                auto insert = builder.CreateInsertElement(vec, val, vin->index(), "vector_insert");
+		auto vec = lower_port(builder, state_arg, pkt, ven->source_vector());
 
-                return insert;
-        }
+		auto extract = builder.CreateExtractElement(vec, ven->index(), "vector_extract");
 
-        case node_kinds::vector_extract: {
-                auto ven = (vector_extract_node *)a;
-
-                auto vec = lower_port(builder, state_arg, pkt, ven->source_vector());
-
-                auto extract = builder.CreateExtractElement(vec, ven->index(), "vector_extract");
-
-                return extract;
-        }
+		return extract;
+	}
 
 	case node_kinds::binary_atomic: {
 		auto ban = (binary_atomic_node *)a;
 		auto lhs = lower_port(builder, state_arg, pkt, ban->address());
 #ifndef ARCH_X86_64
-		auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
+		auto gs_reg = builder.CreateGEP(
+			types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); // TODO: move offset_2_idx into a common header
 		lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, gs_reg));
 #endif
 		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
@@ -1166,18 +1233,31 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 		lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
 		AtomicRMWInst *out = nullptr;
-		switch(ban->op()) {
-			case binary_atomic_op::add: builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
-			case binary_atomic_op::sub: builder.CreateAtomicRMW(AtomicRMWInst::Sub, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
-			case binary_atomic_op::xadd: out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
-			case binary_atomic_op::bor: out = builder.CreateAtomicRMW(AtomicRMWInst::Or, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
-			case binary_atomic_op::xchg: out = builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
-			default: throw std::runtime_error("unsupported bin atomic operation " + std::to_string((int)ban->op()));
+		switch (ban->op()) {
+		case binary_atomic_op::add:
+			builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent);
+			break;
+		case binary_atomic_op::sub:
+			builder.CreateAtomicRMW(AtomicRMWInst::Sub, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent);
+			break;
+		case binary_atomic_op::xadd:
+			out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent);
+			break;
+		case binary_atomic_op::bor:
+			out = builder.CreateAtomicRMW(AtomicRMWInst::Or, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent);
+			break;
+		case binary_atomic_op::xchg:
+			out = builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent);
+			break;
+		default:
+			throw std::runtime_error("unsupported bin atomic operation " + std::to_string((int)ban->op()));
 		}
 		if (out) {
 			switch (ban->op()) {
-				//case binary_atomic_op::xadd: out = builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, out, Align(64), AtomicOrdering::SequentiallyConsistent); break;
-				default: break;
+			// case binary_atomic_op::xadd: out = builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, out, Align(64), AtomicOrdering::SequentiallyConsistent);
+			// break;
+			default:
+				break;
 			}
 			node_ports_to_llvm_values_[&ban->val()] = out;
 			return out;
@@ -1190,7 +1270,8 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto tan = (ternary_atomic_node *)a;
 		auto lhs = lower_port(builder, state_arg, pkt, tan->address());
 #ifndef ARCH_X86_64
-		auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
+		auto gs_reg = builder.CreateGEP(
+			types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); // TODO: move offset_2_idx into a common header
 		lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, gs_reg));
 #endif
 		auto rhs = lower_port(builder, state_arg, pkt, tan->rhs());
@@ -1201,49 +1282,56 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto rax_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, reg_idx) });
 
 		Value *out;
-		switch(tan->op()) {
-			case ternary_atomic_op::cmpxchg: {
-				lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
-				auto instr = builder.CreateAtomicCmpXchg(lhs, rhs, top, Align(1), AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
-				auto new_rax_val = builder.CreateSelect(builder.CreateExtractValue(instr, 1), rhs, builder.CreateExtractValue(instr, 0));
-				builder.CreateStore(builder.CreateZExt(new_rax_val, types.i64), rax_reg);
-				
-				return instr;
-			}
-			default: throw std::runtime_error("unsupported tern atomic operation " + std::to_string((int)tan->op()));
+		switch (tan->op()) {
+		case ternary_atomic_op::cmpxchg: {
+			lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
+			auto instr = builder.CreateAtomicCmpXchg(lhs, rhs, top, Align(1), AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
+			auto new_rax_val = builder.CreateSelect(builder.CreateExtractValue(instr, 1), rhs, builder.CreateExtractValue(instr, 0));
+			builder.CreateStore(builder.CreateZExt(new_rax_val, types.i64), rax_reg);
+
+			return instr;
+		}
+		default:
+			throw std::runtime_error("unsupported tern atomic operation " + std::to_string((int)tan->op()));
 		}
 		return out;
 	}
 	case node_kinds::internal_call: {
-        auto icn = (internal_call_node *)a;
-        auto switch_callee = module_->getOrInsertFunction("execute_internal_call", types.internal_call_handler);
-        if (icn->fn().name() == "handle_syscall") {
-                return builder.CreateCall(switch_callee, { state_arg, ConstantInt::get(types.i32, 1) });
-        }
-        throw std::runtime_error("unsupported internal call type" + icn->fn().name());
+		auto icn = (internal_call_node *)a;
+		auto switch_callee = module_->getOrInsertFunction("execute_internal_call", types.internal_call_handler);
+		if (icn->fn().name() == "handle_syscall") {
+			return builder.CreateCall(switch_callee, { state_arg, ConstantInt::get(types.i32, 1) });
+		}
+		throw std::runtime_error("unsupported internal call type" + icn->fn().name());
 	}
 	case node_kinds::write_local: {
-        auto wln = (write_local_node *)a;
-        auto val = lower_port(builder, state_arg, pkt, wln->write_value());
-        ::llvm::Type *ty;
-        switch (wln->write_value().type().width()) {
-                case 80: ty = types.f80; break;
-                case 64: ty = types.f80; break;
-                default: throw std::runtime_error("unsupported alloca width");
-        }
-        auto var_ptr = builder.CreateAlloca(ty, nullptr, "local var");
-        local_var_to_llvm_addr_[wln->local()] = var_ptr;
+		auto wln = (write_local_node *)a;
+		auto val = lower_port(builder, state_arg, pkt, wln->write_value());
+		::llvm::Type *ty;
+		switch (wln->write_value().type().width()) {
+		case 80:
+			ty = types.f80;
+			break;
+		case 64:
+			ty = types.f80;
+			break;
+		default:
+			throw std::runtime_error("unsupported alloca width");
+		}
+		auto var_ptr = builder.CreateAlloca(ty, nullptr, "local var");
+		local_var_to_llvm_addr_[wln->local()] = var_ptr;
 
-        auto store = builder.CreateStore(val, var_ptr);
-        store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), guest_mem_alias_scope_));
-        return store;
+		auto store = builder.CreateStore(val, var_ptr);
+		store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), guest_mem_alias_scope_));
+		return store;
 	}
 	default:
 		throw std::runtime_error("lower_node: unsupported node kind " + std::to_string((int)a->kind()));
 	}
 }
 
-void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBlock *contblock, std::shared_ptr<chunk> c, std::shared_ptr<std::map<unsigned long, Function *>> fns)
+void llvm_static_output_engine_impl::lower_chunk(
+	IRBuilder<> *builder, BasicBlock *contblock, std::shared_ptr<chunk> c, std::shared_ptr<std::map<unsigned long, Function *>> fns)
 {
 	std::map<unsigned long, BasicBlock *> blocks;
 
@@ -1251,10 +1339,10 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 
 	auto state_arg = fn->getArg(0);
 
-	auto pre = BasicBlock::Create(*llvm_context_, fn->getName()+"-pre", fn);
-	auto mid = BasicBlock::Create(*llvm_context_, fn->getName()+"-mid");
-	//auto pst = BasicBlock::Create(*llvm_context_, fn->getName()+"-pst", fn);
-	auto dyn = BasicBlock::Create(*llvm_context_, fn->getName()+"-dyn");
+	auto pre = BasicBlock::Create(*llvm_context_, fn->getName() + "-pre", fn);
+	auto mid = BasicBlock::Create(*llvm_context_, fn->getName() + "-mid");
+	// auto pst = BasicBlock::Create(*llvm_context_, fn->getName()+"-pst", fn);
+	auto dyn = BasicBlock::Create(*llvm_context_, fn->getName() + "-dyn");
 
 	builder->SetInsertPoint(pre);
 	auto pc_ptr = builder->CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 0) });
@@ -1271,7 +1359,7 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 		auto next_block = blocks[p->address()];
 
 		if (packet_block != nullptr) {
-			//falltrhough!
+			// falltrhough!
 			auto ft = builder->CreateBr(next_block);
 		}
 
@@ -1286,30 +1374,30 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 		}
 
 		switch (p->updates_pc()) {
-			case br_type::none:
-				break;
-			case br_type::call: {
-				auto f = get_static_fn(p, fns);
-				if (f) {
-					builder->CreateCall(f, { state_arg });
-				} else {
-					builder->CreateCall(contblock->getParent(), { state_arg });
-				}
-				break;
+		case br_type::none:
+			break;
+		case br_type::call: {
+			auto f = get_static_fn(p, fns);
+			if (f) {
+				builder->CreateCall(f, { state_arg });
+			} else {
+				builder->CreateCall(contblock->getParent(), { state_arg });
 			}
-			case br_type::br:
-			case br_type::csel: {
-				auto condbr = create_static_condbr(builder, p, &blocks, mid);
-				if (!condbr)
-					builder->CreateBr(mid);
-				packet_block = nullptr;
-				break;
-			}
-			case br_type::ret: {
-				builder->CreateRetVoid();
-				packet_block = nullptr;
-				break;
-			}
+			break;
+		}
+		case br_type::br:
+		case br_type::csel: {
+			auto condbr = create_static_condbr(builder, p, &blocks, mid);
+			if (!condbr)
+				builder->CreateBr(mid);
+			packet_block = nullptr;
+			break;
+		}
+		case br_type::ret: {
+			builder->CreateRetVoid();
+			packet_block = nullptr;
+			break;
+		}
 		}
 	}
 
@@ -1323,9 +1411,9 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 	builder->SetInsertPoint(mid);
 	auto pc = builder->CreateLoad(types.i64, pc_ptr, "local-pc");
 	auto fnswitch = builder->CreateSwitch(pc, dyn);
-	
+
 	for (auto p : blocks) {
-		fnswitch->addCase(ConstantInt::get(types.i64,p.first), p.second);
+		fnswitch->addCase(ConstantInt::get(types.i64, p.first), p.second);
 	}
 
 	builder->SetInsertPoint(dyn);
@@ -1336,11 +1424,13 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 		throw std::runtime_error("function verification failed");
 	}
 }
-Instruction *llvm_static_output_engine_impl::create_static_condbr(IRBuilder<> *builder, std::shared_ptr<packet> pkt, std::map<unsigned long, BasicBlock *> *blocks, BasicBlock *mid) {
+Instruction *llvm_static_output_engine_impl::create_static_condbr(
+	IRBuilder<> *builder, std::shared_ptr<packet> pkt, std::map<unsigned long, BasicBlock *> *blocks, BasicBlock *mid)
+{
 	auto it = builder->GetInsertPoint();
 	if ((--it)->getOpcode() != Instruction::Store)
 		return nullptr;
-	
+
 	if ((--it)->getOpcode() != Instruction::Select)
 		return nullptr;
 
@@ -1368,18 +1458,19 @@ Instruction *llvm_static_output_engine_impl::create_static_condbr(IRBuilder<> *b
 	return builder->CreateCondBr(cond, true_block, false_block);
 };
 
-Function *llvm_static_output_engine_impl::get_static_fn(std::shared_ptr<packet> pkt, std::shared_ptr<std::map<unsigned long, Function *>> fns) {
+Function *llvm_static_output_engine_impl::get_static_fn(std::shared_ptr<packet> pkt, std::shared_ptr<std::map<unsigned long, Function *>> fns)
+{
 
 	write_pc_node *node = nullptr;
 	for (auto a : pkt->actions()) {
-		if(a->kind() == node_kinds::write_pc && ((write_pc_node *)a)->updates_pc()==br_type::call)
+		if (a->kind() == node_kinds::write_pc && ((write_pc_node *)a)->updates_pc() == br_type::call)
 			node = (write_pc_node *)a;
 	}
 	if (!node)
 		return nullptr;
 	if (node->const_target()) {
 
-		auto it = fns->find(node->const_target()+pkt->address());
+		auto it = fns->find(node->const_target() + pkt->address());
 		auto ret = it != fns->end() ? it->second : nullptr;
 		if (ret)
 			fixed_branches++;
@@ -1404,9 +1495,8 @@ void llvm_static_output_engine_impl::optimise()
 	PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
 	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
-	PB.registerOptimizerLastEPCallback( [&](ModulePassManager &mpm, OptimizationLevel Level) {
-		mpm.addPass(createModuleToFunctionPassAdaptor(JumpThreadingPass())); }
-	);
+	PB.registerOptimizerLastEPCallback(
+		[&](ModulePassManager &mpm, OptimizationLevel Level) { mpm.addPass(createModuleToFunctionPassAdaptor(JumpThreadingPass())); });
 	MPM.run(*module_, MAM);
 
 	// Compiled modules now exists
@@ -1431,11 +1521,11 @@ void llvm_static_output_engine_impl::compile()
 	TargetOptions TO;
 	auto RM = Optional<Reloc::Model>();
 #if defined(ARCH_RISCV64)
-	//Add multiply(M), atomics(A), single(F) and double(D) precision float and compressed(C) extensions
+	// Add multiply(M), atomics(A), single(F) and double(D) precision float and compressed(C) extensions
 	const char *features = "+m,+a,+f,+d,+c";
 	const char *cpu = "generic-rv64";
-	//Specify abi as 64 bits using double float registers
-	TO.MCOptions.ABIName="lp64d";
+	// Specify abi as 64 bits using double float registers
+	TO.MCOptions.ABIName = "lp64d";
 #elif defined(ARCH_AARCH64)
 	const char *features = "+fp-armv8,+v8.5a,+lse,+ls64";
 	const char *cpu = "thunderx2t99";

@@ -18,23 +18,23 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 			"Specify the syntax to use when disassembling host instructions (x86 input only: att or intel)") //
 		("graph", po::value<std::string>(), "Creates a DOT graph file representing the input ELF translation") //
 		("no-static", "Do not do any static translation") //
-        ("runtime-lib-path", po::value<std::string>()->default_value(ARANCINI_LIBPATH), "Path to arancini libraries (defaults specified by build system)") //
+		("runtime-lib-path", po::value<std::string>()->default_value(ARANCINI_LIBPATH), "Path to arancini libraries (defaults specified by build system)") //
 		("static-binary", po::value<std::string>()->implicit_value(ARANCINI_LIBDIR)->zero_tokens(),
 			"Link the generated binary statically to the arancini libraries inside this path. Requires to have built the arancini-runtime-static target. "
 			"Default specified by build system.") //
 		("wrapper", po::value<std::string>()) //
-        ("cxx-compiler-path", po::value<std::string>()->default_value("g++"), "Path to C++ compiler to use for translated binary") //
-        ("debug-gen", "Include debugging information in the generated output binary") //
+		("cxx-compiler-path", po::value<std::string>()->default_value("g++"), "Path to C++ compiler to use for translated binary") //
+		("debug-gen", "Include debugging information in the generated output binary") //
 		("debug", "Enable debugging output");
 
-    po::variables_map vm;
+	po::variables_map vm;
 	try {
-        po::store(po::parse_command_line(argc, argv, desc), vm);
+		po::store(po::parse_command_line(argc, argv, desc), vm);
 
-        if (vm.count("help")) {
-            std::cout << desc << std::endl;
-            return std::nullopt;
-        }
+		if (vm.count("help")) {
+			std::cout << desc << std::endl;
+			return std::nullopt;
+		}
 
 		po::notify(vm);
 	} catch (std::exception &e) {

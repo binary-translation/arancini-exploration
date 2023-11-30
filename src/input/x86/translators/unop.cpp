@@ -1,6 +1,6 @@
 #include <arancini/input/x86/translators/translators.h>
-#include <arancini/ir/node.h>
 #include <arancini/ir/ir-builder.h>
+#include <arancini/ir/node.h>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
@@ -37,38 +37,38 @@ void unop_translator::do_translate()
 		break;
 	}
 
-  case XED_ICLASS_BSWAP: {
-    auto src = read_operand(0);
-    auto nr_bytes = src->val().type().width() == 32 ? 4 : 8;
+	case XED_ICLASS_BSWAP: {
+		auto src = read_operand(0);
+		auto nr_bytes = src->val().type().width() == 32 ? 4 : 8;
 
-    src = builder().insert_bitcast(value_type::vector(value_type::u8(), nr_bytes), src->val());
-    rslt = src;
+		src = builder().insert_bitcast(value_type::vector(value_type::u8(), nr_bytes), src->val());
+		rslt = src;
 
-    for (int i = 0; i < nr_bytes; i++) {
-      rslt = builder().insert_vector_insert(rslt->val(), i, builder().insert_vector_extract(src->val(), nr_bytes - i - 1)->val());
-    }
+		for (int i = 0; i < nr_bytes; i++) {
+			rslt = builder().insert_vector_insert(rslt->val(), i, builder().insert_vector_extract(src->val(), nr_bytes - i - 1)->val());
+		}
 
-    break;
-  }
+		break;
+	}
 
-  case XED_ICLASS_PMOVMSKB: {
-    auto src = read_operand(1);
-    auto nr_bytes = src->val().type().width() == 64 ? 8 : 16;
+	case XED_ICLASS_PMOVMSKB: {
+		auto src = read_operand(1);
+		auto nr_bytes = src->val().type().width() == 64 ? 8 : 16;
 
-    if (nr_bytes == 8) {
-      rslt = builder().insert_constant_i(value_type::u8(), 0);
-    } else {
-      rslt = builder().insert_constant_i(value_type::u16(), 0);
-    }
+		if (nr_bytes == 8) {
+			rslt = builder().insert_constant_i(value_type::u8(), 0);
+		} else {
+			rslt = builder().insert_constant_i(value_type::u16(), 0);
+		}
 
-    for (int i = 0; i < nr_bytes; i++) {
-      auto top_bit = builder().insert_bit_extract(src->val(), (i + 1) * 8 - 1, 1);
-      rslt = builder().insert_bit_insert(rslt->val(), top_bit->val(), i, 1);
-    }
+		for (int i = 0; i < nr_bytes; i++) {
+			auto top_bit = builder().insert_bit_extract(src->val(), (i + 1) * 8 - 1, 1);
+			rslt = builder().insert_bit_insert(rslt->val(), top_bit->val(), i, 1);
+		}
 
-    rslt = builder().insert_zx(value_type(value_type_class::unsigned_integer, get_operand_width(0)), rslt->val());
-    break;
-  }
+		rslt = builder().insert_zx(value_type(value_type_class::unsigned_integer, get_operand_width(0)), rslt->val());
+		break;
+	}
 
 	default:
 		throw std::runtime_error("unsupported unop");
@@ -80,9 +80,9 @@ void unop_translator::do_translate()
 	case XED_ICLASS_NOT:
 		write_flags(rslt, flag_op::update, flag_op::set0, flag_op::set0, flag_op::update, flag_op::update, flag_op::ignore);
 		break;
-  case XED_ICLASS_INC:
-  case XED_ICLASS_DEC:
-  case XED_ICLASS_NEG:
+	case XED_ICLASS_INC:
+	case XED_ICLASS_DEC:
+	case XED_ICLASS_NEG:
 		write_flags(rslt, flag_op::update, flag_op::ignore, flag_op::update, flag_op::update, flag_op::update, flag_op::update);
 		break;
 

@@ -12,9 +12,7 @@ void interrupt_translator::do_translate()
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
 	case XED_ICLASS_INT: {
 		builder().insert_internal_call(
-			builder().ifr().resolve("handle_int"),
-			{ &builder().insert_constant_u32(xed_decoded_inst_get_unsigned_immediate(xed_inst()))->val() }
-		);
+			builder().ifr().resolve("handle_int"), { &builder().insert_constant_u32(xed_decoded_inst_get_unsigned_immediate(xed_inst()))->val() });
 		break;
 	}
 

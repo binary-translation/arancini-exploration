@@ -10,19 +10,19 @@ set(IR_SRCS
         dot-graph-generator.cpp)
 
 add_library(arancini-ir
-            SHARED
-            ${IR_SRCS})
+        SHARED
+        ${IR_SRCS})
 add_library(arancini-ir-static
-            STATIC
-            ${IR_SRCS})
+        STATIC
+        ${IR_SRCS})
 
 set(INCLUDE_PATH ../../inc)
 target_include_directories(arancini-ir
-                           PUBLIC
-                           ${INCLUDE_PATH})
+        PUBLIC
+        ${INCLUDE_PATH})
 target_include_directories(arancini-ir-static
-                           PUBLIC
-                           ${INCLUDE_PATH})
+        PUBLIC
+        ${INCLUDE_PATH})
 
 target_link_libraries(arancini-ir PUBLIC xed)
 target_link_libraries(arancini-ir-static PUBLIC xed)

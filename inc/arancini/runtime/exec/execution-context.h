@@ -22,10 +22,11 @@ public:
 	execution_context(input::input_arch &ia, output::dynamic::dynamic_output_engine &oe, bool optimise);
 	~execution_context();
 
-	void *add_memory_region(off_t base_address, size_t size, bool ignore_brk=false);
+	void *add_memory_region(off_t base_address, size_t size, bool ignore_brk = false);
 
 	std::shared_ptr<execution_thread> create_execution_thread();
-	std::pair<std::map<void *, std::shared_ptr<execution_thread>>::const_iterator, std::map<void *, std::shared_ptr<execution_thread>>::const_iterator> get_thread_range();
+	std::pair<std::map<void *, std::shared_ptr<execution_thread>>::const_iterator, std::map<void *, std::shared_ptr<execution_thread>>::const_iterator>
+	get_thread_range();
 	void *get_memory_ptr(off_t base_address) const { return (void *)((uintptr_t)memory_ + base_address); }
 
 	int invoke(void *cpu_state);

@@ -6,7 +6,6 @@
 
 #include <cstdlib>
 
-
 namespace arancini::output::dynamic::riscv64 {
 
 Assembler::Assembler(arancini::output::dynamic::machine_code_writer *writer, bool track_usage, ExtensionSet extensions)
@@ -18,9 +17,9 @@ Assembler::Assembler(arancini::output::dynamic::machine_code_writer *writer, boo
 
 Assembler::~Assembler()
 {
-//	if (track_usage_) {
-//		std::cerr << "Total RISC-V instructions emitted: " << std::dec << instructions32 << " full size, " << instructions16 << " compressed" << std::endl;
-//	}
+	//	if (track_usage_) {
+	//		std::cerr << "Total RISC-V instructions emitted: " << std::dec << instructions32 << " full size, " << instructions16 << " compressed" << std::endl;
+	//	}
 }
 
 void Assembler::Bind(Label *label)
@@ -1924,8 +1923,8 @@ void Assembler::c_slli(Register rd, Register rs1, intptr_t imm)
 	ASSERT(Supports(RV_C));
 	ASSERT(rd == rs1);
 	ASSERT(imm != 0);
-	//TODO Temp fix
-	imm=SignExtend(6, imm);
+	// TODO Temp fix
+	imm = SignExtend(6, imm);
 	Emit16(C_SLLI | EncodeCRd(rd) | EncodeCIImm(imm));
 }
 

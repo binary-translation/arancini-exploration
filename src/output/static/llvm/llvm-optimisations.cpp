@@ -10,11 +10,13 @@ using namespace arancini::output::o_static::llvm;
 using namespace arancini::ir;
 using namespace ::llvm;
 
-Instruction *llvm_static_output_engine_impl::create_static_condbr(IRBuilder<> *builder, std::shared_ptr<packet> pkt, std::map<unsigned long, BasicBlock *> *blocks, BasicBlock *mid) {
+Instruction *llvm_static_output_engine_impl::create_static_condbr(
+	IRBuilder<> *builder, std::shared_ptr<packet> pkt, std::map<unsigned long, BasicBlock *> *blocks, BasicBlock *mid)
+{
 	auto it = builder->GetInsertPoint();
 	if ((--it)->getOpcode() != Instruction::Store)
 		return nullptr;
-	
+
 	if ((--it)->getOpcode() != Instruction::Select)
 		return nullptr;
 

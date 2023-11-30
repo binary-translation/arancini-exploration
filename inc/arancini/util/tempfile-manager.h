@@ -9,7 +9,7 @@ class tempfile;
 
 class tempfile_manager {
 public:
-	std::shared_ptr<tempfile> create_file(const std::string& suffix = ".tmp");
+	std::shared_ptr<tempfile> create_file(const std::string &suffix = ".tmp");
 
 private:
 	std::list<std::shared_ptr<tempfile>> tempfiles_;

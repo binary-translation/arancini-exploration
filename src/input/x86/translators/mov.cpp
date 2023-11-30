@@ -1,6 +1,6 @@
 #include <arancini/input/x86/translators/translators.h>
-#include <arancini/ir/node.h>
 #include <arancini/ir/ir-builder.h>
+#include <arancini/ir/node.h>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
@@ -19,7 +19,7 @@ void mov_translator::do_translate()
 
 		auto tt = opname == XED_OPERAND_MEM0 ? type_of_operand(1) : type_of_operand(0);
 		auto op1 = auto_cast(tt, read_operand(1));
-		//TODO: temporary hack for MOVQ with immediate
+		// TODO: temporary hack for MOVQ with immediate
 		if (is_immediate_operand(1) && get_operand_width(1) < get_operand_width(0)) {
 			op1 = builder().insert_zx(value_type::u64(), op1->val());
 		}
@@ -46,17 +46,17 @@ void mov_translator::do_translate()
 	}
 
 	case XED_ICLASS_CDQ: {
-    // xed encoding: cdq edx eax
+		// xed encoding: cdq edx eax
 		auto eax = builder().insert_bitcast(value_type::s32(), read_operand(1)->val());
 		auto sx = builder().insert_sx(value_type::s64(), eax->val());
 		auto hi = builder().insert_bit_extract(sx->val(), 32, 32);
 
-    write_operand(0, hi->val());
+		write_operand(0, hi->val());
 		break;
 	}
 
 	case XED_ICLASS_CDQE: {
-    // xed encoding: cdqe rax eax
+		// xed encoding: cdqe rax eax
 		/* Only for 64-bit, other sizes are with CBW/CWDE instructions */
 		auto eax = builder().insert_bitcast(value_type::s32(), read_operand(1)->val());
 		auto rax = builder().insert_sx(value_type::s64(), eax->val());
@@ -123,81 +123,84 @@ void mov_translator::do_translate()
 		break;
 	}
 
-  case XED_ICLASS_MOVSD_XMM: {
-    auto src = read_operand(1);
-    auto dst_width = get_operand_width(0);
-    auto src_width = src->val().type().width();
+	case XED_ICLASS_MOVSD_XMM: {
+		auto src = read_operand(1);
+		auto dst_width = get_operand_width(0);
+		auto src_width = src->val().type().width();
 
-    if (dst_width == 64) { // movsd m64, xmm1
-      src = builder().insert_bit_extract(src->val(), 0, 64);
-    } else if (src_width == 64) { // movsd xmm1, m64
-      src = builder().insert_zx(value_type::u128(), src->val());
-    } else { // movsd xmm1, xmm2
-      auto dst = read_operand(0);
-      src = builder().insert_bit_extract(src->val(), 0, 64);
-      dst = builder().insert_bit_insert(dst->val(), src->val(), 0, 64);
-    }
-    write_operand(0, src->val());
-    break;
-  }
-
-  case XED_ICLASS_MOVSB:
-  case XED_ICLASS_MOVSD:
-  case XED_ICLASS_MOVSW:
-  case XED_ICLASS_MOVSQ: {
-	int addr_align;
-
-	switch (xed_decoded_inst_get_iclass(xed_inst())) {
-	case XED_ICLASS_MOVSQ:
-	  addr_align = 8;
-	  break;
-	case XED_ICLASS_MOVSD:
-	  addr_align = 4;
-	  break;
-	case XED_ICLASS_MOVSW:
-	  addr_align = 2;
-	  break;
-	case XED_ICLASS_MOVSB:
-	  addr_align = 1;
-	  break;
-	default:
-	  throw std::runtime_error("unsupported rep movs size");
+		if (dst_width == 64) { // movsd m64, xmm1
+			src = builder().insert_bit_extract(src->val(), 0, 64);
+		} else if (src_width == 64) { // movsd xmm1, m64
+			src = builder().insert_zx(value_type::u128(), src->val());
+		} else { // movsd xmm1, xmm2
+			auto dst = read_operand(0);
+			src = builder().insert_bit_extract(src->val(), 0, 64);
+			dst = builder().insert_bit_insert(dst->val(), src->val(), 0, 64);
+		}
+		write_operand(0, src->val());
+		break;
 	}
-	auto cst_align = builder().insert_constant_u64(addr_align);
 
-	// move byte/word/dword/qword from [rsi] to [rdi], then inc/dec rsi and rdi depending on DF flag
-	auto rsi = read_reg(value_type::u64(), reg_offsets::RSI);
-	auto rdi = read_reg(value_type::u64(), reg_offsets::RDI);
-	const value_type &vt = addr_align == 8 ? value_type::u64() : addr_align == 4 ? value_type::u32() : addr_align == 2 ? value_type::u16() : value_type::u8();
-	auto rsi_val = builder().insert_read_mem(vt, rsi->val());
+	case XED_ICLASS_MOVSB:
+	case XED_ICLASS_MOVSD:
+	case XED_ICLASS_MOVSW:
+	case XED_ICLASS_MOVSQ: {
+		int addr_align;
 
-	builder().insert_write_mem(rdi->val(), rsi_val->val());
+		switch (xed_decoded_inst_get_iclass(xed_inst())) {
+		case XED_ICLASS_MOVSQ:
+			addr_align = 8;
+			break;
+		case XED_ICLASS_MOVSD:
+			addr_align = 4;
+			break;
+		case XED_ICLASS_MOVSW:
+			addr_align = 2;
+			break;
+		case XED_ICLASS_MOVSB:
+			addr_align = 1;
+			break;
+		default:
+			throw std::runtime_error("unsupported rep movs size");
+		}
+		auto cst_align = builder().insert_constant_u64(addr_align);
 
-	// update rdi and rsi according to DF register (0: inc, 1: dec)
-	auto df = read_reg(value_type::u1(), reg_offsets::DF);
-	auto df_test = builder().insert_cmpne(df->val(), builder().insert_constant_i(value_type::u1(), 0)->val());
-	cond_br_node *br_df = (cond_br_node *)builder().insert_cond_br(df_test->val(), nullptr);
+		// move byte/word/dword/qword from [rsi] to [rdi], then inc/dec rsi and rdi depending on DF flag
+		auto rsi = read_reg(value_type::u64(), reg_offsets::RSI);
+		auto rdi = read_reg(value_type::u64(), reg_offsets::RDI);
+		const value_type &vt = addr_align == 8 ? value_type::u64()
+			: addr_align == 4				   ? value_type::u32()
+			: addr_align == 2				   ? value_type::u16()
+											   : value_type::u8();
+		auto rsi_val = builder().insert_read_mem(vt, rsi->val());
 
-	write_reg(reg_offsets::RDI, builder().insert_add(rdi->val(), cst_align->val())->val());
-	write_reg(reg_offsets::RSI, builder().insert_add(rsi->val(), cst_align->val())->val());
-	br_node *br_then = (br_node *)builder().insert_br(nullptr);
+		builder().insert_write_mem(rdi->val(), rsi_val->val());
 
-	auto else_label = builder().insert_label("else");
-	br_df->add_br_target(else_label);
+		// update rdi and rsi according to DF register (0: inc, 1: dec)
+		auto df = read_reg(value_type::u1(), reg_offsets::DF);
+		auto df_test = builder().insert_cmpne(df->val(), builder().insert_constant_i(value_type::u1(), 0)->val());
+		cond_br_node *br_df = (cond_br_node *)builder().insert_cond_br(df_test->val(), nullptr);
 
-	write_reg(reg_offsets::RDI, builder().insert_sub(rdi->val(), cst_align->val())->val());
-	write_reg(reg_offsets::RSI, builder().insert_sub(rsi->val(), cst_align->val())->val());
+		write_reg(reg_offsets::RDI, builder().insert_add(rdi->val(), cst_align->val())->val());
+		write_reg(reg_offsets::RSI, builder().insert_add(rsi->val(), cst_align->val())->val());
+		br_node *br_then = (br_node *)builder().insert_br(nullptr);
 
-	auto endif_label = builder().insert_label("endif");
-	br_then->add_br_target(endif_label);
+		auto else_label = builder().insert_label("else");
+		br_df->add_br_target(else_label);
 
-	break;
-  }
+		write_reg(reg_offsets::RDI, builder().insert_sub(rdi->val(), cst_align->val())->val());
+		write_reg(reg_offsets::RSI, builder().insert_sub(rsi->val(), cst_align->val())->val());
+
+		auto endif_label = builder().insert_label("endif");
+		br_then->add_br_target(endif_label);
+
+		break;
+	}
 
 	case XED_ICLASS_MOVUPS:
 	case XED_ICLASS_MOVAPS:
 	case XED_ICLASS_MOVDQA:
-  case XED_ICLASS_MOVDQU:
+	case XED_ICLASS_MOVDQU:
 	case XED_ICLASS_MOVAPD: {
 		// TODO: INCORRECT FOR SOME SIZES
 
@@ -208,37 +211,37 @@ void mov_translator::do_translate()
 		break;
 	}
 
-  case XED_ICLASS_MOVLPD: {
-    auto src = read_operand(1);
-    if (src->val().type().width() == 128) {
-      src = builder().insert_bit_extract(src->val(), 0, 64);
-    }
+	case XED_ICLASS_MOVLPD: {
+		auto src = read_operand(1);
+		if (src->val().type().width() == 128) {
+			src = builder().insert_bit_extract(src->val(), 0, 64);
+		}
 
-    if (get_operand_width(0) == 64) {
-      write_operand(0, src->val());
-    } else { // 128 bits destination
-      auto dst = read_operand(0);
-      dst = builder().insert_bit_insert(dst->val(), src->val(), 0, 64);
-      write_operand(0, dst->val());
-    }
-    break;
-  }
-  case XED_ICLASS_MOVHPS:
-  case XED_ICLASS_MOVHPD: {
-    auto src = read_operand(1);
-    if (src->val().type().width() == 128) {
-      src = builder().insert_bit_extract(src->val(), 0, 64);
-    }
+		if (get_operand_width(0) == 64) {
+			write_operand(0, src->val());
+		} else { // 128 bits destination
+			auto dst = read_operand(0);
+			dst = builder().insert_bit_insert(dst->val(), src->val(), 0, 64);
+			write_operand(0, dst->val());
+		}
+		break;
+	}
+	case XED_ICLASS_MOVHPS:
+	case XED_ICLASS_MOVHPD: {
+		auto src = read_operand(1);
+		if (src->val().type().width() == 128) {
+			src = builder().insert_bit_extract(src->val(), 0, 64);
+		}
 
-    if (get_operand_width(0) == 64) {
-      write_operand(0, src->val());
-    } else { // 128 bits destination
-      auto dst = read_operand(0);
-      dst = builder().insert_bit_insert(dst->val(), src->val(), 64, 64);
-      write_operand(0, dst->val());
-    }
-    break;
-  }
+		if (get_operand_width(0) == 64) {
+			write_operand(0, src->val());
+		} else { // 128 bits destination
+			auto dst = read_operand(0);
+			dst = builder().insert_bit_insert(dst->val(), src->val(), 64, 64);
+			write_operand(0, dst->val());
+		}
+		break;
+	}
 
 	case XED_ICLASS_MOVSS: {
 		// movss xmm1, xmm2: dst[31..0] = src[31..0], dst[MAXVAL..32] are unmodified

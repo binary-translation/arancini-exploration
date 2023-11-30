@@ -1,8 +1,8 @@
 #pragma once
 
 #include <arancini/output/dynamic/machine-code-allocator.h>
-#include <iostream>
 #include <cstring>
+#include <iostream>
 
 namespace arancini::output::dynamic {
 class machine_code_writer {
@@ -44,7 +44,7 @@ public:
 		code_ptr_ = allocator_.allocate(code_ptr_, code_size_);
 		__builtin___clear_cache(static_cast<char *>(code_ptr_), ((char *)code_ptr_ + code_size_));
 		alloc_size_ = code_size_;
-//			std::cerr << "mc: finalise: ptr=" << std::hex << code_ptr_ << ", size=" << alloc_size_ << std::endl;
+		//			std::cerr << "mc: finalise: ptr=" << std::hex << code_ptr_ << ", size=" << alloc_size_ << std::endl;
 	}
 
 	void reset()

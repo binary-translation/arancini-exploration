@@ -13,7 +13,8 @@ public:
 	void *get_cpu_state() const { return cpu_state_; }
 
 	uint64_t chain_address_;
-	int* clear_child_tid_;
+	int *clear_child_tid_;
+
 private:
 	execution_context &owner_;
 	void *cpu_state_;

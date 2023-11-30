@@ -164,11 +164,10 @@ void riscv64_translation_context::begin_instruction(off_t address, const std::st
 	ret_val_ = 0;
 
 	// Enable automatic breakpoints after certain program counter
-//	if (address == 0x401cb3) {
-//		insert_ebreak = true;
-//		assembler_.ebreak();
-//	}
-
+	//	if (address == 0x401cb3) {
+	//		insert_ebreak = true;
+	//		assembler_.ebreak();
+	//	}
 }
 
 void riscv64_translation_context::end_instruction()

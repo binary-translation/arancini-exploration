@@ -1,6 +1,6 @@
 #include <arancini/input/x86/translators/translators.h>
-#include <arancini/ir/node.h>
 #include <arancini/ir/ir-builder.h>
+#include <arancini/ir/node.h>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
@@ -29,10 +29,10 @@ void stack_translator::do_translate()
 	case XED_ICLASS_LEAVE: {
 		/* Only supported for 64-bit mode */
 		/*
-		* LEAVE:
-		* 	RSP := RBP
-		* 	RBP := Pop()
-		*/
+		 * LEAVE:
+		 * 	RSP := RBP
+		 * 	RBP := Pop()
+		 */
 		auto rbp = read_reg(value_type::u64(), reg_offsets::RBP);
 		write_reg(reg_offsets::RSP, rbp->val());
 

@@ -3,6 +3,4 @@
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
 
-void nop_translator::do_translate()
-{
-}
+void nop_translator::do_translate() { }

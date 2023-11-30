@@ -62,47 +62,47 @@ public:
 		, info_(info)
 	{
 #ifdef ARCH_X86_64
-		//HACK: for hello-world/histogram on x86
+		// HACK: for hello-world/histogram on x86
 		if (name == "__set_thread_area") {
-		     info_ = 2;
-		     size_ = 16;
+			info_ = 2;
+			size_ = 16;
 		}
 		if (name == "memcpy") {
-		     info_ = 2;
-		     size_ = 50;
+			info_ = 2;
+			size_ = 50;
 		}
 		if (name == "_start") {
-		     info_ = 2;
-		     size_ = 22;
+			info_ = 2;
+			size_ = 22;
 		}
 		if (name == "_start_c") {
-		     info_ = 2;
-		     // hello-world: size_ = 241;
-		     size_ = 249;
+			info_ = 2;
+			// hello-world: size_ = 241;
+			size_ = 249;
 		}
 		if (name == "_init") {
-		     info_ = 2;
-		     size_ = 3;
+			info_ = 2;
+			size_ = 3;
 		}
 		if (name == "__syscall_cp_asm") {
-		     info_ = 2;
-		     size_ = 42;
+			info_ = 2;
+			size_ = 42;
 		}
 		if (name == "memset") {
-		     info_ = 2;
-		     size_ = 196;
+			info_ = 2;
+			size_ = 196;
 		}
 		if (name == "__clone") {
-		     info_ = 2;
-		     size_ = 57;
+			info_ = 2;
+			size_ = 57;
 		}
 		if (name == "sem_timedwait") {
-		     info_ = 2;
-		     size_ = 219;
+			info_ = 2;
+			size_ = 219;
 		}
 		if (name == "memmove") {
-		     info_ = 2;
-		     size_ = 37;
+			info_ = 2;
+			size_ = 37;
 		}
 #endif
 	}

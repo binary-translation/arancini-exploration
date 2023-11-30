@@ -114,80 +114,80 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_HLT:
 	case XED_ICLASS_CPUID:
 	case XED_ICLASS_PREFETCHNTA:
-  case XED_ICLASS_PAUSE:
-  // case XED_ICLASS_FNSTENV: // TODO support
-  // case XED_ICLASS_FLDENV: // TODO support
-  // case XED_ICLASS_FWAIT: // TODO support
-	  return std::make_unique<nop_translator>(builder);
+	case XED_ICLASS_PAUSE:
+		// case XED_ICLASS_FNSTENV: // TODO support
+		// case XED_ICLASS_FLDENV: // TODO support
+		// case XED_ICLASS_FWAIT: // TODO support
+		return std::make_unique<nop_translator>(builder);
 
-  case XED_ICLASS_XOR:
-  case XED_ICLASS_PXOR:
-  case XED_ICLASS_AND:
-  case XED_ICLASS_PAND:
-  case XED_ICLASS_OR:
-  case XED_ICLASS_POR:
-  case XED_ICLASS_ADD:
-  case XED_ICLASS_ADDSD:
-  case XED_ICLASS_ADC:
-  case XED_ICLASS_SUB:
-  case XED_ICLASS_SBB:
-  case XED_ICLASS_SUBSS:
-  case XED_ICLASS_SUBSD:
-  case XED_ICLASS_CMP:
-  case XED_ICLASS_TEST:
-  case XED_ICLASS_XADD:
-  case XED_ICLASS_BT:
-  case XED_ICLASS_BTS:
-  case XED_ICLASS_BTR:
-  case XED_ICLASS_BSR:
-  case XED_ICLASS_BSF:
-  case XED_ICLASS_COMISS:
-  // SSE2 binary operations
-  case XED_ICLASS_PADDQ:
-  case XED_ICLASS_PADDD:
-  case XED_ICLASS_PADDW:
-  case XED_ICLASS_PADDB:
-  case XED_ICLASS_PSUBQ:
-  case XED_ICLASS_PSUBD:
-  case XED_ICLASS_PSUBW:
-  case XED_ICLASS_PSUBB:
-  case XED_ICLASS_PCMPEQB:
-  case XED_ICLASS_PCMPGTB:
-  case XED_ICLASS_PCMPGTW:
-  case XED_ICLASS_PCMPGTD:
-	  return std::make_unique<binop_translator>(builder);
+	case XED_ICLASS_XOR:
+	case XED_ICLASS_PXOR:
+	case XED_ICLASS_AND:
+	case XED_ICLASS_PAND:
+	case XED_ICLASS_OR:
+	case XED_ICLASS_POR:
+	case XED_ICLASS_ADD:
+	case XED_ICLASS_ADDSD:
+	case XED_ICLASS_ADC:
+	case XED_ICLASS_SUB:
+	case XED_ICLASS_SBB:
+	case XED_ICLASS_SUBSS:
+	case XED_ICLASS_SUBSD:
+	case XED_ICLASS_CMP:
+	case XED_ICLASS_TEST:
+	case XED_ICLASS_XADD:
+	case XED_ICLASS_BT:
+	case XED_ICLASS_BTS:
+	case XED_ICLASS_BTR:
+	case XED_ICLASS_BSR:
+	case XED_ICLASS_BSF:
+	case XED_ICLASS_COMISS:
+	// SSE2 binary operations
+	case XED_ICLASS_PADDQ:
+	case XED_ICLASS_PADDD:
+	case XED_ICLASS_PADDW:
+	case XED_ICLASS_PADDB:
+	case XED_ICLASS_PSUBQ:
+	case XED_ICLASS_PSUBD:
+	case XED_ICLASS_PSUBW:
+	case XED_ICLASS_PSUBB:
+	case XED_ICLASS_PCMPEQB:
+	case XED_ICLASS_PCMPGTB:
+	case XED_ICLASS_PCMPGTW:
+	case XED_ICLASS_PCMPGTD:
+		return std::make_unique<binop_translator>(builder);
 
-  case XED_ICLASS_PUSH:
-  case XED_ICLASS_POP:
-  case XED_ICLASS_LEAVE:
-	  return std::make_unique<stack_translator>(builder);
+	case XED_ICLASS_PUSH:
+	case XED_ICLASS_POP:
+	case XED_ICLASS_LEAVE:
+		return std::make_unique<stack_translator>(builder);
 
-  case XED_ICLASS_CALL_FAR:
-  case XED_ICLASS_CALL_NEAR:
-  case XED_ICLASS_RET_FAR:
-  case XED_ICLASS_RET_NEAR:
-  case XED_ICLASS_JMP:
-	  return std::make_unique<branch_translator>(builder);
+	case XED_ICLASS_CALL_FAR:
+	case XED_ICLASS_CALL_NEAR:
+	case XED_ICLASS_RET_FAR:
+	case XED_ICLASS_RET_NEAR:
+	case XED_ICLASS_JMP:
+		return std::make_unique<branch_translator>(builder);
 
-  case XED_ICLASS_SAR:
-  case XED_ICLASS_SHR:
-  case XED_ICLASS_SHL:
-  case XED_ICLASS_ROR:
-  case XED_ICLASS_ROL:
-  case XED_ICLASS_PSRLW:
-  case XED_ICLASS_PSRLD:
-  case XED_ICLASS_PSRLQ:
+	case XED_ICLASS_SAR:
+	case XED_ICLASS_SHR:
+	case XED_ICLASS_SHL:
+	case XED_ICLASS_ROR:
+	case XED_ICLASS_ROL:
+	case XED_ICLASS_PSRLW:
+	case XED_ICLASS_PSRLD:
+	case XED_ICLASS_PSRLQ:
 	case XED_ICLASS_PSLLDQ:
 	case XED_ICLASS_PSRLDQ:
 	case XED_ICLASS_PSLLD:
 		return std::make_unique<shifts_translator>(builder);
 
-  case XED_ICLASS_INC:
-  case XED_ICLASS_DEC:
-  case XED_ICLASS_NOT:
-  case XED_ICLASS_NEG:
-  case XED_ICLASS_BSWAP:
-  case XED_ICLASS_PMOVMSKB:
+	case XED_ICLASS_INC:
+	case XED_ICLASS_DEC:
+	case XED_ICLASS_NOT:
+	case XED_ICLASS_NEG:
+	case XED_ICLASS_BSWAP:
+	case XED_ICLASS_PMOVMSKB:
 		return std::make_unique<unop_translator>(builder);
 
 	case XED_ICLASS_MUL:
@@ -202,15 +202,15 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_PMULLW:
 		return std::make_unique<muldiv_translator>(builder);
 
-  case XED_ICLASS_REPE_CMPSB:
-  case XED_ICLASS_REP_STOSB:
-  case XED_ICLASS_REP_STOSD:
-  case XED_ICLASS_REP_STOSW:
-  case XED_ICLASS_REP_STOSQ:
-  case XED_ICLASS_REP_MOVSB:
-  case XED_ICLASS_REP_MOVSD:
-  case XED_ICLASS_REP_MOVSW:
-  case XED_ICLASS_REP_MOVSQ:
+	case XED_ICLASS_REPE_CMPSB:
+	case XED_ICLASS_REP_STOSB:
+	case XED_ICLASS_REP_STOSD:
+	case XED_ICLASS_REP_STOSW:
+	case XED_ICLASS_REP_STOSQ:
+	case XED_ICLASS_REP_MOVSB:
+	case XED_ICLASS_REP_MOVSD:
+	case XED_ICLASS_REP_MOVSW:
+	case XED_ICLASS_REP_MOVSQ:
 		return std::make_unique<rep_translator>(builder);
 
 	case XED_ICLASS_PUNPCKLBW:
@@ -221,7 +221,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_PUNPCKHWD:
 	case XED_ICLASS_PUNPCKHDQ:
 	case XED_ICLASS_PUNPCKHQDQ:
-  case XED_ICLASS_PACKUSWB:
+	case XED_ICLASS_PACKUSWB:
 		return std::make_unique<punpck_translator>(builder);
 
 	case XED_ICLASS_VADDSS:
@@ -243,12 +243,12 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 
 	case XED_ICLASS_XADD_LOCK:
 	case XED_ICLASS_XCHG:
-  case XED_ICLASS_CMPXCHG_LOCK:
-  case XED_ICLASS_ADD_LOCK:
-  case XED_ICLASS_AND_LOCK:
-  case XED_ICLASS_OR_LOCK:
-  case XED_ICLASS_INC_LOCK:
-  case XED_ICLASS_DEC_LOCK:
+	case XED_ICLASS_CMPXCHG_LOCK:
+	case XED_ICLASS_ADD_LOCK:
+	case XED_ICLASS_AND_LOCK:
+	case XED_ICLASS_OR_LOCK:
+	case XED_ICLASS_INC_LOCK:
+	case XED_ICLASS_DEC_LOCK:
 		return std::make_unique<atomic_translator>(builder);
 
 	case XED_ICLASS_XGETBV:
@@ -258,44 +258,44 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_CLC:
 		return std::make_unique<control_translator>(builder);
 
-  case XED_ICLASS_FNSTCW:
-  case XED_ICLASS_FLDCW:
-  case XED_ICLASS_FNSTSW:
-  case XED_ICLASS_FLD:
-  case XED_ICLASS_FILD:
-  case XED_ICLASS_FST:
-  case XED_ICLASS_FSTP:
-  case XED_ICLASS_FIST:
-  case XED_ICLASS_FISTP:
-  case XED_ICLASS_FADD:
-  case XED_ICLASS_FADDP:
-  case XED_ICLASS_FSUB:
-  case XED_ICLASS_FSUBP:
-  case XED_ICLASS_FSUBR:
-  case XED_ICLASS_FSUBRP:
-  case XED_ICLASS_FISUB:
-  case XED_ICLASS_FMUL:
-  case XED_ICLASS_FMULP:
-  case XED_ICLASS_FDIV:
-  case XED_ICLASS_FDIVP:
-  case XED_ICLASS_FPREM:
-  case XED_ICLASS_FLDZ:
-  case XED_ICLASS_FLD1:
-  case XED_ICLASS_FCHS:
-  case XED_ICLASS_FABS:
-  case XED_ICLASS_FXCH:
-  case XED_ICLASS_FCOMI:
-  case XED_ICLASS_FCOMIP:
-  case XED_ICLASS_FUCOMI:
-  case XED_ICLASS_FUCOMIP:
+	case XED_ICLASS_FNSTCW:
+	case XED_ICLASS_FLDCW:
+	case XED_ICLASS_FNSTSW:
+	case XED_ICLASS_FLD:
+	case XED_ICLASS_FILD:
+	case XED_ICLASS_FST:
+	case XED_ICLASS_FSTP:
+	case XED_ICLASS_FIST:
+	case XED_ICLASS_FISTP:
+	case XED_ICLASS_FADD:
+	case XED_ICLASS_FADDP:
+	case XED_ICLASS_FSUB:
+	case XED_ICLASS_FSUBP:
+	case XED_ICLASS_FSUBR:
+	case XED_ICLASS_FSUBRP:
+	case XED_ICLASS_FISUB:
+	case XED_ICLASS_FMUL:
+	case XED_ICLASS_FMULP:
+	case XED_ICLASS_FDIV:
+	case XED_ICLASS_FDIVP:
+	case XED_ICLASS_FPREM:
+	case XED_ICLASS_FLDZ:
+	case XED_ICLASS_FLD1:
+	case XED_ICLASS_FCHS:
+	case XED_ICLASS_FABS:
+	case XED_ICLASS_FXCH:
+	case XED_ICLASS_FCOMI:
+	case XED_ICLASS_FCOMIP:
+	case XED_ICLASS_FUCOMI:
+	case XED_ICLASS_FUCOMIP:
 		return std::make_unique<fpu_translator>(builder);
 
 	case XED_ICLASS_INT:
 	case XED_ICLASS_INT3:
 	case XED_ICLASS_SYSCALL:
-  case XED_ICLASS_UD0:
-  case XED_ICLASS_UD1:
-  case XED_ICLASS_UD2:
+	case XED_ICLASS_UD0:
+	case XED_ICLASS_UD1:
+	case XED_ICLASS_UD2:
 		return std::make_unique<interrupt_translator>(builder);
 
 	default:
@@ -303,7 +303,8 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	}
 }
 
-static translation_result translate_instruction(ir_builder &builder, size_t address, xed_decoded_inst_t *xedd, bool debug, disassembly_syntax da, std::string &disasm)
+static translation_result translate_instruction(
+	ir_builder &builder, size_t address, xed_decoded_inst_t *xedd, bool debug, disassembly_syntax da, std::string &disasm)
 {
 	if (debug) {
 		char buffer[64];
@@ -350,7 +351,7 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 	size_t offset = 0;
 
-    std::string disasm = "";
+	std::string disasm = "";
 	while (offset < code_size) {
 		xed_decoded_inst_t xedd;
 		xed_decoded_inst_zero(&xedd);
@@ -369,24 +370,24 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 		if (r == translation_result::fail) {
 			throw std::runtime_error("instruction translation failure: " + std::to_string(xed_error));
 		} else if (r == translation_result::end_of_block && basic_block) {
-            // Print backwards branch addr (if exists)
-            // Useful for debug infrastructure
-            auto pos = disasm.find("0x");
-            if (pos != disasm.npos) {
-                auto addr_str = disasm.substr(pos);
-                off_t addr = std::strtol(addr_str.c_str(), nullptr, 16);
-                if (addr > base_address && addr < base_address + offset + length) {
+			// Print backwards branch addr (if exists)
+			// Useful for debug infrastructure
+			auto pos = disasm.find("0x");
+			if (pos != disasm.npos) {
+				auto addr_str = disasm.substr(pos);
+				off_t addr = std::strtol(addr_str.c_str(), nullptr, 16);
+				if (addr > base_address && addr < base_address + offset + length) {
 #ifndef NDEBUG
-                    std::cerr << "Backwards branch @ " << addr_str << '\n';
+					std::cerr << "Backwards branch @ " << addr_str << '\n';
 #endif
-                }
-            }
+				}
+			}
 			break;
 		}
 
 		offset += length;
 	}
 
-    base_address += offset;
+	base_address += offset;
 	builder.end_chunk();
 }

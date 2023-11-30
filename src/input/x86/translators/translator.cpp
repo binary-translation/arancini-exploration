@@ -10,11 +10,11 @@
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
 
-translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_inst, const std::string& disasm)
+translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_inst, const std::string &disasm)
 {
 	switch (xed_decoded_inst_get_iclass(xed_inst)) {
 	// TODO: this is a bad way of avoiding empty packets. Should be done by checking that the translator is a nop_translator, not hardcoded switch case
-	//case XED_ICLASS_NOP:
+	// case XED_ICLASS_NOP:
 	case XED_ICLASS_HLT:
 	case XED_ICLASS_CPUID:
 	case XED_ICLASS_PREFETCHNTA:
@@ -34,39 +34,39 @@ translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_
 
 void translator::dump_xed_encoding(void)
 {
-  xed_decoded_inst_t *xed_ins = xed_inst();
+	xed_decoded_inst_t *xed_ins = xed_inst();
 	const xed_inst_t *insn = xed_decoded_inst_inst(xed_ins);
-  auto nops = xed_decoded_inst_noperands(xed_ins);
-  char buf[64];
+	auto nops = xed_decoded_inst_noperands(xed_ins);
+	char buf[64];
 
-  xed_format_context(XED_SYNTAX_INTEL, xed_ins, buf, sizeof(buf) - 1, 0, nullptr, 0);
-  std::cerr << "decoding: " << buf << std::endl;
-  std::cerr << "xed encoding: ";
+	xed_format_context(XED_SYNTAX_INTEL, xed_ins, buf, sizeof(buf) - 1, 0, nullptr, 0);
+	std::cerr << "decoding: " << buf << std::endl;
+	std::cerr << "xed encoding: ";
 	for (unsigned int opnum = 0; opnum < nops; opnum++) {
-    auto operand = xed_inst_operand(insn, opnum);
-    xed_operand_print(operand, buf, sizeof(buf) - 1);
-    std::cerr << buf << " ";
+		auto operand = xed_inst_operand(insn, opnum);
+		xed_operand_print(operand, buf, sizeof(buf) - 1);
+		std::cerr << buf << " ";
 	}
-  std::cerr << std::endl;
+	std::cerr << std::endl;
 }
 
 translator::reg_offsets translator::xedreg_to_offset(xed_reg_enum_t reg)
 {
-  auto regclass = xed_reg_class(reg);
+	auto regclass = xed_reg_class(reg);
 
-  switch (regclass) {
-  case XED_REG_CLASS_GPR: {
-    auto largest_reg = xed_get_largest_enclosing_register(reg);
-    return (translator::reg_offsets)((int)((largest_reg - XED_REG_RAX) * 8) + (int)reg_offsets::RAX);
-  }
-  case XED_REG_CLASS_XMM:
-  case XED_REG_CLASS_YMM:
-  case XED_REG_CLASS_ZMM: {
-    return (translator::reg_offsets)((int)((reg - XED_REG_ZMM0) * 64) + (int)reg_offsets::ZMM0);
-  }
-  default:
-    throw std::runtime_error("unsupported register class when computing offset from xed");
-  }
+	switch (regclass) {
+	case XED_REG_CLASS_GPR: {
+		auto largest_reg = xed_get_largest_enclosing_register(reg);
+		return (translator::reg_offsets)((int)((largest_reg - XED_REG_RAX) * 8) + (int)reg_offsets::RAX);
+	}
+	case XED_REG_CLASS_XMM:
+	case XED_REG_CLASS_YMM:
+	case XED_REG_CLASS_ZMM: {
+		return (translator::reg_offsets)((int)((reg - XED_REG_ZMM0) * 64) + (int)reg_offsets::ZMM0);
+	}
+	default:
+		throw std::runtime_error("unsupported register class when computing offset from xed");
+	}
 }
 
 action_node *translator::write_operand(int opnum, port &value)
@@ -115,7 +115,8 @@ action_node *translator::write_operand(int opnum, port &value)
 				return write_reg(xedreg_to_offset(reg), res->val());
 			}
 			default:
-				throw std::runtime_error("" + std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": unsupported general purpose register size: " + std::to_string(width));
+				throw std::runtime_error(
+					"" + std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": unsupported general purpose register size: " + std::to_string(width));
 			}
 		}
 
@@ -128,60 +129,74 @@ action_node *translator::write_operand(int opnum, port &value)
 			value_node *enc;
 			if (!xed_classify_sse(xed_inst())) {
 				value_node *flat;
-				switch(val_len) {
-					case 32: flat = builder_.insert_bitcast(value_type::u32(), value); break;
-					case 64: flat = builder_.insert_bitcast(value_type::u64(), value); break;
-					case 128: flat = builder_.insert_bitcast(value_type::u128(), value); break;
-					case 256: flat = builder_.insert_bitcast(value_type::u256(), value); break;
-					case 512: flat = builder_.insert_bitcast(value_type::u512(), value); break;
-					default: throw std::runtime_error("unsupported value width when writing X/Y/ZMM registers");
+				switch (val_len) {
+				case 32:
+					flat = builder_.insert_bitcast(value_type::u32(), value);
+					break;
+				case 64:
+					flat = builder_.insert_bitcast(value_type::u64(), value);
+					break;
+				case 128:
+					flat = builder_.insert_bitcast(value_type::u128(), value);
+					break;
+				case 256:
+					flat = builder_.insert_bitcast(value_type::u256(), value);
+					break;
+				case 512:
+					flat = builder_.insert_bitcast(value_type::u512(), value);
+					break;
+				default:
+					throw std::runtime_error("unsupported value width when writing X/Y/ZMM registers");
 				}
-				switch(xed_get_register_width_bits64(xed_get_largest_enclosing_register(reg))) {
-					case 128: return write_reg(enc_reg_off, builder_.insert_zx(value_type::u128(), flat->val())->val());
-					case 256: return write_reg(enc_reg_off, builder_.insert_zx(value_type::u256(), flat->val())->val());
-					case 512: return write_reg(enc_reg_off, builder_.insert_zx(value_type::u512(), flat->val())->val());
+				switch (xed_get_register_width_bits64(xed_get_largest_enclosing_register(reg))) {
+				case 128:
+					return write_reg(enc_reg_off, builder_.insert_zx(value_type::u128(), flat->val())->val());
+				case 256:
+					return write_reg(enc_reg_off, builder_.insert_zx(value_type::u256(), flat->val())->val());
+				case 512:
+					return write_reg(enc_reg_off, builder_.insert_zx(value_type::u512(), flat->val())->val());
 				}
 			}
-			switch(xed_get_register_width_bits64(xed_get_largest_enclosing_register(reg))) {
-					case 128: enc = read_reg( value_type::u128(), enc_reg_off); break;
-					case 256: enc = read_reg( value_type::u256(), enc_reg_off); break;
-					case 512: enc = read_reg( value_type::u512(), enc_reg_off); break;
+			switch (xed_get_register_width_bits64(xed_get_largest_enclosing_register(reg))) {
+			case 128:
+				enc = read_reg(value_type::u128(), enc_reg_off);
+				break;
+			case 256:
+				enc = read_reg(value_type::u256(), enc_reg_off);
+				break;
+			case 512:
+				enc = read_reg(value_type::u512(), enc_reg_off);
+				break;
 			}
 			auto enc_len = enc->val().type().width();
-			switch(val_len) {
-				case 32: {
-						 orig = builder_.insert_bitcast(value_type::u32(), value);
-						 enc = builder_.insert_bitcast(value_type::vector(value_type::u32(), enc_len/val_len), enc->val());
-						 enc = builder_.insert_vector_insert(enc->val(), 0, orig->val());
-				}
-				break;
-				case 64: {
-						 orig = builder_.insert_bitcast(value_type::u64(), value);
-						 enc = builder_.insert_bitcast(value_type::vector(value_type::u64(), enc_len/val_len), enc->val());
-						 enc = builder_.insert_vector_insert(enc->val(), 0, orig->val());
-				}
-				break;
-				case 128: {
-						 orig = builder_.insert_bitcast(value_type::u128(), value);
-						 enc = builder_.insert_bitcast(value_type::vector(value_type::u128(), enc_len/val_len), enc->val());
-						 enc = builder_.insert_vector_insert(enc->val(), 0, orig->val());
-				}
-				break;
-				case 256: {
-						 orig = builder_.insert_bitcast(value_type::u256(), value);
-						 enc = builder_.insert_bitcast(value_type::vector(value_type::u256(), enc_len/val_len), enc->val());
-						 enc = builder_.insert_vector_insert(enc->val(), 0, orig->val());
-				}
-				break;
-				case 512: {
-						 orig = builder_.insert_bitcast(value_type::u512(), value);
-						 enc = builder_.insert_bitcast(value_type::vector(value_type::u512(), enc_len/val_len), enc->val());
-						 enc = builder_.insert_vector_insert(enc->val(), 0, orig->val());
-				}
-				break;
-
+			switch (val_len) {
+			case 32: {
+				orig = builder_.insert_bitcast(value_type::u32(), value);
+				enc = builder_.insert_bitcast(value_type::vector(value_type::u32(), enc_len / val_len), enc->val());
+				enc = builder_.insert_vector_insert(enc->val(), 0, orig->val());
+			} break;
+			case 64: {
+				orig = builder_.insert_bitcast(value_type::u64(), value);
+				enc = builder_.insert_bitcast(value_type::vector(value_type::u64(), enc_len / val_len), enc->val());
+				enc = builder_.insert_vector_insert(enc->val(), 0, orig->val());
+			} break;
+			case 128: {
+				orig = builder_.insert_bitcast(value_type::u128(), value);
+				enc = builder_.insert_bitcast(value_type::vector(value_type::u128(), enc_len / val_len), enc->val());
+				enc = builder_.insert_vector_insert(enc->val(), 0, orig->val());
+			} break;
+			case 256: {
+				orig = builder_.insert_bitcast(value_type::u256(), value);
+				enc = builder_.insert_bitcast(value_type::vector(value_type::u256(), enc_len / val_len), enc->val());
+				enc = builder_.insert_vector_insert(enc->val(), 0, orig->val());
+			} break;
+			case 512: {
+				orig = builder_.insert_bitcast(value_type::u512(), value);
+				enc = builder_.insert_bitcast(value_type::vector(value_type::u512(), enc_len / val_len), enc->val());
+				enc = builder_.insert_vector_insert(enc->val(), 0, orig->val());
+			} break;
 			}
-			return write_reg( enc_reg_off, enc->val());
+			return write_reg(enc_reg_off, enc->val());
 		}
 
 		case XED_REG_CLASS_X87: {
@@ -196,7 +211,7 @@ action_node *translator::write_operand(int opnum, port &value)
 			case XED_REG_ST6:
 			case XED_REG_ST7: {
 				auto st_idx = reg - XED_REG_ST0;
-        return fpu_stack_set(st_idx, value);
+				return fpu_stack_set(st_idx, value);
 			}
 			default:
 				throw std::runtime_error("unsupported x87 register type");
@@ -248,42 +263,45 @@ value_node *translator::read_operand(int opnum)
 				throw std::runtime_error("unsupported register size");
 			}
 
-		case XED_REG_CLASS_XMM: return read_reg(value_type::u128(), xedreg_to_offset(xed_get_largest_enclosing_register(reg)));
-		case XED_REG_CLASS_YMM: return read_reg(value_type::u256(), xedreg_to_offset(xed_get_largest_enclosing_register(reg)));
-		case XED_REG_CLASS_ZMM: return read_reg(value_type::u512(), xedreg_to_offset(xed_get_largest_enclosing_register(reg)));
+		case XED_REG_CLASS_XMM:
+			return read_reg(value_type::u128(), xedreg_to_offset(xed_get_largest_enclosing_register(reg)));
+		case XED_REG_CLASS_YMM:
+			return read_reg(value_type::u256(), xedreg_to_offset(xed_get_largest_enclosing_register(reg)));
+		case XED_REG_CLASS_ZMM:
+			return read_reg(value_type::u512(), xedreg_to_offset(xed_get_largest_enclosing_register(reg)));
 
-      // case XED_REG_CLASS_FLAGS:
-      // 	return read_reg(value_type::u64(), xedreg_to_offset(reg));
+			// case XED_REG_CLASS_FLAGS:
+			// 	return read_reg(value_type::u64(), xedreg_to_offset(reg));
 
-    case XED_REG_CLASS_X87: {
-      switch (reg) {
+		case XED_REG_CLASS_X87: {
+			switch (reg) {
 				// TODO put the convert logic here?
-      case XED_REG_ST0:
-      case XED_REG_ST1:
-      case XED_REG_ST2:
-      case XED_REG_ST3:
-      case XED_REG_ST4:
-      case XED_REG_ST5:
-      case XED_REG_ST6:
-      case XED_REG_ST7: {
+			case XED_REG_ST0:
+			case XED_REG_ST1:
+			case XED_REG_ST2:
+			case XED_REG_ST3:
+			case XED_REG_ST4:
+			case XED_REG_ST5:
+			case XED_REG_ST6:
+			case XED_REG_ST7: {
 				auto st_idx = reg - XED_REG_ST0;
-        return fpu_stack_get(st_idx);
-      }
-      default:
-        throw std::runtime_error("unsupported x87 register type");
-      }
-    }
-    case XED_REG_CLASS_PSEUDOX87: {
-      switch (reg) {
-      case XED_REG_X87CONTROL:
+				return fpu_stack_get(st_idx);
+			}
+			default:
+				throw std::runtime_error("unsupported x87 register type");
+			}
+		}
+		case XED_REG_CLASS_PSEUDOX87: {
+			switch (reg) {
+			case XED_REG_X87CONTROL:
 				return read_reg(value_type::u16(), reg_offsets::X87_CTRL);
-      case XED_REG_X87STATUS:
+			case XED_REG_X87STATUS:
 				return read_reg(value_type::u16(), reg_offsets::X87_STS);
-      default:
+			default:
 				throw std::runtime_error("unsupported pseudoX87 register type");
-      }
-      break;
-    }
+			}
+			break;
+		}
 
 		default:
 			throw std::runtime_error(std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": unsupported register class: " + std::to_string(regclass));
@@ -291,7 +309,7 @@ value_node *translator::read_operand(int opnum)
 	}
 
 	case XED_OPERAND_IMM0: {
-		if (xed_decoded_inst_get_immediate_is_signed(xed_inst())){
+		if (xed_decoded_inst_get_immediate_is_signed(xed_inst())) {
 			switch (xed_decoded_inst_get_immediate_width_bits(xed_inst())) {
 			case 8:
 				return builder_.insert_constant_s8(xed_decoded_inst_get_signed_immediate(xed_inst()));
@@ -321,12 +339,12 @@ value_node *translator::read_operand(int opnum)
 	}
 
 	case XED_OPERAND_MEM0:
-  case XED_OPERAND_MEM1: {
-    auto mem_idx = opname - XED_OPERAND_MEM0;
-    auto addr = compute_address(mem_idx);
+	case XED_OPERAND_MEM1: {
+		auto mem_idx = opname - XED_OPERAND_MEM0;
+		auto addr = compute_address(mem_idx);
 
-    switch (xed_decoded_inst_get_memory_operand_length(xed_inst(), mem_idx)) {
-    case 1:
+		switch (xed_decoded_inst_get_memory_operand_length(xed_inst(), mem_idx)) {
+		case 1:
 			return builder_.insert_read_mem(value_type::u8(), addr->val());
 		case 2:
 			return builder_.insert_read_mem(value_type::u16(), addr->val());
@@ -341,7 +359,7 @@ value_node *translator::read_operand(int opnum)
 			throw std::runtime_error("invalid memory width in read");
 		}
 	}
-	case XED_OPERAND_RELBR:{
+	case XED_OPERAND_RELBR: {
 		int32_t displacement = xed_decoded_inst_get_branch_displacement(xed_inst());
 		return builder_.insert_constant_u64(displacement);
 	}
@@ -372,7 +390,7 @@ ssize_t translator::get_operand_width(int opnum)
 	case XED_OPERAND_MEM1:
 		return 8 * xed_decoded_inst_get_memory_operand_length(xed_inst(), 1);
 
-  default:
+	default:
 		throw std::runtime_error("unsupported operand width query");
 	}
 }
@@ -383,7 +401,7 @@ bool translator::is_memory_operand(int opnum)
 	auto operand = xed_inst_operand(insn, opnum);
 	auto opname = xed_operand_name(operand);
 
-	return (opname == XED_OPERAND_MEM0 || opname == XED_OPERAND_MEM1 );
+	return (opname == XED_OPERAND_MEM0 || opname == XED_OPERAND_MEM1);
 }
 
 bool translator::is_immediate_operand(int opnum)
@@ -392,7 +410,7 @@ bool translator::is_immediate_operand(int opnum)
 	auto operand = xed_inst_operand(insn, opnum);
 	auto opname = xed_operand_name(operand);
 
-	return (opname == XED_OPERAND_IMM0 || opname == XED_OPERAND_IMM1 );
+	return (opname == XED_OPERAND_IMM0 || opname == XED_OPERAND_IMM1);
 }
 
 value_node *translator::compute_address(int mem_idx)
@@ -466,82 +484,90 @@ value_node *translator::compute_fpu_stack_addr(int stack_idx)
 	auto x87_stack_base = read_reg(value_type::u64(), reg_offsets::X87_STACK_BASE);
 	auto x87_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
 
-  // Get the TOP of the stack and multiply by 10 to get the proper offset (an FPU stack register is 10-bytes wide)
+	// Get the TOP of the stack and multiply by 10 to get the proper offset (an FPU stack register is 10-bytes wide)
 	auto top = builder_.insert_zx(value_type::u64(), builder_.insert_bit_extract(x87_status->val(), 11, 3)->val());
 	top = builder_.insert_mul(top->val(), cst_10->val());
 
-  // Add the TOP offset to the base address of the stack
-  auto addr = builder_.insert_add(x87_stack_base->val(), top->val());
+	// Add the TOP offset to the base address of the stack
+	auto addr = builder_.insert_add(x87_stack_base->val(), top->val());
 
-  // If accessing ST(i) with i > 0, add the offset of the index to the address
+	// If accessing ST(i) with i > 0, add the offset of the index to the address
 	if (stack_idx) {
 		auto idx_offset = builder_.insert_constant_u64(stack_idx * 10);
-    addr = builder_.insert_add(addr->val(), idx_offset->val());
-  }
+		addr = builder_.insert_add(addr->val(), idx_offset->val());
+	}
 
-  return addr;
+	return addr;
 }
 
 value_node *translator::fpu_stack_get(int stack_idx)
 {
-  auto st0_addr = compute_fpu_stack_addr(stack_idx);
-  return builder().insert_read_mem(value_type::f80(), st0_addr->val());
+	auto st0_addr = compute_fpu_stack_addr(stack_idx);
+	return builder().insert_read_mem(value_type::f80(), st0_addr->val());
 }
 
 action_node *translator::fpu_stack_set(int stack_idx, port &val)
 {
-  // Update the tag register with a valid value
-  // TODO: Support for zero and special tags?
-  auto x87_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
+	// Update the tag register with a valid value
+	// TODO: Support for zero and special tags?
+	auto x87_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
 	auto top = builder_.insert_bit_extract(x87_status->val(), 11, 3);
-  auto x87_flag = read_reg(value_type::u16(), reg_offsets::X87_TAG);
+	auto x87_flag = read_reg(value_type::u16(), reg_offsets::X87_TAG);
 
-  auto valid_tag = builder_.insert_constant_u16(0x3); // valid = 0b00 = 0x0 = ~0x3
-  // we shift 0x3 by 2 * top to match with the tag register, then NOT to get the proper mask to AND with tag register
-  valid_tag = builder_.insert_lsl(valid_tag->val(), builder_.insert_lsl(builder_.insert_zx(value_type::u16(), top->val())->val(), builder_.insert_constant_u1(1)->val())->val());
-  valid_tag = builder_.insert_not(valid_tag->val());
-  x87_flag = builder_.insert_and(x87_flag->val(), valid_tag->val());
-  write_reg(reg_offsets::X87_TAG, x87_flag->val());
+	auto valid_tag = builder_.insert_constant_u16(0x3); // valid = 0b00 = 0x0 = ~0x3
+	// we shift 0x3 by 2 * top to match with the tag register, then NOT to get the proper mask to AND with tag register
+	valid_tag = builder_.insert_lsl(
+		valid_tag->val(), builder_.insert_lsl(builder_.insert_zx(value_type::u16(), top->val())->val(), builder_.insert_constant_u1(1)->val())->val());
+	valid_tag = builder_.insert_not(valid_tag->val());
+	x87_flag = builder_.insert_and(x87_flag->val(), valid_tag->val());
+	write_reg(reg_offsets::X87_TAG, x87_flag->val());
 
-  // Write the value to ST(stack_idx)
-  auto st0_addr = compute_fpu_stack_addr(stack_idx);
-  return builder().insert_write_mem(st0_addr->val(), val);
+	// Write the value to ST(stack_idx)
+	auto st0_addr = compute_fpu_stack_addr(stack_idx);
+	return builder().insert_write_mem(st0_addr->val(), val);
 }
 
 action_node *translator::fpu_stack_top_move(int val)
 {
 	auto x87_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
 	auto top = builder_.insert_bit_extract(x87_status->val(), 11, 3);
-  auto x87_flag = read_reg(value_type::u16(), reg_offsets::X87_TAG);
+	auto x87_flag = read_reg(value_type::u16(), reg_offsets::X87_TAG);
 
-  value_node *new_top;
-  if (val == 1) { // pop
-    // mark the old tag as empty
-    auto empty_tag = builder_.insert_constant_u16(0x3); // empty = 0b11 = 0x3
-    // we shift the empty tag by 2 * top to match with the tag register, then OR them
-    empty_tag = builder_.insert_lsl(empty_tag->val(), builder_.insert_lsl(builder_.insert_zx(value_type::u16(), top->val())->val(), builder_.insert_constant_u1(1)->val())->val());
-    x87_flag = builder_.insert_or(x87_flag->val(), empty_tag->val());
-    write_reg(reg_offsets::X87_TAG, x87_flag->val());
+	value_node *new_top;
+	if (val == 1) { // pop
+		// mark the old tag as empty
+		auto empty_tag = builder_.insert_constant_u16(0x3); // empty = 0b11 = 0x3
+		// we shift the empty tag by 2 * top to match with the tag register, then OR them
+		empty_tag = builder_.insert_lsl(
+			empty_tag->val(), builder_.insert_lsl(builder_.insert_zx(value_type::u16(), top->val())->val(), builder_.insert_constant_u1(1)->val())->val());
+		x87_flag = builder_.insert_or(x87_flag->val(), empty_tag->val());
+		write_reg(reg_offsets::X87_TAG, x87_flag->val());
 
-    // compute the new top index
-    new_top = builder_.insert_add(top->val(), builder_.insert_constant_i(top->val().type(), (unsigned int)val)->val());
-  } else if (val == -1) { // push
-    new_top = builder_.insert_sub(top->val(), builder_.insert_constant_i(top->val().type(), (unsigned int)(-val))->val());
-  } else {
-    throw std::logic_error("Cannot move the FPU stack by " + std::to_string(val) + ". Must be 1 or -1.");
-  }
+		// compute the new top index
+		new_top = builder_.insert_add(top->val(), builder_.insert_constant_i(top->val().type(), (unsigned int)val)->val());
+	} else if (val == -1) { // push
+		new_top = builder_.insert_sub(top->val(), builder_.insert_constant_i(top->val().type(), (unsigned int)(-val))->val());
+	} else {
+		throw std::logic_error("Cannot move the FPU stack by " + std::to_string(val) + ". Must be 1 or -1.");
+	}
 
-  x87_status = builder_.insert_bit_insert(x87_status->val(), new_top->val(), 11, 3);
-  return write_reg(reg_offsets::X87_STS, x87_status->val());
+	x87_status = builder_.insert_bit_insert(x87_status->val(), new_top->val(), 11, 3);
+	return write_reg(reg_offsets::X87_STS, x87_status->val());
 }
 
 unsigned long translator::offset_to_idx(reg_offsets reg) { return off_to_idx[(unsigned long)reg]; }
 
 const char *translator::offset_to_name(reg_offsets reg) { return off_to_name[(unsigned long)reg]; }
 
-action_node *translator::write_reg(reg_offsets reg, port &value) { return builder_.insert_write_reg((unsigned long)reg, offset_to_idx(reg), offset_to_name(reg), value); }
+action_node *translator::write_reg(reg_offsets reg, port &value)
+{
+	return builder_.insert_write_reg((unsigned long)reg, offset_to_idx(reg), offset_to_name(reg), value);
+}
 
-value_node *translator::read_reg(const value_type &vt, reg_offsets reg) { return builder_.insert_read_reg(vt, (unsigned long)reg, offset_to_idx(reg), offset_to_name(reg)); }
+value_node *translator::read_reg(const value_type &vt, reg_offsets reg)
+{
+	return builder_.insert_read_reg(vt, (unsigned long)reg, offset_to_idx(reg), offset_to_name(reg));
+}
 
 void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of, flag_op sf, flag_op pf, flag_op af)
 {
@@ -660,7 +686,7 @@ void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
 			break;
 		case node_kinds::bit_shift:
 			write_reg(reg_offsets::SF, ((bit_shift_node *)op)->negative());
-			break ;
+			break;
 		case node_kinds::constant:
 			write_reg(reg_offsets::SF, builder_.insert_constant_i(value_type::u1(), ((constant_node *)op)->const_val_i() < 0)->val());
 			break;

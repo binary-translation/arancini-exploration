@@ -16,11 +16,11 @@ void muldiv_translator::do_translate()
 	}
 
 	auto inst = xed_decoded_inst_get_iclass(insn);
-  switch (inst) {
+	switch (inst) {
 	case XED_ICLASS_MUL: {
 		/* mul %reg is decoded as mul %reg %rax %rdx */
-		auto ax = builder().insert_zx(value_type(value_type_class::unsigned_integer, op[1]->val().type().element_width() * 2,
-								   op[1]->val().type().nr_elements()), op[1]->val());
+		auto ax = builder().insert_zx(
+			value_type(value_type_class::unsigned_integer, op[1]->val().type().element_width() * 2, op[1]->val().type().nr_elements()), op[1]->val());
 		auto castop = builder().insert_zx(ax->val().type(), op[0]->val());
 		auto rslt = builder().insert_mul(ax->val(), castop->val());
 		if (op[0]->val().type().width() == 8) {
@@ -148,95 +148,94 @@ void muldiv_translator::do_translate()
 		break;
 	}
 
-  case XED_ICLASS_MULSD: {
-    auto dst = read_operand(0);
-    auto src = read_operand(1);
+	case XED_ICLASS_MULSD: {
+		auto dst = read_operand(0);
+		auto src = read_operand(1);
 
-    auto src_low = builder().insert_bit_extract(src->val(), 0, 64);
-    auto dst_low = builder().insert_bit_extract(dst->val(), 0, 64);
-    auto mul = builder().insert_mul(src_low->val(), dst_low->val());
-    dst = builder().insert_bit_insert(dst->val(), mul->val(), 0, 64);
-    write_operand(0, dst->val());
-    break;
-  }
+		auto src_low = builder().insert_bit_extract(src->val(), 0, 64);
+		auto dst_low = builder().insert_bit_extract(dst->val(), 0, 64);
+		auto mul = builder().insert_mul(src_low->val(), dst_low->val());
+		dst = builder().insert_bit_insert(dst->val(), mul->val(), 0, 64);
+		write_operand(0, dst->val());
+		break;
+	}
 
-  case XED_ICLASS_MULSS: {
-    auto dst = read_operand(0);
-    auto src = read_operand(1);
+	case XED_ICLASS_MULSS: {
+		auto dst = read_operand(0);
+		auto src = read_operand(1);
 
-    if (src->val().type().width() != 32) {
-      src = builder().insert_bit_extract(src->val(), 0, 32);
-    }
-    auto dst_low = builder().insert_bit_extract(dst->val(), 0, 32);
+		if (src->val().type().width() != 32) {
+			src = builder().insert_bit_extract(src->val(), 0, 32);
+		}
+		auto dst_low = builder().insert_bit_extract(dst->val(), 0, 32);
 
-    auto mul = builder().insert_mul(dst_low->val(), src->val());
-    dst = builder().insert_bit_insert(dst->val(), mul->val(), 0, 32);
-    write_operand(0, dst->val());
+		auto mul = builder().insert_mul(dst_low->val(), src->val());
+		dst = builder().insert_bit_insert(dst->val(), mul->val(), 0, 32);
+		write_operand(0, dst->val());
 
-    break;
-  }
+		break;
+	}
 
-  case XED_ICLASS_DIVSS:
-  case XED_ICLASS_DIVSD: {
-    // divss xmm1, xmm2/m32
-    auto dst = read_operand(0);
-    auto src = read_operand(1);
-    auto size = (inst == XED_ICLASS_DIVSS) ? 32 : 64;
+	case XED_ICLASS_DIVSS:
+	case XED_ICLASS_DIVSD: {
+		// divss xmm1, xmm2/m32
+		auto dst = read_operand(0);
+		auto src = read_operand(1);
+		auto size = (inst == XED_ICLASS_DIVSS) ? 32 : 64;
 
-    auto dst_low = builder().insert_bitcast(value_type(value_type_class::floating_point, size),
-                                            builder().insert_bit_extract(dst->val(), 0, size)->val());
-    if (src->val().type().width() == 128) { // if src is xmm
+		auto dst_low = builder().insert_bitcast(value_type(value_type_class::floating_point, size), builder().insert_bit_extract(dst->val(), 0, size)->val());
+		if (src->val().type().width() == 128) { // if src is xmm
 			src = builder().insert_bit_extract(src->val(), 0, size);
-    }
-    src = builder().insert_bitcast(value_type(value_type_class::floating_point, size), src->val());
+		}
+		src = builder().insert_bitcast(value_type(value_type_class::floating_point, size), src->val());
 
-    auto div = builder().insert_div(dst_low->val(), src->val());
-    dst = builder().insert_bit_insert(dst->val(), div->val(), 0, size);
-    write_operand(0, dst->val());
-    break;
-  }
+		auto div = builder().insert_div(dst_low->val(), src->val());
+		dst = builder().insert_bit_insert(dst->val(), div->val(), 0, size);
+		write_operand(0, dst->val());
+		break;
+	}
 
-  case XED_ICLASS_PMULUDQ: {
-    // pmuludq xmm1, xmm2/m128 or pmuludq mm1, mm2/m64
-    auto dst = read_operand(0);
-    auto src = read_operand(1);
+	case XED_ICLASS_PMULUDQ: {
+		// pmuludq xmm1, xmm2/m128 or pmuludq mm1, mm2/m64
+		auto dst = read_operand(0);
+		auto src = read_operand(1);
 
-    if (dst->val().type().width() == 64) {
-      auto dst_low = builder().insert_zx(value_type::u64(), builder().insert_bit_extract(dst->val(), 0, 32)->val());
-      auto src_low = builder().insert_zx(value_type::u64(), builder().insert_bit_extract(src->val(), 0, 32)->val());
-      auto mul = builder().insert_mul(dst_low->val(), src_low->val());
-      write_operand(0, mul->val());
-    } else {
-      auto dst_vec = builder().insert_bitcast(value_type::vector(value_type::u32(), 4), dst->val());
-      auto src_vec = builder().insert_bitcast(value_type::vector(value_type::u32(), 4), src->val());
-      auto mul0 = builder().insert_mul(builder().insert_zx(value_type::u64(), builder().insert_vector_extract(dst_vec->val(), 0)->val())->val(),
-                                       builder().insert_zx(value_type::u64(), builder().insert_vector_extract(src_vec->val(), 0)->val())->val());
-      auto mul1 = builder().insert_mul(builder().insert_zx(value_type::u64(), builder().insert_vector_extract(dst_vec->val(), 2)->val())->val(),
-                                       builder().insert_zx(value_type::u64(), builder().insert_vector_extract(src_vec->val(), 2)->val())->val());
-      dst = builder().insert_bit_insert(dst->val(), mul0->val(), 0, 64);
-      dst = builder().insert_bit_insert(dst->val(), mul1->val(), 64, 64);
-      write_operand(0, dst->val());
-    }
-    break;
-  }
+		if (dst->val().type().width() == 64) {
+			auto dst_low = builder().insert_zx(value_type::u64(), builder().insert_bit_extract(dst->val(), 0, 32)->val());
+			auto src_low = builder().insert_zx(value_type::u64(), builder().insert_bit_extract(src->val(), 0, 32)->val());
+			auto mul = builder().insert_mul(dst_low->val(), src_low->val());
+			write_operand(0, mul->val());
+		} else {
+			auto dst_vec = builder().insert_bitcast(value_type::vector(value_type::u32(), 4), dst->val());
+			auto src_vec = builder().insert_bitcast(value_type::vector(value_type::u32(), 4), src->val());
+			auto mul0 = builder().insert_mul(builder().insert_zx(value_type::u64(), builder().insert_vector_extract(dst_vec->val(), 0)->val())->val(),
+				builder().insert_zx(value_type::u64(), builder().insert_vector_extract(src_vec->val(), 0)->val())->val());
+			auto mul1 = builder().insert_mul(builder().insert_zx(value_type::u64(), builder().insert_vector_extract(dst_vec->val(), 2)->val())->val(),
+				builder().insert_zx(value_type::u64(), builder().insert_vector_extract(src_vec->val(), 2)->val())->val());
+			dst = builder().insert_bit_insert(dst->val(), mul0->val(), 0, 64);
+			dst = builder().insert_bit_insert(dst->val(), mul1->val(), 64, 64);
+			write_operand(0, dst->val());
+		}
+		break;
+	}
 
-  case XED_ICLASS_PMULLW: {
-    auto dst = read_operand(0);
-    auto src = read_operand(1);
-    auto nr_elt = dst->val().type().width() / 16;
+	case XED_ICLASS_PMULLW: {
+		auto dst = read_operand(0);
+		auto src = read_operand(1);
+		auto nr_elt = dst->val().type().width() / 16;
 
-    dst = builder().insert_bitcast(value_type::vector(value_type::s16(), nr_elt), dst->val());
-    src = builder().insert_bitcast(value_type::vector(value_type::s16(), nr_elt), src->val());
-    for (int i = 0; i < nr_elt; i++) {
-      auto dst_elt = builder().insert_sx(value_type::s32(), builder().insert_vector_extract(dst->val(), i)->val());
-      auto src_elt = builder().insert_sx(value_type::s32(), builder().insert_vector_extract(src->val(), i)->val());
-      auto mul = builder().insert_mul(dst_elt->val(), src_elt->val());
-      auto res_elt = builder().insert_bit_extract(mul->val(), 0, 16);
-      dst = builder().insert_vector_insert(dst->val(), i, res_elt->val());
-    }
-    write_operand(0, dst->val());
-    break;
-  }
+		dst = builder().insert_bitcast(value_type::vector(value_type::s16(), nr_elt), dst->val());
+		src = builder().insert_bitcast(value_type::vector(value_type::s16(), nr_elt), src->val());
+		for (int i = 0; i < nr_elt; i++) {
+			auto dst_elt = builder().insert_sx(value_type::s32(), builder().insert_vector_extract(dst->val(), i)->val());
+			auto src_elt = builder().insert_sx(value_type::s32(), builder().insert_vector_extract(src->val(), i)->val());
+			auto mul = builder().insert_mul(dst_elt->val(), src_elt->val());
+			auto res_elt = builder().insert_bit_extract(mul->val(), 0, 16);
+			dst = builder().insert_vector_insert(dst->val(), i, res_elt->val());
+		}
+		write_operand(0, dst->val());
+		break;
+	}
 
 	default:
 		throw std::runtime_error("unsupported mul/div operation");

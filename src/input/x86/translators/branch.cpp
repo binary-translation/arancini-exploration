@@ -1,6 +1,6 @@
 #include <arancini/input/x86/translators/translators.h>
-#include <arancini/ir/node.h>
 #include <arancini/ir/ir-builder.h>
+#include <arancini/ir/node.h>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
@@ -20,14 +20,13 @@ void branch_translator::do_translate()
 		auto next_target_node = builder().insert_add(builder().insert_read_pc()->val(), builder().insert_constant_u64(instruction_length)->val());
 		builder().insert_write_mem(new_rsp->val(), next_target_node->val());
 
-
 		auto target = read_operand(0);
 
 		if (target->kind() == ir::node_kinds::constant) {
 			auto const_val = ((constant_node *)target)->const_val_i();
 			auto call_target = builder().insert_add(target->val(), builder().insert_constant_u64(instruction_length)->val());
 			target = builder().insert_add(builder().insert_read_pc()->val(), call_target->val());
-			builder().insert_write_pc(target->val(), br_type::call, const_val+instruction_length);
+			builder().insert_write_pc(target->val(), br_type::call, const_val + instruction_length);
 			break;
 		}
 

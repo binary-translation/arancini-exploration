@@ -11,11 +11,11 @@ set(OUTPUT_RISCV64_SRCS
         riscv64-dynamic-output-engine.cpp)
 
 add_library(arancini-output-riscv64
-            SHARED
-            ${OUTPUT_RISCV64_SRCS})
+        SHARED
+        ${OUTPUT_RISCV64_SRCS})
 add_library(arancini-output-riscv64-static
-            STATIC
-            ${OUTPUT_RISCV64_SRCS})
+        STATIC
+        ${OUTPUT_RISCV64_SRCS})
 
 set(INCLUDE_PATH ../../../inc)
 target_include_directories(arancini-output-riscv64 PUBLIC ${INCLUDE_PATH})

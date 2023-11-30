@@ -4,7 +4,7 @@
 
 using namespace arancini::util;
 
-std::shared_ptr<tempfile> tempfile_manager::create_file(const std::string& suffix)
+std::shared_ptr<tempfile> tempfile_manager::create_file(const std::string &suffix)
 {
 	const char *n = tempnam(nullptr, "T-");
 

@@ -27,15 +27,15 @@ set(INPUT_X86_SRCS
         translators/shuffle.cpp
         translators/translator.cpp
         translators/unop.cpp
-    )
+)
 
 add_library(arancini-input-x86
-            SHARED
-            ${INPUT_X86_SRCS})
+        SHARED
+        ${INPUT_X86_SRCS})
 
 add_library(arancini-input-x86-static
-            STATIC
-            ${INPUT_X86_SRCS})
+        STATIC
+        ${INPUT_X86_SRCS})
 
 set(INCLUDE_PATH ../../../inc)
 target_include_directories(arancini-input-x86 PUBLIC ${INCLUDE_PATH})

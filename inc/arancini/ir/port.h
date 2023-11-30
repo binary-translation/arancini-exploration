@@ -26,9 +26,7 @@ public:
 
 	void add_target(node *target) { targets_.insert(target); }
 
-  size_t remove_target(node *target) {
-    return targets_.erase(target);
-  }
+	size_t remove_target(node *target) { return targets_.erase(target); }
 
 	const std::set<node *> targets() const { return targets_; }
 

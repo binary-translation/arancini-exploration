@@ -7,7 +7,6 @@
 
 #include <arancini/output/dynamic/riscv64/encoder/globals.h>
 
-
 #if !defined(DEBUG) && !defined(NDEBUG)
 #define DEBUG
 #warning neither DEBUG nor NDEBUG defined. Defaulting to DEBUG
@@ -18,24 +17,27 @@
 namespace arancini::output::dynamic::riscv64 {
 
 class Assert {
- public:
-  Assert(const char* file, int line) : file_(file), line_(line) {}
+public:
+	Assert(const char *file, int line)
+		: file_(file)
+		, line_(line)
+	{
+	}
 
-  NORETURN void Fail(const char* format, ...) PRINTF_ATTRIBUTE(2, 3);
+	NORETURN void Fail(const char *format, ...) PRINTF_ATTRIBUTE(2, 3);
 
- private:
-  const char* file_;
-  int line_;
+private:
+	const char *file_;
+	int line_;
 };
 
-}  // namespace arancini::output::dynamic::riscv64
+} // namespace arancini::output::dynamic::riscv64
 
 #define FATAL(error) arancini::output::dynamic::riscv64::Assert(__FILE__, __LINE__).Fail("%s", error)
 
 #define FATAL1(format, p1) arancini::output::dynamic::riscv64::Assert(__FILE__, __LINE__).Fail(format, (p1))
 
-#define FATAL2(format, p1, p2)                                                 \
-  arancini::output::dynamic::riscv64::Assert(__FILE__, __LINE__).Fail(format, (p1), (p2))
+#define FATAL2(format, p1, p2) arancini::output::dynamic::riscv64::Assert(__FILE__, __LINE__).Fail(format, (p1), (p2))
 
 #define UNIMPLEMENTED() FATAL("unimplemented code")
 
@@ -43,46 +45,41 @@ class Assert {
 
 #define OUT_OF_MEMORY() FATAL("Out of memory.")
 
-
 #if defined(DEBUG)
 // DEBUG binaries use assertions in the code.
 // Note: We wrap the if statement in a do-while so that we get a compile
 //       error if there is no semicolon after ASSERT(condition). This
 //       ensures that we get the same behavior on DEBUG and RELEASE builds.
 
-#define ASSERT(cond)                                                           \
-  do {                                                                         \
-    if (!(cond))                                                               \
-        arancini::output::dynamic::riscv64::Assert(__FILE__, __LINE__).Fail("expected: %s", #cond);         \
-  } while (false)
+#define ASSERT(cond)                                                                                                                                           \
+	do {                                                                                                                                                       \
+		if (!(cond))                                                                                                                                           \
+			arancini::output::dynamic::riscv64::Assert(__FILE__, __LINE__).Fail("expected: %s", #cond);                                                        \
+	} while (false)
 
 // DEBUG_ASSERT allows identifiers in condition to be undeclared in release
 // mode.
 #define DEBUG_ASSERT(cond) ASSERT(cond)
 
-#else  // if defined(DEBUG)
+#else // if defined(DEBUG)
 
 // In order to avoid variable unused warnings for code that only uses
 // a variable in an ASSERT or EXPECT, we make sure to use the macro
 // argument.
-#define ASSERT(condition)                                                      \
-  do {                                                                         \
-  } while (false && (condition))
+#define ASSERT(condition)                                                                                                                                      \
+	do {                                                                                                                                                       \
+	} while (false && (condition))
 
 #define DEBUG_ASSERT(cond)
 
-#endif  // if defined(DEBUG)
+#endif // if defined(DEBUG)
 
 #if !defined(COMPILE_ASSERT)
-template <bool>
-struct CompileAssert {
-};
+template <bool> struct CompileAssert { };
 #define COMPILE_ASSERT_JOIN(a, b) COMPILE_ASSERT_JOIN_HELPER(a, b)
 #define COMPILE_ASSERT_JOIN_HELPER(a, b) a##b
-#define COMPILE_ASSERT(expr)                                                   \
-  ATTRIBUTE_UNUSED typedef CompileAssert<(static_cast<bool>(expr))>            \
-  COMPILE_ASSERT_JOIN(CompileAssertTypeDef, __LINE__)[static_cast<bool>(expr)  \
-  ? 1 : -1]
-#endif  // !defined(COMPILE_ASSERT)
+#define COMPILE_ASSERT(expr)                                                                                                                                   \
+	ATTRIBUTE_UNUSED typedef CompileAssert<(static_cast<bool>(expr))> COMPILE_ASSERT_JOIN(CompileAssertTypeDef, __LINE__)[static_cast<bool>(expr) ? 1 : -1]
+#endif // !defined(COMPILE_ASSERT)
 
-#endif  // VM_ASSERT_H_
+#endif // VM_ASSERT_H_
