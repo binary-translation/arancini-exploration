@@ -1,8 +1,8 @@
 #pragma once
 #include "arancini/output/static/llvm/llvm-static-visitor.h"
 #include <arancini/ir/node.h>
-
 #include <llvm/ADT/ArrayRef.h>
+#include <arancini/ir/opt.h>
 #include <llvm/IR/BasicBlock.h>
 #include <map>
 #include <memory>
@@ -78,6 +78,7 @@ private:
 		::llvm::PointerType *cpu_state_ptr;
 		::llvm::FunctionType *main_fn;
 		::llvm::FunctionType *loop_fn;
+		::llvm::FunctionType *chunk_fn;
 		::llvm::FunctionType *init_dbt;
 		::llvm::FunctionType *dbt_invoke;
 		::llvm::FunctionType *internal_call_handler;
@@ -103,6 +104,7 @@ private:
 	std::map<ir::port *, ::llvm::Value *> node_ports_to_llvm_values_;
 	std::map<ir::label_node *, ::llvm::BasicBlock *> label_nodes_to_llvm_blocks_;
 	std::unordered_map<const ir::local_var *, ::llvm::Value *> local_var_to_llvm_addr_;
+	std::unordered_map<reg_offsets, ::llvm::AllocaInst *> reg_to_alloca_;
 
 	void build();
 	void initialise_types();
@@ -117,10 +119,18 @@ private:
 		std::shared_ptr<ir::packet> pkt, ir::port &p);
 	::llvm::Value *materialise_port(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
 		std::shared_ptr<ir::packet> pkt, ir::port &p);
+	void init_regs(::llvm::IRBuilder<> &builder);
+	void save_all_regs(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg);
+	void restore_all_regs(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg);
+	// passes
 	::llvm::Function *get_static_fn(std::shared_ptr<ir::packet> pkt, std::shared_ptr<std::map<unsigned long, ::llvm::Function *>>);
 	::llvm::Instruction *create_static_condbr(::llvm::IRBuilder<> *builder, std::shared_ptr<ir::packet> pkt, std::map<unsigned long, ::llvm::BasicBlock *> *blocks, ::llvm::BasicBlock *mid);
 	::llvm::FunctionType *get_fn_type(std::shared_ptr<ir::chunk>, ir::llvm_ret_visitor& ret, ir::llvm_arg_visitor& arg);
-	::llvm::ArrayRef<::llvm::Type *> get_fn_argv(std::shared_ptr<ir::chunk>);
-	::llvm::Type *get_fn_ret_type(std::shared_ptr<ir::chunk>);
+	std::vector<::llvm::Value *> load_args(::llvm::IRBuilder<> *builder, ::llvm::Argument *state_arg);
+	void unwrap_ret(::llvm::IRBuilder<> *builder, ::llvm::Value *value);
+	std::vector<::llvm::Value*> wrap_ret(::llvm::IRBuilder<> *builder);
+	
+	::llvm::Value *createLoadFromCPU(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, unsigned long reg_idx);
+	void createStoreToCPU(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, unsigned int ret_idx, ::llvm::Value *ret, unsigned long reg_idx);
 };
 } // namespace arancini::output::o_static::llvm
