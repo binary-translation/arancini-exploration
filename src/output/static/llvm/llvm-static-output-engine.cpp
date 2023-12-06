@@ -274,7 +274,8 @@ void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlo
 		std::stringstream fn_name;
 		fn_name << "FN_" << std::hex << c->packets()[0]->address();
 
-		auto fn_type = get_fn_type(c, ret, arg);
+		//auto fn_type = get_fn_type(c, ret, arg);
+		auto fn_type = types.loop_fn;
 		auto fn = Function::Create(fn_type, GlobalValue::LinkageTypes::ExternalLinkage, fn_name.str(), *module_);
 			(*fns)[c->packets()[0]->address()] = fn;
 	}
