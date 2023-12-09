@@ -270,6 +270,6 @@ extern "C" int invoke_code(void *cpu_state) { return ctx_->invoke(cpu_state); }
  */
 extern "C" int execute_internal_call(void *cpu_state, int call) { return ctx_->internal_call(cpu_state, call); }
 
-extern "C" void finalize() { delete ctx_; }
+extern "C" void finalize() { delete ctx_; exit(0); }
 
 extern "C" void alert() { std::cout << "Top of MainLoop!\n"; }

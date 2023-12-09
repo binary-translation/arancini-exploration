@@ -978,10 +978,12 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 		throw std::runtime_error("unsupported width on write pc operation");
 	}
 
-	if (n.updates_pc() == br_type::call)
+	if (n.updates_pc() == br_type::call) {
 		ret_val_ = 3;
-	if (n.updates_pc() == br_type::ret)
+	}
+	if (n.updates_pc() == br_type::ret) {
 		ret_val_ = 4;
+	}
 
 	if (ret_val_ == 0) { // Only chain on normal block end
 		const std::optional<int64_t> &target = get_as_int(n.value().owner());

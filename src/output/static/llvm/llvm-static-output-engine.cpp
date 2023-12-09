@@ -7,6 +7,7 @@
 #include <arancini/output/static/llvm/llvm-static-output-engine-impl.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <llvm/ADT/FloatingPointMode.h>
 #include <llvm/IR/Constants.h>
@@ -171,8 +172,8 @@ void llvm_static_output_engine_impl::build()
 	auto check_for_ret_block = BasicBlock::Create(*llvm_context_, "check_for_ret", loop_fn);
 	auto check_for_int_call_block = BasicBlock::Create(*llvm_context_, "check_for_internal_call", loop_fn);
 	auto internal_call_block = BasicBlock::Create(*llvm_context_, "internal_call", loop_fn);
-	auto call_block = BasicBlock::Create(*llvm_context_, "check_for_internal_call", loop_fn);
-	auto ret_block = BasicBlock::Create(*llvm_context_, "check_for_internal_call", loop_fn);
+	auto call_block = BasicBlock::Create(*llvm_context_, "call", loop_fn);
+	auto ret_block = BasicBlock::Create(*llvm_context_, "return", loop_fn);
 	auto exit_block = BasicBlock::Create(*llvm_context_, "exit", loop_fn);
 
 	IRBuilder<> builder(*llvm_context_);
@@ -1208,7 +1209,21 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
         auto icn = (internal_call_node *)a;
         auto switch_callee = module_->getOrInsertFunction("execute_internal_call", types.internal_call_handler);
         if (icn->fn().name() == "handle_syscall") {
-                return builder.CreateCall(switch_callee, { state_arg, ConstantInt::get(types.i32, 1) });
+
+			auto current_bb = builder.GetInsertBlock();
+			auto exit_block = BasicBlock::Create(*llvm_context_, "finalize",  current_bb->getParent());
+			auto cont_block = BasicBlock::Create(*llvm_context_, "cont",  current_bb->getParent());
+			auto ret = builder.CreateCall(switch_callee, { state_arg, ConstantInt::get(types.i32, 1) });
+			builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, ret, ConstantInt::get(types.i32, 1)), exit_block, cont_block);
+
+			builder.SetInsertPoint(exit_block);
+			auto finalize = module_->getOrInsertFunction("finalize", types.finalize);
+			auto call = builder.CreateCall(finalize, {});
+			call->setDoesNotReturn();
+			builder.CreateBr(cont_block);
+
+			builder.SetInsertPoint(cont_block);
+			return ret;
         }
         throw std::runtime_error("unsupported internal call type" + icn->fn().name());
 	}
