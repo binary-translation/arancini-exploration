@@ -113,8 +113,7 @@ void llvm_ret_visitor::visit_write_pc_node(write_pc_node &n) {
 		waiting_[current_chunk_] = callee;
 		return;
 	}
-	if (n.updates_pc() == br_type::none) {
-		// 40:40 that this is a syscall
+	if (n.updates_pc() == br_type::sys) {
 		for (auto it = current_possible_.begin(); it != current_possible_.end(); it++) {
 			if (*it == reg_offsets::RAX) {
 				types_[current_chunk_].insert(*it);
@@ -217,8 +216,8 @@ void llvm_arg_visitor::visit_write_pc_node(write_pc_node &n) {
 		waiting_[current_chunk_] = callee;
 		return;
 	}
-	if (n.updates_pc() == br_type::none) {
-		// 40:40 that this is a syscall, so rdi, rsi, rdx, r8, r9 might be used
+	if (n.updates_pc() == br_type::sys) {
+		// this is a syscall, so rdi, rsi, rdx, r8, r9 might be used
 		for (auto it = current_possible_.begin(); it != current_possible_.end(); it++) {
 			if ((*it == reg_offsets::RDI) ||
 				(*it == reg_offsets::RSI) ||

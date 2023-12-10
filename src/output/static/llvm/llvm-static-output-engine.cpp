@@ -1331,6 +1331,7 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 
 		switch (p->updates_pc()) {
 			case br_type::none:
+			case br_type::sys:
 				break;
 			case br_type::call: {
 				auto f = get_static_fn(p, fns);
