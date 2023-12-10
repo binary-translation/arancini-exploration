@@ -39,7 +39,7 @@ enum class node_kinds {
 	internal_call
 };
 
-enum br_type { none, br, csel, call, ret };
+enum br_type { none,sys , br, csel, call, ret };
 
 class node {
 public:
@@ -1019,7 +1019,7 @@ public:
 	const internal_function &fn() const { return fn_; }
 	const std::vector<port *> &args() const { return args_; }
 
-	virtual br_type updates_pc() const override { return br_type::none; }
+	virtual br_type updates_pc() const override { return br_type::sys; }
 
 	virtual void accept(visitor &v) override
 	{
