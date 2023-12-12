@@ -52,6 +52,7 @@ public:
 
 	virtual void accept(visitor &v) { v.visit_node(*this); }
 
+#ifndef NDEBUG
 	void set_metadata(const std::string &key, std::shared_ptr<metadata> value) { md_[key] = value; }
 
 	std::shared_ptr<metadata> get_metadata(const std::string &key) const { return md_.at(key); }
@@ -81,11 +82,17 @@ public:
 	}
 
 	bool has_metadata(const std::string &key) const { return md_.count(key) > 0; }
+#endif
+
+	virtual ~node() = default;
 
 private:
 	node_kinds kind_;
+#ifndef NDEBUG
 	std::map<std::string, std::shared_ptr<metadata>> md_;
+#endif
 };
+
 
 class value_node : public node {
 public:
@@ -329,7 +336,7 @@ private:
 
 class write_reg_node : public action_node {
 public:
-	write_reg_node(unsigned long regoff, unsigned long regidx, const char *regname, port &val) 
+	write_reg_node(unsigned long regoff, unsigned long regidx, const char *regname, port &val)
 		: action_node(node_kinds::write_reg)
 		, regoff_(regoff)
 		, regidx_(regidx)
@@ -436,7 +443,7 @@ public:
 	port &negative() { return negative_; }
 
 	[[nodiscard]] const port &zero() const { return zero_; }
-	[[nodiscard]] const port &negative() const{ return negative_; }
+	[[nodiscard]] const port &negative() const { return negative_; }
 
 	virtual void accept(visitor &v) override
 	{

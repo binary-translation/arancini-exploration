@@ -1,5 +1,6 @@
 #pragma once
 
+#include <arancini/ir/allocator.h>
 #include <arancini/ir/node.h>
 
 namespace arancini::ir {
@@ -16,8 +17,17 @@ public:
 
 	internal_function_resolver &ifr() const { return ifr_; }
 
-	virtual void begin_chunk() = 0;
-	virtual void end_chunk() = 0;
+	virtual void begin_chunk()
+	{
+		// Create Allocator for the current chunk. It will be aliased by all the action_node pointers. So it stays active after the chunk is finished until all
+		// references to the action_nodes are released
+		allocator = std::make_shared<Allocator<node>>();
+	};
+	virtual void end_chunk()
+	{
+		// The action_nodes still alias it. So until all the action nodes in the chunk are finished the allocation stays valid.
+		allocator.reset();
+	};
 
 	virtual void begin_packet(off_t address, const std::string &disassembly = "") = 0;
 	virtual packet_type end_packet() = 0;
@@ -365,23 +375,27 @@ public:
 	action_node *insert_internal_call(const internal_function &fn, const std::vector<port *> &args) { return create_and_insert<internal_call_node>(fn, args); }
 
 protected:
-	virtual void insert_action(action_node *a) = 0;
+	virtual void insert_action(std::shared_ptr<action_node> a) = 0;
 	virtual void process_node(node *) {};
 
 private:
 	internal_function_resolver &ifr_;
 
-	template <class T, typename... Args> T *create_and_insert(Args &&...args) { return insert(new T(std::forward<Args>(args)...)); }
+	template <class T, typename... Args> T *create_and_insert(Args &&...args) { return insert(new (allocator->allocate<T>()) T(std::forward<Args>(args)...)); }
 
 	template <class T> T *insert(T *n)
 	{
 		process_node(n);
 
 		if (n->is_action()) {
-			insert_action((action_node *)n);
+			// Creates the action_node ptr as an alias of the full allocation. So the allocation of the full chunk stays live until the last action_node is not
+			// referenced anymore.
+			insert_action(std::shared_ptr<action_node>(allocator, (action_node *)n));
 		}
 
 		return n;
 	}
+
+	std::shared_ptr<Allocator<node>> allocator;
 };
 } // namespace arancini::ir

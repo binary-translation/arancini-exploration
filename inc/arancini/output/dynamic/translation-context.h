@@ -1,6 +1,8 @@
 #pragma once
 
+#include <arancini/ir/node.h>
 #include <cstdlib>
+#include <memory>
 #include <string>
 
 namespace arancini::ir {
@@ -28,7 +30,7 @@ public:
 		// Default to No-op
 	};
 
-	virtual void lower(ir::node *n) = 0;
+	virtual void lower(const std::shared_ptr<ir::action_node> &n) = 0;
 
 	machine_code_writer &writer() const { return writer_; }
 

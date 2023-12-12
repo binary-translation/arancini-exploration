@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
+#include <utility>
 
 using namespace arancini::runtime::dbt;
 using namespace arancini::runtime::exec;
@@ -39,14 +40,20 @@ class dbt_ir_builder : public ir_builder {
 public:
 	dbt_ir_builder(internal_function_resolver &ifr, std::shared_ptr<translation_context> tctx)
 		: ir_builder(ifr)
-		, tctx_(tctx)
+		, tctx_(std::move(tctx))
 		, is_eob_(false)
 	{
 	}
 
-	virtual void begin_chunk() override { tctx_->begin_block(); }
+	virtual void begin_chunk() override {
+		ir_builder::begin_chunk();
+		tctx_->begin_block();
+	}
 
-	virtual void end_chunk() override { tctx_->end_block(); }
+	virtual void end_chunk() override {
+		ir_builder::end_chunk();
+		tctx_->end_block();
+	}
 
 	virtual void begin_packet(off_t address, const std::string &disassembly = "") override
 	{
@@ -80,7 +87,7 @@ public:
 	}
 
 protected:
-	virtual void insert_action(action_node *a) override
+	virtual void insert_action(std::shared_ptr<action_node> a) override
 	{
 		if (a->updates_pc()) {
 			is_eob_ = true;
@@ -115,7 +122,7 @@ public:
 
 			tctx_->begin_instruction(p->address(), p->disassembly());
 
-			for (auto a : p->actions()) {
+			for (const auto& a : p->actions()) {
 				tctx_->lower(a);
 			}
 

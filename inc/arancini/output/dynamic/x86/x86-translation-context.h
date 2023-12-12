@@ -20,7 +20,7 @@ public:
 	virtual void begin_instruction(off_t address, const std::string &disasm) override;
 	virtual void end_instruction() override;
 	virtual void end_block() override;
-	virtual void lower(ir::node *n) override;
+	virtual void lower(const std::shared_ptr<ir::action_node> &n) override;
 
 private:
 	x86_instruction_builder builder_;

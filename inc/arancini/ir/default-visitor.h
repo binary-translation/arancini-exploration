@@ -12,7 +12,7 @@ class default_visitor : public visitor {
 public:
 	virtual void visit_chunk(chunk &c) override
 	{
-		for (auto p : c.packets()) {
+		for (const auto& p : c.packets()) {
 			p->accept(*this);
 		}
 	}
@@ -145,6 +145,8 @@ public:
 	}
 
 	virtual bool seen_node(node *n) override { return seen_.count(n) > 0; }
+
+	virtual void reset() override { seen_.clear(); }
 
 private:
 	std::set<node *> seen_;
