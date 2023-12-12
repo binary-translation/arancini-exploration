@@ -175,8 +175,9 @@ bool insert_ebreak = false;
  */
 void riscv64_translation_context::add_marker(int payload)
 {
-	// TODO Remove/only in debug
+#ifndef NDEBUG
 	builder_.li(ZERO, payload);
+#endif
 }
 
 void riscv64_translation_context::begin_block()
@@ -187,10 +188,11 @@ void riscv64_translation_context::begin_block()
 	flag_written_.reset();
 	builder_.reset();
 
-	// TODO Remove/only in debug
+#ifndef NDEBUG
 	if (insert_ebreak) {
 		builder_.ebreak();
 	}
+#endif
 
 	add_marker(1);
 }
