@@ -11,6 +11,8 @@ namespace arancini::output::dynamic::riscv64::builder {
 
 class InstructionBuilder {
 public:
+	void Align(intptr_t alignByte) { instructions_.emplace_back(InstructionType::Imm, (ImmFunc)&Assembler::Align, alignByte); }
+
 	void Bind(Label *label) { instructions_.emplace_back(InstructionType::Label, &Assembler::Bind, label); }
 
 	// ==== RV32I ====

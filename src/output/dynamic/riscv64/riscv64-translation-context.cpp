@@ -161,8 +161,7 @@ void riscv64_translation_context::write_back_registers()
 
 	for (uint32_t i = 0; i < flag_written_.size(); ++i) {
 		if (flag_written_[i]) {
-			builder_.sb(RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + 16 + i },
-				AddressOperand { FP, static_cast<intptr_t>(flag_off + i) });
+			builder_.sb(RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + 16 + i }, AddressOperand { FP, static_cast<intptr_t>(flag_off + i) });
 		}
 	}
 }
@@ -209,11 +208,10 @@ void riscv64_translation_context::begin_instruction(off_t address, const std::st
 	ret_val_ = 0;
 
 	// Enable automatic breakpoints after certain program counter
-//	if (address == 0x401cb3) {
-//		insert_ebreak = true;
-//		assembler_.ebreak();
-//	}
-
+	//	if (address == 0x401cb3) {
+	//		insert_ebreak = true;
+	//		assembler_.ebreak();
+	//	}
 }
 
 void riscv64_translation_context::end_instruction()
@@ -1072,6 +1070,7 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 
 				builder_.beqz(cond, false_calc, Assembler::kNearJump);
 
+				builder_.Align(Assembler::label_align);
 				builder_.auipc_keep(A1, 0);
 				TypedRegister &trueval = materialise_constant(*target2);
 				builder_.sd(trueval, AddressOperand { FP, static_cast<intptr_t>(reg_offsets::PC) });
@@ -1639,7 +1638,7 @@ void riscv64_translation_context::chain(uint64_t chain_address, void *chain_targ
 	if (IsCInstruction(following_instr_enc)) {
 		CInstruction following_instr { static_cast<uint16_t>(following_instr_enc) };
 		if (following_instr.opcode() == C_BEQZ || following_instr.opcode() == C_BNEZ) {
-			chain_machine_code_writer writer = chain_machine_code_writer { instr_p };
+			chain_machine_code_writer writer = chain_machine_code_writer { instr_p, 12 };
 
 			Assembler ass { &writer, false, RV_GC };
 
@@ -1656,6 +1655,7 @@ void riscv64_translation_context::chain(uint64_t chain_address, void *chain_targ
 
 				offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));
 				ass.j(offset);
+				ass.Align(Assembler::label_align);
 				ass.Bind(&end);
 			} else {
 				if (following_instr.opcode() == C_BEQZ) {
@@ -1670,7 +1670,8 @@ void riscv64_translation_context::chain(uint64_t chain_address, void *chain_targ
 			}
 		} else {
 			// NOP before? Use the NOP
-			chain_machine_code_writer writer = *(instr_p - 1) == 0b10011 ? chain_machine_code_writer { instr_p - 1 } : chain_machine_code_writer { instr_p };
+			chain_machine_code_writer writer
+				= *(instr_p - 1) == 0b10011 ? chain_machine_code_writer { instr_p - 1, 16 } : chain_machine_code_writer { instr_p, 16 };
 
 			Assembler ass { &writer, false, RV_GC };
 			intptr_t offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));
@@ -1683,7 +1684,7 @@ void riscv64_translation_context::chain(uint64_t chain_address, void *chain_targ
 	} else {
 		Instruction following_instr { following_instr_enc };
 		if (following_instr.opcode() == BRANCH) {
-			chain_machine_code_writer writer = chain_machine_code_writer { instr_p };
+			chain_machine_code_writer writer = chain_machine_code_writer { instr_p, 16 };
 
 			Assembler ass { &writer, false, RV_GC };
 
@@ -1716,6 +1717,7 @@ void riscv64_translation_context::chain(uint64_t chain_address, void *chain_targ
 
 				offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));
 				ass.j(offset);
+				ass.Align(Assembler::label_align);
 				ass.Bind(&end);
 			} else {
 				switch (following_instr.funct3()) {
@@ -1748,7 +1750,8 @@ void riscv64_translation_context::chain(uint64_t chain_address, void *chain_targ
 			}
 		} else {
 			// NOP before? Use the NOP
-			chain_machine_code_writer writer = *(instr_p - 1) == 0b10011 ? chain_machine_code_writer { instr_p - 1 } : chain_machine_code_writer { instr_p };
+			chain_machine_code_writer writer
+				= *(instr_p - 1) == 0b10011 ? chain_machine_code_writer { instr_p - 1, 16 } : chain_machine_code_writer { instr_p, 16 };
 
 			Assembler ass { &writer, false, RV_GC };
 			intptr_t offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));

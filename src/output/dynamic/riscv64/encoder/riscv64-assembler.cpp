@@ -22,6 +22,25 @@ Assembler::~Assembler(){
 	}
 }
 
+void Assembler::Align (intptr_t alignByte)
+{ Align(alignByte, 0b10011, 0b1); }
+
+void Assembler::Align(intptr_t alignByte, uint32_t pad32, uint16_t pad16)
+{
+	ASSERT(alignByte <= 16);
+
+	size_t misalignment = Position() & (alignByte - 1);
+
+	for (; misalignment / 4; misalignment -= 4) {
+		Emit32(pad32);
+	}
+	for (; misalignment / 2; misalignment -= 2) {
+		Emit16(pad16);
+	}
+
+	ASSERT(Utils::IsAligned(Position(), alignByte));
+}
+
 void Assembler::Bind(Label *label)
 {
 	ASSERT(!label->IsBound());

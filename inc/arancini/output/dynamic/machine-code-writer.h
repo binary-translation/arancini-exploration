@@ -1,8 +1,8 @@
 #pragma once
 
 #include <arancini/output/dynamic/machine-code-allocator.h>
-#include <iostream>
 #include <cstring>
+#include <iostream>
 
 namespace arancini::output::dynamic {
 class machine_code_writer {
@@ -15,6 +15,16 @@ public:
 	{
 	}
 
+protected:
+	machine_code_writer(machine_code_allocator &allocator, void *code_ptr, size_t code_size, size_t alloc_size)
+		: allocator_(allocator)
+		, code_ptr_(code_ptr)
+		, code_size_(code_size)
+		, alloc_size_(alloc_size)
+	{
+	}
+
+public:
 	/*template <typename T> void emit(T v)
 	{
 		ensure_capacity(sizeof(T));
@@ -32,6 +42,14 @@ public:
 	{
 		ensure_capacity(size);
 		std::memcpy((unsigned char *)code_ptr_ + code_size_, buffer, size);
+
+		code_size_ += size;
+	}
+
+	void shift(size_t offset, size_t size)
+	{
+		ensure_capacity(size);
+		std::memmove((unsigned char *)code_ptr_ + offset, (unsigned char *)code_ptr_ + offset + size, code_size_ - offset);
 
 		code_size_ += size;
 	}

@@ -70,6 +70,8 @@ class Label {
 // All functions produce exactly one instruction.
 class Assembler {
  public:
+	static constexpr const int jump_align = 1;
+	static constexpr const int label_align = 4;
   static const bool kNearJump = true;
   static const bool kFarJump = false;
 
@@ -82,6 +84,9 @@ class Assembler {
   bool Supports(ExtensionSet extensions) const {
     return extensions_.IncludesAll(extensions);
   }
+
+  void Align(intptr_t alignByte);
+  void Align(intptr_t alignByte, uint32_t pad32, uint16_t pad16);
 
   void Bind(Label* label);
 
