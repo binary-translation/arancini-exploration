@@ -13,6 +13,7 @@
 #include <iostream>
 #include <llvm/ADT/ArrayRef.h>
 #include <llvm/ADT/FloatingPointMode.h>
+#include <llvm/ADT/StringExtras.h>
 #include <llvm/IR/Argument.h>
 #include <llvm/IR/ConstantFolder.h>
 #include <llvm/IR/Constants.h>
@@ -270,7 +271,7 @@ Value *llvm_static_output_engine_impl::createLoadFromCPU(IRBuilder<> &builder, A
 	Type *ty = types.i512;
 	if ( reg_idx < 27 ) ty = types.i64;
 
-	return builder.CreateLoad(ty, builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, reg_idx) }));
+	return builder.CreateLoad(ty, builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, reg_idx) }), "Load_Idx_"+itostr(reg_idx));
 }
 
 void llvm_static_output_engine_impl::createStoreToCPU(IRBuilder<> &builder, Argument *state_arg, unsigned int ret_idx, Value *ret, unsigned long reg_idx) {
@@ -302,8 +303,8 @@ void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlo
 		std::stringstream fn_name;
 		fn_name << "FN_" << std::hex << c->packets()[0]->address();
 
-		//auto fn_type = get_fn_type(c, ret, arg);
-		auto fn_type = types.loop_fn;
+		auto fn_type = get_fn_type(c, ret, arg);
+		//auto fn_type = types.loop_fn;
 		auto fn = Function::Create(fn_type, GlobalValue::LinkageTypes::ExternalLinkage, fn_name.str(), *module_);
 			(*fns)[c->packets()[0]->address()] = fn;
 	}
@@ -312,7 +313,7 @@ void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlo
 		lower_chunk(&builder, contblock, c, fns);
 	}
 	for (auto f : *fns) {
-		auto b = BasicBlock::Create(*llvm_context_, "", contblock->getParent());
+		auto b = BasicBlock::Create(*llvm_context_, "Call_"+f.second->getName(), contblock->getParent());
 		builder.SetInsertPoint(b);
 		auto pc = createLoadFromCPU(builder, cpu_state, 0);
 		auto rdi = createLoadFromCPU(builder, cpu_state, 8);
@@ -1500,7 +1501,7 @@ FunctionType *llvm_static_output_engine_impl::get_fn_type(std::shared_ptr<chunk>
 	auto rets = ret.get_type(c->packets()[0]->address());
 	auto args = arg.get_type(c->packets()[0]->address());
 
-	ArrayRef<Type*> argv;
+	std::vector<Type*> argv;
 	StructType* retv;
 	for (auto r : rets) {
 		if (r < reg_offsets::ZMM0) {
@@ -1521,7 +1522,7 @@ FunctionType *llvm_static_output_engine_impl::get_fn_type(std::shared_ptr<chunk>
 
 void llvm_static_output_engine_impl::init_regs(IRBuilder<> &builder) {
 	reg_to_alloca_.clear();
-#define DEFREG(ctype, ltype, name) reg_to_alloca_[reg_offsets::name] = builder.CreateAlloca(types.ltype, 128);
+#define DEFREG(ctype, ltype, name) reg_to_alloca_[reg_offsets::name] = builder.CreateAlloca(types.ltype, 128, nullptr, "reg"#name);
 #include <arancini/input/x86/reg.def>
 #undef DEFREG
 }
