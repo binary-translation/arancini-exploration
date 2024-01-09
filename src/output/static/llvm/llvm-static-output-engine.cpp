@@ -9,6 +9,8 @@
 #include <fstream>
 #include <iostream>
 #include <llvm/ADT/FloatingPointMode.h>
+#include <llvm/ADT/Optional.h>
+#include <llvm/IR/ConstantFolder.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Instructions.h>
