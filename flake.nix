@@ -76,7 +76,7 @@
 	in
 	{
 		defaultPackage = build_pkgs.callPackage(
-		{stdenv, graphviz, gdb, python3, git, cmake, pkg-config, clang_14, zlib, boost, libffi, libxml2, llvmPackages_14, lib, gcc, keystone}:
+		{stdenv, graphviz, gdb, python3, git, cmake, pkg-config, clang_16, zlib, boost, libffi, libxml2, llvmPackages_16, lib, gcc, keystone}:
 			stdenv.mkDerivation {
 				name = "arancini";
 				pname = "txlat";
@@ -89,7 +89,7 @@
 					git
 					cmake
 					pkg-config
-					clang_14
+					clang_16
 				];
 				buildInputs = [
 					zlib
@@ -98,9 +98,9 @@
 					libffi
 					fadec
 					libxml2
-					llvmPackages_14.llvm.dev
-					llvmPackages_14.bintools
-					llvmPackages_14.lld
+					llvmPackages_16.llvm.dev
+					llvmPackages_16.bintools
+					llvmPackages_16.lld
 					keystone
 				];
 				depsTargetTarget = [ gcc ];
