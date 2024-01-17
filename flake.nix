@@ -76,7 +76,25 @@
 	in
 	{
 		defaultPackage = build_pkgs.callPackage(
-		{stdenv, graphviz, gdb, python3, git, cmake, pkg-config, clang_16, zlib, boost, libffi, libxml2, llvmPackages_16, lib, gcc, keystone}:
+		{stdenv, graphviz, gdb, python3, git, cmake, pkg-config, clang_16, zlib, boost, libffi, libxml2, llvmPackages_16, lib, gcc, keystone, lldb}:
+		    let llvmDebug = llvmPackages_16.llvm.override { debugVersion = true; };
+		    in
+#		    let
+#              llvmDevDebug = llvmPackages_16.llvm.dev.overrideAttrs (oldAttrs: {
+#                debugVersion = true;
+#              });
+#            in
+#		    let
+#              llvmBinToolsDebug = llvmPackages_16.bintools.overrideAttrs (oldAttrs: {
+#                debugVersion = true;
+#              });
+#            in
+#		    let
+#              llvmLldDebug = llvmPackages_16.lld.overrideAttrs (oldAttrs: {
+#                debugVersion = true;
+#              });
+#            in
+
 			stdenv.mkDerivation {
 				name = "arancini";
 				pname = "txlat";
@@ -90,6 +108,7 @@
 					cmake
 					pkg-config
 					clang_16
+					lldb
 				];
 				buildInputs = [
 					zlib
@@ -98,7 +117,7 @@
 					libffi
 					fadec
 					libxml2
-					llvmPackages_16.llvm.dev
+					llvmDebug.dev
 					llvmPackages_16.bintools
 					llvmPackages_16.lld
 					keystone

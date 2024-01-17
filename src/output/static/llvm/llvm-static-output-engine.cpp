@@ -3,6 +3,7 @@
 #include "arancini/ir/port.h"
 #include "arancini/ir/visitor.h"
 #include "llvm/Support/raw_ostream.h"
+#include "arancini/output/static/llvm/Passes/RegArgPromotionPass.h"
 #include <arancini/ir/chunk.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine-impl.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
@@ -21,6 +22,7 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/PassManager.h>
+#include <llvm/IR/Verifier.h>
 #include <llvm/Support/TimeProfiler.h>
 #include <llvm/Transforms/Scalar/JumpThreading.h>
 #include <map>
@@ -266,7 +268,11 @@ void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlo
 		fn_name << "FN_" << std::hex << c->packets()[0]->address();
 
 		auto fn = Function::Create(types.loop_fn, GlobalValue::LinkageTypes::ExternalLinkage, fn_name.str(), *module_);
-		(*fns)[c->packets()[0]->address()] = fn;
+        fn->addFnAttr(ARANCINI_FUNCTION_TYPE, ARANCINI_STATIC_FUNCTION);
+        fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
+        fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
+        fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
+        (*fns)[c->packets()[0]->address()] = fn;
 	}
 
 	for (auto c : chunks_) {
@@ -1493,7 +1499,7 @@ Function *llvm_static_output_engine_impl::get_static_fn(std::shared_ptr<packet> 
 
 void llvm_static_output_engine_impl::optimise()
 {
-	LoopAnalysisManager LAM;
+    LoopAnalysisManager LAM;
 	FunctionAnalysisManager FAM;
 	CGSCCAnalysisManager CGAM;
 	ModuleAnalysisManager MAM;
@@ -1505,7 +1511,8 @@ void llvm_static_output_engine_impl::optimise()
 	PB.registerLoopAnalyses(LAM);
 	PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
+    ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
+    MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(RegArgPromotionPass(types.cpu_state)));
 	PB.registerOptimizerLastEPCallback(
 		[&](ModulePassManager &mpm, OptimizationLevel Level) { mpm.addPass(createModuleToFunctionPassAdaptor(JumpThreadingPass())); });
 	MPM.run(*module_, MAM);
