@@ -39,6 +39,9 @@ namespace arancini::output {
 class static_output_personality;
 }
 
+const std::string ARANCINI_FUNCTION_TYPE = "arancini_func_ty";
+const std::string ARANCINI_STATIC_FUNCTION = "static_func";
+
 namespace arancini::output::o_static::llvm {
 class llvm_static_output_engine;
 

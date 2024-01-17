@@ -23,6 +23,6 @@ public:
 private:
 	std::unique_ptr<llvm_static_output_engine_impl> oei_;
 	bool dbg_;
-	std::optional<std::string> debug_dump_filename;
+	std::optional<std::string> debug_dump_filename{};
 };
 } // namespace arancini::output::o_static::llvm

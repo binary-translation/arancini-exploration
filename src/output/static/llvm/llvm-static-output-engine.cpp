@@ -2,6 +2,7 @@
 #include "arancini/ir/port.h"
 #include "arancini/ir/visitor.h"
 #include "llvm/Support/raw_ostream.h"
+#include "arancini/output/static/llvm/Passes/RegArgPromotionPass.h"
 #include <arancini/ir/chunk.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine-impl.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
@@ -15,6 +16,8 @@
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
+#include <llvm/IR/PassManager.h>
+#include <llvm/IR/Verifier.h>
 #include <llvm/Support/TimeProfiler.h>
 #include <map>
 #include <memory>
@@ -1225,7 +1228,7 @@ void llvm_static_output_engine_impl::lower_chunk(SwitchInst *pcswitch, BasicBloc
 
 void llvm_static_output_engine_impl::optimise()
 {
-	LoopAnalysisManager LAM;
+    LoopAnalysisManager LAM;
 	FunctionAnalysisManager FAM;
 	CGSCCAnalysisManager CGAM;
 	ModuleAnalysisManager MAM;
@@ -1238,6 +1241,7 @@ void llvm_static_output_engine_impl::optimise()
 	PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
 	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
+    MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(RegArgPromotionPass(types.cpu_state)));
 
 	MPM.run(*module_, MAM);
 

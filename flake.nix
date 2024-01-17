@@ -77,6 +77,8 @@
 	{
 		defaultPackage = build_pkgs.callPackage(
 		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang_16, zlib, boost, libffi, libxml2, llvmPackages_16, lib, gcc}:
+			let llvmDebug = llvmPackages_16.llvm.override { debugVersion = true; };
+			in
 			stdenv.mkDerivation {
 				name = "arancini";
 				pname = "txlat";
@@ -90,6 +92,7 @@
 					cmake
 					pkg-config
 					clang_16
+					#lldb
 				];
 				buildInputs = [
 					zlib
@@ -98,7 +101,7 @@
 					libffi
 					fadec
 					libxml2
-					llvmPackages_16.llvm.dev
+					llvmDebug.dev
 					llvmPackages_16.bintools
 					llvmPackages_16.lld
 				];
