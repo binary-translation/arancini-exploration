@@ -11,12 +11,14 @@
 out/
 build/
 bench/
+test/downloads
 build*/
 .cache/
 .vscode/
 generated.S
 cmake-build-*
 compile_commands.json
+result
 
 **/*.dot
 **/*.dot.*

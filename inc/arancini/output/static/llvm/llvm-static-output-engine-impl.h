@@ -104,7 +104,7 @@ private:
 	std::map<ir::port *, ::llvm::Value *> node_ports_to_llvm_values_;
 	std::map<ir::label_node *, ::llvm::BasicBlock *> label_nodes_to_llvm_blocks_;
 	std::unordered_map<const ir::local_var *, ::llvm::Value *> local_var_to_llvm_addr_;
-	std::unordered_map<reg_offsets, ::llvm::AllocaInst *> reg_to_alloca_;
+	std::unordered_map<reg_offsets, ::llvm::Value*> reg_to_alloca_;
 
 	void build();
 	void initialise_types();
@@ -127,8 +127,8 @@ private:
 	::llvm::Instruction *create_static_condbr(::llvm::IRBuilder<> *builder, std::shared_ptr<ir::packet> pkt, std::map<unsigned long, ::llvm::BasicBlock *> *blocks, ::llvm::BasicBlock *mid);
 	::llvm::FunctionType *get_fn_type(std::shared_ptr<ir::chunk>, ir::llvm_ret_visitor& ret, ir::llvm_arg_visitor& arg);
 	std::vector<::llvm::Value *> load_args(::llvm::IRBuilder<> *builder, ::llvm::Argument *state_arg);
-	void unwrap_ret(::llvm::IRBuilder<> *builder, ::llvm::Value *value);
-	std::vector<::llvm::Value*> wrap_ret(::llvm::IRBuilder<> *builder);
+	void unwrap_ret(::llvm::IRBuilder<> *builder, ::llvm::Value *value, ::llvm::Argument *state_arg);
+	std::vector<::llvm::Value*> wrap_ret(::llvm::IRBuilder<> *builder, ::llvm::Argument *state_arg);
 	
 	::llvm::Value *createLoadFromCPU(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, unsigned long reg_idx);
 	void createStoreToCPU(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, unsigned int ret_idx, ::llvm::Value *ret, unsigned long reg_idx);
