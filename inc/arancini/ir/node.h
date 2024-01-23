@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <stdexcept>
@@ -11,7 +12,7 @@
 
 namespace arancini::ir {
 enum class node_kinds {
-	label,
+	label = 0,
 	read_pc,
 	write_pc,
 	constant,
@@ -38,6 +39,8 @@ enum class node_kinds {
 	write_local,
 	internal_call
 };
+
+enum br_type { none, br, csel, call, ret };
 
 class node {
 public:
@@ -86,6 +89,64 @@ public:
 
 	virtual ~node() = default;
 
+    const char *to_string() const {
+        switch (kind()) {
+        case node_kinds::label:
+            return "label node";
+        case node_kinds::read_pc:
+            return "read PC node";
+        case node_kinds::write_pc:
+            return "write PC node";
+        case node_kinds::constant:
+            return "constant node";
+        case node_kinds::unary_arith:
+            return "unary arithmetic node";
+        case node_kinds::binary_arith:
+            return "binary arithmetic node";
+        case node_kinds::ternary_arith:
+            return "ternary arithmetic node";
+        case node_kinds::unary_atomic:
+            return "unary atomic node";
+        case node_kinds::binary_atomic:
+            return "binary atomic node";
+        case node_kinds::ternary_atomic:
+            return "ternary atomic node";
+        case node_kinds::read_reg:
+            return "read register node";
+        case node_kinds::read_mem:
+            return "read memory node";
+        case node_kinds::write_reg:
+            return "write memory node";
+        case node_kinds::write_mem:
+            return "write memory node";
+        case node_kinds::cast:
+            return "cast node";
+        case node_kinds::csel:
+            return "conditional select node";
+        case node_kinds::bit_shift:
+            return "bit shift node";
+        case node_kinds::br:
+            return "branch node";
+        case node_kinds::cond_br:
+            return "conditional branch node";
+        case node_kinds::bit_extract:
+            return "bit extract node";
+        case node_kinds::bit_insert:
+            return "bit insert node";
+        case node_kinds::vector_extract:
+            return "vector extract node";
+        case node_kinds::vector_insert:
+            return "vector insert node";
+        case node_kinds::read_local:
+            return "read local node";
+        case node_kinds::write_local:
+            return "write local node";
+        case node_kinds::internal_call:
+            return "internal call node";
+        default:
+            return "Unknown node";
+        }
+    }
 private:
 	node_kinds kind_;
 #ifndef NDEBUG
@@ -129,7 +190,7 @@ public:
 
 	virtual bool is_action() const override { return true; }
 
-	virtual bool updates_pc() const { return false; }
+	virtual br_type updates_pc() const { return br_type::none; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -153,7 +214,7 @@ public:
 	{
 	}
 
-	const std::string name() { return name_; }
+	const std::string& name() const { return name_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -228,16 +289,18 @@ public:
 
 class write_pc_node : public action_node {
 public:
-	write_pc_node(port &value)
+	write_pc_node(port &value, br_type br_type, unsigned long target)
 		: action_node(node_kinds::write_pc)
 		, value_(value)
+		, br_type_(br_type)
+		, target_(target)
 	{
 		value.add_target(this);
 	}
 
 	port &value() const { return value_; }
 
-	virtual bool updates_pc() const override { return true; }
+	virtual br_type updates_pc() const override { return br_type_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -245,8 +308,11 @@ public:
 		v.visit_write_pc_node(*this);
 	}
 
+	unsigned long const_target() { return target_; };
 private:
 	port &value_;
+	br_type br_type_;
+	unsigned long target_;
 };
 
 class constant_node : public value_node {
@@ -458,8 +524,25 @@ private:
 	port zero_, negative_;
 };
 
-enum class cast_op { bitcast, zx, sx, trunc, convert };
-enum class fp_convert_type { none, round, trunc };
+enum class cast_op : uint8_t { bitcast, zx, sx, trunc, convert };
+enum class fp_convert_type : uint8_t { none, round, trunc };
+
+static std::string to_string(cast_op op) {
+    switch (op) {
+    case cast_op::bitcast:
+        return "bitcast";
+    case cast_op::zx:
+        return "zero-extend";
+    case cast_op::sx:
+        return "sign-extend";
+    case cast_op::trunc:
+        return "truncate";
+    case cast_op::convert:
+        return "convert";
+    default:
+        return "unknown cast operation";
+    }
+}
 
 class cast_node : public value_node {
 public:
@@ -506,6 +589,7 @@ public:
 
 	port &source_value() const { return source_value_; }
 	value_type &target_type() { return target_type_; }
+	const value_type &target_type() const { return target_type_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -1019,7 +1103,7 @@ public:
 	const internal_function &fn() const { return fn_; }
 	const std::vector<port *> &args() const { return args_; }
 
-	virtual bool updates_pc() const override { return true; }
+	virtual br_type updates_pc() const override { return br_type::none; }
 
 	virtual void accept(visitor &v) override
 	{

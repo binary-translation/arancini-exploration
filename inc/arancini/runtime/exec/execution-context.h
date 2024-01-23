@@ -37,6 +37,7 @@ private:
 	uintptr_t brk_;
 	uintptr_t brk_limit_;
 
+	pthread_mutex_t big_fat_lock;
 	std::map<void *, std::shared_ptr<execution_thread>> threads_;
 	dbt::translation_engine te_;
 

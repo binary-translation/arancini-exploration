@@ -1,6 +1,7 @@
 #pragma once
 #include <arancini/ir/node.h>
 
+#include <llvm/IR/BasicBlock.h>
 #include <map>
 #include <memory>
 #include <unordered_map>
@@ -51,6 +52,7 @@ public:
 
 	void generate();
 
+	unsigned long fixed_branches;
 private:
 	const llvm_static_output_engine &e_;
 	const std::vector<std::shared_ptr<ir::chunk>> &chunks_;
@@ -107,12 +109,14 @@ private:
 	void optimise();
 	void compile();
 	void lower_chunks(::llvm::SwitchInst *pcswitch, ::llvm::BasicBlock *contblock);
-	void lower_chunk(::llvm::SwitchInst *pcswitch, ::llvm::BasicBlock *contblock, std::shared_ptr<ir::chunk> chunk, std::shared_ptr<std::map<unsigned long, ::llvm::BasicBlock *>> blocks);
+	void lower_chunk(::llvm::IRBuilder<> *builder, ::llvm::BasicBlock *contblock, std::shared_ptr<ir::chunk> chunk, std::shared_ptr<std::map<unsigned long, ::llvm::Function *>> fns);
 	::llvm::Value *lower_node(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
 		std::shared_ptr<ir::packet> pkt, ir::node *a);
 	::llvm::Value *lower_port(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
 		std::shared_ptr<ir::packet> pkt, ir::port &p);
 	::llvm::Value *materialise_port(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
 		std::shared_ptr<ir::packet> pkt, ir::port &p);
+	::llvm::Function *get_static_fn(std::shared_ptr<ir::packet> pkt, std::shared_ptr<std::map<unsigned long, ::llvm::Function *>>);
+	::llvm::Instruction *create_static_condbr(::llvm::IRBuilder<> *builder, std::shared_ptr<ir::packet> pkt, std::map<unsigned long, ::llvm::BasicBlock *> *blocks, ::llvm::BasicBlock *mid);
 };
 } // namespace arancini::output::o_static::llvm

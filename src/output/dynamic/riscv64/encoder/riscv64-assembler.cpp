@@ -16,10 +16,11 @@ Assembler::Assembler(arancini::output::dynamic::machine_code_writer *writer, boo
 {
 }
 
-Assembler::~Assembler(){
-	if (track_usage_) {
-		std::cout << "Total RISC-V instructions emitted: " << std::dec << instructions32 << " full size, " << instructions16 << " compressed" << std::endl;
-	}
+Assembler::~Assembler()
+{
+//	if (track_usage_) {
+//		std::cerr << "Total RISC-V instructions emitted: " << std::dec << instructions32 << " full size, " << instructions16 << " compressed" << std::endl;
+//	}
 }
 
 void Assembler::Bind(Label *label)

@@ -179,6 +179,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_PSRLQ:
 	case XED_ICLASS_PSLLDQ:
 	case XED_ICLASS_PSRLDQ:
+	case XED_ICLASS_PSLLD:
 		return std::make_unique<shifts_translator>(builder);
 
   case XED_ICLASS_INC:
@@ -302,10 +303,8 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	}
 }
 
-static translation_result translate_instruction(ir_builder &builder, size_t address, xed_decoded_inst_t *xedd, bool debug, disassembly_syntax da)
+static translation_result translate_instruction(ir_builder &builder, size_t address, xed_decoded_inst_t *xedd, bool debug, disassembly_syntax da, std::string &disasm)
 {
-	std::string disasm = "";
-
 	if (debug) {
 		char buffer[64];
 		xed_format_context(da == disassembly_syntax::intel ? XED_SYNTAX_INTEL : XED_SYNTAX_ATT, xedd, buffer, sizeof(buffer) - 1, address, nullptr, 0);
@@ -343,10 +342,15 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 	const uint8_t *mc = (const uint8_t *)code;
 
 	static uint nr_chunk = 1;
+#ifndef NDEBUG
 	std::cerr << "chunk[" << std::dec << nr_chunk << "] @ " << std::hex << base_address << " code=" << code << ", size=" << code_size << std::endl;
+#endif
+
 	nr_chunk++;
 
 	size_t offset = 0;
+
+    std::string disasm = "";
 	while (offset < code_size) {
 		xed_decoded_inst_t xedd;
 		xed_decoded_inst_zero(&xedd);
@@ -360,17 +364,29 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 		xed_uint_t length = xed_decoded_inst_get_length(&xedd);
 
-		auto r = translate_instruction(builder, base_address, &xedd, debug(), da_);
+		auto r = translate_instruction(builder, base_address + offset, &xedd, debug(), da_, disasm);
 
 		if (r == translation_result::fail) {
 			throw std::runtime_error("instruction translation failure: " + std::to_string(xed_error));
 		} else if (r == translation_result::end_of_block && basic_block) {
+            // Print backwards branch addr (if exists)
+            // Useful for debug infrastructure
+            auto pos = disasm.find("0x");
+            if (pos != disasm.npos) {
+                auto addr_str = disasm.substr(pos);
+                off_t addr = std::strtol(addr_str.c_str(), nullptr, 16);
+                if (addr > base_address && addr < base_address + offset + length) {
+#ifndef NDEBUG
+                    std::cerr << "Backwards branch @ " << addr_str << '\n';
+#endif
+                }
+            }
 			break;
 		}
 
 		offset += length;
-		base_address += length;
 	}
 
+    base_address += offset;
 	builder.end_chunk();
 }

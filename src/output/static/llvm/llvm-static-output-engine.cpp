@@ -1,4 +1,5 @@
 #include "arancini/ir/node.h"
+#include "arancini/ir/opt.h"
 #include "arancini/ir/port.h"
 #include "arancini/ir/visitor.h"
 #include "llvm/Support/raw_ostream.h"
@@ -12,12 +13,19 @@
 #include <llvm/ADT/FloatingPointMode.h>
 #include <llvm/ADT/Optional.h>
 #include <llvm/IR/ConstantFolder.h>
+#include <llvm/IR/ConstantFolder.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/Function.h>
+#include <llvm/IR/GlobalValue.h>
+#include <llvm/IR/InstrTypes.h>
+#include <llvm/IR/Instruction.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/PassManager.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/Transforms/Scalar/JumpThreading.h>
+#include <llvm/IR/PassManager.h>
 #include <llvm/Support/TimeProfiler.h>
 #include <map>
 #include <memory>
@@ -46,6 +54,7 @@ llvm_static_output_engine_impl::llvm_static_output_engine_impl(const llvm_static
 	, llvm_context_(std::make_unique<LLVMContext>())
 	, module_(std::make_unique<Module>("generated", *llvm_context_))
 	, in_br(false)
+	, fixed_branches(0)
 {
 }
 
@@ -75,7 +84,7 @@ void llvm_static_output_engine_impl::initialise_types()
 	types.i64 = Type::getInt64Ty(*llvm_context_);
 	types.f32 = Type::getFloatTy(*llvm_context_);
 	types.f64 = Type::getDoubleTy(*llvm_context_);
-	types.f80 = Type::getX86_FP80Ty(*llvm_context_);
+	types.f80 = Type::getDoubleTy(*llvm_context_);
 	types.i128 = Type::getInt128Ty(*llvm_context_);
 	types.i256 = IntegerType::get(*llvm_context_, 256);
 	types.i512 = IntegerType::get(*llvm_context_, 512);
@@ -167,8 +176,12 @@ void llvm_static_output_engine_impl::build()
 	auto entry_block = BasicBlock::Create(*llvm_context_, "entry", loop_fn);
 	auto loop_block = BasicBlock::Create(*llvm_context_, "loop", loop_fn);
 	auto switch_to_dbt = BasicBlock::Create(*llvm_context_, "switch_to_dbt", loop_fn);
+	auto check_for_call_block = BasicBlock::Create(*llvm_context_, "check_for_call", loop_fn);
+	auto check_for_ret_block = BasicBlock::Create(*llvm_context_, "check_for_ret", loop_fn);
 	auto check_for_int_call_block = BasicBlock::Create(*llvm_context_, "check_for_internal_call", loop_fn);
 	auto internal_call_block = BasicBlock::Create(*llvm_context_, "internal_call", loop_fn);
+	auto call_block = BasicBlock::Create(*llvm_context_, "check_for_internal_call", loop_fn);
+	auto ret_block = BasicBlock::Create(*llvm_context_, "check_for_internal_call", loop_fn);
 	auto exit_block = BasicBlock::Create(*llvm_context_, "exit", loop_fn);
 
 	IRBuilder<> builder(*llvm_context_);
@@ -181,6 +194,9 @@ void llvm_static_output_engine_impl::build()
 
 	builder.SetInsertPoint(loop_block);
 
+	//DEBUG
+	//auto alert = module_->getOrInsertFunction("alert", types.finalize);
+	//builder.CreateCall(alert, { });
 	auto program_counter_val = builder.CreateLoad(types.i64, program_counter, "pc");
 	auto pcswitch = builder.CreateSwitch(program_counter_val, switch_to_dbt);
 
@@ -190,7 +206,21 @@ void llvm_static_output_engine_impl::build()
 
 	auto switch_callee = module_->getOrInsertFunction("invoke_code", types.dbt_invoke);
 	auto invoke_result = builder.CreateCall(switch_callee, { state_arg });
-	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 0)), loop_block, check_for_int_call_block);
+	/*
+	 * RETURN CODES:
+	 * 4: last instr was a ret  -> emit a return
+	 * 3: last instr was a call -> call MainLoop to figure out the next Fn
+	 * 2: do internal call
+	 * 1: do syscall
+	 * 0: all other instr		-> we did not leave the current unknown function
+	 */
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 0)), loop_block, check_for_call_block);
+
+	builder.SetInsertPoint(check_for_call_block);
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 3)), call_block, check_for_ret_block);
+
+	builder.SetInsertPoint(check_for_ret_block);
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 4)), ret_block, check_for_int_call_block);
 
 	builder.SetInsertPoint(check_for_int_call_block);
 	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_SGT, invoke_result, ConstantInt::get(types.i32, 0)), internal_call_block, exit_block);
@@ -206,6 +236,13 @@ void llvm_static_output_engine_impl::build()
 	auto finalize_call_callee = module_->getOrInsertFunction("finalize", types.finalize);
 	builder.CreateCall(finalize_call_callee, {});
 
+	builder.CreateRetVoid();
+
+	builder.SetInsertPoint(call_block);
+	builder.CreateCall(loop_fn, { state_arg });
+	builder.CreateBr(loop_block);
+
+	builder.SetInsertPoint(ret_block);
 	builder.CreateRetVoid();
 
 	if (e_.debug_dump_filename.has_value()) {
@@ -228,12 +265,26 @@ void llvm_static_output_engine_impl::build()
 
 void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlock *contblock)
 {
-	auto blocks = std::make_shared<std::map<unsigned long, BasicBlock *>>();
+	IRBuilder<> builder(*llvm_context_);
+	auto fns = std::make_shared<std::map<unsigned long, Function *>>();
+
 	for (auto c : chunks_) {
-		lower_chunk(pcswitch, contblock, c, blocks);
+		std::stringstream fn_name;
+		fn_name << "FN_" << std::hex << c->packets()[0]->address();
+
+		auto fn = Function::Create(types.loop_fn, GlobalValue::LinkageTypes::ExternalLinkage, fn_name.str(), *module_);
+			(*fns)[c->packets()[0]->address()] = fn;
 	}
-	for (auto b : *blocks) {
-		pcswitch->addCase(ConstantInt::get(types.i64, b.first), b.second);
+
+	for (auto c : chunks_) {
+		lower_chunk(&builder, contblock, c, fns);
+	}
+	for (auto f : *fns) {
+		auto b = BasicBlock::Create(*llvm_context_, "", contblock->getParent());
+		builder.SetInsertPoint(b);
+		builder.CreateCall(f.second, { contblock->getParent()->getArg(0) });
+		builder.CreateRetVoid();
+		pcswitch->addCase(ConstantInt::get(types.i64, f.first), b);
 	}
 }
 
@@ -299,12 +350,6 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		auto rmn = (read_mem_node *)n;
 		auto address = lower_port(builder, state_arg, pkt, rmn->address());
 
-		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(types.i64, 256));
-
-		if (auto address_ptr_i = ::llvm::dyn_cast<Instruction>(address_ptr)) {
-			address_ptr_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, guest_mem_alias_scope_));
-		}
-
 		::llvm::Type *ty;
 		switch (rmn->val().type().width()) {
 		case 8:
@@ -328,6 +373,16 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 		default:
 			throw std::runtime_error("unsupported memory load width: " + std::to_string(rmn->val().type().width()));
+		}
+
+#ifndef ARCH_X86_64
+		auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
+		address = builder.CreateAdd(address, builder.CreateLoad(types.i64, gs_reg));
+#endif
+		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(ty, 256));
+
+		if (auto address_ptr_i = ::llvm::dyn_cast<Instruction>(address_ptr)) {
+			address_ptr_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, guest_mem_alias_scope_));
 		}
 
 		LoadInst *li = builder.CreateLoad(ty, address_ptr);
@@ -888,6 +943,10 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		
 		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
 		auto lhs = lower_port(builder, state_arg, pkt, ban->address());
+#ifndef ARCH_X86_64
+		auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
+		lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, gs_reg));
+#endif
 		lhs = builder.CreateLoad(rhs->getType(), builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256)), "Atomic LHS");
 		auto value_port = lower_port(builder, state_arg, pkt, n->val());
 		
@@ -935,6 +994,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 	        ::llvm::Type *ty;
 	        switch (rln->local()->type().width()) {
 	                case 80: ty = types.f80; break;
+	                case 64: ty = types.f80; break;
 	                default: throw std::runtime_error("unsupported read_local width"+std::to_string(rln->local()->type().width()));
 	        }
 	        auto load = builder.CreateLoad(ty, address, "read_local");
@@ -1014,6 +1074,10 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto address = lower_port(builder, state_arg, pkt, wmn->address());
 		auto value = lower_port(builder, state_arg, pkt, wmn->value());
 
+#ifndef ARCH_X86_64
+		auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
+		address = builder.CreateAdd(address, builder.CreateLoad(types.i64, gs_reg));
+#endif
 		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(value->getType(), 256));
 
 		if (auto address_ptr_i = ::llvm::dyn_cast<Instruction>(address_ptr)) {
@@ -1105,6 +1169,10 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 	case node_kinds::binary_atomic: {
 		auto ban = (binary_atomic_node *)a;
 		auto lhs = lower_port(builder, state_arg, pkt, ban->address());
+#ifndef ARCH_X86_64
+		auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
+		lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, gs_reg));
+#endif
 		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
 
 		auto existing = node_ports_to_llvm_values_.find(&ban->val());
@@ -1114,11 +1182,11 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
 		AtomicRMWInst *out = nullptr;
 		switch(ban->op()) {
-			case binary_atomic_op::add: builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(8), AtomicOrdering::SequentiallyConsistent); break;
-			case binary_atomic_op::sub: builder.CreateAtomicRMW(AtomicRMWInst::Sub, lhs, rhs, Align(8), AtomicOrdering::SequentiallyConsistent); break;
-			case binary_atomic_op::xadd: out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(8), AtomicOrdering::SequentiallyConsistent); break;
-			case binary_atomic_op::bor: out = builder.CreateAtomicRMW(AtomicRMWInst::Or, lhs, rhs, Align(8), AtomicOrdering::SequentiallyConsistent); break;
-			case binary_atomic_op::xchg: out = builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, rhs, Align(8), AtomicOrdering::SequentiallyConsistent); break;
+			case binary_atomic_op::add: builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
+			case binary_atomic_op::sub: builder.CreateAtomicRMW(AtomicRMWInst::Sub, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
+			case binary_atomic_op::xadd: out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
+			case binary_atomic_op::bor: out = builder.CreateAtomicRMW(AtomicRMWInst::Or, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
+			case binary_atomic_op::xchg: out = builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
 			default: throw std::runtime_error("unsupported bin atomic operation " + std::to_string((int)ban->op()));
 		}
 		if (out) {
@@ -1136,14 +1204,25 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 	case node_kinds::ternary_atomic: {
 		auto tan = (ternary_atomic_node *)a;
 		auto lhs = lower_port(builder, state_arg, pkt, tan->address());
+#ifndef ARCH_X86_64
+		auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
+		lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, gs_reg));
+#endif
 		auto rhs = lower_port(builder, state_arg, pkt, tan->rhs());
 		auto top = lower_port(builder, state_arg, pkt, tan->top());
+		auto rax_node = tan->rhs().owner();
+		assert((rax_node->kind() == node_kinds::read_reg) || "Cmpxcg[top] is not a register");
+		auto reg_idx = ((read_reg_node *)rax_node)->regidx();
+		auto rax_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, reg_idx) });
 
 		Value *out;
 		switch(tan->op()) {
 			case ternary_atomic_op::cmpxchg: {
 				lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
-				auto instr = builder.CreateAtomicCmpXchg(lhs, rhs, top, Align(8), AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
+				auto instr = builder.CreateAtomicCmpXchg(lhs, rhs, top, Align(1), AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
+				auto new_rax_val = builder.CreateSelect(builder.CreateExtractValue(instr, 1), rhs, builder.CreateExtractValue(instr, 0));
+				builder.CreateStore(builder.CreateZExt(new_rax_val, types.i64), rax_reg);
+
 				return instr;
 			}
 			default: throw std::runtime_error("unsupported tern atomic operation " + std::to_string((int)tan->op()));
@@ -1164,6 +1243,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
         ::llvm::Type *ty;
         switch (wln->write_value().type().width()) {
                 case 80: ty = types.f80; break;
+                case 64: ty = types.f80; break;
                 default: throw std::runtime_error("unsupported alloca width");
         }
         auto var_ptr = builder.CreateAlloca(ty, nullptr, "local var");
@@ -1178,53 +1258,151 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 	}
 }
 
-void llvm_static_output_engine_impl::lower_chunk(SwitchInst *pcswitch, BasicBlock *contblock, std::shared_ptr<chunk> c, std::shared_ptr<std::map<unsigned long, BasicBlock *>> blocks)
+void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBlock *contblock, std::shared_ptr<chunk> c, std::shared_ptr<std::map<unsigned long, Function *>> fns)
 {
-	IRBuilder<> builder(*llvm_context_);
-	//std::map<unsigned long, BasicBlock *> blocks;
+	std::map<unsigned long, BasicBlock *> blocks;
 
-	if (c->packets().empty()) {
-		return;
-	}
+	auto fn = fns->at(c->packets()[0]->address());
 
-	auto state_arg = contblock->getParent()->getArg(0);
+	auto state_arg = fn->getArg(0);
+
+	auto pre = BasicBlock::Create(*llvm_context_, fn->getName()+"-pre", fn);
+	auto mid = BasicBlock::Create(*llvm_context_, fn->getName()+"-mid");
+	//auto pst = BasicBlock::Create(*llvm_context_, fn->getName()+"-pst", fn);
+	auto dyn = BasicBlock::Create(*llvm_context_, fn->getName()+"-dyn");
+
+	builder->SetInsertPoint(pre);
+	auto pc_ptr = builder->CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 0) });
 
 	for (auto p : c->packets()) {
 		std::stringstream block_name;
 		block_name << "INSN_" << std::hex << p->address();
-
-		BasicBlock *block = BasicBlock::Create(*llvm_context_, block_name.str(), contblock->getParent());
-		(*blocks)[p->address()] = block;
+		auto b = BasicBlock::Create(*llvm_context_, block_name.str(), fn);
+		blocks[p->address()] = b;
 	}
 
-	BasicBlock *packet_block = nullptr;
+	BasicBlock *packet_block = pre;
 	for (auto p : c->packets()) {
-		auto next_block = (*blocks)[p->address()];
+		auto next_block = blocks[p->address()];
 
 		if (packet_block != nullptr) {
-			builder.CreateBr(next_block);
+			//falltrhough!
+			auto ft = builder->CreateBr(next_block);
 		}
 
 		packet_block = next_block;
 
-		builder.SetInsertPoint(packet_block);
+		builder->SetInsertPoint(packet_block);
 
 		if (!p->actions().empty()) {
 			for (const auto& a : p->actions()) {
-				lower_node(builder, state_arg, p, a.get());
+				lower_node(*builder, state_arg, p, a.get());
 			}
 		}
 
-		if (p->updates_pc()) {
-			builder.CreateBr(contblock);
-			packet_block = nullptr;
+		switch (p->updates_pc()) {
+			case br_type::none:
+				break;
+			case br_type::call: {
+				auto f = get_static_fn(p, fns);
+				if (f) {
+					builder->CreateCall(f, { state_arg });
+				} else {
+					builder->CreateCall(contblock->getParent(), { state_arg });
+				}
+				break;
+			}
+			case br_type::br:
+			case br_type::csel: {
+				auto condbr = create_static_condbr(builder, p, &blocks, mid);
+				if (!condbr)
+					builder->CreateBr(mid);
+				packet_block = nullptr;
+				break;
+			}
+			case br_type::ret: {
+				builder->CreateRetVoid();
+				packet_block = nullptr;
+				break;
+			}
 		}
 	}
 
 	if (packet_block != nullptr) {
-		builder.CreateBr(contblock);
+		builder->CreateRetVoid();
+	}
+
+	mid->insertInto(fn);
+	dyn->insertInto(fn);
+
+	builder->SetInsertPoint(mid);
+	auto pc = builder->CreateLoad(types.i64, pc_ptr, "local-pc");
+	auto fnswitch = builder->CreateSwitch(pc, dyn);
+
+	for (auto p : blocks) {
+		fnswitch->addCase(ConstantInt::get(types.i64,p.first), p.second);
+	}
+
+	builder->SetInsertPoint(dyn);
+	builder->CreateCall(contblock->getParent(), { state_arg });
+	builder->CreateRetVoid();
+
+	if (verifyFunction(*fn, &errs())) {
+		throw std::runtime_error("function verification failed");
 	}
 }
+Instruction *llvm_static_output_engine_impl::create_static_condbr(IRBuilder<> *builder, std::shared_ptr<packet> pkt, std::map<unsigned long, BasicBlock *> *blocks, BasicBlock *mid) {
+	auto it = builder->GetInsertPoint();
+	if ((--it)->getOpcode() != Instruction::Store)
+		return nullptr;
+
+	if ((--it)->getOpcode() != Instruction::Select)
+		return nullptr;
+
+	auto cond = it->getOperand(0);
+	auto true_addr = dyn_cast<ConstantInt>(it->getOperand(1));
+	auto false_addr = dyn_cast<ConstantInt>(it->getOperand(2));
+
+	BasicBlock *true_block = mid;
+	BasicBlock *false_block = mid;
+	std::map<unsigned long, BasicBlock *>::iterator bb_it;
+
+	// Add can constant fold on creation
+	if (true_addr) {
+		bb_it = blocks->find(true_addr->getZExtValue());
+		true_block = bb_it != blocks->end() ? bb_it->second : mid;
+	}
+
+	if (false_addr) {
+		bb_it = blocks->find(false_addr->getZExtValue());
+		false_block = bb_it != blocks->end() ? bb_it->second : mid;
+	}
+
+	if (true_block != mid && false_block != mid)
+		fixed_branches++;
+	return builder->CreateCondBr(cond, true_block, false_block);
+};
+
+Function *llvm_static_output_engine_impl::get_static_fn(std::shared_ptr<packet> pkt, std::shared_ptr<std::map<unsigned long, Function *>> fns) {
+
+	write_pc_node *node = nullptr;
+	for (auto a : pkt->actions()) {
+		if(a->kind() == node_kinds::write_pc && (std::dynamic_pointer_cast<write_pc_node>(a))->updates_pc()==br_type::call)
+			node = std::dynamic_pointer_cast<write_pc_node>(a).get();
+	}
+	if (!node)
+		return nullptr;
+	if (node->const_target()) {
+
+		auto it = fns->find(node->const_target()+pkt->address());
+		auto ret = it != fns->end() ? it->second : nullptr;
+		if (ret)
+			fixed_branches++;
+		return ret;
+	}
+
+	return nullptr;
+};
 
 void llvm_static_output_engine_impl::optimise()
 {
@@ -1242,6 +1420,9 @@ void llvm_static_output_engine_impl::optimise()
 
 	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
     MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(RegArgPromotionPass(types.cpu_state)));
+	PB.registerOptimizerLastEPCallback( [&](ModulePassManager &mpm, OptimizationLevel Level) {
+		mpm.addPass(createModuleToFunctionPassAdaptor(JumpThreadingPass())); }
+	);
 
 	MPM.run(*module_, MAM);
 
@@ -1255,6 +1436,7 @@ void llvm_static_output_engine_impl::optimise()
 			errs() << "Error opening file '" << filename << "': " << EC.message() << "\n";
 		}
 
+		std::cerr << "Fixed branches: " << fixed_branches << std::endl;
 		module_->print(file, nullptr);
 		file.close();
 	}
@@ -1262,6 +1444,7 @@ void llvm_static_output_engine_impl::optimise()
 
 void llvm_static_output_engine_impl::compile()
 {
+	std::cout << "Fixed branches: " << fixed_branches << std::endl;
 	auto TT = sys::getDefaultTargetTriple();
 	module_->setTargetTriple(TT);
 
@@ -1279,6 +1462,9 @@ void llvm_static_output_engine_impl::compile()
 	const char *cpu = "generic-rv64";
 	//Specify abi as 64 bits using double float registers
 	TO.MCOptions.ABIName="lp64d";
+#elif defined(ARCH_AARCH64)
+	const char *features = "+fp-armv8,+v8.5a,+lse,+ls64";
+	const char *cpu = "thunderx2t99";
 #else
 	const char *features = "+avx";
 	const char *cpu = "generic";

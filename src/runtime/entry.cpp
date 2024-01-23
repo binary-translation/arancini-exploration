@@ -29,7 +29,11 @@ using namespace arancini::runtime::exec::x86;
 static execution_context *ctx_;
 
 // TODO: this needs to depend on something, somehow.  Some kind of variable?
+#ifndef NDEBUG
 static arancini::input::x86::x86_input_arch ia(true, arancini::input::x86::disassembly_syntax::intel);
+#else
+static arancini::input::x86::x86_input_arch ia(false, arancini::input::x86::disassembly_syntax::intel);
+#endif
 
 #if defined(ARCH_X86_64)
 static arancini::output::dynamic::x86::x86_dynamic_output_engine oe;
@@ -68,7 +72,9 @@ static void segv_handler(int signo, siginfo_t *info, void *context)
 	unsigned i = 0;
 	auto range = ctx_->get_thread_range();
 	for (auto it  = range.first; it != range.second; it++) {
-			std::cerr << "Thread[" << i << "] Guest PC: " << ((x86_cpu_state *)it->second->get_cpu_state())->PC << std::endl;
+            auto state = (x86_cpu_state*)it->second->get_cpu_state();
+			std::cerr << "Thread[" << i << "] Guest PC: " << state->PC << std::endl;
+			std::cerr << "Thread[" << i << "] FS: " << state->FS << std::endl;
 			i++;
 	}
 
@@ -116,8 +122,8 @@ static void load_gph(execution_context *ctx, const guest_program_header_metadata
 	void *ptr = ctx->add_memory_region(md->load_address, md->memory_size);
 
 	// Debugging information
-	std::cerr << "loading gph load-addr=" << std::hex << md->load_address << ", mem-size=" << md->memory_size
-			  << ", end=" << (md->load_address + md->memory_size) << ", file-size=" << md->file_size << ", target=" << ptr << std::endl;
+//		std::cerr << "loading gph load-addr=" << std::hex << md->load_address << ", mem-size=" << md->memory_size
+//				  << ", end=" << (md->load_address + md->memory_size) << ", file-size=" << md->file_size << ", target=" << ptr << std::endl;
 
 	// Copy the data from the host binary into the new allocated region of emulated
 	// guest memory.  This should be only of the specified file size, because the file size
@@ -212,7 +218,7 @@ static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, exe
  */
 extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc, char **argv)
 {
-	std::cerr << "arancini: dbt: initialise" << std::endl;
+//		std::cerr << "arancini: dbt: initialise" << std::endl;
 
 	// Consume args until '--'
 	int start = 1;
@@ -248,10 +254,11 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	__current_state = x86_state;
 	x86_state->PC = entry_point;
 
+	x86_state->GS = (unsigned long long)ctx_->get_memory_ptr(0);
 	x86_state->RSP = setup_guest_stack(argc, argv, 0x100000000, ctx_, start);
 	x86_state->X87_STACK_BASE = (intptr_t)mmap(NULL, 80, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0) - (intptr_t)ctx_->get_memory_ptr(0);
 	// Report on various information for useful debugging purposes.
-	std::cerr << "state @ " << (void *)x86_state << ", pc @ " << std::hex << x86_state->PC << ", stack @ " << std::hex << x86_state->RSP << std::endl;
+//		std::cerr << "state @ " << (void *)x86_state << ", pc @ " << std::hex << x86_state->PC << ", stack @ " << std::hex << x86_state->RSP << std::endl;
 
 	// Initialisation of the runtime is complete - return a pointer to the raw CPU state structure
 	// so that the static code can use it for emulation.
@@ -270,3 +277,5 @@ extern "C" int invoke_code(void *cpu_state) { return ctx_->invoke(cpu_state); }
 extern "C" int execute_internal_call(void *cpu_state, int call) { return ctx_->internal_call(cpu_state, call); }
 
 extern "C" void finalize() { delete ctx_; }
+
+extern "C" void alert() { std::cout << "Top of MainLoop!\n"; }

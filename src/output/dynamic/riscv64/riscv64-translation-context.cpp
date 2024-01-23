@@ -135,7 +135,7 @@ bool insert_ebreak = false;
 void riscv64_translation_context::add_marker(int payload)
 {
 	// TODO Remove/only in debug
-	builder_.li(ZERO, payload);
+	//	builder_.li(ZERO, payload);
 }
 
 void riscv64_translation_context::begin_block()

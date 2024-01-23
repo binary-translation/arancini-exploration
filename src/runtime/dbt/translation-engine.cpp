@@ -89,7 +89,7 @@ public:
 protected:
 	virtual void insert_action(std::shared_ptr<action_node> a) override
 	{
-		if (a->updates_pc()) {
+		if (a->updates_pc() != br_type::none) {
 			is_eob_ = true;
 		}
 
@@ -152,7 +152,7 @@ translation *translation_engine::translate(unsigned long pc)
 {
 	void *code = ec_.get_memory_ptr(pc);
 
-	std::cerr << "translating pc=" << std::hex << pc << std::endl;
+//        std::cerr << "translating pc=" << std::hex << pc << std::endl;
 
 	if (deadflags_) {
 		opt_dbt_ir_builder builder(ia_.get_internal_function_resolver(), ctx_, *deadflags_);

@@ -1,16 +1,26 @@
-**.o
-**.so
-**.a
-**.d
+**/*.o
+**/*.so
+**/*.a
+**/*.d
+**/*.out
+**/*-txl
+**/*.zip
+**/*.txt
+**/*.dump
+**/*.log
 out/
+tags
 build/
+bench/
+build*/
 .cache/
 .vscode/
+lib/keystone
 generated.S
 cmake-build-*
 compile_commands.json
 
-**.dot
-**.dot.*
+**/*.dot
+**/*.dot.*
 
 *.ll

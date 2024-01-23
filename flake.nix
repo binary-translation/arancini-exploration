@@ -76,7 +76,7 @@
 	in
 	{
 		defaultPackage = build_pkgs.callPackage(
-		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang_16, zlib, boost, libffi, libxml2, llvmPackages_16, lib, gcc}:
+		{stdenv, graphviz, gdb, python3, git, cmake, pkg-config, clang_16, zlib, boost, libffi, libxml2, llvmPackages_16, lib, gcc, keystone}:
 			let llvmDebug = llvmPackages_16.llvm.override { debugVersion = true; };
 			in
 			stdenv.mkDerivation {
@@ -85,7 +85,7 @@
 				src = self;
 				nativeBuildInputs = [
 					#graphviz
-					#gdb
+					gdb
 					python3
 					#valgrind
 					git
@@ -104,13 +104,15 @@
 					llvmDebug.dev
 					llvmPackages_16.bintools
 					llvmPackages_16.lld
+					keystone
 				];
 				depsTargetTarget = [ gcc ];
 				configurePhase = ''
 					export FLAKE_BUILD=1
+					export NDEBUG=1
 					cmakeConfigurePhase
 				'';
-				cmakeFlags = [ "-DBUILD_TESTS=1" ] ++ lib.optionals (system == "riscv64-linux") ["--toolchain riscv64-toolchain-nix.cmake"];
+				cmakeFlags = [ "-DBUILD_TESTS=1" "-DCMAKE_BUILD_TYPE=Release" ] ++ lib.optionals (system == "riscv64-linux") ["--toolchain riscv64-toolchain-nix.cmake"];
 			}
 		) {};
 	});
