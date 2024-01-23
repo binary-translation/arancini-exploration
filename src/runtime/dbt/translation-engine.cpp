@@ -114,6 +114,8 @@ public:
 	{
 		default_ir_builder::end_chunk();
 
+		deadflags_.reset();
+
 		get_chunk()->accept(deadflags_);
 
 		tctx_->begin_block();
