@@ -274,6 +274,7 @@ void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlo
 
 		auto fn = Function::Create(types.loop_fn, GlobalValue::LinkageTypes::ExternalLinkage, fn_name.str(), *module_);
 			(*fns)[c->packets()[0]->address()] = fn;
+        fn->addFnAttr(ARANCINI_FUNCTION_TYPE, ARANCINI_STATIC_FUNCTION);
 	}
 
 	for (auto c : chunks_) {
