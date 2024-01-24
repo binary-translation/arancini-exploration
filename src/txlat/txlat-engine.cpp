@@ -30,6 +30,7 @@ void txlat_engine::process_options(arancini::output::o_static::static_output_eng
 {
 	if (auto llvmoe = dynamic_cast<llvm_static_output_engine *>(&oe)) {
 		llvmoe->set_debug(cmdline.count("debug"));
+        llvmoe->enable_reg_arg_promotion(cmdline.count("reg-arg-promotion") != 0);
 		if (auto filename = cmdline.find("dump-llvm"); filename != cmdline.end() && !filename->second.empty()) {
 			llvmoe->set_debug_dump_filename(filename->second.as<std::string>());
 		}

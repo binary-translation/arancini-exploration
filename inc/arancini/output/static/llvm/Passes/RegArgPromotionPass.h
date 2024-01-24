@@ -6,6 +6,8 @@
 #include <llvm/Transforms/Utils/Cloning.h>
 #include <llvm/Analysis/LazyCallGraph.h>
 #include <llvm/Analysis/CGSCCPassManager.h>
+#include <unordered_set>
+#include <unordered_map>
 
 
 namespace arancini::output::o_static::llvm {
@@ -23,5 +25,8 @@ namespace arancini::output::o_static::llvm {
         llvm::Type *cpuStateType;
 
         Function *promoteRegToArg(Function *F);
+
+        // A map from function to its promoted registers
+        std::unordered_map<Function *, std::unordered_set<size_t>> promotedRegs;
     };
 }

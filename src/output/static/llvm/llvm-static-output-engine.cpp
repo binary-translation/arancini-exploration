@@ -275,7 +275,10 @@ void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlo
 		auto fn = Function::Create(types.loop_fn, GlobalValue::LinkageTypes::ExternalLinkage, fn_name.str(), *module_);
 			(*fns)[c->packets()[0]->address()] = fn;
         fn->addFnAttr(ARANCINI_FUNCTION_TYPE, ARANCINI_STATIC_FUNCTION);
-	}
+        fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
+        fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
+        fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
+    }
 
 	for (auto c : chunks_) {
 		lower_chunk(&builder, contblock, c, fns);
@@ -1420,7 +1423,9 @@ void llvm_static_output_engine_impl::optimise()
 	PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
 	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
-    MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(RegArgPromotionPass(types.cpu_state)));
+    if (e_.reg_arg_promotion) {
+        MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(RegArgPromotionPass(types.cpu_state)));
+    }
 	PB.registerOptimizerLastEPCallback( [&](ModulePassManager &mpm, OptimizationLevel Level) {
 		mpm.addPass(createModuleToFunctionPassAdaptor(JumpThreadingPass())); }
 	);
