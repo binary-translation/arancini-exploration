@@ -27,6 +27,6 @@ namespace arancini::output::o_static::llvm {
         Function *promoteRegToArg(Function *F);
 
         // A map from function to its promoted registers
-        std::unordered_map<Function *, std::unordered_set<size_t>> promotedRegs;
+        std::unordered_map<Function *, std::set<size_t>> promotedRegs;
     };
 }

@@ -30,7 +30,13 @@ namespace arancini::output::o_static::llvm {
         return "guestreg";
     }
 
-    /**
+	// TODO: instead of hardcoding, take form reg.def
+	static const size_t NUM_GPRS = 16;
+	static const size_t GPR_START = 1;
+	static const size_t NUM_VEC_REGS = 32;
+	static const size_t VEC_REG_START = 27;
+
+	/**
      * Get the register idx if addr is a GEP
      * @param addr
      * @param regIdx
@@ -70,9 +76,26 @@ namespace arancini::output::o_static::llvm {
                F->getFnAttribute(ARANCINI_FUNCTION_TYPE).getValueAsString() == ARANCINI_STATIC_FUNCTION;
     }
 
-    Function *RegArgPromotionPass::promoteRegToArg(Function *F) {
-        const size_t MAX_GPR_IDX = 16;
+	static bool isGPR(size_t regIdx) {
+		return regIdx >= GPR_START && regIdx < GPR_START + NUM_GPRS;
+	}
 
+	static bool isVecReg(size_t regIdx) {
+		return regIdx >= VEC_REG_START && regIdx < VEC_REG_START + NUM_VEC_REGS;
+	}
+
+	static Type *getRegTy(LLVMContext &Ctx, size_t regIdx) {
+		if (isGPR(regIdx)) {
+			return Type::getInt64Ty(Ctx);
+		}
+		if (isVecReg(regIdx)) {
+			return Type::getIntNTy(Ctx, 512);
+		}
+
+		llvm_unreachable("Unhandled register");
+	}
+
+    Function *RegArgPromotionPass::promoteRegToArg(Function *F) {
         if (!shouldRecoverFunctionSignature(F)) {
             return nullptr;
         }
@@ -98,10 +121,10 @@ namespace arancini::output::o_static::llvm {
         auto cpuStructPtr = F->getArg(0);
 
         // the queue contains the block and the argument candidate registers
-        std::deque<std::pair<BasicBlock *, std::unordered_set<size_t>>> queue;
-        std::unordered_set<BasicBlock *> seen;
+        std::deque<std::pair<BasicBlock *, std::set<size_t>>> queue;
+        std::set<BasicBlock *> seen;
         std::vector<LoadInst *> nonDominatedLoads;
-        std::unordered_set<size_t> arg_regs{};
+        std::set<size_t> arg_regs{};
         if (argumentRegisters != promotedRegs.end()) {
             // maybe inefficient to copy here
             arg_regs = argumentRegisters->second;
@@ -127,8 +150,7 @@ namespace arancini::output::o_static::llvm {
                         continue;
                     }
 
-                    if (*regIdx == 0 || *regIdx > MAX_GPR_IDX) {
-                        // for now, we only consider GPRs
+					if (!isGPR(*regIdx) || !isVecReg(*regIdx)) {
                         continue;
                     }
 
@@ -171,10 +193,9 @@ namespace arancini::output::o_static::llvm {
         for (const auto &arg : F->args()) {
             params.emplace_back(arg.getType());
         }
-        for (size_t i = 0; i < newArgRegs.size(); ++i) {
-            // TODO: needs to be updated once we support more than just GPRs
-            params.emplace_back(i64Ty);
-        }
+		for (const auto newArgReg : newArgRegs) {
+			params.emplace_back(getRegTy(F->getContext(), newArgReg));
+		}
         FunctionType *signature = FunctionType::get(F->getReturnType(), params, false);
         Function *newFunc = Function::Create(signature, F->getLinkage());
         newFunc->copyAttributesFrom(F);
