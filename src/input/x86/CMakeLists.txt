@@ -27,6 +27,7 @@ set(INPUT_X86_SRCS
         translators/shuffle.cpp
         translators/translator.cpp
         translators/unop.cpp
+        translators/io.cpp
     )
 
 add_library(arancini-input-x86

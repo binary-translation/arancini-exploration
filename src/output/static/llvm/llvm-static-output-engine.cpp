@@ -777,7 +777,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 				}
 				return builder.CreateBitCast(val, ::llvm::VectorType::get(ty, cn->target_type().nr_elements(), false));
 			}
-			if (val->getType()->isVectorTy()) {
+			//if (val->getType()->isVectorTy()) {
 				switch (cn->target_type().width()) {
 				case 1:
 					ty = types.i1;
@@ -788,12 +788,20 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 				case 16:
 					ty = types.i16;
 					break;
-				case 32:
-					ty = types.i32;
+				case 32: {
+					if (cn->target_type().is_floating_point())
+						ty = types.f32;
+					else
+						ty = types.i32;
 					break;
-				case 64:
-					ty = types.i64;
+				}
+				case 64: {
+					if (cn->target_type().is_floating_point())
+						ty = types.f64;
+					else
+						ty = types.i64;
 					break;
+				}
 				case 128:
 					ty = types.i128;
 					break;
@@ -808,8 +816,8 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 				}
 				return builder.CreateBitCast(val, ty);
 
-			}
-			return val;
+			//}
+			//return val;
 		}
 		case cast_op::convert: {
 			::llvm::RoundingMode rm;
@@ -1329,6 +1337,9 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 			builder.SetInsertPoint(cont_block);
 			return ret;
+        }
+        if (icn->fn().name() == "handle_poison") {
+                return builder.CreateCall(switch_callee, { state_arg, ConstantInt::get(types.i32, 2) });
         }
         throw std::runtime_error("unsupported internal call type" + icn->fn().name());
 	}

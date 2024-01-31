@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
+#include <ostream>
 #include <string>
 
 using namespace arancini::txlat;
@@ -125,6 +126,17 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 			// find the address of the symbol after s in the text section, and assume that the size of s is until there
 			auto next = *(std::next(translated_addrs.find(s.value()), 1));
 			auto size = next - s.value();
+
+			// find the section this symbol is in
+			// TODO: reverse mapping
+			for (auto sec : elf.sections()) {
+				if ((unsigned long)sec->address() <= s.value() && (unsigned long)sec->address()+sec->data_size() > s.value()) {
+					// Either out of bounds, or size is negative
+					if (s.value()+size > (unsigned long)sec->address()+sec->data_size() || (long)size < 0) {	
+						size = sec->address()+sec->data_size() - s.value();
+					}
+				}
+			}
 			auto fixed_sym = symbol(s.name(), s.value(), size, s.section_index(), s.info());
 			std::cerr << "[DEBUG] PASS2: translating symbol '" << s.name() << "' [" << std::dec << size << " bytes]"  << std::endl;
 			oe->add_chunk(translate_symbol(*ia, elf, fixed_sym));

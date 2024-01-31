@@ -503,8 +503,12 @@ int execution_context::internal_call(void *cpu_state, int call)
             util::global_logger.error("Unsupported system call: {:#x}\n", util::copy(x86_state->RAX));
 			return 1;
 		}
-	} else {
-        util::global_logger.error("Unsupported internal call: {}\n", call);
+	} else if (call == 3) {
+		auto x86_state = (x86::x86_cpu_state *)cpu_state;
+		auto pc = x86_state->PC;
+        util::global_logger.error("Poison Instr @ GuestPC:", pc);
+	}else {
+        util::global_logger.error("Unsupported internal call:", std::dec, call);
 		return 1;
 	}
 	return 0;

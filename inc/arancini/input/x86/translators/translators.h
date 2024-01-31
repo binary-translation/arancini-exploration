@@ -162,5 +162,6 @@ private:
   DEFINE_TRANSLATOR(fpu)
   DEFINE_TRANSLATOR(control)
   DEFINE_TRANSLATOR(interrupt)
+  DEFINE_TRANSLATOR(io)
 } // namespace arancini::input::x86::translators
 
