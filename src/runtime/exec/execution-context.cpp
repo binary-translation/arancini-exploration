@@ -480,11 +480,15 @@ int execution_context::internal_call(void *cpu_state, int call)
 			native_syscall(__NR_exit, x86_state->RDI);
 		}
 		default:
-			std::cerr << "Unsupported syscall id " << std::dec << x86_state->RAX << std::endl;
+            util::logger.error("Unsupported system call:", std::dec, +x86_state->RAX);
 			return 1;
 		}
-	} else {
-		std::cerr << "Unknown internal call id " << std::dec << call << std::endl;
+	} else if (call == 3) {
+		auto x86_state = (x86::x86_cpu_state *)cpu_state;
+		auto pc = x86_state->PC;
+        util::logger.error("Poison Instr @ GuestPC:", pc);
+	}else {
+        util::logger.error("Unsupported internal call:", std::dec, call);
 		return 1;
 	}
 	return 0;

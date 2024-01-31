@@ -297,6 +297,9 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_UD1:
   case XED_ICLASS_UD2:
 		return std::make_unique<interrupt_translator>(builder);
+	case XED_ICLASS_INSD:
+	case XED_ICLASS_OUTSD:
+		return std::make_unique<io_translator>(builder);
 
 	default:
 		return nullptr;
@@ -305,13 +308,9 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 
 static translation_result translate_instruction(ir_builder &builder, size_t address, xed_decoded_inst_t *xedd, bool debug, disassembly_syntax da)
 {
-	std::string disasm = "";
-
-	if (debug) {
-		char buffer[64];
-		xed_format_context(da == disassembly_syntax::intel ? XED_SYNTAX_INTEL : XED_SYNTAX_ATT, xedd, buffer, sizeof(buffer) - 1, address, nullptr, 0);
-		disasm = std::string(buffer);
-	}
+	char buffer[64];
+	xed_format_context(da == disassembly_syntax::intel ? XED_SYNTAX_INTEL : XED_SYNTAX_ATT, xedd, buffer, sizeof(buffer) - 1, address, nullptr, 0);
+	disasm = std::string(buffer);
 
 	auto t = get_translator(builder, xed_decoded_inst_get_iclass(xedd));
 
@@ -356,7 +355,12 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 		xed_error_enum_t xed_error = xed_decode(&xedd, &mc[offset], code_size - offset);
 		if (xed_error != XED_ERROR_NONE) {
-			throw std::runtime_error("unable to decode instruction: " + std::to_string(xed_error));
+			std::stringstream stream;
+			stream << std::hex << base_address + offset;
+			std::string s = stream.str();
+			throw std::runtime_error("unable to decode instruction: " +
+									 std::to_string(xed_error) +
+									 " inst: " + s);
 		}
 
 		xed_uint_t length = xed_decoded_inst_get_length(&xedd);
