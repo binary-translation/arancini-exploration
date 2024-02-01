@@ -31,7 +31,8 @@ void txlat_engine::process_options(arancini::output::o_static::static_output_eng
 {
 	if (auto llvmoe = dynamic_cast<llvm_static_output_engine *>(&oe)) {
 		llvmoe->set_debug(cmdline.count("debug"));
-		if (auto filename = cmdline.at("dump-llvm"); !filename.empty()) {
+		if (cmdline.count("dump-llvm")) {
+			auto filename = cmdline.at("dump-llvm");
 			llvmoe->set_debug_dump_filename(filename.as<std::string>());
 		}
 	}

@@ -310,7 +310,7 @@ static translation_result translate_instruction(ir_builder &builder, size_t addr
 {
 	char buffer[64];
 	xed_format_context(da == disassembly_syntax::intel ? XED_SYNTAX_INTEL : XED_SYNTAX_ATT, xedd, buffer, sizeof(buffer) - 1, address, nullptr, 0);
-	disasm = std::string(buffer);
+	auto disasm = std::string(buffer);
 
 	auto t = get_translator(builder, xed_decoded_inst_get_iclass(xedd));
 

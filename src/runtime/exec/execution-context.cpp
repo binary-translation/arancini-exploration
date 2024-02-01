@@ -480,15 +480,15 @@ int execution_context::internal_call(void *cpu_state, int call)
 			native_syscall(__NR_exit, x86_state->RDI);
 		}
 		default:
-            util::logger.error("Unsupported system call:", std::dec, +x86_state->RAX);
+		std::cerr << "Unsupported system call:" << std::dec << x86_state->RAX << std::endl;
 			return 1;
 		}
 	} else if (call == 3) {
 		auto x86_state = (x86::x86_cpu_state *)cpu_state;
 		auto pc = x86_state->PC;
-        util::logger.error("Poison Instr @ GuestPC:", pc);
+		std::cerr << "Poison Instr @ GuestPC:" << pc << std::endl;
 	}else {
-        util::logger.error("Unsupported internal call:", std::dec, call);
+		std::cerr << "Unsupported internal call:" << std::dec << call << std::endl;
 		return 1;
 	}
 	return 0;
