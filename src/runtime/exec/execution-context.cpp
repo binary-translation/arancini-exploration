@@ -227,6 +227,18 @@ int execution_context::internal_call(void *cpu_state, int call)
 			}
 			break;
 		}
+		case 7: // poll
+		{
+			// AARCH64 doesn't have poll, use ppoll instead
+			auto ptr = (uintptr_t)get_memory_ptr(x86_state->RDI);
+			struct timespec ts;
+			auto msec = x86_state->RDX;
+			ts.tv_sec = (long)(msec/1000);
+			ts.tv_nsec = (msec%1000)*1000000;
+			auto ret = native_syscall(__NR_ppoll, ptr, x86_state->RSI, (uintptr_t)&ts, (uintptr_t)NULL, sizeof(sigset_t));
+			x86_state->RAX = ret;
+			break;
+		}
 		case 9: // mmap
 		{
 			// Hint to higher than already mapped memory if no hint
