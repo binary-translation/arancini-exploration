@@ -19,6 +19,13 @@ enum class reg_offsets : unsigned long {
 #undef DEFREG
 };
 
+static constexpr unsigned long counter_base_  = __COUNTER__;
+static std::map<unsigned long, unsigned long> off_to_idx {
+#define DEFREG(ctype, ltype, name) {X86_OFFSET_OF(name), __COUNTER__ - counter_base_ -1},
+#include <arancini/input/x86/reg.def>
+#undef DEFREG
+};
+
 namespace arancini::ir {
   class deadflags_opt_visitor : public default_visitor {
   public:
