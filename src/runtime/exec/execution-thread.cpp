@@ -5,7 +5,8 @@
 using namespace arancini::runtime::exec;
 
 execution_thread::execution_thread(execution_context &owner, size_t state_size)
-	: owner_(owner)
+	: chain_address_(0)
+	, owner_(owner)
 	, cpu_state_(nullptr)
 	, cpu_state_size_(state_size)
 {

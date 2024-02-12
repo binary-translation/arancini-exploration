@@ -141,9 +141,9 @@ int execution_context::invoke(void *cpu_state) {
 
 	pthread_mutex_lock(&big_fat_lock);
 	auto txln = te_.get_translation(x86_state->PC);
-	pthread_mutex_unlock(&big_fat_lock);
 	if (txln == nullptr) {
         util::global_logger.error("Unable to translate\n");
+		pthread_mutex_unlock(&big_fat_lock);
 		return 1;
 	}
 
@@ -154,6 +154,7 @@ int execution_context::invoke(void *cpu_state) {
 		te_.chain(et->chain_address_, txln->get_code_ptr());
 	}
 
+	pthread_mutex_unlock(&big_fat_lock);
 	const dbt::native_call_result result = txln->invoke(cpu_state);
 
 	et->chain_address_ = result.chain_address;

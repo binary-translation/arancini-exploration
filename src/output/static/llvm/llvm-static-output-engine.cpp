@@ -27,6 +27,9 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/Transforms/Utils/Mem2Reg.h>
+#include "llvm/Transforms/AggressiveInstCombine/AggressiveInstCombine.h"
+#include "llvm/Transforms/IPO/DeadArgumentElimination.h"
+#include "llvm/Transforms/Scalar/ADCE.h"
 #include <llvm/IR/PassManager.h>
 #include <llvm/Support/TimeProfiler.h>
 #include <map>
@@ -317,10 +320,10 @@ void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlo
 		auto fn_type = get_fn_type(c, ret, arg);
 		//auto fn_type = types.loop_fn;
 		auto fn = Function::Create(fn_type, GlobalValue::LinkageTypes::ExternalLinkage, fn_name.str(), *module_);
-		fn->addParamAttr(15, Attribute::AttrKind::NoAlias);
-		fn->addParamAttr(15, Attribute::AttrKind::NoCapture);
-		fn->addParamAttr(15, Attribute::getWithDereferenceableBytes(*llvm_context_, sizeof(runtime::exec::x86::x86_cpu_state)));
-		fn->addParamAttr(15, Attribute::AttrKind::NoUndef);
+		fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
+		fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
+		fn->addParamAttr(0, Attribute::getWithDereferenceableBytes(*llvm_context_, sizeof(runtime::exec::x86::x86_cpu_state)));
+		fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
 		(*fns)[c->packets()[0]->address()] = fn;
 	}
 
@@ -346,13 +349,11 @@ void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlo
 		auto zmm5 = createLoadFromCPU(builder, cpu_state, 32);
 		auto zmm6 = createLoadFromCPU(builder, cpu_state, 33);
 		auto zmm7 = createLoadFromCPU(builder, cpu_state, 34);
-		auto ret = builder.CreateCall(f.second, { pc, rdi, rsi, rdx, rcx, r8, r9, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6, zmm7, cpu_state});
-		createStoreToCPU(builder, cpu_state, 0, ret, 0);
-		createStoreToCPU(builder, cpu_state, 1, ret, 1);
-		createStoreToCPU(builder, cpu_state, 2, ret, 3);
-		createStoreToCPU(builder, cpu_state, 3, ret, 25);
-		createStoreToCPU(builder, cpu_state, 4, ret, 27);
-		createStoreToCPU(builder, cpu_state, 5, ret, 28);
+		auto ret = builder.CreateCall(f.second, { cpu_state, rdi, rsi, rdx, rcx, r8, r9, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6, zmm7 });
+		createStoreToCPU(builder, cpu_state, 0, ret, 1);
+		createStoreToCPU(builder, cpu_state, 1, ret, 3);
+		createStoreToCPU(builder, cpu_state, 2, ret, 27);
+		createStoreToCPU(builder, cpu_state, 3, ret, 28);
 		builder.CreateRetVoid();
 		pcswitch->addCase(ConstantInt::get(types.i64, f.first), b);
 	}
@@ -1148,7 +1149,27 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 			val = builder.CreateBitCast(val, IntegerType::get(*llvm_context_, val->getType()->getPrimitiveSizeInBits()));
 		auto reg_val = builder.CreateZExtOrBitCast(val, reg_type);
 
-		return builder.CreateStore(reg_val, dest_reg);
+		Align align = Align(8);
+		switch (reg_type->getPrimitiveSizeInBits()) {
+		case 1:
+		case 8: {
+			align = Align(1);
+			break;
+				}
+		case 16:
+		case 32:
+		case 64:
+			break;
+		case 128:
+		case 256:
+		case 512: {
+			align = Align(64);
+			break;
+				  }
+		default:
+			throw std::runtime_error("unsupported register width " + std::to_string(wrn->val().type().width()) + " in store");
+		}
+		return builder.CreateAlignedStore(reg_val, dest_reg, align);
 	}
 
 	case node_kinds::write_mem: {
@@ -1180,7 +1201,8 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto dest_reg = reg_to_alloca_.at(reg_offsets::PC);
 		auto val = lower_port(builder, state_arg, pkt, wpn->value());
 
-		builder.CreateStore(val, dest_mem);
+		// For Debug only! This will break the static_csel pass
+		//builder.CreateStore(val, dest_mem);
 		return builder.CreateStore(val, dest_reg);
 	}
 
@@ -1366,9 +1388,8 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 std::vector<Value*> llvm_static_output_engine_impl::load_args(IRBuilder<> *builder, Argument *state_arg) {
 
-		builder->CreateStore(builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RSP)), builder->CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 5) }));
 	std::vector<Value*> ret = {
-		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::PC)),
+		state_arg,
 		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RDI)),
 		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RSI)),
 		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RDX)),
@@ -1382,29 +1403,22 @@ std::vector<Value*> llvm_static_output_engine_impl::load_args(IRBuilder<> *build
 		builder->CreateLoad(types.i512, reg_to_alloca_.at(reg_offsets::ZMM4)),
 		builder->CreateLoad(types.i512, reg_to_alloca_.at(reg_offsets::ZMM5)),
 		builder->CreateLoad(types.i512, reg_to_alloca_.at(reg_offsets::ZMM6)),
-		builder->CreateLoad(types.i512, reg_to_alloca_.at(reg_offsets::ZMM7)),
-		state_arg
+		builder->CreateLoad(types.i512, reg_to_alloca_.at(reg_offsets::ZMM7))
 	};
 	return ret;
 };
 
 void llvm_static_output_engine_impl::unwrap_ret(IRBuilder<> *builder, Value *value, Argument *state_arg) {
-	builder->CreateStore(builder->CreateLoad(types.i64, builder->CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 5) })), reg_to_alloca_.at(reg_offsets::RSP));
-	builder->CreateStore(builder->CreateExtractValue(value, { 0 }), reg_to_alloca_.at(reg_offsets::PC));
-	builder->CreateStore(builder->CreateExtractValue(value, { 1 }), reg_to_alloca_.at(reg_offsets::RAX));
-	builder->CreateStore(builder->CreateExtractValue(value, { 2 }), reg_to_alloca_.at(reg_offsets::RDX));
-	builder->CreateStore(builder->CreateExtractValue(value, { 3 }), reg_to_alloca_.at(reg_offsets::FS));
-	builder->CreateStore(builder->CreateExtractValue(value, { 4 }), reg_to_alloca_.at(reg_offsets::ZMM0));
-	builder->CreateStore(builder->CreateExtractValue(value, { 5 }), reg_to_alloca_.at(reg_offsets::ZMM1));
+	builder->CreateStore(builder->CreateExtractValue(value, { 0 }), reg_to_alloca_.at(reg_offsets::RAX));
+	builder->CreateStore(builder->CreateExtractValue(value, { 1 }), reg_to_alloca_.at(reg_offsets::RDX));
+	builder->CreateStore(builder->CreateExtractValue(value, { 2 }), reg_to_alloca_.at(reg_offsets::ZMM0));
+	builder->CreateStore(builder->CreateExtractValue(value, { 3 }), reg_to_alloca_.at(reg_offsets::ZMM1));
 };
 
 std::vector<Value*> llvm_static_output_engine_impl::wrap_ret(IRBuilder<> *builder, Argument *state_arg) {
 	std::vector<Value*> ret;
-	//builder->CreateStore(builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RSP)), builder->CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 5) }));
-	ret.push_back(builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::PC)));
 	ret.push_back(builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RAX)));
 	ret.push_back(builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RDX)));
-	ret.push_back(builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::FS)));
 	ret.push_back(builder->CreateLoad(types.i512, reg_to_alloca_.at(reg_offsets::ZMM0)));
 	ret.push_back(builder->CreateLoad(types.i512, reg_to_alloca_.at(reg_offsets::ZMM1)));
 	return ret;
@@ -1416,19 +1430,17 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 
 	auto fn = fns->at(c->packets()[0]->address());
 
-	auto state_arg = fn->getArg(15);
+	auto state_arg = fn->getArg(0);
 
 	auto pre = BasicBlock::Create(*llvm_context_, fn->getName()+"-pre", fn);
 	auto mid = BasicBlock::Create(*llvm_context_, fn->getName()+"-mid");
 	//auto pst = BasicBlock::Create(*llvm_context_, fn->getName()+"-pst", fn);
 	auto dyn = BasicBlock::Create(*llvm_context_, fn->getName()+"-dyn");
 
-	bool has_dyn_br = false;
-
 	builder->SetInsertPoint(pre);
 	init_regs(*builder);
-	restore_all_regs(*builder, state_arg);
-	builder->CreateStore(fn->getArg(0), reg_to_alloca_.at(reg_offsets::PC));
+	restore_all_regs(*builder, state_arg, false);
+
 	builder->CreateStore(fn->getArg(1), reg_to_alloca_.at(reg_offsets::RDI));
 	builder->CreateStore(fn->getArg(2), reg_to_alloca_.at(reg_offsets::RSI));
 	builder->CreateStore(fn->getArg(3), reg_to_alloca_.at(reg_offsets::RDX));
@@ -1445,7 +1457,6 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 	builder->CreateStore(fn->getArg(13), reg_to_alloca_.at(reg_offsets::ZMM6));
 	builder->CreateStore(fn->getArg(14), reg_to_alloca_.at(reg_offsets::ZMM7));
 	auto pc_ptr = reg_to_alloca_.at(reg_offsets::PC);
-	//auto pc_ptr = builder->CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 0) });
 
 	for (auto p : c->packets()) {
 		std::stringstream block_name;
@@ -1480,7 +1491,9 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 			case br_type::call: {
 				auto f = get_static_fn(p, fns);
 				if (f) {
+					save_all_regs(*builder, state_arg, false);
 					auto ret = builder->CreateCall(f, load_args(builder, state_arg));
+					restore_all_regs(*builder, state_arg, false);
 					unwrap_ret(builder, ret, state_arg);
 				} else {
 					save_all_regs(*builder, state_arg);
@@ -1500,7 +1513,8 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 				break;
 			}
 			case br_type::ret: {
-				builder->CreateAggregateRet(wrap_ret(builder, state_arg).data(), 6);
+				save_all_regs(*builder, state_arg, false);
+				builder->CreateAggregateRet(wrap_ret(builder, state_arg).data(), 4);
 				packet_block = nullptr;
 				break;
 			}
@@ -1508,28 +1522,26 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 	}
 
 	if (packet_block != nullptr) {
-		builder->CreateAggregateRet(wrap_ret(builder, state_arg).data(), 6);
+		save_all_regs(*builder, state_arg, false);
+		builder->CreateAggregateRet(wrap_ret(builder, state_arg).data(), 4);
 	}
 
-	//if (has_dyn_br) {
-	if (true) {
-		mid->insertInto(fn);
-		dyn->insertInto(fn);
+	mid->insertInto(fn);
+	dyn->insertInto(fn);
 
-		builder->SetInsertPoint(mid);
-		auto pc = builder->CreateLoad(types.i64, pc_ptr, "local-pc");
-		auto fnswitch = builder->CreateSwitch(pc, dyn);
+	builder->SetInsertPoint(mid);
+	auto pc = builder->CreateLoad(types.i64, pc_ptr, "local-pc");
+	auto fnswitch = builder->CreateSwitch(pc, dyn);
 
-		for (auto p : blocks) {
-			fnswitch->addCase(ConstantInt::get(types.i64,p.first), p.second);
-		}
-
-		builder->SetInsertPoint(dyn);
-		save_all_regs(*builder, state_arg);
-		builder->CreateCall(contblock->getParent(), { state_arg });
-		restore_all_regs(*builder, state_arg);
-		builder->CreateAggregateRet(wrap_ret(builder, state_arg).data(), 6);
+	for (auto p : blocks) {
+		fnswitch->addCase(ConstantInt::get(types.i64,p.first), p.second);
 	}
+
+	builder->SetInsertPoint(dyn);
+	save_all_regs(*builder, state_arg);
+	builder->CreateCall(contblock->getParent(), { state_arg });
+	restore_all_regs(*builder, state_arg);
+	builder->CreateAggregateRet(wrap_ret(builder, state_arg).data(), 4);
 
 	if (verifyFunction(*fn, &errs())) {
 		throw std::runtime_error("function verification failed");
@@ -1549,40 +1561,64 @@ FunctionType *llvm_static_output_engine_impl::get_fn_type(std::shared_ptr<chunk>
 		}
 	}
 
-	retv = StructType::get(*llvm_context_, { types.i64, types.i64, types.i64, types.i64, types.i512, types.i512}, false); // PC, rax, rdx, fs, zmm0, zmm1
+	retv = StructType::get(*llvm_context_, { types.i64, types.i64, types.i512, types.i512}, false);
 	argv = {
-		types.i64,
+		types.cpu_state_ptr,
 		types.i64, types.i64, types.i64, types.i64, types.i64, types.i64,
 		types.i512, types.i512, types.i512, types.i512,
 		types.i512, types.i512, types.i512, types.i512,
-		types.cpu_state_ptr
-	}; // PC, 6 int args, 8 float args, cpu_struct
+	}; // cpu_state, 6 int args, 8 float args
 	return FunctionType::get(retv, argv, false);
 }
 
 void llvm_static_output_engine_impl::init_regs(IRBuilder<> &builder) {
 	reg_to_alloca_.clear();
-#define DEFREG(ctype, ltype, name) reg_to_alloca_[reg_offsets::name] = builder.CreateAlloca(types.ltype, 128, nullptr, "reg"#name);
+#define DEFREG(ctype, ltype, name) do { \
+	reg_to_alloca_[reg_offsets::name] = builder.CreateAlloca(types.ltype, 128, nullptr, "reg"#name); \
+	builder.CreateStore(ConstantInt::get(types.ltype, 0), reg_to_alloca_.at(reg_offsets::name)); \
+} while (0);
 #include <arancini/input/x86/reg.def>
 #undef DEFREG
 }
 
-void llvm_static_output_engine_impl::save_all_regs(IRBuilder<> &builder, Argument *state_arg) {
-	unsigned int idx = 0;
-#define DEFREG(ctype, ltype, name) \
-	auto name##_ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, idx++) }); \
-	builder.CreateStore(builder.CreateLoad(types.ltype, reg_to_alloca_.at(reg_offsets::name)), name##_ptr);
-#include<arancini/input/x86/reg.def>
-#undef DEFREG
+// well akshually, all non-callee saved registers that are worth saving
+void llvm_static_output_engine_impl::save_all_regs(IRBuilder<> &builder, Argument *state_arg, bool with_args) {
+	auto args = { reg_offsets::RCX, reg_offsets::RDX, reg_offsets::RDI, reg_offsets::RSI, reg_offsets::R8, reg_offsets::R9, reg_offsets::ZMM0, reg_offsets::ZMM1, reg_offsets::ZMM2, reg_offsets::ZMM3, reg_offsets::ZMM4, reg_offsets::ZMM5, reg_offsets::ZMM6, reg_offsets::ZMM7
+	};
+	auto regs = { reg_offsets::PC, reg_offsets::RAX, reg_offsets::RSP,
+				  reg_offsets::R10, reg_offsets::R11, reg_offsets::FS, reg_offsets::GS,
+				  reg_offsets::X87_STACK_BASE, reg_offsets::X87_STS
+	};
+	for (auto reg : regs) {
+		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
+		auto alloca = reg_to_alloca_.at(reg);
+		builder.CreateStore(builder.CreateLoad(alloca->getType(), alloca), ptr);
+	}
+	if (!with_args) return;
+	for (auto reg : args) {
+		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
+		auto alloca = reg_to_alloca_.at(reg);
+		builder.CreateStore(builder.CreateLoad(alloca->getType(), alloca), ptr);
+	}
 }
 
-void llvm_static_output_engine_impl::restore_all_regs(IRBuilder<> &builder, Argument *state_arg) {
-	unsigned int idx = 0;
-#define DEFREG(ctype, ltype, name) \
-	auto name##_ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, idx++) }); \
-	builder.CreateStore(builder.CreateLoad(types.ltype, name##_ptr), reg_to_alloca_.at(reg_offsets::name));
-#include<arancini/input/x86/reg.def>
-#undef DEFREG
+void llvm_static_output_engine_impl::restore_all_regs(IRBuilder<> &builder, Argument *state_arg, bool with_rets) {
+	auto rets = { reg_offsets::RAX, reg_offsets::RDX, reg_offsets::ZMM0, reg_offsets::ZMM1 };
+	auto regs = { reg_offsets::PC, reg_offsets::RSP,
+				reg_offsets::FS, reg_offsets::GS,
+				reg_offsets::X87_STACK_BASE, reg_offsets::X87_STS
+	};
+	for (auto reg : regs) {
+		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "restore_"+std::to_string((unsigned long)reg));
+		auto alloca = reg_to_alloca_.at(reg);
+		builder.CreateStore(builder.CreateLoad(alloca->getType(), ptr), alloca);
+	}
+	if (!with_rets) return;
+	for (auto reg : rets) {
+		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "restore_"+std::to_string((unsigned long)reg));
+		auto alloca = reg_to_alloca_.at(reg);
+		builder.CreateStore(builder.CreateLoad(alloca->getType(), ptr), alloca);
+	}
 }
 
 Function *llvm_static_output_engine_impl::get_static_fn(std::shared_ptr<packet> pkt, std::shared_ptr<std::map<unsigned long, Function *>> fns) {
@@ -1622,8 +1658,11 @@ void llvm_static_output_engine_impl::optimise()
 
 	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
 	PB.registerOptimizerLastEPCallback( [&](ModulePassManager &mpm, OptimizationLevel Level) {
-		mpm.addPass(createModuleToFunctionPassAdaptor(PromotePass())); }
-	);
+		mpm.addPass(createModuleToFunctionPassAdaptor(PromotePass()));
+		mpm.addPass(createModuleToFunctionPassAdaptor(ADCEPass()));
+		mpm.addPass(createModuleToFunctionPassAdaptor(AggressiveInstCombinePass()));
+		mpm.addPass(DeadArgumentEliminationPass());
+	});
 	MPM.run(*module_, MAM);
 
 	// Compiled modules now exists
