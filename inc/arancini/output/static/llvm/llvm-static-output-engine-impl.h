@@ -121,8 +121,10 @@ private:
 	::llvm::Value *materialise_port(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
 		std::shared_ptr<ir::packet> pkt, ir::port &p);
 	void init_regs(::llvm::IRBuilder<> &builder);
-	void save_all_regs(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, bool with_args=true);
-	void restore_all_regs(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, bool with_rets=true);
+	void save_all_regs(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg);
+	void restore_all_regs(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg);
+	void save_callee_regs(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, bool with_args=true);
+	void restore_callee_regs(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, bool with_rets=true);
 	// passes
 	::llvm::Function *get_static_fn(std::shared_ptr<ir::packet> pkt, std::shared_ptr<std::map<unsigned long, ::llvm::Function *>>);
 	::llvm::Instruction *create_static_condbr(::llvm::IRBuilder<> *builder, std::shared_ptr<ir::packet> pkt, std::map<unsigned long, ::llvm::BasicBlock *> *blocks, ::llvm::BasicBlock *mid);
