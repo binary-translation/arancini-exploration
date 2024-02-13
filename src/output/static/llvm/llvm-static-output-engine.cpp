@@ -1439,7 +1439,7 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 
 	builder->SetInsertPoint(pre);
 	init_regs(*builder);
-	restore_all_regs(*builder, state_arg, false);
+	restore_callee_regs(*builder, state_arg, false);
 
 	builder->CreateStore(fn->getArg(1), reg_to_alloca_.at(reg_offsets::RDI));
 	builder->CreateStore(fn->getArg(2), reg_to_alloca_.at(reg_offsets::RSI));
@@ -1491,14 +1491,14 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 			case br_type::call: {
 				auto f = get_static_fn(p, fns);
 				if (f) {
-					save_all_regs(*builder, state_arg, false);
+					save_callee_regs(*builder, state_arg, false);
 					auto ret = builder->CreateCall(f, load_args(builder, state_arg));
-					restore_all_regs(*builder, state_arg, false);
+					restore_callee_regs(*builder, state_arg, false);
 					unwrap_ret(builder, ret, state_arg);
 				} else {
-					save_all_regs(*builder, state_arg);
+					save_callee_regs(*builder, state_arg);
 					builder->CreateCall(contblock->getParent(), { state_arg });
-					restore_all_regs(*builder, state_arg);
+					restore_callee_regs(*builder, state_arg);
 				}
 				break;
 			}
@@ -1506,14 +1506,13 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 			case br_type::csel: {
 				auto condbr = create_static_condbr(builder, p, &blocks, mid);
 				if (!condbr) {
-					has_dyn_br = true;
 					builder->CreateBr(mid);
 				}
 				packet_block = nullptr;
 				break;
 			}
 			case br_type::ret: {
-				save_all_regs(*builder, state_arg, false);
+				save_callee_regs(*builder, state_arg, false);
 				builder->CreateAggregateRet(wrap_ret(builder, state_arg).data(), 4);
 				packet_block = nullptr;
 				break;
@@ -1522,7 +1521,7 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 	}
 
 	if (packet_block != nullptr) {
-		save_all_regs(*builder, state_arg, false);
+		save_callee_regs(*builder, state_arg, false);
 		builder->CreateAggregateRet(wrap_ret(builder, state_arg).data(), 4);
 	}
 
@@ -1538,9 +1537,9 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 	}
 
 	builder->SetInsertPoint(dyn);
-	save_all_regs(*builder, state_arg);
+	save_callee_regs(*builder, state_arg);
 	builder->CreateCall(contblock->getParent(), { state_arg });
-	restore_all_regs(*builder, state_arg);
+	restore_callee_regs(*builder, state_arg);
 	builder->CreateAggregateRet(wrap_ret(builder, state_arg).data(), 4);
 
 	if (verifyFunction(*fn, &errs())) {
@@ -1575,19 +1574,45 @@ void llvm_static_output_engine_impl::init_regs(IRBuilder<> &builder) {
 	reg_to_alloca_.clear();
 #define DEFREG(ctype, ltype, name) do { \
 	reg_to_alloca_[reg_offsets::name] = builder.CreateAlloca(types.ltype, 128, nullptr, "reg"#name); \
-	builder.CreateStore(ConstantInt::get(types.ltype, 0), reg_to_alloca_.at(reg_offsets::name)); \
+	builder.CreateStore(PoisonValue::get(types.ltype), reg_to_alloca_.at(reg_offsets::name)); \
 } while (0);
 #include <arancini/input/x86/reg.def>
 #undef DEFREG
 }
 
-// well akshually, all non-callee saved registers that are worth saving
-void llvm_static_output_engine_impl::save_all_regs(IRBuilder<> &builder, Argument *state_arg, bool with_args) {
+void llvm_static_output_engine_impl::save_all_regs(IRBuilder<> &builder, Argument *state_arg) {
+	auto regs = {
+#define DEFREG(ctype, ltype, name) reg_offsets::name,
+#include <arancini/input/x86/reg.def>
+#undef DEFREG
+	};
+	for (auto reg : regs) {
+		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
+		auto alloca = reg_to_alloca_.at(reg);
+		builder.CreateStore(builder.CreateLoad(alloca->getType(), alloca), ptr);
+	}
+}
+
+void llvm_static_output_engine_impl::restore_all_regs(IRBuilder<> &builder, Argument *state_arg) {
+	auto regs = {
+#define DEFREG(ctype, ltype, name) reg_offsets::name,
+#include <arancini/input/x86/reg.def>
+#undef DEFREG
+	};
+	for (auto reg : regs) {
+		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "restore_"+std::to_string((unsigned long)reg));
+		auto alloca = reg_to_alloca_.at(reg);
+		builder.CreateStore(builder.CreateLoad(alloca->getType(), ptr), alloca);
+	}
+}
+
+// well akshually, callee saved registers and permanent state
+void llvm_static_output_engine_impl::save_callee_regs(IRBuilder<> &builder, Argument *state_arg, bool with_args) {
 	auto args = { reg_offsets::RCX, reg_offsets::RDX, reg_offsets::RDI, reg_offsets::RSI, reg_offsets::R8, reg_offsets::R9, reg_offsets::ZMM0, reg_offsets::ZMM1, reg_offsets::ZMM2, reg_offsets::ZMM3, reg_offsets::ZMM4, reg_offsets::ZMM5, reg_offsets::ZMM6, reg_offsets::ZMM7
 	};
-	auto regs = { reg_offsets::PC, reg_offsets::RAX, reg_offsets::RSP,
-				  reg_offsets::R10, reg_offsets::R11, reg_offsets::FS, reg_offsets::GS,
-				  reg_offsets::X87_STACK_BASE, reg_offsets::X87_STS
+	auto regs = { reg_offsets::PC, reg_offsets::RBX, reg_offsets::RSP,
+				  reg_offsets::RBP, reg_offsets::R12, reg_offsets::R13, reg_offsets::R14, reg_offsets::R15,
+				  reg_offsets::FS, reg_offsets::GS, reg_offsets::X87_STACK_BASE, reg_offsets::X87_STS
 	};
 	for (auto reg : regs) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
@@ -1602,11 +1627,11 @@ void llvm_static_output_engine_impl::save_all_regs(IRBuilder<> &builder, Argumen
 	}
 }
 
-void llvm_static_output_engine_impl::restore_all_regs(IRBuilder<> &builder, Argument *state_arg, bool with_rets) {
+void llvm_static_output_engine_impl::restore_callee_regs(IRBuilder<> &builder, Argument *state_arg, bool with_rets) {
 	auto rets = { reg_offsets::RAX, reg_offsets::RDX, reg_offsets::ZMM0, reg_offsets::ZMM1 };
-	auto regs = { reg_offsets::PC, reg_offsets::RSP,
-				reg_offsets::FS, reg_offsets::GS,
-				reg_offsets::X87_STACK_BASE, reg_offsets::X87_STS
+	auto regs = { reg_offsets::PC, reg_offsets::RBX, reg_offsets::RSP,
+				  reg_offsets::RBP, reg_offsets::R12, reg_offsets::R13, reg_offsets::R14, reg_offsets::R15,
+				  reg_offsets::FS, reg_offsets::GS, reg_offsets::X87_STACK_BASE, reg_offsets::X87_STS
 	};
 	for (auto reg : regs) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "restore_"+std::to_string((unsigned long)reg));
