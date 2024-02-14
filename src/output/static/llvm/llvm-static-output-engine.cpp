@@ -1574,7 +1574,7 @@ void llvm_static_output_engine_impl::init_regs(IRBuilder<> &builder) {
 	reg_to_alloca_.clear();
 #define DEFREG(ctype, ltype, name) do { \
 	reg_to_alloca_[reg_offsets::name] = builder.CreateAlloca(types.ltype, 128, nullptr, "reg"#name); \
-	builder.CreateStore(PoisonValue::get(types.ltype), reg_to_alloca_.at(reg_offsets::name)); \
+	builder.CreateStore(ConstantInt::get(types.ltype, 0), reg_to_alloca_.at(reg_offsets::name)); \
 } while (0);
 #include <arancini/input/x86/reg.def>
 #undef DEFREG
