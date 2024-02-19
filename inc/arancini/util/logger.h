@@ -1,7 +1,6 @@
 #include <arancini/util/system-config.h>
 
 #include <mutex>
-#include <memory>
 #include <iostream>
 #include <functional>
 #include <type_traits>
@@ -10,12 +9,20 @@ namespace util {
 
 namespace details {
 
+// Dummy locking policy for logger
+//
+// This policy is used on non-synchronizing loggers for a lock()/unlock()
+// interface
 class no_lock_policy {
 public:
     void lock() { }
     void unlock() { }
 };
 
+// Locking policy for logger
+//
+// This policy handles synchronization for the logger using a mutex via the
+// lock()/unlock() interface that is invoked by the logger implementation
 class basic_lock_policy {
 public:
     void lock() { mutex_.lock(); }
@@ -24,6 +31,10 @@ private:
     std::mutex mutex_;
 };
 
+// Logging levels policy for logger
+//
+// This policy provides an alternative interface to the logger with a more
+// user-friendly API.
 template <typename T>
 class level_policy {
 public:
@@ -84,14 +95,29 @@ protected:
 template <bool enable, typename lock_policy, template <typename logger> typename level_policy>
 class logger_impl;
 
+// Logger implementation using policies
+//
+// lock_policy: must provide lock() and unlock() - can be used for
+// synchronization
+//
+// level_policy: provides different interface to logger (e.g. info() instead of
+// log())
+//
+// Logger can be customized with different policies
 template <typename lock_policy, template <typename logger> typename level_policy>
 class logger_impl<true, lock_policy, level_policy> final :
-public lock_policy,
+private lock_policy,
 public level_policy<logger_impl<true, lock_policy, level_policy>>
 {
 public:
+    logger_impl() = default;
+
+    // Specify a prefix for all printed messages
+    logger_impl(const std::string &prefix): prefix_(prefix) { }
+
     using base_type = logger_impl<true, lock_policy, level_policy>;
 
+    // Enable/disable logger
     bool enable(bool status) {
         enabled_ = status;
         return enabled_;
@@ -99,10 +125,14 @@ public:
 
     bool is_enabled() const { return enabled_; }
 
+    // Basic interface for logging
+    //
+    // Prints specified arguments with cout
     template<typename... Args>
     base_type &log(Args&&... args) {
         lock_policy::lock();
         if (enabled_) {
+            std::cout << prefix_ << ' ';
             ((std::cout << (eval(args)) << ' '), ...);
             std::cout << '\n';
         }
@@ -110,8 +140,11 @@ public:
 
         return *this;
     }
-private: bool enabled_ = true;
+private:
+    bool enabled_ = true;
+    std::string prefix_;
 
+    // Helper functions for uniformly handling functions and non-functions
     template<typename T>
     static auto eval(const T& arg) -> std::enable_if_t<!std::is_invocable_v<T>, const T&> {
         return arg;
@@ -124,6 +157,11 @@ private: bool enabled_ = true;
     }
 };
 
+// Dummy logger
+//
+// Does not print any messages, meant for compile-time disabling of the logger
+//
+// Maintains the same interface as the actual logger
 template <template <typename T> typename level_policy>
 class logger_impl<false, no_lock_policy, level_policy> final :
 public no_lock_policy,
@@ -151,6 +189,9 @@ private:
     }
 };
 
+// Lazy evaluation handlers
+//
+// Helper for non-const lazy evaluation
 template <typename... Args>
 struct non_const_lazy_eval_impl {
     template <typename R, typename T>
@@ -158,6 +199,9 @@ struct non_const_lazy_eval_impl {
     { return std::bind(ptr, obj, args...); }
 };
 
+// Lazy evaluation handlers
+//
+// Helper for const lazy evaluation
 template <typename... Args>
 struct const_lazy_eval_impl {
     template <typename R, typename T>
@@ -165,6 +209,11 @@ struct const_lazy_eval_impl {
     { return std::bind(ptr, obj, args...); }
 };
 
+// Lazy evaluation handlers
+//
+// Uniformly handle const and non-const lazy evaluation
+//
+// Supports lazy evaluation for both regular functions and class member functions
 template <typename... Args>
 struct lazy_eval_impl : const_lazy_eval_impl<Args...>, non_const_lazy_eval_impl<Args...>
 {
@@ -177,12 +226,25 @@ struct lazy_eval_impl : const_lazy_eval_impl<Args...>, non_const_lazy_eval_impl<
 
 } // namespace details
 
+// Lazy evaluation wrappers for postponing evaluation until use by the logger
+// By default, all loggers evaluate their arguments
+//
+// These wrappers can express that a given parameter should not be evaluated
+// immediately
 template <typename... Args> constexpr details::lazy_eval_impl<Args...> lazy_eval = {};
 template <typename... Args> constexpr details::const_lazy_eval_impl<Args...> const_lazy_eval = {};
 template <typename... Args> constexpr details::non_const_lazy_eval_impl<Args...> non_const_lazy_eval = {};
 
-using logging = details::logger_impl<util::system_config::enable_logging, details::no_lock_policy, details::level_policy>;
-inline logging logger;
+// Basic logger type with associated policy
+using basic_logging = details::logger_impl<system_config::enable_logging, details::no_lock_policy, details::level_policy>;
+
+// Global logger for generic logging in the project
+inline basic_logging global_logger;
+
+// Perfect forward initialization sometimes doesn't work (e.g. packed structs)
+// In such cases, an explicit copy is needed
+template <typename T>
+T copy(const T& t) { return t; }
 
 } // namespace util
 
