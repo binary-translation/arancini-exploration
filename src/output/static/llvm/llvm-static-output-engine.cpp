@@ -18,6 +18,7 @@
 #include <ostream>
 #include <sstream>
 #include <string>
+#include <optional>
 
 using namespace arancini::output::o_static::llvm;
 using namespace arancini::ir;
