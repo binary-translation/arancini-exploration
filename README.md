@@ -55,3 +55,5 @@ along with its corresponding translation, but also for including debugging
 information or debugging the `txlat` tool itself. For a complete overview of all
 supported flags, consult `txlat --help`.
 
+Further documentation may be found under the `arancini/docs` directory.
+
