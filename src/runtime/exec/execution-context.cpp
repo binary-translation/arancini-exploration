@@ -127,7 +127,7 @@ int execution_context::invoke(void *cpu_state) {
     util::logger.info("INVOKE PC =", x86_state->PC);
     util::logger.info("=================");
 
-    util::logger.info(*x86_state);
+    // util::logger.info(*x86_state);
     util::logger.info("--------------------------------------------");
     util::logger.debug("STACK:");
     //auto* memptr = reinterpret_cast<uint64_t*>(get_memory_ptr(0)) + x86_state->RSP;

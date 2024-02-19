@@ -44,35 +44,35 @@ public:
     template<typename... Args>
     T &debug(Args&&... args) {
         if (level_ <= levels::debug)
-            return static_cast<T*>(this)->log(std::forward<Args>(args)...);
+            return static_cast<T*>(this)->log("[DEBUG] ", std::forward<Args>(args)...);
         else return *static_cast<T*>(this);
     }
 
     template<typename... Args>
     T &info(Args&&... args) {
         if (level_ <= levels::info)
-            return static_cast<T*>(this)->log(std::forward<Args>(args)...);
+            return static_cast<T*>(this)->log("[INFO] ", std::forward<Args>(args)...);
         else return *static_cast<T*>(this);
     }
 
     template<typename... Args>
     T &warn(Args&&... args) {
         if (level_ <= levels::warn)
-            return static_cast<T*>(this)->log(std::forward<Args>(args)...);
+            return static_cast<T*>(this)->log("[WARNING] ", std::forward<Args>(args)...);
         else return *static_cast<T*>(this);
     }
 
     template<typename... Args>
     T &error(Args&&... args) {
         if (level_ <= levels::error)
-            return static_cast<T*>(this)->log(std::forward<Args>(args)...);
+            return static_cast<T*>(this)->log("[ERROR] ", std::forward<Args>(args)...);
         else return *static_cast<T*>(this);
     }
 
     template<typename... Args>
     T &fatal(Args&&... args) {
         if (level_ <= levels::fatal)
-            return static_cast<T*>(this)->log(std::forward<Args>(args)...);
+            return static_cast<T*>(this)->log("[FATAL] ", std::forward<Args>(args)...);
         else return *static_cast<T*>(this);
     }
 protected:
@@ -101,12 +101,12 @@ public:
 
     template<typename... Args>
     base_type &log(Args&&... args) {
-        lock_policy().lock();
+        lock_policy::lock();
         if (enabled_) {
             ((std::cout << (eval(args)) << ' '), ...);
             std::cout << '\n';
         }
-        lock_policy().unlock();
+        lock_policy::unlock();
 
         return *this;
     }
