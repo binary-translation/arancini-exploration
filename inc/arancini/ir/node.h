@@ -520,7 +520,7 @@ private:
 enum class cast_op : uint8_t { bitcast, zx, sx, trunc, convert };
 enum class fp_convert_type : uint8_t { none, round, trunc };
 
-static std::string to_string(cast_op op) {
+inline std::string to_string(cast_op op) {
     switch (op) {
     case cast_op::bitcast:
         return "bitcast";

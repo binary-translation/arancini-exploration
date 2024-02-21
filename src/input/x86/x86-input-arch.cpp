@@ -1,7 +1,7 @@
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/input/x86/x86-input-arch.h>
 #include <arancini/ir/ir-builder.h>
-#include <iostream>
+#include <arancini/util/logger.h>
 #include <sstream>
 
 using namespace arancini::ir;
@@ -315,7 +315,7 @@ static translation_result translate_instruction(ir_builder &builder, size_t addr
 	if (t) {
 		return t->translate(address, xedd, disasm);
 	} else {
-		std::cerr << "Could not find a translator for: " << disasm << std::endl;
+        util::global_logger.error("Could not find a translator for:", disasm);
 		return translation_result::fail;
 	}
 }
@@ -342,15 +342,13 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 	static uint nr_chunk = 1;
 
-#ifndef NDEBUG
-	std::cerr << "chunk[" << std::dec << nr_chunk << "] @ " << std::hex << base_address << " code=" << code << ", size=" << code_size << std::endl;
-#endif
+    util::global_logger.info("chunk [", nr_chunk, "] @", std::hex, base_address,
+                       "code =", code, ", size =", code_size);
 
 	nr_chunk++;
 
 	size_t offset = 0;
-
-    std::string disasm = "";
+    std::string disasm;
 	while (offset < code_size) {
 		xed_decoded_inst_t xedd;
 		xed_decoded_inst_zero(&xedd);
@@ -364,7 +362,7 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 		xed_uint_t length = xed_decoded_inst_get_length(&xedd);
 
-		auto r = translate_instruction(builder, base_address + offset, &xedd, debug(), da_, disasm);
+		auto r = translate_instruction(builder, base_address, &xedd, debug(), da_, disasm);
 
 		if (r == translation_result::fail) {
 			throw std::runtime_error("instruction translation failure: " + std::to_string(xed_error));
@@ -375,11 +373,9 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
             if (pos != disasm.npos) {
                 auto addr_str = disasm.substr(pos);
                 off_t addr = std::strtol(addr_str.c_str(), nullptr, 16);
-                if (addr > base_address && addr < base_address + offset + length) {
-#ifndef NDEBUG
-                    std::cerr << "Backwards branch @ " << addr_str << '\n';
-#endif
-                }
+
+                if (addr > base_address && addr < base_address + offset + length)
+                    util::global_logger.info("Backwards branch @", addr_str);
             }
 			break;
 		}

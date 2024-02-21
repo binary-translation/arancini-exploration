@@ -18,7 +18,7 @@ namespace arancini::runtime::exec::x86 {
 #define DEFREG(ctype, ltype, name) ctype name;
 #include <arancini/input/x86/reg.def>
 #undef DEFREG
-    } __attribute__((packed));
+    };
 
 std::ostream& operator<<(std::ostream &os, const x86_cpu_state &s);
 std::ostream& print_stack(std::ostream& os, const uint64_t *s, size_t byte_count);
