@@ -8,7 +8,6 @@
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
 #include <cstdint>
 #include <iostream>
-#include <llvm/ADT/Optional.h>
 #include <llvm/ADT/FloatingPointMode.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>

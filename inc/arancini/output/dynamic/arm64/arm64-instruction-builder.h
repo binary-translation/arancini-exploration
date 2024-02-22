@@ -675,9 +675,7 @@ public:
 
 	void emit(machine_code_writer &writer);
 
-	void dump(std::ostream &os) const;
-
-	size_t nr_instructions() const { return instructions_.size(); }
+    std::vector<instruction> instructions() const { return instructions_; }
 private:
 	std::vector<instruction> instructions_;
 

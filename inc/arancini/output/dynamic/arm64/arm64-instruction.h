@@ -187,8 +187,6 @@ private:
     size_t index_;
 };
 
-std::string to_string(const preg_operand&);
-
 // TODO: how are immediates represented in arm
 // TODO: fix this
 class immediate_operand {
@@ -436,7 +434,9 @@ struct operand {
         return static_cast<operand_type>(op_.index());
     }
 
-	void dump(std::ostream &os) const;
+    size_t index() const {
+        return op_.index();
+    }
 protected:
     operand_variant op_;
 	bool use_, def_, keep_;
@@ -498,8 +498,6 @@ public:
     instruction &set_branch(bool is_branch) { branch_ = is_branch; return *this; }
     instruction &set_copy(bool is_copy) { copy_ = is_copy; return *this; }
 
-	void dump(std::ostream &os) const;
-    std::string dump() const;
 	void kill() { opcode_.clear(); }
 
 	bool is_dead() const { return opcode_.empty(); }
@@ -514,6 +512,8 @@ public:
 
 	operand_array &operands() { return operands_; }
 	const operand_array &operands() const { return operands_; }
+
+    std::string comment() const { return comment_; }
 private:
     std::string opcode_;
     std::string comment_;

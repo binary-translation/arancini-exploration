@@ -161,7 +161,7 @@ std::string labelify(const std::string &str) {
 }
 
 void arm64_translation_context::begin_instruction(off_t address, const std::string &disasm) {
-	instruction_index_to_guest_[builder_.nr_instructions()] = address;
+	instruction_index_to_guest_[builder_.instructions().size()] = address;
 
 	this_pc_ = address;
 	std::cerr << "  " << std::hex << address << ": " << disasm << std::endl;

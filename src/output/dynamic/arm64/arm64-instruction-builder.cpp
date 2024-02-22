@@ -158,9 +158,7 @@ void instruction_builder::allocate() {
                     // No need to track this virtual register anymore, it is
                     // overwritten here by the def()
                     vreg_to_preg.erase(vri);
-                    util::global_logger.debug("  allocated to");
-                    o.dump(std::cerr);
-                    util::global_logger.debug("-- releasing");
+                    util::global_logger.debug("Allocated to {} -- releasing\n", o);
                 } else if (o.is_keep()) {
                     has_unused_keep = true;
 
@@ -182,8 +180,7 @@ void instruction_builder::allocate() {
 			// We only care about REG uses - but we also need to consider REGs used in MEM expressions
             const vreg_operand *vreg = nullptr;
             if (o.is_use() && (vreg = get_vreg_or_base(o)) != nullptr) {
-                util::global_logger.debug("  USE");
-                o.dump(std::cerr);
+                util::global_logger.debug("Use {}", o);
                 auto type = vreg->type();
                 unsigned int vri = vreg->index();
 				if (!vreg_to_preg.count(vri)) {
@@ -219,12 +216,18 @@ void instruction_builder::allocate() {
 	}
 }
 
-void instruction_builder::dump(std::ostream &os) const {
-	for (const auto &insn : instructions_) {
-		if (!insn.is_dead()) {
-            insn.dump(os);
-            os << '\n';
-		}
-	}
-}
 
+template <>
+struct fmt::formatter<instruction_builder> {
+    constexpr format_parse_context::iterator parse(const format_parse_context &parse_ctx) {
+        return parse_ctx.begin();
+    }
+
+    format_context::iterator format(const instruction_builder &builder, format_context &format_ctx) const {
+        for (const auto &insn : builder.instructions()) {
+            if (!insn.is_dead()) {
+                fmt::format_to(format_ctx.out(), "{}\n", insn);
+            }
+        }
+    }
+};
