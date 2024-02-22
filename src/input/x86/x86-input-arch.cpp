@@ -2,7 +2,6 @@
 #include <arancini/input/x86/x86-input-arch.h>
 #include <arancini/ir/ir-builder.h>
 #include <arancini/util/logger.h>
-#include <sstream>
 
 using namespace arancini::ir;
 using namespace arancini::input;
@@ -315,7 +314,7 @@ static translation_result translate_instruction(ir_builder &builder, size_t addr
 	if (t) {
 		return t->translate(address, xedd, disasm);
 	} else {
-        util::global_logger.error("Could not find a translator for:", disasm);
+        util::global_logger.error("Could not find a translator for {}\n", disasm);
 		return translation_result::fail;
 	}
 }
@@ -342,8 +341,7 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 	static uint nr_chunk = 1;
 
-    util::global_logger.info("chunk [", nr_chunk, "] @", std::hex, base_address,
-                       "code =", code, ", size =", code_size);
+    util::global_logger.info("chunk [{}] @ {} code={} size={}\n", nr_chunk, base_address, code, code_size);
 
 	nr_chunk++;
 
@@ -375,7 +373,7 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
                 off_t addr = std::strtol(addr_str.c_str(), nullptr, 16);
 
                 if (addr > base_address && addr < base_address + offset + length)
-                    util::global_logger.info("Backwards branch @", addr_str);
+                    util::global_logger.info("Backwards branch @ {}\n", addr_str);
             }
 			break;
 		}

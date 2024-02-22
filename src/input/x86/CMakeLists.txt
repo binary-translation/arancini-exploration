@@ -43,5 +43,5 @@ target_include_directories(arancini-input-x86 PUBLIC ${INCLUDE_PATH})
 target_include_directories(arancini-input-x86-static PUBLIC ${INCLUDE_PATH})
 
 # Link to XED
-target_link_libraries(arancini-input-x86 PRIVATE xed)
-target_link_libraries(arancini-input-x86-static PRIVATE xed)
+target_link_libraries(arancini-input-x86 PRIVATE xed arancini-logger)
+target_link_libraries(arancini-input-x86-static PRIVATE xed arancini-logger)
