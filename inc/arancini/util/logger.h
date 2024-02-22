@@ -1,7 +1,10 @@
+#pragma once
+
 #include <arancini/util/system-config.h>
 
+#include <fmt/core.h>
+
 #include <mutex>
-#include <iostream>
 #include <functional>
 #include <type_traits>
 
@@ -55,35 +58,35 @@ public:
     template<typename... Args>
     T &debug(Args&&... args) {
         if (level_ <= levels::debug)
-            return static_cast<T*>(this)->log("[DEBUG] ", std::forward<Args>(args)...);
+            return static_cast<T*>(this)->log("[DEBUG] {}", fmt::format(std::forward<Args>(args)...));
         else return *static_cast<T*>(this);
     }
 
     template<typename... Args>
     T &info(Args&&... args) {
         if (level_ <= levels::info)
-            return static_cast<T*>(this)->log("[INFO] ", std::forward<Args>(args)...);
+            return static_cast<T*>(this)->log("[INFO] {}", fmt::format(std::forward<Args>(args)...));
         else return *static_cast<T*>(this);
     }
 
     template<typename... Args>
     T &warn(Args&&... args) {
         if (level_ <= levels::warn)
-            return static_cast<T*>(this)->log("[WARNING] ", std::forward<Args>(args)...);
+            return static_cast<T*>(this)->log("[WARNING] {}", fmt::format(std::forward<Args>(args)...));
         else return *static_cast<T*>(this);
     }
 
     template<typename... Args>
     T &error(Args&&... args) {
         if (level_ <= levels::error)
-            return static_cast<T*>(this)->log("[ERROR] ", std::forward<Args>(args)...);
+            return static_cast<T*>(this)->log("[ERROR] {}", fmt::format(std::forward<Args>(args)...));
         else return *static_cast<T*>(this);
     }
 
     template<typename... Args>
     T &fatal(Args&&... args) {
         if (level_ <= levels::fatal)
-            return static_cast<T*>(this)->log("[FATAL] ", std::forward<Args>(args)...);
+            return static_cast<T*>(this)->log("[FATAL] {}", fmt::format(std::forward<Args>(args)...));
         else return *static_cast<T*>(this);
     }
 protected:
@@ -132,9 +135,8 @@ public:
     base_type &log(Args&&... args) {
         lock_policy::lock();
         if (enabled_) {
-            std::cout << prefix_ << ' ';
-            ((std::cout << (eval(args)) << ' '), ...);
-            std::cout << '\n';
+            if (!prefix_.empty()) fmt::print("{}", prefix_);
+            fmt::print(std::forward<Args>(args)...);
         }
         lock_policy::unlock();
 
@@ -195,7 +197,7 @@ private:
 template <typename... Args>
 struct non_const_lazy_eval_impl {
     template <typename R, typename T>
-    auto operator()(R (T::*ptr)(Args...), T* obj, Args&&... args) const noexcept
+    std::function<R()> operator()(R (T::*ptr)(Args...), T* obj, Args&&... args) const noexcept
     { return std::bind(ptr, obj, args...); }
 };
 
@@ -205,7 +207,7 @@ struct non_const_lazy_eval_impl {
 template <typename... Args>
 struct const_lazy_eval_impl {
     template <typename R, typename T>
-    auto operator()(R (T::*ptr)(Args...) const, const T* obj, Args&&... args) const noexcept
+    std::function<R()> operator()(R (T::*ptr)(Args...) const, const T* obj, Args&&... args) const noexcept
     { return std::bind(ptr, obj, args...); }
 };
 
@@ -215,12 +217,11 @@ struct const_lazy_eval_impl {
 //
 // Supports lazy evaluation for both regular functions and class member functions
 template <typename... Args>
-struct lazy_eval_impl : const_lazy_eval_impl<Args...>, non_const_lazy_eval_impl<Args...>
-{
+struct lazy_eval_impl : const_lazy_eval_impl<Args...>, non_const_lazy_eval_impl<Args...> {
     using const_lazy_eval_impl<Args...>::operator();
     using non_const_lazy_eval_impl<Args...>::operator();
     template <typename R>
-    auto operator()(R (*ptr)(Args...), Args&&... args) const noexcept
+    std::function<R()> operator()(R (*ptr)(Args...), Args&&... args) const noexcept
     { return std::bind(ptr, args...); }
 };
 
@@ -235,8 +236,9 @@ template <typename... Args> constexpr details::lazy_eval_impl<Args...> lazy_eval
 template <typename... Args> constexpr details::const_lazy_eval_impl<Args...> const_lazy_eval = {};
 template <typename... Args> constexpr details::non_const_lazy_eval_impl<Args...> non_const_lazy_eval = {};
 
-// Basic logger type with associated policy
-using basic_logging = details::logger_impl<system_config::enable_logging, details::no_lock_policy, details::level_policy>;
+// Basic logger types with associated policies
+using basic_logging = details::logger_impl<true, details::no_lock_policy, details::level_policy>;
+using synch_logging = details::logger_impl<true, details::basic_lock_policy, details::level_policy>;
 
 // Global logger for generic logging in the project
 inline basic_logging global_logger;
@@ -247,4 +249,11 @@ template <typename T>
 T copy(const T& t) { return t; }
 
 } // namespace util
+
+template <typename R>
+struct fmt::formatter<std::function<R()>> : fmt::formatter<R> {
+    format_context::iterator  format(const std::function<R()> &binding, format_context &format_ctx) const {
+        return format_to(format_ctx.out(), "{}", binding());
+    }
+};
 
