@@ -182,7 +182,7 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
 
 void arm64_translation_context::end_instruction() {
     try {
-        for (const auto* node : nodes_)
+        for (const auto &node : nodes_)
             materialise(node);
     } catch (std::exception &e) {
         std::cerr << e.what() << '\n';
@@ -211,8 +211,8 @@ void arm64_translation_context::end_block() {
     }
 }
 
-void arm64_translation_context::lower(ir::node *n) {
-    nodes_.push_back(n);
+void arm64_translation_context::lower(const std::shared_ptr<ir::action_node> &n) {
+    nodes_.push_back(n.get());
 }
 
 void arm64_translation_context::materialise(const ir::node* n) {

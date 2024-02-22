@@ -1,4 +1,5 @@
 #include "arancini/ir/value-type.h"
+#include <arancini/util/logger.h>
 #include <arancini/output/dynamic/arm64/arm64-instruction.h>
 #include <arancini/output/dynamic/arm64/arm64-instruction-builder.h>
 #include <array>
@@ -106,9 +107,6 @@ private:
 
 void instruction_builder::allocate() {
 	// reverse linear scan allocator
-#ifdef DEBUG_REGALLOC
-	DEBUG_STREAM << "REGISTER ALLOCATION" << std::endl;
-#endif
     // TODO: handle direct physical register usage
     // TODO: handle different sizes
 
@@ -124,12 +122,6 @@ void instruction_builder::allocate() {
 
 	for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
 		auto &insn = *RI;
-
-#ifdef DEBUG_REGALLOC
-		DEBUG_STREAM << "considering instruction ";
-		insn.dump(DEBUG_STREAM);
-		DEBUG_STREAM << '\n';
-#endif
 
         bool has_unused_keep = false;
         std::array<std::pair<size_t, size_t>, 5> allocs;
@@ -154,11 +146,6 @@ void instruction_builder::allocate() {
 
 			// Only regs can be /real/ defs
 			if (o.is_def() && o.is_vreg() && !o.is_use()) {
-#ifdef DEBUG_REGALLOC
-				DEBUG_STREAM << "  DEF ";
-				o.dump(DEBUG_STREAM);
-#endif
-
                 auto type = o.vreg().type();
 				unsigned int vri = o.vreg().index();
 
@@ -171,22 +158,17 @@ void instruction_builder::allocate() {
                     // No need to track this virtual register anymore, it is
                     // overwritten here by the def()
                     vreg_to_preg.erase(vri);
-                    util::logger.debug("  allocated to", util::lazy_eval<>(&operand::dump, &o), "-- releasing");
+                    util::global_logger.debug("  allocated to");
+                    o.dump(std::cerr);
+                    util::global_logger.debug("-- releasing");
                 } else if (o.is_keep()) {
                     has_unused_keep = true;
 
                     allocate(o, i);
 				} else {
-#ifdef DEBUG_REGALLOC
-					DEBUG_STREAM << " not allocated - killing instruction" << std::endl;
-#endif
 					insn.kill();
 					break;
 				}
-
-#ifdef DEBUG_REGALLOC
-				DEBUG_STREAM << std::endl;
-#endif
 			}
 		}
 
@@ -200,16 +182,12 @@ void instruction_builder::allocate() {
 			// We only care about REG uses - but we also need to consider REGs used in MEM expressions
             const vreg_operand *vreg = nullptr;
             if (o.is_use() && (vreg = get_vreg_or_base(o)) != nullptr) {
-                util::logger.debug("  USE", util::lazy_eval<>(&operand::dump, &o));
+                util::global_logger.debug("  USE");
+                o.dump(std::cerr);
                 auto type = vreg->type();
                 unsigned int vri = vreg->index();
 				if (!vreg_to_preg.count(vri)) {
                     allocate(o, i);
-#ifdef DEBUG_REGALLOC
-					DEBUG_STREAM << " allocating vreg to ";
-					o.dump(DEBUG_STREAM);
-                    DEBUG_STREAM << '\n';
-#endif
 				} else {
 					o.allocate(vreg_to_preg.at(vri), type);
 				}

@@ -22,13 +22,13 @@ public:
 	virtual void begin_instruction(off_t address, const std::string &disasm) override;
 	virtual void end_instruction() override;
 	virtual void end_block() override;
-	virtual void lower(ir::node *n) override;
+	virtual void lower(const std::shared_ptr<ir::action_node> &n) override;
 
     virtual ~arm64_translation_context() { }
 private:
 	instruction_builder builder_;
-    std::vector<ir::node *> nodes_;
-	std::set<const ir::node *> materialised_nodes_;
+    std::vector<const ir::node*> nodes_;
+	std::set<const ir::node*> materialised_nodes_;
 	std::unordered_map<const ir::port *, std::vector<vreg_operand>> port_to_vreg_;
 	std::unordered_map<unsigned long, off_t> instruction_index_to_guest_;
     std::unordered_map<const ir::local_var *, std::vector<vreg_operand>> locals_;
