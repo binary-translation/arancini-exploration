@@ -185,9 +185,8 @@ void arm64_translation_context::end_instruction() {
         for (const auto &node : nodes_)
             materialise(node);
     } catch (std::exception &e) {
-        std::cerr << e.what() << '\n';
-        builder_.dump(std::cerr);
-        std::cerr << "Terminating exception raised; aborting\n";
+        util::global_logger.fatal("Terminating exception raised: {}; aborting\n", e.what());
+        util::global_logger.fatal("Instruction state:\n{}\n", builder_);
         std::abort();
     }
 }
@@ -204,9 +203,8 @@ void arm64_translation_context::end_block() {
 
         builder_.emit(writer());
     } catch (std::exception &e) {
-        std::cerr << e.what() << '\n';
-        builder_.dump(std::cerr);
-        std::cerr << "Terminating exception raised; aborting\n";
+        util::global_logger.fatal("Terminating exception raised: {}; aborting\n", e.what());
+        util::global_logger.fatal("Instruction state:\n{}\n", builder_);
         std::abort();
     }
 }

@@ -1,4 +1,3 @@
-#include <arancini/util/logger.h>
 #include <arancini/output/dynamic/arm64/arm64-instruction.h>
 
 #include <cstdint>
@@ -8,7 +7,11 @@
 
 using namespace arancini::output::dynamic::arm64;
 
-std::string arancini::output::dynamic::arm64::to_string(const preg_operand &op) {
+constexpr fmt::format_parse_context::iterator fmt::formatter<preg_operand>::parse(const fmt::format_parse_context &parse_ctx) {
+    return parse_ctx.begin();
+}
+
+fmt::format_context::iterator fmt::formatter<preg_operand>::format(const preg_operand &op, format_context &format_ctx) const {
     static const char* name64[] = {
         "",
         "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
@@ -75,7 +78,7 @@ std::string arancini::output::dynamic::arm64::to_string(const preg_operand &op) 
     size_t reg_idx = op.register_index();
 
     if (op.special())
-        return name_special[reg_idx];
+        return fmt::format_to(format_ctx.out(), "{}", name_special[reg_idx]);
 
     if (type.is_vector()) {
         std::string name = type.width() == 128 ? name_vector_neon[reg_idx] : name_vector_sve2[reg_idx];
@@ -95,11 +98,11 @@ std::string arancini::output::dynamic::arm64::to_string(const preg_operand &op) 
         default:
             throw std::runtime_error("Vectors larger than 64-bit not supported");
         }
-        return name;
+        return fmt::format_to(format_ctx.out(), "{}", name);
     } else if (type.is_floating_point()) {
-        return type.element_width() > 32 ? name_float64[reg_idx] : name_float32[reg_idx];
+        return fmt::format_to(format_ctx.out(), "{}", type.element_width() > 32 ? name_float64[reg_idx] : name_float32[reg_idx]);
     } else if (type.is_integer()) {
-        return type.element_width() > 32 ? name64[reg_idx] : name32[reg_idx];
+        return fmt::format_to(format_ctx.out(), "{}", type.element_width() > 32 ? name64[reg_idx] : name32[reg_idx]);
     } else {
         throw std::runtime_error("Physical registers are specified as 32-bit or 64-bit only");
     }
@@ -118,94 +121,88 @@ size_t assembler::assemble(const char *code, unsigned char **out) {
     return size;
 }
 
-template <>
-struct fmt::formatter<instruction> {
-    constexpr format_parse_context::iterator parse(const format_parse_context &parse_ctx) {
-        return parse_ctx.begin();
+constexpr fmt::format_parse_context::iterator fmt::formatter<instruction>::parse(const fmt::format_parse_context &parse_ctx) {
+    return parse_ctx.begin();
+}
+
+fmt::format_context::iterator fmt::formatter<instruction>::format(const instruction &instruction, fmt::format_context &format_ctx) const {
+    fmt::format_to(format_ctx.out(), "{}", instruction.opcode());
+    
+    if (instruction.operand_count()) return format_ctx.out();
+    
+    const auto &operands = instruction.operands();
+    for (size_t i = 0; i < instruction.operand_count() - 1; ++i) {
+        fmt::format_to(format_ctx.out(), " {},", operands[i]);
     }
 
-    format_context::iterator format(const instruction &instruction, format_context &format_ctx) const {
-        fmt::format_to(format_ctx.out(), "{}", instruction.opcode());
-        
-        if (instruction.operand_count()) return format_ctx.out();
-        
-        const auto &operands = instruction.operands();
-        for (size_t i = 0; i < instruction.operand_count() - 1; ++i) {
-            fmt::format_to(format_ctx.out(), " {},", operands[i]);
+    fmt::format_to(format_ctx.out(), " {}", operands[instruction.operand_count()-1]);
+
+    if (!instruction.comment().empty())
+        fmt::format_to(format_ctx.out(), " // {}", instruction.comment());
+
+    return format_ctx.out();
+}
+
+constexpr fmt::format_parse_context::iterator fmt::formatter<operand>::parse(const fmt::format_parse_context &parse_ctx) {
+    return parse_ctx.begin();
+}
+
+fmt::format_context::iterator fmt::formatter<operand>::format(const operand &op, fmt::format_context &format_ctx) const {
+    switch (op.op_type()) {
+    case operand_type::cond:
+        // TODO: rename
+        fmt::format_to(format_ctx.out(), "{}", op.cond().condition());
+        break;
+    case operand_type::label:
+        fmt::format_to(format_ctx.out(), "{}", op.label().name());
+        break;
+    case operand_type::shift:
+        if (!op.shift().modifier().empty())
+            fmt::format_to(format_ctx.out(), "{}", op.shift().modifier());
+        fmt::format_to(format_ctx.out(), "#{x}", op.shift().modifier());
+        break;
+    case operand_type::imm:
+        fmt::format_to(format_ctx.out(), "#{x}", op.immediate().value());
+        break;
+
+    case operand_type::mem:
+        fmt::format_to(format_ctx.out(), "[");
+
+        if (op.memory().is_virtual())
+            fmt::format_to(format_ctx.out(), "%V{}_{}", 
+                           op.memory().vreg_base().width(), op.memory().vreg_base().index());
+        else
+            fmt::format_to(format_ctx.out(), "{}", op.memory().preg_base());
+
+        if (!op.memory().offset().value()) {
+            fmt::format_to(format_ctx.out(), "]");
+            break;
         }
 
-        fmt::format_to(format_ctx.out(), " {}", operands[instruction.operand_count()-1]);
+        if (!op.memory().post_index())
+            fmt::format_to(format_ctx.out(), "#{x}", op.memory().offset().value());
+        else if (op.memory().pre_index())
+            fmt::format_to(format_ctx.out(), "!");
 
-        if (!instruction.comment().empty())
-            fmt::format_to(format_ctx.out(), " // {}", instruction.comment());
+        if (op.memory().post_index())
+            fmt::format_to(format_ctx.out(), "], #{x}", op.memory().offset().value());
 
-        return format_ctx.out();
+        // TODO: register indirect with index
+        break;
+
+    case operand_type::preg:
+        // TODO: implement printer for preg
+        fmt::format_to(format_ctx.out(), "{}", op.preg());
+        break;
+
+    case operand_type::vreg:
+        fmt::format_to(format_ctx.out(), "%V{}", op.vreg().index());
+        break;
+    default:
+        throw std::runtime_error("operand::dump() encountered invalid operand type: "
+                                 + std::to_string(op.index()));
     }
-};
 
-template <>
-struct fmt::formatter<operand> {
-    constexpr format_parse_context::iterator parse(const format_parse_context &parse_ctx) {
-        return parse_ctx.begin();
-    }
-
-    format_context::iterator format(const operand &op, format_context &format_ctx) const {
-        switch (op.op_type()) {
-        case operand_type::cond:
-            // TODO: rename
-            fmt::format_to(format_ctx.out(), "{}", op.cond().condition());
-            break;
-        case operand_type::label:
-            fmt::format_to(format_ctx.out(), "{}", op.label().name());
-            break;
-        case operand_type::shift:
-            if (!op.shift().modifier().empty())
-                fmt::format_to(format_ctx.out(), "{}", op.shift().modifier());
-            fmt::format_to(format_ctx.out(), "#{x}", op.shift().modifier());
-            break;
-        case operand_type::imm:
-            fmt::format_to(format_ctx.out(), "#{x}", op.immediate().value());
-            break;
-
-        case operand_type::mem:
-            fmt::format_to(format_ctx.out(), "[");
-
-            if (op.memory().is_virtual())
-                fmt::format_to(format_ctx.out(), "%V{}_{}", 
-                               op.memory().vreg_base().width(), op.memory().vreg_base().index());
-            else
-                fmt::format_to(format_ctx.out(), "{}", op.memory().preg_base());
-
-            if (!op.memory().offset().value()) {
-                fmt::format_to(format_ctx.out(), "]");
-                break;
-            }
-
-            if (!op.memory().post_index())
-                fmt::format_to(format_ctx.out(), "#{x}", op.memory().offset().value());
-            else if (op.memory().pre_index())
-                fmt::format_to(format_ctx.out(), "!");
-
-            if (op.memory().post_index())
-                fmt::format_to(format_ctx.out(), "], #{x}", op.memory().offset().value());
-
-            // TODO: register indirect with index
-            break;
-
-        case operand_type::preg:
-            // TODO: implement printer for preg
-            fmt::format_to(format_ctx.out(), "{}", op.preg());
-            break;
-
-        case operand_type::vreg:
-            fmt::format_to(format_ctx.out(), "%V{}", op.vreg().index());
-            break;
-        default:
-            throw std::runtime_error("operand::dump() encountered invalid operand type: "
-                                     + std::to_string(op.index()));
-        }
-
-        return format_ctx.out();
-    }
-};
+    return format_ctx.out();
+}
 

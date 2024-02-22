@@ -25,7 +25,6 @@ void instruction_builder::spill() {
 void instruction_builder::emit(machine_code_writer &writer) {
     size_t size;
     uint8_t* encode;
-    std::stringstream assembly;
 
     for (std::size_t i = 0; i < instructions_.size(); ++i) {
         const auto &insn = instructions_[i];
@@ -40,19 +39,19 @@ void instruction_builder::emit(machine_code_writer &writer) {
             if (op.op_type() == operand_type::invalid ||
                 op.op_type() == operand_type::vreg ||
                 (op.op_type() == operand_type::mem && op.memory().is_virtual())) {
-                dump(assembly);
-                std::cerr << assembly.str() << '\n';
+                util::global_logger.error("Instruction builder failed:\n{}\n", *this);
                 throw std::runtime_error("Virtual register after register allocation: "
-                                         + insn.dump());
+                                         + fmt::format("{}", insn));
             }
         }
     }
 
-    dump(assembly);
+    // TODO: change to use fmt
+    auto assembly = fmt::format("{}", *this);
 
-    size = asm_.assemble(assembly.str().c_str(), &encode);
+    size = asm_.assemble(assembly.c_str(), &encode);
 
-    std::cerr << assembly.str() << '\n';
+    util::global_logger.info("Produced translation:\n{}\n", assembly);
 
     // TODO: write directly
     writer.copy_in(encode, size);
@@ -217,17 +216,15 @@ void instruction_builder::allocate() {
 }
 
 
-template <>
-struct fmt::formatter<instruction_builder> {
-    constexpr format_parse_context::iterator parse(const format_parse_context &parse_ctx) {
-        return parse_ctx.begin();
-    }
+constexpr fmt::format_parse_context::iterator fmt::formatter<instruction_builder>::parse(const fmt::format_parse_context &parse_ctx) {
+    return parse_ctx.begin();
+}
 
-    format_context::iterator format(const instruction_builder &builder, format_context &format_ctx) const {
-        for (const auto &insn : builder.instructions()) {
-            if (!insn.is_dead()) {
-                fmt::format_to(format_ctx.out(), "{}\n", insn);
-            }
+fmt::format_context::iterator fmt::formatter<instruction_builder>::format(const instruction_builder &builder, fmt::format_context &format_ctx) const {
+    for (const auto &insn : builder.instructions()) {
+        if (!insn.is_dead()) {
+            fmt::format_to(format_ctx.out(), "{}\n", insn);
         }
     }
-};
+}
+
