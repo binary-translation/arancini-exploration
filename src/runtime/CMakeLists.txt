@@ -46,12 +46,14 @@ target_link_libraries(arancini-runtime
                       xed
                       arancini-ir
                       arancini-input-x86
-                      arancini-trampoline)
+                      arancini-trampoline
+                      arancini-logger)
 target_link_libraries(arancini-runtime-static
                       PRIVATE
                       xed
                       arancini-ir-static
                       arancini-input-x86-static
-                      arancini-trampoline)
+                      arancini-trampoline
+                      arancini-logger)
 
 install(TARGETS arancini-runtime LIBRARY)

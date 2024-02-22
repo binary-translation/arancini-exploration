@@ -53,6 +53,7 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
 endif ()
 
 # Build core
+add_subdirectory(inc/arancini/util)
 add_subdirectory(src/core)
 add_subdirectory(src/ir)
 add_subdirectory(src/input/x86)
