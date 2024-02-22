@@ -146,18 +146,6 @@ public:
 private:
     bool enabled_ = true;
     std::string prefix_;
-
-    // Helper functions for uniformly handling functions and non-functions
-    template<typename T>
-    static auto eval(const T& arg) -> std::enable_if_t<!std::is_invocable_v<T>, const T&> {
-        return arg;
-    }
-
-    // Helper for function objects
-    template<typename T>
-    static auto eval(const T& arg) -> std::enable_if_t<std::is_invocable_v<T>, decltype(arg())> {
-        return arg();
-    }
 };
 
 // Dummy logger
@@ -179,17 +167,6 @@ public:
     // FIXME: add attribute to specify that it should be ignored
     template<typename... Args>
     logger_impl<false, no_lock_policy, level_policy> &log([[gnu::unused]] Args&&... args) { return *this; }
-private:
-    template<typename T>
-    static auto eval(const T& arg) -> std::enable_if_t<!std::is_invocable_v<T>, const T&> {
-        return arg;
-    }
-
-    // Helper for function objects
-    template<typename T>
-    static auto eval(const T& arg) -> std::enable_if_t<std::is_invocable_v<T>, decltype(arg())> {
-        return arg();
-    }
 };
 
 // Lazy evaluation handlers
