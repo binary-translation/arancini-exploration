@@ -62,18 +62,21 @@ static void segv_handler([[maybe_unused]] int signo, [[maybe_unused]] siginfo_t 
 	unsigned long rip = 0;
 #endif
 
-    util::global_logger.fatal("SEGMENTATION FAULT: code=", std::hex, info->si_code, ", rip =", rip, ", host-virtual-address =", info->si_addr);
 	uintptr_t emulated_base = (uintptr_t)ctx_->get_memory_ptr(0);
 	if ((uintptr_t)info->si_addr >= emulated_base) {
-        util::global_logger.log(", guest-virtual-address=", ((uintptr_t)info->si_addr - emulated_base));
-	}
+        util::global_logger.fatal("SEGMENTATION FAULT: code={:x}, rip={:x}, host-virtual-address={:x}, guest-virtual-address={:x}\n",
+                                  info->si_code, rip, info->si_addr, reinterpret_cast<uintptr_t>(info->si_addr) - emulated_base);
+    } else {
+        util::global_logger.fatal("SEGMENTATION FAULT: code={:x}, rip={:x}, host-virtual-address={:x}\n",
+                                  info->si_code, rip, info->si_addr);
+    }
 
 	unsigned i = 0;
 	auto range = ctx_->get_thread_range();
 	for (auto it  = range.first; it != range.second; it++) {
             auto state = (x86_cpu_state*)it->second->get_cpu_state();
-            util::global_logger.log("Thread[", i, "] Guest PC:", state->PC);
-		    util::global_logger.log("Thread[", i, "] FS:", state->FS);
+            util::global_logger.log("Thread[{}] Guest PC: {:x}\n", i, state->PC);
+		    util::global_logger.log("Thread[{}] FS: {:x}\n", i, state->FS);
 			i++;
 	}
 
@@ -121,9 +124,9 @@ static void load_gph(execution_context *ctx, const guest_program_header_metadata
 	void *ptr = ctx->add_memory_region(md->load_address, md->memory_size);
 
 	// Debugging information
-    util::global_logger.log("loading gph load-addr=", std::hex, md->load_address, ", mem-size=",
-                      md->memory_size, ", end=", (md->load_address + md->memory_size),
-                      ", file-size=", md->file_size, ", target=", ptr);
+    util::global_logger.log("loading gph load-addr={:x} mem-size={} end={:x} file-size={} target={}\n", 
+                            md->load_address, md->memory_size, (md->load_address + md->memory_size),
+                            md->file_size, fmt::ptr(ptr));
 
 	// Copy the data from the host binary into the new allocated region of emulated
 	// guest memory.  This should be only of the specified file size, because the file size
@@ -293,8 +296,7 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	x86_state->X87_STACK_BASE = (intptr_t)mmap(NULL, 80, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0) - (intptr_t)ctx_->get_memory_ptr(0);
 
 	// Report on various information for useful debugging purposes.
-    util::global_logger.info("state @", (void *)x86_state, ", pc @", std::hex,
-                             x86_state->PC, ", stack @", x86_state->RSP);
+    util::global_logger.info("state@{} pc@{:x} stack@{:x}\n", fmt::ptr(x86_state), x86_state->PC, x86_state->RSP);
 
 	// Initialisation of the runtime is complete - return a pointer to the raw CPU state structure
 	// so that the static code can use it for emulation.
