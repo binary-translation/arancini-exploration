@@ -47,6 +47,11 @@ if(NOT DEFINED ENV{FLAKE_BUILD})
 	include(cmake/fadec.cmake)
 endif () #NIX
 
+find_package(fmt QUIET)
+if (NOT fmt_FOUND)
+    include(cmake/fmt.cmake)
+endif ()
+
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_compile_definitions(ENABLE_LOGGING=true)
     add_compile_definitions(ENABLE_VERBOSE_CODE_GEN=true)
