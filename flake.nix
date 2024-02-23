@@ -102,7 +102,7 @@
 					llvmPackages_14.llvm.dev
 					llvmPackages_14.bintools
 					llvmPackages_14.lld
-
+                    fmt
 				];
 				depsTargetTarget = [ gcc ];
 				configurePhase = ''

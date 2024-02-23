@@ -9,6 +9,7 @@
       clang_14
       graphviz
       git
+      fmt
       boost
       gdb
       cmake
