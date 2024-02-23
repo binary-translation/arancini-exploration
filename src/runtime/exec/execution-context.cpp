@@ -124,7 +124,7 @@ int execution_context::invoke(void *cpu_state) {
 	auto x86_state = (x86::x86_cpu_state *)cpu_state;
 
     util::global_logger.info("=================\n");
-    util::global_logger.info("INVOKE PC = {:x}\n", x86_state->PC);
+    util::global_logger.info("INVOKE PC = {:x}\n", util::copy(x86_state->PC));
     util::global_logger.info("=================\n");
     util::global_logger.info("Registers:\n{}\n", *x86_state);
     util::global_logger.info("--------------------------------------------\n");
@@ -158,7 +158,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 	//std::cerr << "Executing internal call via TEMPORARY interface" << std::endl;
 	if (call == 1) { // syscall
 		auto x86_state = (x86::x86_cpu_state *)cpu_state;
-        util::global_logger.debug("System call number: {}\n", x86_state->RAX);
+        util::global_logger.debug("System call number: {}\n", util::copy(x86_state->RAX));
 		switch (x86_state->RAX) {
 		case 2: // open
 		{
@@ -480,7 +480,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 		case 231:
             util::global_logger.debug("System call: exit()\n");
 
-            util::global_logger.info("Exiting from emulated process with exit code: {}\n", x86_state->RDI);
+            util::global_logger.info("Exiting from emulated process with exit code: {}\n", util::copy(x86_state->RDI));
 			exit(x86_state->RDI);
 			return 1;
 		case 228: // clock_gettime
@@ -492,7 +492,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 			native_syscall(__NR_exit, x86_state->RDI);
             break;
 		default:
-            util::global_logger.error("Unsupported system call: {}\n", x86_state->RAX);
+            util::global_logger.error("Unsupported system call: {}\n", util::copy(x86_state->RAX));
 			return 1;
 		}
 	} else {
