@@ -71,8 +71,8 @@ static void segv_handler([[maybe_unused]] int signo, [[maybe_unused]] siginfo_t 
 	auto range = ctx_->get_thread_range();
 	for (auto it  = range.first; it != range.second; it++) {
             auto state = (x86_cpu_state*)it->second->get_cpu_state();
-            util::global_logger.log("Thread[{}] Guest PC: {:x}\n", i, state->PC);
-		    util::global_logger.log("Thread[{}] FS: {:x}\n", i, state->FS);
+            util::global_logger.log("Thread[{}] Guest PC: {:x}\n", i, util::copy(state->PC));
+		    util::global_logger.log("Thread[{}] FS: {:x}\n", i, util::copy(state->FS));
 			i++;
 	}
 
@@ -291,7 +291,7 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	x86_state->X87_STACK_BASE = (intptr_t)mmap(NULL, 80, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0) - (intptr_t)ctx_->get_memory_ptr(0);
 
 	// Report on various information for useful debugging purposes.
-    util::global_logger.info("state@{} pc@{:x} stack@{:x}\n", fmt::ptr(x86_state), x86_state->PC, x86_state->RSP);
+    util::global_logger.info("state@{} pc@{:x} stack@{:x}\n", fmt::ptr(x86_state), util::copy(x86_state->PC), util::copy(x86_state->RSP));
 
 	// Initialisation of the runtime is complete - return a pointer to the raw CPU state structure
 	// so that the static code can use it for emulation.
