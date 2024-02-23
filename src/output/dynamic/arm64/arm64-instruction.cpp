@@ -7,10 +7,6 @@
 
 using namespace arancini::output::dynamic::arm64;
 
-constexpr fmt::format_parse_context::iterator fmt::formatter<preg_operand>::parse(const fmt::format_parse_context &parse_ctx) {
-    return parse_ctx.begin();
-}
-
 fmt::format_context::iterator fmt::formatter<preg_operand>::format(const preg_operand &op, format_context &format_ctx) const {
     static const char* name64[] = {
         "",
@@ -121,10 +117,6 @@ size_t assembler::assemble(const char *code, unsigned char **out) {
     return size;
 }
 
-constexpr fmt::format_parse_context::iterator fmt::formatter<instruction>::parse(const fmt::format_parse_context &parse_ctx) {
-    return parse_ctx.begin();
-}
-
 fmt::format_context::iterator fmt::formatter<instruction>::format(const instruction &instruction, fmt::format_context &format_ctx) const {
     fmt::format_to(format_ctx.out(), "{}", instruction.opcode());
     
@@ -141,10 +133,6 @@ fmt::format_context::iterator fmt::formatter<instruction>::format(const instruct
         fmt::format_to(format_ctx.out(), " // {}", instruction.comment());
 
     return format_ctx.out();
-}
-
-constexpr fmt::format_parse_context::iterator fmt::formatter<operand>::parse(const fmt::format_parse_context &parse_ctx) {
-    return parse_ctx.begin();
 }
 
 fmt::format_context::iterator fmt::formatter<operand>::format(const operand &op, fmt::format_context &format_ctx) const {

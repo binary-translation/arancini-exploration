@@ -687,7 +687,9 @@ private:
 
 template <>
 struct fmt::formatter<arancini::output::dynamic::arm64::instruction_builder> {
-    constexpr fmt::format_parse_context::iterator parse(const fmt::format_parse_context &parse_ctx); 
+    constexpr fmt::format_parse_context::iterator parse(const fmt::format_parse_context &parse_ctx) {
+        return parse_ctx.begin();
+    }
 
     fmt::format_context::iterator format(const arancini::output::dynamic::arm64::instruction_builder &builder, fmt::format_context &format_ctx) const;
 };

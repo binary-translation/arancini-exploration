@@ -215,11 +215,6 @@ void instruction_builder::allocate() {
 	}
 }
 
-
-constexpr fmt::format_parse_context::iterator fmt::formatter<instruction_builder>::parse(const fmt::format_parse_context &parse_ctx) {
-    return parse_ctx.begin();
-}
-
 fmt::format_context::iterator fmt::formatter<instruction_builder>::format(const instruction_builder &builder, fmt::format_context &format_ctx) const {
     for (const auto &insn : builder.instructions()) {
         if (!insn.is_dead()) {

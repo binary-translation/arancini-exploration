@@ -531,21 +531,27 @@ private:
 
 template <>
 struct fmt::formatter<arancini::output::dynamic::arm64::preg_operand> {
-    constexpr format_parse_context::iterator parse(const format_parse_context &parse_ctx);
+    constexpr format_parse_context::iterator parse(const format_parse_context &parse_ctx) {
+        return parse_ctx.begin();
+    }
 
     format_context::iterator format(const arancini::output::dynamic::arm64::preg_operand &op, format_context &format_ctx) const;
 };
 
 template <>
 struct fmt::formatter<arancini::output::dynamic::arm64::operand> {
-    constexpr format_parse_context::iterator parse(const format_parse_context &parse_ctx);
+    constexpr format_parse_context::iterator parse(const format_parse_context &parse_ctx) {
+        return parse_ctx.begin();
+    }
 
     format_context::iterator format(const arancini::output::dynamic::arm64::operand &op, format_context &format_ctx) const;
 };
 
 template <>
 struct fmt::formatter<arancini::output::dynamic::arm64::instruction> {
-    constexpr format_parse_context::iterator parse(const format_parse_context &parse_ctx);
+    constexpr format_parse_context::iterator parse(const format_parse_context &parse_ctx) {
+        return parse_ctx.begin();
+    }
 
     format_context::iterator format(const arancini::output::dynamic::arm64::instruction &insn, format_context &format_ctx) const;
 };
