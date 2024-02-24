@@ -120,9 +120,9 @@ static void load_gph(execution_context *ctx, const guest_program_header_metadata
 	void *ptr = ctx->add_memory_region(md->load_address, md->memory_size);
 
 	// Debugging information
-    util::global_logger.log("loading gph load-addr={:x} mem-size={} end={:x} file-size={} target={}\n", 
-                            md->load_address, md->memory_size, (md->load_address + md->memory_size),
-                            md->file_size, fmt::ptr(ptr));
+    util::global_logger.info("loading gph load-addr={:x} mem-size={} end={:x} file-size={} target={}\n", 
+                             md->load_address, md->memory_size, (md->load_address + md->memory_size),
+                             md->file_size, fmt::ptr(ptr));
 
 	// Copy the data from the host binary into the new allocated region of emulated
 	// guest memory.  This should be only of the specified file size, because the file size
