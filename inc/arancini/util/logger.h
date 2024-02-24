@@ -62,38 +62,46 @@ public:
 
     levels get_level() const { return level_; }
 
+    T &separator(levels level, char separator_character) {
+        if (level_ <= level) {
+            std::string separator(80, separator_character);
+            return static_cast<T*>(this)->log("{}\n", separator);
+        }
+        else return *static_cast<T*>(this);
+    }
+
     template<typename... Args>
     T &debug(Args&&... args) {
         if (level_ <= levels::debug)
-            return static_cast<T*>(this)->log("[DEBUG] {}", fmt::format(std::forward<Args>(args)...));
+            return static_cast<T*>(this)->log("[DEBUG]   {}", fmt::format(std::forward<Args>(args)...));
         else return *static_cast<T*>(this);
     }
 
     template<typename... Args>
     T &info(Args&&... args) {
         if (level_ <= levels::info)
-            return static_cast<T*>(this)->log("[INFO] {}", fmt::format(std::forward<Args>(args)...));
+            return static_cast<T*>(this)->log("[INFO]    {}", fmt::format(std::forward<Args>(args)...));
         else return *static_cast<T*>(this);
     }
 
     template<typename... Args>
     T &warn(Args&&... args) {
         if (level_ <= levels::warn)
-            return static_cast<T*>(this)->log("[WARNING] {}", fmt::format(std::forward<Args>(args)...));
+            return static_cast<T*>(this)->log(stderr, "[WARNING] {}", fmt::format(std::forward<Args>(args)...));
         else return *static_cast<T*>(this);
     }
 
     template<typename... Args>
     T &error(Args&&... args) {
         if (level_ <= levels::error)
-            return static_cast<T*>(this)->log("[ERROR] {}", fmt::format(std::forward<Args>(args)...));
+            return static_cast<T*>(this)->log(stderr, "[ERROR]   {}", fmt::format(std::forward<Args>(args)...));
         else return *static_cast<T*>(this);
     }
 
     template<typename... Args>
     T &fatal(Args&&... args) {
         if (level_ <= levels::fatal)
-            return static_cast<T*>(this)->log("[FATAL] {}", fmt::format(std::forward<Args>(args)...));
+            return static_cast<T*>(this)->log(stderr, "[FATAL]   {}", fmt::format(std::forward<Args>(args)...));
         else return *static_cast<T*>(this);
     }
 protected:
@@ -137,17 +145,24 @@ public:
 
     // Basic interface for logging
     //
-    // Prints specified arguments with cout
+    // Support explicitly specifying the destination FILE* for the output
+    // Arguments are given as for the {fmt} library
     template<typename... Args>
-    base_type &log(Args&&... args) {
+    base_type &log(FILE* dest, Args&&... args) {
         lock_policy::lock();
         if (enabled_) {
             if (!prefix_.empty()) fmt::print("{}", prefix_);
-            fmt::print(std::forward<Args>(args)...);
+            fmt::print(dest, std::forward<Args>(args)...);
         }
         lock_policy::unlock();
 
         return *this;
+    }
+    
+    // Basic interface for logging
+    template<typename... Args>
+    base_type &log(Args&&... args) {
+        return log(stdout, std::forward<Args>(args)...);
     }
 private:
     bool enabled_ = true;
