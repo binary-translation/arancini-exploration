@@ -3,6 +3,7 @@
 #include "arancini/ir/port.h"
 #include "arancini/ir/visitor.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Config/llvm-config.h"
 #include <arancini/ir/chunk.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine-impl.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
@@ -19,6 +20,16 @@
 #include <ostream>
 #include <sstream>
 #include <string>
+
+#if LLVM_VERSION_MAJOR < 16
+#include <llvm/ADT/Optional.h>
+template <typename T>
+using optional = llvm::Optional<T>;
+#else
+#include <optional>
+template <typename T>
+using optional = std::optional<T>;
+#endif
 
 using namespace arancini::output::o_static::llvm;
 using namespace arancini::ir;
@@ -1268,7 +1279,7 @@ void llvm_static_output_engine_impl::compile()
 	}
 
 	TargetOptions TO;
-	auto RM = std::optional<Reloc::Model>();
+	auto RM = optional<Reloc::Model>();
 #if defined(ARCH_RISCV64)
 	//Add multiply(M), atomics(A), single(F) and double(D) precision float and compressed(C) extensions
 	const char *features = "+m,+a,+f,+d,+c";

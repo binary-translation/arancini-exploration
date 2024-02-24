@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 3.14)
 project(utils)
 
-find_package(fmt QUIET)
-if (NOT fmt_FOUND)
-    message(FATAL_ERROR "fmt library (used by Arancini logger) not found")
+if (NOT TARGET fmt)
+    find_package(fmt QUIET)
+    if (NOT fmt_FOUND)
+        message(FATAL_ERROR "fmt library (used by Arancini logger) not found")
+    endif ()
 endif ()
 
 add_library(arancini-logger INTERFACE logger.h)
