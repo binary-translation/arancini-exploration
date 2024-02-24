@@ -42,19 +42,25 @@ private:
 template <typename T>
 class level_policy {
 public:
-    enum class levels : uint8_t {
+    struct levels_t {
+        enum level : uint8_t {
         disabled,
         debug,
         info,
         warn,
         error,
         fatal
+        };
     };
+
+    using levels = typename levels_t::level;
 
     levels set_level(levels level) {
         level_ = level;
         return level_;
     }
+
+    levels get_level() const { return level_; }
 
     template<typename... Args>
     T &debug(Args&&... args) {

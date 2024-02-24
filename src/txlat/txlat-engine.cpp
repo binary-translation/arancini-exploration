@@ -1,4 +1,5 @@
 #include <arancini/output/static/static-output-engine.h>
+#include <arancini/util/logger.h>
 #include <arancini/elf/elf-reader.h>
 #include <arancini/input/x86/x86-input-arch.h>
 #include <arancini/ir/chunk.h>
@@ -35,7 +36,7 @@ void txlat_engine::process_options(arancini::output::o_static::static_output_eng
 
 static void run_or_fail(const std::string &cmd)
 {
-	std::cerr << "running: " << cmd << "..." << std::endl;
+    util::global_logger.info("Running: {}...\n", cmd);
 	if (std::system(cmd.c_str()) != 0) {
 		throw std::runtime_error("error whilst running subcommand");
 	}
@@ -118,7 +119,8 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	// For each program header, determine whether or not it's loadable, and generate a
 	// corresponding temporary file containing the binary contents of the segment.
 	for (auto p : elf.program_headers()) {
-		// std::cerr << "PH: " << (int)p->type() << std::endl;
+        // TODO: fix
+        ::util::global_logger.debug("Program header: {}\n", (int)p->type());
 		if (p->type() == program_header_type::loadable) {
 			// Create a temporary file, and record it in the phbins list.
 			auto phbin = tf.create_file(".bin");
@@ -208,8 +210,7 @@ x86 symbol sections to the Arancini IR.
 */
 std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arch &ia, elf_reader &reader, const symbol &sym)
 {
-	std::cerr << "translating symbol " << sym.name() << ", value=" << std::hex << sym.value() << ", size=" << sym.size() << ", section=" << sym.section_index()
-			  << std::endl;
+    ::util::global_logger.info("Translating symbol {}; value={:x} size={} section={}\n", sym.name(), sym.value(), sym.size(), sym.section_index());
 
 	auto section = reader.get_section(sym.section_index());
 	if (!section) {
@@ -226,7 +227,7 @@ std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arc
 	ia.translate_chunk(irb, sym.value(), symbol_data, sym.size(), false);
 	auto dur = std::chrono::high_resolution_clock::now() - start;
 
-	std::cerr << "symbol translation time: " << std::dec << std::chrono::duration_cast<std::chrono::microseconds>(dur).count() << " us" << std::endl;
+    ::util::global_logger.info("Symbol translation time: {} us\n", std::chrono::duration_cast<std::chrono::microseconds>(dur).count());
 	return irb.get_chunk();
 }
 
@@ -258,11 +259,12 @@ void txlat_engine::generate_dot_graph(arancini::output::o_static::static_output_
 
 void txlat_engine::optimise(arancini::output::o_static::static_output_engine &oe, const boost::program_options::variables_map &cmdline)
 {
-  auto start = std::chrono::high_resolution_clock::now();
-  deadflags_opt_visitor deadflags;
-  for (auto c : oe.chunks()) {
-    c->accept(deadflags);
-  }
-	auto dur = std::chrono::high_resolution_clock::now() - start;
-  std::cerr << "Optimisation: dead flags elimination pass: " << std::dec << std::chrono::duration_cast<std::chrono::microseconds>(dur).count() << " us" << std::endl;
+    auto start = std::chrono::high_resolution_clock::now();
+    deadflags_opt_visitor deadflags;
+    for (auto c : oe.chunks()) {
+      c->accept(deadflags);
+    }
+  	auto dur = std::chrono::high_resolution_clock::now() - start;
+    ::util::global_logger.info("Optimisation: dead flags elimination pass took {} us\n", std::chrono::duration_cast<std::chrono::microseconds>(dur).count());
 }
+

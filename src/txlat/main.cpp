@@ -1,4 +1,5 @@
 #include <arancini/txlat/txlat-engine.h>
+#include <arancini/util/logger.h>
 #include <boost/program_options.hpp>
 #include <iostream>
 #include <optional>
@@ -38,8 +39,9 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 
 		po::notify(vm);
 	} catch (std::exception &e) {
-		std::cerr << "Error: " << e.what() << std::endl << std::endl;
-		std::cout << desc << std::endl;
+        ::util::global_logger.error("{}\n", e.what());
+        if (::util::global_logger.get_level() <= ::util::basic_logging::levels::error)
+            std::cerr << desc << '\n';
 		return std::nullopt;
 	}
 
@@ -58,7 +60,7 @@ int main(int argc, const char *argv[])
 	try {
 		e.translate(cmdline.value());
 	} catch (const std::exception &e) {
-		std::cerr << "translation error: " << e.what() << std::endl;
+        ::util::global_logger.error("translation error: {}\n", e.what());
 		return 1;
 	}
 

@@ -20,6 +20,7 @@ target_link_libraries(txlat
                       arancini-ir
                       arancini-input-x86
                       arancini-output-llvm
+                      arancini-logger
                       Boost::program_options)
 
 install(TARGETS arancini-core arancini-ir arancini-input-x86 arancini-output-llvm LIBRARY)
