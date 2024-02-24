@@ -1,4 +1,5 @@
 #include <arancini/input/x86/translators/translators.h>
+#include <arancini/util/logger.h>
 #include <arancini/ir/ir-builder.h>
 #include <arancini/ir/node.h>
 #include <arancini/ir/packet.h>
@@ -34,20 +35,22 @@ translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_
 
 void translator::dump_xed_encoding(void)
 {
-  xed_decoded_inst_t *xed_ins = xed_inst();
-	const xed_inst_t *insn = xed_decoded_inst_inst(xed_ins);
-  auto nops = xed_decoded_inst_noperands(xed_ins);
-  char buf[64];
-
-  xed_format_context(XED_SYNTAX_INTEL, xed_ins, buf, sizeof(buf) - 1, 0, nullptr, 0);
-  std::cerr << "decoding: " << buf << std::endl;
-  std::cerr << "xed encoding: ";
-	for (unsigned int opnum = 0; opnum < nops; opnum++) {
-    auto operand = xed_inst_operand(insn, opnum);
-    xed_operand_print(operand, buf, sizeof(buf) - 1);
-    std::cerr << buf << " ";
-	}
-  std::cerr << std::endl;
+    xed_decoded_inst_t *xed_ins = xed_inst();
+    const xed_inst_t *insn = xed_decoded_inst_inst(xed_ins);
+    auto nops = xed_decoded_inst_noperands(xed_ins);
+    char buf[64];
+  
+    xed_format_context(XED_SYNTAX_INTEL, xed_ins, buf, sizeof(buf) - 1, 0, nullptr, 0);
+    util::global_logger.info("Decoding: {}\n", buf);
+    util::global_logger.info("XED encoding:\n");
+  	for (unsigned int opnum = 0; opnum < nops; opnum++) {
+        auto operand = xed_inst_operand(insn, opnum);
+        xed_operand_print(operand, buf, sizeof(buf) - 1);
+        if (util::global_logger.get_level() <= util::basic_logging::levels::info)
+            util::global_logger.log("{} ", buf);
+  	}
+    if (util::global_logger.get_level() <= util::basic_logging::levels::info)
+        util::global_logger.log("\n", buf);
 }
 
 translator::reg_offsets translator::xedreg_to_offset(xed_reg_enum_t reg)
