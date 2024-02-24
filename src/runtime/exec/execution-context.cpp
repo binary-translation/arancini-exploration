@@ -79,8 +79,8 @@ void *execution_context::add_memory_region(off_t base_address, size_t size, bool
 	uintptr_t base_ptr_off = base_ptr & 0xfffull;
 	uintptr_t aligned_size = (size + base_ptr_off + 0xfff) & ~0xfffull;
 
-	std::cerr << "amr: base-pointer=" << std::hex << base_ptr << ", aligned-base-ptr=" << aligned_base_ptr << ", base-ptr-off=" << base_ptr_off
-			  << ", size=" << size << ", aligned-size=" << aligned_size << std::endl;
+    util::global_logger.info("amr: base-pointer={} aligned-base-ptr={} base-ptr-off={} size={} aligned-size={}\n",
+                             base_ptr, aligned_base_ptr, base_ptr_off, size, aligned_size); 
 
 	mprotect((void *)aligned_base_ptr, aligned_size, PROT_READ | PROT_WRITE);
 
@@ -141,7 +141,7 @@ int execution_context::invoke(void *cpu_state) {
 
 	// Chain
 	if (et->chain_address_) {
-		//		std::cerr << "Chaining previous block to " << std::hex << x86_state->PC << std::endl;
+        util::global_logger.info("Chaining previous block to {}\n", util::copy(x86_state->PC));
 
 		te_.chain(et->chain_address_, txln->get_code_ptr());
 	}
@@ -155,7 +155,7 @@ int execution_context::invoke(void *cpu_state) {
 
 int execution_context::internal_call(void *cpu_state, int call)
 {
-	//std::cerr << "Executing internal call via TEMPORARY interface" << std::endl;
+    util::global_logger.info("Executing internal call via TEMPORARY interface\n");
 	if (call == 1) { // syscall
 		auto x86_state = (x86::x86_cpu_state *)cpu_state;
         util::global_logger.debug("System call number: {}\n", util::copy(x86_state->RAX));
@@ -332,7 +332,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 				arg += (uintptr_t)memory_;
 				break;
 			default:
-				std::cerr << "Unknown ioctl request " << std::dec << request << std::endl;
+                util::global_logger.warn("Unknown ioctl request {}\n", request);
 				x86_state->RAX = -EINVAL;
 				return 0;
 			}
