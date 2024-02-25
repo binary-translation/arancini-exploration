@@ -267,7 +267,7 @@ void txlat_engine::generate_dot_graph(arancini::output::o_static::static_output_
 {
 	std::ostream *o;
 
-  std::cout << "Generating dot graph to: " << filename << std::endl;
+    std::cout << "Generating dot graph to: " << filename << std::endl;
 
 	if (filename == "-") {
 		o = &std::cout;

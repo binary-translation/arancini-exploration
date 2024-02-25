@@ -79,7 +79,7 @@ void *execution_context::add_memory_region(off_t base_address, size_t size, bool
 	uintptr_t base_ptr_off = base_ptr & 0xfffull;
 	uintptr_t aligned_size = (size + base_ptr_off + 0xfff) & ~0xfffull;
 
-    util::global_logger.info("amr: base-pointer={} aligned-base-ptr={} base-ptr-off={} size={} aligned-size={}\n",
+    util::global_logger.info("amr: base-pointer={:#x} aligned-base-ptr={:#x} base-ptr-off={:#x} size={} aligned-size={}\n",
                              base_ptr, aligned_base_ptr, base_ptr_off, size, aligned_size); 
 
 	mprotect((void *)aligned_base_ptr, aligned_size, PROT_READ | PROT_WRITE);
@@ -124,7 +124,7 @@ int execution_context::invoke(void *cpu_state) {
 	auto x86_state = (x86::x86_cpu_state *)cpu_state;
 
     util::global_logger.separator(util::basic_logging::levels::info, '=');
-    util::global_logger.info("INVOKE PC = {:x}\n", util::copy(x86_state->PC));
+    util::global_logger.info("INVOKE PC = {:#x}\n", util::copy(x86_state->PC));
     util::global_logger.separator(util::basic_logging::levels::info, '=');
     util::global_logger.info("Registers:\n{}\n", *x86_state);
     util::global_logger.separator(util::basic_logging::levels::debug, '-');
@@ -141,7 +141,7 @@ int execution_context::invoke(void *cpu_state) {
 
 	// Chain
 	if (et->chain_address_) {
-        util::global_logger.info("Chaining previous block to {}\n", util::copy(x86_state->PC));
+        util::global_logger.info("Chaining previous block to {:#x}\n", util::copy(x86_state->PC));
 
 		te_.chain(et->chain_address_, txln->get_code_ptr());
 	}
@@ -500,7 +500,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 			native_syscall(__NR_exit, x86_state->RDI);
             break;
 		default:
-            util::global_logger.error("Unsupported system call: {}\n", util::copy(x86_state->RAX));
+            util::global_logger.error("Unsupported system call: {:#x}\n", util::copy(x86_state->RAX));
 			return 1;
 		}
 	} else {

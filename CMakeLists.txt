@@ -24,6 +24,13 @@ set_property(CACHE DBT_ARCH PROPERTY STRINGS X86_64 RISCV64 AARCH64)
 
 option(BUILD_TESTS "Enable build of tests" OFF)
 
+# Enable logger
+option(ENABLE_GLOBAL_LOGGING "Enable Arancini to print logging information during runtime (fatal error messages are always printed)" ON)
+if (ENABLE_GLOBAL_LOGGING)
+    add_compile_definitions(ENABLE_GLOBAL_LOGGING=true)
+endif ()
+
+
 message(STATUS "Detected local architecture ${ARCH}")
 message(STATUS "Building DBT for architecture ${DBT_ARCH}")
 
@@ -56,7 +63,6 @@ if (NOT fmt_FOUND)
 endif ()
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
-    add_compile_definitions(ENABLE_LOGGING=true)
     add_compile_definitions(ENABLE_VERBOSE_CODE_GEN=true)
 endif ()
 
@@ -101,3 +107,4 @@ add_subdirectory(src/txlat)
 if (BUILD_TESTS)
     add_subdirectory(test)
 endif ()
+
