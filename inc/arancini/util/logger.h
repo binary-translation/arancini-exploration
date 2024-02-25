@@ -7,7 +7,6 @@
 
 #include <mutex>
 #include <functional>
-#include <type_traits>
 
 namespace util {
 
@@ -72,40 +71,47 @@ public:
 
     template<typename... Args>
     T &debug(Args&&... args) {
-        if (level_ <= levels::debug)
-            return static_cast<T*>(this)->log("[DEBUG]   {}", fmt::format(std::forward<Args>(args)...));
-        else return *static_cast<T*>(this);
+        if (level_ <= levels::error)
+            return logger->log(stderr, "[DEBUG]   {}", fmt::format(std::forward<Args>(args)...));
+        return *logger;
     }
 
     template<typename... Args>
     T &info(Args&&... args) {
-        if (level_ <= levels::info)
-            return static_cast<T*>(this)->log("[INFO]    {}", fmt::format(std::forward<Args>(args)...));
-        else return *static_cast<T*>(this);
+        if (level_ <= levels::error)
+            return logger->log(stderr, "[INFO]    {}", fmt::format(std::forward<Args>(args)...));
+        return *logger;
     }
 
     template<typename... Args>
     T &warn(Args&&... args) {
-        if (level_ <= levels::warn)
-            return static_cast<T*>(this)->log(stderr, "[WARNING] {}", fmt::format(std::forward<Args>(args)...));
-        else return *static_cast<T*>(this);
+        if (level_ <= levels::error)
+            return logger->log(stderr, "[WARNING] {}", fmt::format(std::forward<Args>(args)...));
+        return *logger;
     }
 
     template<typename... Args>
     T &error(Args&&... args) {
         if (level_ <= levels::error)
-            return static_cast<T*>(this)->log(stderr, "[ERROR]   {}", fmt::format(std::forward<Args>(args)...));
-        else return *static_cast<T*>(this);
+            return logger->log(stderr, "[ERROR]   {}", fmt::format(std::forward<Args>(args)...));
+        return *logger;
     }
 
     template<typename... Args>
     T &fatal(Args&&... args) {
+        // Print FATAL messages even with disabled logger
+        if (!logger->is_enabled()) {
+            return logger->mandatory_log(stderr, "[FATAL]   {}", fmt::format(std::forward<Args>(args)...));
+        }
+
         if (level_ <= levels::fatal)
-            return static_cast<T*>(this)->log(stderr, "[FATAL]   {}", fmt::format(std::forward<Args>(args)...));
-        else return *static_cast<T*>(this);
+            return logger->log(stderr, "[FATAL]   {}", fmt::format(std::forward<Args>(args)...));
+        return *logger;
     }
 protected:
     levels level_ = levels::warn;
+
+    T* logger = static_cast<T*>(this);
 
     virtual ~level_policy() { }
 };
@@ -137,24 +143,37 @@ public:
 
     // Enable/disable logger
     bool enable(bool status) {
+        lock_policy::lock();
         enabled_ = status;
         return enabled_;
+        lock_policy::unlock();
     }
 
     bool is_enabled() const { return enabled_; }
 
     // Basic interface for logging
     //
+    // Enables logging even when the logger is disabled
+    // Meant for use only be wrappers or in special other cases
+    template<typename... Args>
+    base_type &mandatory_log(FILE* dest, Args&&... args) {
+        lock_policy::lock();
+        if (!prefix_.empty()) fmt::print("{}", prefix_);
+        fmt::print(dest, std::forward<Args>(args)...);
+        lock_policy::unlock();
+
+        return *this;
+    }
+
+    // Basic canonical interface for logging
+    //
     // Support explicitly specifying the destination FILE* for the output
     // Arguments are given as for the {fmt} library
     template<typename... Args>
     base_type &log(FILE* dest, Args&&... args) {
-        lock_policy::lock();
         if (enabled_) {
-            if (!prefix_.empty()) fmt::print("{}", prefix_);
-            fmt::print(dest, std::forward<Args>(args)...);
+            return mandatory_log(dest, std::forward<Args>(args)...);
         }
-        lock_policy::unlock();
 
         return *this;
     }
@@ -180,14 +199,31 @@ public no_lock_policy,
 public level_policy<logger_impl<false, no_lock_policy, level_policy>>
 {
 public:
-    using base_type = logger_impl<true, no_lock_policy, level_policy>;
+    using base_type = logger_impl<false, no_lock_policy, level_policy>;
+    
+    // Specify a prefix for all printed messages
+    logger_impl() = default;
+    logger_impl(const std::string &prefix): prefix_(prefix) { }
 
     bool enable(bool) { return false; }
     bool is_enabled() const { return false; }
 
     // FIXME: add attribute to specify that it should be ignored
     template<typename... Args>
-    logger_impl<false, no_lock_policy, level_policy> &log([[gnu::unused]] Args&&... args) { return *this; }
+    base_type &log([[gnu::unused]] Args&&...) { return *this; }
+
+    template<typename... Args>
+    base_type &log(FILE*, [[gnu::unused]] Args&&...) { return *this; }
+
+    // Basic interface for logging
+    template<typename... Args>
+    base_type &mandatory_log(FILE* dest, Args&&... args) {
+        if (!prefix_.empty()) fmt::print("{}", prefix_);
+        fmt::print(dest, std::forward<Args>(args)...);
+        return *this;
+    }
+private:
+    std::string prefix_;
 };
 
 // Lazy evaluation handlers
