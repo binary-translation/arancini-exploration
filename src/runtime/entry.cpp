@@ -219,10 +219,7 @@ static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, exe
 /*
  * Initialises the dynamic runtime for the guest program that is about to be executed.
  */
-extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc, char **argv)
-{
-	std::cerr << "arancini: dbt: initialise" << std::endl;
-
+extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc, char **argv) {
     const char* flag = getenv("ARANCINI_ENABLE_LOG");
     bool log_status = false;
     if (flag) {
@@ -232,8 +229,6 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
             log_status = false;
         } else throw std::runtime_error("ARANCINI_ENABLE_LOG must be set to either true or false");
     }
-
-    std::cerr << "Logger status: " << std::boolalpha << log_status << ":" << util::global_logger.enable(log_status) << '\n';
 
     // Determine logger level
     flag = getenv("ARANCINI_LOG_LEVEL");
@@ -256,6 +251,8 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 
     // Set logger level
     util::global_logger.set_level(level);
+
+    util::global_logger.info("arancini: dbt: initialise\n");
 
 	// Consume args until '--'
 	int start = 1;
@@ -295,7 +292,7 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	x86_state->X87_STACK_BASE = (intptr_t)mmap(NULL, 80, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0) - (intptr_t)ctx_->get_memory_ptr(0);
 
 	// Report on various information for useful debugging purposes.
-    util::global_logger.info("state@{} pc@{:#x} stack@{:#x}\n", fmt::ptr(x86_state), util::copy(x86_state->PC), util::copy(x86_state->RSP));
+    util::global_logger.info("state={} pc={:#x} stack={:#x}\n", fmt::ptr(x86_state), util::copy(x86_state->PC), util::copy(x86_state->RSP));
 
 	// Initialisation of the runtime is complete - return a pointer to the raw CPU state structure
 	// so that the static code can use it for emulation.

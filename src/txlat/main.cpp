@@ -18,8 +18,6 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
         } else throw std::runtime_error("ARANCINI_ENABLE_LOG must be set to either true or false");
     }
 
-    std::cerr << "Logger status: " << std::boolalpha << log_status << ":" << util::global_logger.enable(log_status) << '\n';
-
     // Determine logger level
     flag = getenv("ARANCINI_LOG_LEVEL");
     util::basic_logging::levels level = util::basic_logging::levels::info;
