@@ -71,21 +71,21 @@ public:
 
     template<typename... Args>
     T &debug(Args&&... args) {
-        if (level_ <= levels::error)
+        if (level_ <= levels::debug)
             return logger->log(stderr, "[DEBUG]   {}", fmt::format(std::forward<Args>(args)...));
         return *logger;
     }
 
     template<typename... Args>
     T &info(Args&&... args) {
-        if (level_ <= levels::error)
+        if (level_ <= levels::info)
             return logger->log(stderr, "[INFO]    {}", fmt::format(std::forward<Args>(args)...));
         return *logger;
     }
 
     template<typename... Args>
     T &warn(Args&&... args) {
-        if (level_ <= levels::error)
+        if (level_ <= levels::warn)
             return logger->log(stderr, "[WARNING] {}", fmt::format(std::forward<Args>(args)...));
         return *logger;
     }
@@ -272,8 +272,8 @@ template <typename... Args> constexpr details::const_lazy_eval_impl<Args...> con
 template <typename... Args> constexpr details::non_const_lazy_eval_impl<Args...> non_const_lazy_eval = {};
 
 // Basic logger types with associated policies
-using basic_logging = details::logger_impl<true, details::no_lock_policy, details::level_policy>;
-using synch_logging = details::logger_impl<true, details::basic_lock_policy, details::level_policy>;
+using basic_logging = details::logger_impl<system_config::enable_global_logging, details::no_lock_policy, details::level_policy>;
+using synch_logging = details::logger_impl<system_config::enable_global_logging, details::basic_lock_policy, details::level_policy>;
 
 // Global logger for generic logging in the project
 inline basic_logging global_logger;
