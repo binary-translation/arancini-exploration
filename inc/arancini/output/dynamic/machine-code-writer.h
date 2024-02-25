@@ -1,7 +1,7 @@
 #pragma once
 
 #include <arancini/output/dynamic/machine-code-allocator.h>
-#include <iostream>
+#include <arancini/util/logger.h>
 #include <cstring>
 
 namespace arancini::output::dynamic {
@@ -28,8 +28,7 @@ public:
 	void emit32(unsigned int c) { copy_in(reinterpret_cast<const unsigned char *>(&c), sizeof(c)); }
 	/*void emit64(unsigned long c) { emit<decltype(c)>(c); }*/
 
-	void copy_in(const unsigned char *buffer, size_t size)
-	{
+	void copy_in(const unsigned char *buffer, size_t size) {
 		ensure_capacity(size);
 		std::memcpy((unsigned char *)code_ptr_ + code_size_, buffer, size);
 
@@ -39,24 +38,21 @@ public:
 	void *ptr() const { return code_ptr_; }
 	size_t size() const { return code_size_; }
 
-	void finalise()
-	{
+	void finalise() {
 		code_ptr_ = allocator_.allocate(code_ptr_, code_size_);
 		__builtin___clear_cache(static_cast<char *>(code_ptr_), ((char *)code_ptr_ + code_size_));
 		alloc_size_ = code_size_;
 
-		std::cerr << "mc: finalise: ptr=" << std::hex << code_ptr_ << ", size=" << alloc_size_ << std::endl;
+        util::global_logger.info("Machine code writer finalized: ptr={}, size={}\n", code_ptr_, alloc_size_);
 	}
 
-	void reset()
-	{
+	void reset() {
 		code_ptr_ = nullptr;
 		alloc_size_ = code_size_ = 0;
 	}
 
 private:
-	void ensure_capacity(size_t extra)
-	{
+	void ensure_capacity(size_t extra) {
 		if ((code_size_ + extra) > alloc_size_) {
 			if (alloc_size_ == 0) {
 				alloc_size_ = 64;
@@ -73,4 +69,6 @@ private:
 	size_t code_size_;
 	size_t alloc_size_;
 };
+
 } // namespace arancini::output::dynamic
+

@@ -5,7 +5,7 @@
 #include <arancini/output/dynamic/riscv64/encoder/riscv64-assembler.h>
 
 #include <cstdlib>
-
+#include <iostream>
 
 namespace arancini::output::dynamic::riscv64 {
 
