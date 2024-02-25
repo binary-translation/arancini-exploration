@@ -52,8 +52,9 @@ if (NOT fmt_FOUND)
     include(cmake/fmt.cmake)
 endif ()
 
+# Logger should be enabled on all builds
+add_compile_definitions(ENABLE_LOGGING=true)
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
-    add_compile_definitions(ENABLE_LOGGING=true)
     add_compile_definitions(ENABLE_VERBOSE_CODE_GEN=true)
 endif ()
 
