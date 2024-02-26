@@ -288,6 +288,9 @@ void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlo
 	auto fns = std::make_shared<std::map<unsigned long, Function *>>();
 	auto cpu_state = contblock->getParent()->getArg(0);
 
+	auto __clk_exit = module_->getOrInsertFunction("clk_exit", types.loop_fn);
+	auto __clk_entry = module_->getOrInsertFunction("clk_entry", types.loop_fn);
+
 	auto ret = llvm_ret_visitor();
 	auto arg = llvm_arg_visitor();
 
@@ -338,7 +341,9 @@ void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlo
 		auto zmm5 = createLoadFromCPU(builder, cpu_state, 32);
 		auto zmm6 = createLoadFromCPU(builder, cpu_state, 33);
 		auto zmm7 = createLoadFromCPU(builder, cpu_state, 34);
+		builder.CreateCall(__clk_exit, {cpu_state});
 		auto ret = builder.CreateCall(f.second, { cpu_state, rdi, rsi, rdx, rcx, r8, r9, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6, zmm7 });
+		builder.CreateCall(__clk_entry, {cpu_state});
 		createStoreToCPU(builder, cpu_state, 0, ret, 1);
 		createStoreToCPU(builder, cpu_state, 1, ret, 3);
 		createStoreToCPU(builder, cpu_state, 2, ret, 27);
