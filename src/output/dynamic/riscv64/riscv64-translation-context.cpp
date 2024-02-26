@@ -22,6 +22,8 @@ using namespace arancini::ir;
  */
 
 static constexpr const unsigned long flag_idx = static_cast<const unsigned long>(std::min({ reg_idx::ZF, reg_idx::CF, reg_idx::OF, reg_idx::SF }));
+static constexpr const unsigned long flag_off
+	= static_cast<const unsigned long>(std::min({ reg_offsets::ZF, reg_offsets::CF, reg_offsets::OF, reg_offsets::SF }));
 
 template <const size_t order[], typename Tuple, size_t... idxs> auto riscv64_translation_context::reorder(Tuple tuple, std::index_sequence<idxs...>)
 {
@@ -102,26 +104,64 @@ std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(
 
 RegisterOperand riscv64_translation_context::get_or_assign_mapped_register(uint32_t idx)
 {
-	reg_written_[idx - 1] = reg_loaded_[idx - 1] = true; // Consider "assign" access as write
-	return RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + (idx - 1) };
+	if (idx >= static_cast<unsigned long>(reg_idx::RAX) && idx <= static_cast<unsigned long>(reg_idx::R15)) { // GPR
+		uint32_t i = idx - 1;
+		reg_written_[i] = reg_loaded_[i] = true; // Consider "assign" access as write
+		RegisterOperand reg = RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + i };
+		if (!idxs_.empty()) {
+			live_across_iteration_.push_front(reg.encoding());
+		}
+		return reg;
+	} else { // FLAG
+		uint32_t i = idx - flag_idx;
+		flag_written_[i] = flag_loaded_[i] = true; // Consider "assign" access as write
+		RegisterOperand reg = RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + 16 + i };
+		if (!idxs_.empty()) {
+			live_across_iteration_.push_front(reg.encoding());
+		}
+		return reg;
+	}
 }
 
 RegisterOperand riscv64_translation_context::get_or_load_mapped_register(uint32_t idx)
 {
-	if (!reg_loaded_[idx - 1]) {
-		RegisterOperand reg = RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + (idx - 1) };
-		reg_loaded_[idx - 1] = true;
-		builder_.ld(reg, AddressOperand { FP, static_cast<intptr_t>(8 * idx) }); // FIXME hardcoded
+	if (idx >= static_cast<unsigned long>(reg_idx::RAX) && idx <= static_cast<unsigned long>(reg_idx::R15)) { // GPR
+		uint32_t i = idx - 1;
+		RegisterOperand reg = RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + i };
+		if (!reg_loaded_[i]) {
+			reg_loaded_[i] = true;
+			builder_.ld(reg, AddressOperand { FP, static_cast<intptr_t>(8 * idx) }); // FIXME hardcoded
+		}
+		if (!idxs_.empty()) {
+			live_across_iteration_.push_front(reg.encoding());
+		}
+		return reg;
+	} else { // FLAG
+		uint32_t i = idx - flag_idx;
+		RegisterOperand reg = RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + 16 + i };
+		if (!flag_loaded_[i]) {
+			flag_loaded_[i] = true;
+			builder_.lb(reg, AddressOperand { FP, static_cast<intptr_t>(flag_off + i) }); // FIXME hardcoded
+		}
+		if (!idxs_.empty()) {
+			live_across_iteration_.push_front(reg.encoding());
+		}
+		return reg;
 	}
-	return RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + (idx - 1) };
 }
 
 void riscv64_translation_context::write_back_registers()
 {
-	for (uint32_t i = 0; i < reg_written_.size(); ++i) {
+	for (uint32_t i = 8; i < reg_written_.size(); ++i) {
 		if (reg_written_[i]) {
 			builder_.sd(
 				RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + i }, AddressOperand { FP, static_cast<intptr_t>(8 * i + 8) }); // FIXME hardcoded offset
+		}
+	}
+
+	for (uint32_t i = 0; i < flag_written_.size(); ++i) {
+		if (flag_written_[i]) {
+			builder_.sb(RegisterOperand { RegisterOperand::FUNCTIONAL_BASE + 16 + i }, AddressOperand { FP, static_cast<intptr_t>(flag_off + i) });
 		}
 	}
 }
@@ -134,20 +174,24 @@ bool insert_ebreak = false;
  */
 void riscv64_translation_context::add_marker(int payload)
 {
-	// TODO Remove/only in debug
+#ifndef NDEBUG
 	builder_.li(ZERO, payload);
+#endif
 }
 
 void riscv64_translation_context::begin_block()
 {
-	reg_loaded_.reset();
+	reg_loaded_ = 0x00ff;
 	reg_written_.reset();
+	flag_loaded_.reset();
+	flag_written_.reset();
 	builder_.reset();
 
-	// TODO Remove/only in debug
+#ifndef NDEBUG
 	if (insert_ebreak) {
 		builder_.ebreak();
 	}
+#endif
 
 	add_marker(1);
 }
@@ -164,11 +208,10 @@ void riscv64_translation_context::begin_instruction(off_t address, const std::st
 	ret_val_ = 0;
 
 	// Enable automatic breakpoints after certain program counter
-//	if (address == 0x401cb3) {
-//		insert_ebreak = true;
-//		assembler_.ebreak();
-//	}
-
+	//	if (address == 0x401cb3) {
+	//		insert_ebreak = true;
+	//		assembler_.ebreak();
+	//	}
 }
 
 void riscv64_translation_context::end_instruction()
@@ -181,6 +224,11 @@ void riscv64_translation_context::end_instruction()
 	for (size_t i = 0; i < std::size(v.reg_used_); ++i) {
 		if (v.reg_used_[i]) {
 			get_or_load_mapped_register(i + 1);
+		}
+	}
+	for (size_t i = 0; i < std::size(v.flag_used_); ++i) {
+		if (v.flag_used_[i]) {
+			get_or_load_mapped_register(i + flag_idx);
 		}
 	}
 
@@ -842,9 +890,14 @@ TypedRegister &riscv64_translation_context::materialise_bit_insert(const bit_ins
 TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_node &n)
 {
 	const port &value = n.val();
-	if (is_int(value, 64) && value.targets().size() == 1 && n.regidx() <= static_cast<unsigned long>(reg_idx::R15)) { // 64bit GPR only used once
+	if (value.targets().size() == 1
+		&& ((is_int(value, 64) && n.regidx() <= static_cast<unsigned long>(reg_idx::R15)) || is_flag(value))) { // 64bit GPR or flag only used once
 		Register reg = get_or_load_mapped_register(n.regidx());
-		return allocate_register(&n.val(), reg).first;
+		TypedRegister &out_reg = allocate_register(&n.val(), reg).first;
+		if (is_flag(value)) {
+			out_reg.set_type(value_type::u64());
+		}
+		return out_reg;
 	}
 
 	auto [out_reg, valid] = allocate_register(&n.val());
@@ -858,7 +911,7 @@ TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_
 			out_reg.set_actual_width();
 			out_reg.set_type(value_type::u64());
 		} else {
-			Register reg = get_or_load_mapped_register(n.regidx());
+			RegisterOperand reg = get_or_load_mapped_register(n.regidx());
 			if (is_int(value, 32)) {
 				builder_.sextw(out_reg, reg);
 				out_reg.set_actual_width();
@@ -871,8 +924,9 @@ TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_
 		return out_reg;
 	}
 	if (is_flag(value)) {
-		builder_.lb(out_reg, AddressOperand { FP, static_cast<intptr_t>(n.regoff()) });
 		out_reg.set_type(value_type::u64());
+		RegisterOperand reg = get_or_load_mapped_register(n.regidx());
+		builder_.mv(out_reg, reg);
 		return out_reg;
 	} else if (is_i128(value) || is_int(value, 512)) {
 		builder_.ld(out_reg.reg1(), AddressOperand { FP, static_cast<intptr_t>(n.regoff()) });
@@ -899,7 +953,7 @@ void riscv64_translation_context::materialise_write_reg(const write_reg_node &n)
 	} else if (is_flag(value)) {
 		TypedRegister &reg_in = *(materialise(value.owner()));
 		RegisterOperand reg = (!is_flag_port(value)) ? reg_in : reg_in.flag(n.regidx() - flag_idx);
-		builder_.sb(reg, AddressOperand { FP, static_cast<intptr_t>(n.regoff()) });
+		builder_.mv(get_or_assign_mapped_register(n.regidx()), reg);
 		return;
 	} else if (is_i128(value) || is_int_vector(value, 2, 64) || is_int_vector(value, 4, 32) || is_int(value, 512) || is_int_vector(value, 4, 128)) {
 		// Treat 512 as 128 for now. Assuming it is just 128 bit instructions acting on 512 registers
@@ -1016,6 +1070,7 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 
 				builder_.beqz(cond, false_calc, Assembler::kNearJump);
 
+				builder_.Align(Assembler::label_align);
 				builder_.auipc_keep(A1, 0);
 				TypedRegister &trueval = materialise_constant(*target2);
 				builder_.sd(trueval, AddressOperand { FP, static_cast<intptr_t>(reg_offsets::PC) });
@@ -1065,7 +1120,7 @@ inline void riscv64_translation_context::bw_branch_vreg_helper(bool bw)
 		idxs_.pop();
 		for (auto it = live_across_iteration_.cbefore_begin(), it_next = std::next(it); it_next != live_across_iteration_.cend();) {
 			const RegisterOperand elem = RegisterOperand { *it_next };
-			if (idxs_.empty() || idxs_.top() < elem.encoding()) {
+			if (idxs_.empty() || (elem.encoding() >= RegisterOperand::VIRTUAL_BASE && idxs_.top() < elem.encoding())) {
 				live_across_iteration_.erase_after(it);
 			} else {
 				++it;
@@ -1583,7 +1638,7 @@ void riscv64_translation_context::chain(uint64_t chain_address, void *chain_targ
 	if (IsCInstruction(following_instr_enc)) {
 		CInstruction following_instr { static_cast<uint16_t>(following_instr_enc) };
 		if (following_instr.opcode() == C_BEQZ || following_instr.opcode() == C_BNEZ) {
-			chain_machine_code_writer writer = chain_machine_code_writer { instr_p };
+			chain_machine_code_writer writer = chain_machine_code_writer { instr_p, 12 };
 
 			Assembler ass { &writer, false, RV_GC };
 
@@ -1600,6 +1655,7 @@ void riscv64_translation_context::chain(uint64_t chain_address, void *chain_targ
 
 				offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));
 				ass.j(offset);
+				ass.Align(Assembler::label_align);
 				ass.Bind(&end);
 			} else {
 				if (following_instr.opcode() == C_BEQZ) {
@@ -1614,7 +1670,8 @@ void riscv64_translation_context::chain(uint64_t chain_address, void *chain_targ
 			}
 		} else {
 			// NOP before? Use the NOP
-			chain_machine_code_writer writer = *(instr_p - 1) == 0b10011 ? chain_machine_code_writer { instr_p - 1 } : chain_machine_code_writer { instr_p };
+			chain_machine_code_writer writer
+				= *(instr_p - 1) == 0b10011 ? chain_machine_code_writer { instr_p - 1, 16 } : chain_machine_code_writer { instr_p, 16 };
 
 			Assembler ass { &writer, false, RV_GC };
 			intptr_t offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));
@@ -1627,7 +1684,7 @@ void riscv64_translation_context::chain(uint64_t chain_address, void *chain_targ
 	} else {
 		Instruction following_instr { following_instr_enc };
 		if (following_instr.opcode() == BRANCH) {
-			chain_machine_code_writer writer = chain_machine_code_writer { instr_p };
+			chain_machine_code_writer writer = chain_machine_code_writer { instr_p, 16 };
 
 			Assembler ass { &writer, false, RV_GC };
 
@@ -1660,6 +1717,7 @@ void riscv64_translation_context::chain(uint64_t chain_address, void *chain_targ
 
 				offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));
 				ass.j(offset);
+				ass.Align(Assembler::label_align);
 				ass.Bind(&end);
 			} else {
 				switch (following_instr.funct3()) {
@@ -1692,7 +1750,8 @@ void riscv64_translation_context::chain(uint64_t chain_address, void *chain_targ
 			}
 		} else {
 			// NOP before? Use the NOP
-			chain_machine_code_writer writer = *(instr_p - 1) == 0b10011 ? chain_machine_code_writer { instr_p - 1 } : chain_machine_code_writer { instr_p };
+			chain_machine_code_writer writer
+				= *(instr_p - 1) == 0b10011 ? chain_machine_code_writer { instr_p - 1, 16 } : chain_machine_code_writer { instr_p, 16 };
 
 			Assembler ass { &writer, false, RV_GC };
 			intptr_t offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));

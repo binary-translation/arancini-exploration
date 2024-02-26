@@ -10,6 +10,7 @@ static const bool kFarJump = false;
 
 enum class InstructionType {
 	Dead,
+	Imm,
 	Label,
 	RdImm,
 	RdLabelNear,
@@ -28,6 +29,7 @@ enum class InstructionType {
 	RdRs1ImmKeepRs2
 };
 
+using ImmFunc = void (Assembler::*)(intptr_t);
 using LabelFunc = decltype(&Assembler::Bind);
 using RdImmFunc = decltype(&Assembler::lui);
 using RdLabelFunc = void (Assembler::*)(Register, Label *, bool);
@@ -41,6 +43,17 @@ using RdAddrOrderFunc = decltype(&Assembler::lrw);
 using RdRs2AddrOrderFunc = decltype(&Assembler::scw);
 
 struct Instruction {
+	Instruction(const InstructionType type, const ImmFunc immFunc, intptr_t align)
+		: rd(none_reg)
+		, rs1(none_reg)
+		, rs2(none_reg)
+		, imm(align)
+		, type_(type)
+		, immFunc_(immFunc)
+	{
+		ASSERT(!(!rd && has_rd()));
+	}
+
 	Instruction(const InstructionType type, const LabelFunc labelFunc, Label *label)
 		: rd(none_reg)
 		, rs1(none_reg)
@@ -180,6 +193,7 @@ struct Instruction {
 	{
 		switch (type_) {
 		case InstructionType::Label:
+			assembler.Align(Assembler::label_align);
 			(assembler.*labelFunc_)(label);
 			break;
 		case InstructionType::RdImm:
@@ -225,6 +239,9 @@ struct Instruction {
 			break;
 		case InstructionType::Dead:
 			break;
+		case InstructionType::Imm:
+			(assembler.*immFunc_)(imm);
+			break;
 		}
 	}
 
@@ -233,6 +250,7 @@ struct Instruction {
 		switch (type_) {
 
 		case InstructionType::Dead:
+		case InstructionType::Imm:
 		case InstructionType::Label:
 		case InstructionType::Rs1Rs2LabelNear:
 		case InstructionType::Rs1Rs2LabelFar:
@@ -259,6 +277,7 @@ struct Instruction {
 	{
 		switch (type_) {
 
+		case InstructionType::Imm:
 		case InstructionType::Label:
 		case InstructionType::RdImm:
 		case InstructionType::RdLabelNear:
@@ -304,6 +323,13 @@ struct Instruction {
 
 		case InstructionType::Dead:
 			return;
+		case InstructionType::Imm:
+			if (immFunc_ == (ImmFunc)&Assembler::Align) {
+				out << ".align " << std::dec << imm;
+			} else {
+				throw std::runtime_error("Unknown label function");
+			}
+			break;
 		case InstructionType::Label:
 			if (labelFunc_ == &Assembler::Bind) {
 				out << "label" << std::hex << label << ":";
@@ -565,6 +591,8 @@ struct Instruction {
 #undef ehandle_instr
 	}
 
+	bool is_func(const LabelFunc func) { return func == labelFunc_; };
+
 	bool is_control_flow()
 	{
 		switch (type_) {
@@ -587,6 +615,7 @@ struct Instruction {
 		case InstructionType::RdRs2AddrOrder:
 		case InstructionType::RdImmKeepRs1:
 		case InstructionType::RdRs1ImmKeepRs2:
+		case InstructionType::Imm:
 			return false;
 		}
 	}
@@ -602,6 +631,7 @@ struct Instruction {
 private:
 	InstructionType type_;
 	union {
+		const ImmFunc immFunc_;
 		const LabelFunc labelFunc_;
 		const RdImmFunc rdImmFunc_;
 		const RdLabelFunc rdLabelFunc_;

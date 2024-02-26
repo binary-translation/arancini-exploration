@@ -27,14 +27,39 @@ call_native:
     // Get mem base into register
     mv t6, a2
 
+    // Load x86 registers into RISCV ones
+
+    ld x16, 8(fp)
+    ld x17, 16(fp)
+    ld x18, 24(fp)
+    ld x19, 32(fp)
+    ld x20, 40(fp)
+    ld x21, 48(fp)
+    ld x22, 56(fp)
+    ld x23, 64(fp)
+
+
     // Call function
     jalr a0
 
+
+    // Save loaded x86 registers
+
+    sd x23, 64(fp)
+    sd x22, 56(fp)
+    sd x21, 48(fp)
+    sd x20, 40(fp)
+    sd x19, 32(fp)
+    sd x18, 24(fp)
+    sd x17, 16(fp)
+    sd x16, 8(fp)
+
+
     // Restore callee-saved registers from stack
     // TODO: handle float regs
-    sd gp,104(sp)      // Restore the callee-saved registers
-    sd s11,96(sp)
-    sd s10,88(sp)
+    ld gp,104(sp)      // Restore the callee-saved registers
+    ld s11,96(sp)
+    ld s10,88(sp)
     ld s9, 80(sp)
     ld s8, 72(sp)
     ld s7, 64(sp)
