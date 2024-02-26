@@ -5,6 +5,7 @@
 #include <arancini/output/dynamic/riscv64/instruction-builder/register-operand.h>
 
 #include <bitset>
+#include <iostream>
 #include <unordered_map>
 
 namespace arancini::output::dynamic::riscv64::builder {

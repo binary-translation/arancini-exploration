@@ -1,8 +1,7 @@
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/input/x86/x86-input-arch.h>
 #include <arancini/ir/ir-builder.h>
-#include <iostream>
-#include <sstream>
+#include <arancini/util/logger.h>
 
 using namespace arancini::ir;
 using namespace arancini::input;
@@ -302,10 +301,8 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	}
 }
 
-static translation_result translate_instruction(ir_builder &builder, size_t address, xed_decoded_inst_t *xedd, bool debug, disassembly_syntax da)
+static translation_result translate_instruction(ir_builder &builder, size_t address, xed_decoded_inst_t *xedd, bool debug, disassembly_syntax da, std::string &disasm)
 {
-	std::string disasm = "";
-
 	if (debug) {
 		char buffer[64];
 		xed_format_context(da == disassembly_syntax::intel ? XED_SYNTAX_INTEL : XED_SYNTAX_ATT, xedd, buffer, sizeof(buffer) - 1, address, nullptr, 0);
@@ -317,7 +314,7 @@ static translation_result translate_instruction(ir_builder &builder, size_t addr
 	if (t) {
 		return t->translate(address, xedd, disasm);
 	} else {
-		std::cerr << "Could not find a translator for: " << disasm << std::endl;
+        util::global_logger.error("Could not find a translator for {}\n", disasm);
 		return translation_result::fail;
 	}
 }
@@ -343,10 +340,13 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 	const uint8_t *mc = (const uint8_t *)code;
 
 	static uint nr_chunk = 1;
-	std::cerr << "chunk[" << std::dec << nr_chunk << "] @ " << std::hex << base_address << " code=" << code << ", size=" << code_size << std::endl;
+
+    util::global_logger.info("chunk [{}] @ {:#x} code={} size={}\n", nr_chunk, base_address, fmt::ptr(code), code_size);
+
 	nr_chunk++;
 
 	size_t offset = 0;
+    std::string disasm;
 	while (offset < code_size) {
 		xed_decoded_inst_t xedd;
 		xed_decoded_inst_zero(&xedd);
@@ -360,11 +360,21 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 		xed_uint_t length = xed_decoded_inst_get_length(&xedd);
 
-		auto r = translate_instruction(builder, base_address, &xedd, debug(), da_);
+		auto r = translate_instruction(builder, base_address, &xedd, debug(), da_, disasm);
 
 		if (r == translation_result::fail) {
 			throw std::runtime_error("instruction translation failure: " + std::to_string(xed_error));
 		} else if (r == translation_result::end_of_block && basic_block) {
+            // Print backwards branch addr (if exists)
+            // Useful for debug infrastructure
+            auto pos = disasm.find("0x");
+            if (pos != disasm.npos) {
+                auto addr_str = disasm.substr(pos);
+                off_t addr = std::strtol(addr_str.c_str(), nullptr, 16);
+
+                if (addr > base_address && addr < base_address + offset + length)
+                    util::global_logger.info("Backwards branch @ {}\n", addr_str);
+            }
 			break;
 		}
 

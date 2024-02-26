@@ -1,4 +1,5 @@
 #include <arancini/txlat/txlat-engine.h>
+#include <arancini/util/logger.h>
 #include <boost/program_options.hpp>
 #include <iostream>
 #include <optional>
@@ -6,8 +7,39 @@
 using namespace arancini::txlat;
 namespace po = boost::program_options;
 
-static std::optional<po::variables_map> init_options(int argc, const char *argv[])
-{
+static std::optional<po::variables_map> init_options(int argc, const char *argv[]) {
+    const char* flag = getenv("ARANCINI_ENABLE_LOG");
+    bool log_status = false;
+    if (flag) {
+        if (!strcmp(flag, "true")) {
+            log_status = true;
+        } else if (!strcmp(flag, "false")) {
+            log_status = false;
+        } else throw std::runtime_error("ARANCINI_ENABLE_LOG must be set to either true or false");
+    }
+
+    // Determine logger level
+    flag = getenv("ARANCINI_LOG_LEVEL");
+    util::basic_logging::levels level = util::basic_logging::levels::info;
+    if (flag && util::global_logger.is_enabled()) {
+        if (!strcmp(flag, "debug"))
+            level = util::basic_logging::levels::debug;
+        else if (!strcmp(flag, "info"))
+            level = util::basic_logging::levels::info;
+        else if (!strcmp(flag, "warn"))
+            level = util::basic_logging::levels::warn;
+        else if (!strcmp(flag, "error"))
+            level = util::basic_logging::levels::error;
+        else if (!strcmp(flag, "fatal"))
+            level = util::basic_logging::levels::fatal;
+        else throw std::runtime_error("ARANCINI_LOG_LEVEL must be set to one among: debug, info, warn, error or fatal");
+    } else if (util::global_logger.is_enabled()) {
+        std::cerr << "Logger enabled without explicit log level; setting log level to default [info]\n";
+    }
+
+    // Set logger level
+    util::global_logger.set_level(level);
+
 	po::options_description desc("Command-line options");
 
 	desc.add_options() //
@@ -38,16 +70,16 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 
 		po::notify(vm);
 	} catch (std::exception &e) {
-		std::cerr << "Error: " << e.what() << std::endl << std::endl;
-		std::cout << desc << std::endl;
+        ::util::global_logger.error("{}\n", e.what());
+        if (::util::global_logger.get_level() <= ::util::basic_logging::levels::error)
+            std::cerr << desc << '\n';
 		return std::nullopt;
 	}
 
 	return vm;
 }
 
-int main(int argc, const char *argv[])
-{
+int main(int argc, const char *argv[]) {
 	auto cmdline = init_options(argc, argv);
 	if (!cmdline.has_value()) {
 		return 1;
@@ -58,9 +90,10 @@ int main(int argc, const char *argv[])
 	try {
 		e.translate(cmdline.value());
 	} catch (const std::exception &e) {
-		std::cerr << "translation error: " << e.what() << std::endl;
+        ::util::global_logger.error("translation error: {}\n", e.what());
 		return 1;
 	}
 
 	return 0;
 }
+

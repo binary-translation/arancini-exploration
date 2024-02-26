@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdlib>
-#include <iostream>
+#include <cstdint>
 
 namespace arancini::runtime::dbt {
 
@@ -30,6 +30,6 @@ public:
 
 private:
 	void *code_ptr_;
-	size_t code_size_;
+	[[maybe_unused]] size_t code_size_;
 };
 } // namespace arancini::runtime::dbt
