@@ -526,6 +526,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 	}
 	return 0;
 }
+std::shared_ptr<execution_thread> execution_context::get_thread(void *cpu_state) { return threads_.at(cpu_state); }
 
 std::pair<decltype(execution_context::threads_)::const_iterator, decltype(execution_context::threads_)::const_iterator> execution_context::get_thread_range() {
 	return std::make_pair(threads_.cbegin(), threads_.cend());
