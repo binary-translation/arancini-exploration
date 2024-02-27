@@ -139,6 +139,8 @@ void llvm_static_output_engine_impl::initialise_types()
 	types.internal_call_handler = FunctionType::get(types.i32, { types.cpu_state_ptr, types.i32 }, false);
 	types.finalize = FunctionType::get(types.vd, {}, false);
 	types.clk_fn = FunctionType::get(types.vd, { types.cpu_state_ptr, PointerType::get(Type::getInt8PtrTy(*llvm_context_), 0) }, false);
+	types.register_static_fn = FunctionType::get(Type::getVoidTy(*llvm_context_), {types.i64, types.i8->getPointerTo()}, false);
+	types.lookup_static_fn = FunctionType::get(types.i8->getPointerTo(), { types.i64 }, false);
 }
 
 void llvm_static_output_engine_impl::create_main_function(Function *loop_fn)
@@ -158,11 +160,33 @@ void llvm_static_output_engine_impl::create_main_function(Function *loop_fn)
 	builder.CreateCondBr(is_not_null, run_block, fail_block);
 
 	builder.SetInsertPoint(run_block);
+
+	auto registerFn = module_->getOrInsertFunction("register_static_fn_addr", types.register_static_fn);
+	for (auto it = fns_->begin(); it != fns_->end(); ++it) {
+		builder.CreateCall(registerFn, {builder.getInt64(it->first), it->second});
+	}
+
 	builder.CreateCall(loop_fn, { init_dbt_result });
 	builder.CreateRet(ConstantInt::get(types.i32, 0));
 
 	builder.SetInsertPoint(fail_block);
 	builder.CreateRet(ConstantInt::get(types.i32, 1));
+}
+
+void llvm_static_output_engine_impl::create_static_functions()
+{
+	for (auto c : chunks_) {
+		std::stringstream fn_name;
+		fn_name << "FN_" << std::hex << c->packets()[0]->address();
+
+		auto fn = Function::Create(get_fn_type(), GlobalValue::LinkageTypes::ExternalLinkage, fn_name.str(), *module_);
+		fn->addParamAttr(0, Attribute::AttrKind::NonNull);
+		fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
+		fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
+		fn->addParamAttr(0, Attribute::getWithDereferenceableBytes(*llvm_context_, sizeof(runtime::exec::x86::x86_cpu_state)));
+		fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
+		(*fns_)[c->packets()[0]->address()] = fn;
+	}
 }
 
 void llvm_static_output_engine_impl::build()
@@ -184,6 +208,8 @@ void llvm_static_output_engine_impl::build()
 	loop_fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
 	loop_fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
 	loop_fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
+
+	create_static_functions();
 
 	create_main_function(loop_fn);
 
@@ -218,9 +244,9 @@ void llvm_static_output_engine_impl::build()
 	//auto alert = module_->getOrInsertFunction("alert", types.finalize);
 	//builder.CreateCall(alert, { });
 	auto program_counter_val = builder.CreateLoad(types.i64, program_counter, "top_pc");
-	auto pcswitch = builder.CreateSwitch(program_counter_val, switch_to_dbt);
+	lower_static_fn_lookup(builder, switch_to_dbt, program_counter_val);
 
-	lower_chunks(pcswitch, loop_block);
+	lower_chunks(loop_fn);
 
 	builder.SetInsertPoint(switch_to_dbt);
 
@@ -240,10 +266,10 @@ void llvm_static_output_engine_impl::build()
 
 	builder.SetInsertPoint(check_for_call_block);
 	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 3)), call_block, check_for_ret_block);
-	
+
 	builder.SetInsertPoint(check_for_ret_block);
 	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 4)), ret_block, check_for_int_call_block);
-	
+
 	builder.SetInsertPoint(check_for_int_call_block);
 	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_SGT, invoke_result, ConstantInt::get(types.i32, 0)), internal_call_block, exit_block);
 
@@ -301,73 +327,59 @@ void llvm_static_output_engine_impl::createStoreToCPU(IRBuilder<> &builder, Argu
 		builder.CreateStore(builder.CreateExtractValue(ret, { ret_idx }), builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, reg_idx) }));
 }
 
-void llvm_static_output_engine_impl::lower_chunks(SwitchInst *pcswitch, BasicBlock *contblock)
+void llvm_static_output_engine_impl::lower_chunks(Function *main_loop)
 {
 	IRBuilder<> builder(*llvm_context_);
-	auto fns = std::make_shared<std::map<unsigned long, Function *>>();
-	auto cpu_state = contblock->getParent()->getArg(0);
 
 	auto clk_ = module_->getOrInsertFunction("clk", types.clk_fn);
 
 	auto ret = llvm_ret_visitor();
 	auto arg = llvm_arg_visitor();
 
-	for (auto c : chunks_) {
+	for (const auto &c : chunks_) {
 		c->accept(ret);
 		c->accept(arg);
 	}
 
-	/*
-	std::cout << "#### return types ####\n";
-	ret.debug_print();
-	std::cout << "#### arg counts ####\n";
-	arg.debug_print();
-	*/	
-	for (auto c : chunks_) {
-		std::stringstream fn_name;
-		fn_name << "FN_" << std::hex << c->packets()[0]->address();
+	for (const auto &c : chunks_) {
+		lower_chunk(&builder, main_loop, c);
+	}
+}
 
-		auto fn_type = get_fn_type(c, ret, arg);
-		//auto fn_type = types.loop_fn;
-		auto fn = Function::Create(fn_type, GlobalValue::LinkageTypes::ExternalLinkage, fn_name.str(), *module_);
-		fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
-		fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
-		fn->addParamAttr(0, Attribute::getWithDereferenceableBytes(*llvm_context_, sizeof(runtime::exec::x86::x86_cpu_state)));
-		fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
-		(*fns)[c->packets()[0]->address()] = fn;
-	}
+void llvm_static_output_engine_impl::lower_static_fn_lookup(IRBuilder<> &builder, BasicBlock *contblock, Value *guestAddr) {
+	auto LookupFn = module_->getOrInsertFunction("lookup_static_fn_addr", types.lookup_static_fn);
 
-	for (auto c : chunks_) {
-		lower_chunk(&builder, contblock, c, fns);
-	}
-	for (auto f : *fns) {
-		auto b = BasicBlock::Create(*llvm_context_, "Call_"+f.second->getName(), contblock->getParent());
-		builder.SetInsertPoint(b);
-		auto pc = createLoadFromCPU(builder, cpu_state, 0);
-		auto rdi = createLoadFromCPU(builder, cpu_state, 8);
-		auto rsi = createLoadFromCPU(builder, cpu_state, 7);
-		auto rdx = createLoadFromCPU(builder, cpu_state, 3);
-		auto rcx = createLoadFromCPU(builder, cpu_state, 2);
-		auto r8 = createLoadFromCPU(builder, cpu_state, 9);
-		auto r9 = createLoadFromCPU(builder, cpu_state, 10);
-		auto rsp = createLoadFromCPU(builder, cpu_state, 5);
-		auto zmm0 = createLoadFromCPU(builder, cpu_state, 27);
-		auto zmm1 = createLoadFromCPU(builder, cpu_state, 28);
-		auto zmm2 = createLoadFromCPU(builder, cpu_state, 29);
-		auto zmm3 = createLoadFromCPU(builder, cpu_state, 30);
-		auto zmm4 = createLoadFromCPU(builder, cpu_state, 31);
-		auto zmm5 = createLoadFromCPU(builder, cpu_state, 32);
-		auto zmm6 = createLoadFromCPU(builder, cpu_state, 33);
-		auto zmm7 = createLoadFromCPU(builder, cpu_state, 34);
-		auto ret = builder.CreateCall(f.second, { cpu_state, rdi, rsi, rdx, rcx, r8, r9, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6, zmm7 });
-		createStoreToCPU(builder, cpu_state, 0, ret, 1);
-		createStoreToCPU(builder, cpu_state, 1, ret, 3);
-		createStoreToCPU(builder, cpu_state, 2, ret, 27);
-		createStoreToCPU(builder, cpu_state, 3, ret, 28);
-		builder.CreateCall(clk_, {cpu_state, builder.CreateGlobalStringPtr("done-loop")});
-		builder.CreateRetVoid();
-		pcswitch->addCase(ConstantInt::get(types.i64, f.first), b);
-	}
+	auto result = builder.CreateCall(LookupFn, { guestAddr });
+	auto cmp = builder.CreateCmp(CmpInst::Predicate::ICMP_NE, result, ConstantPointerNull::get(Type::getInt8PtrTy(*llvm_context_)));
+
+	auto b = BasicBlock::Create(*llvm_context_, "call_static_fn", contblock->getParent());
+
+	builder.CreateCondBr(cmp, b, contblock);
+	auto cpu_state = contblock->getParent()->getArg(0);
+
+	builder.SetInsertPoint(b);
+	auto rdi = createLoadFromCPU(builder, cpu_state, 8);
+	auto rsi = createLoadFromCPU(builder, cpu_state, 7);
+	auto rdx = createLoadFromCPU(builder, cpu_state, 3);
+	auto rcx = createLoadFromCPU(builder, cpu_state, 2);
+	auto r8 = createLoadFromCPU(builder, cpu_state, 9);
+	auto r9 = createLoadFromCPU(builder, cpu_state, 10);
+	auto zmm0 = createLoadFromCPU(builder, cpu_state, 27);
+	auto zmm1 = createLoadFromCPU(builder, cpu_state, 28);
+	auto zmm2 = createLoadFromCPU(builder, cpu_state, 29);
+	auto zmm3 = createLoadFromCPU(builder, cpu_state, 30);
+	auto zmm4 = createLoadFromCPU(builder, cpu_state, 31);
+	auto zmm5 = createLoadFromCPU(builder, cpu_state, 32);
+	auto zmm6 = createLoadFromCPU(builder, cpu_state, 33);
+	auto zmm7 = createLoadFromCPU(builder, cpu_state, 34);
+	auto f = builder.CreateBitCast(result, get_fn_type()->getPointerTo());
+	auto call = builder.CreateCall(get_fn_type(), f, { cpu_state, rdi, rsi, rdx, rcx, r8, r9, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6, zmm7 });
+	createStoreToCPU(builder, cpu_state, 0, call, 1);
+	createStoreToCPU(builder, cpu_state, 1, call, 3);
+	createStoreToCPU(builder, cpu_state, 2, call, 27);
+	createStoreToCPU(builder, cpu_state, 3, call, 28);
+	builder.CreateCall(clk_, {cpu_state, builder.CreateGlobalStringPtr("done-loop")});
+	builder.CreateRetVoid();
 }
 
 static const char *regnames[] = {
@@ -1342,7 +1354,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 				auto instr = builder.CreateAtomicCmpXchg(lhs, rhs, top, Align(1), AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
 				auto new_rax_val = builder.CreateSelect(builder.CreateExtractValue(instr, 1), rhs, builder.CreateExtractValue(instr, 0));
 				builder.CreateStore(builder.CreateZExt(new_rax_val, types.i64), rax_reg);
-				
+
 				return instr;
 			}
 			default: throw std::runtime_error("unsupported tern atomic operation " + std::to_string((int)tan->op()));
@@ -1439,7 +1451,7 @@ std::vector<Value*> llvm_static_output_engine_impl::wrap_ret(IRBuilder<> *builde
 	return ret;
 }
 
-void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBlock *contblock, std::shared_ptr<chunk> c, std::shared_ptr<std::map<unsigned long, Function *>> fns)
+void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function *main_loop, std::shared_ptr<chunk> c)
 {
 	std::map<unsigned long, BasicBlock *> blocks;
 
@@ -1510,7 +1522,7 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 			case br_type::sys:
 				break;
 			case br_type::call: {
-				auto f = get_static_fn(p, fns);
+				auto f = get_static_fn(p);
 				if (f) {
 					save_callee_regs(*builder, state_arg, false);
 					auto ret = builder->CreateCall(f, load_args(builder, state_arg));
@@ -1518,7 +1530,7 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 					unwrap_ret(builder, ret, state_arg);
 				} else {
 					save_callee_regs(*builder, state_arg);
-					builder->CreateCall(contblock->getParent(), { state_arg });
+					builder->CreateCall(main_loop, { state_arg });
 					restore_callee_regs(*builder, state_arg);
 				}
 				break;
@@ -1561,7 +1573,7 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 
 	builder->SetInsertPoint(dyn);
 	save_callee_regs(*builder, state_arg);
-	builder->CreateCall(contblock->getParent(), { state_arg });
+	builder->CreateCall(main_loop, { state_arg });
 	restore_callee_regs(*builder, state_arg);
 	builder->CreateCall(clk_, {state_arg, builder->CreateGlobalStringPtr(exit.str())});
 	builder->CreateAggregateRet(wrap_ret(builder, state_arg).data(), 4);
@@ -1571,18 +1583,9 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, BasicBloc
 	}
 }
 
-FunctionType *llvm_static_output_engine_impl::get_fn_type(std::shared_ptr<chunk> c, llvm_ret_visitor& ret, llvm_arg_visitor& arg) {
-
-	auto rets = ret.get_type(c->packets()[0]->address());
-	auto args = arg.get_type(c->packets()[0]->address());
-
+FunctionType *llvm_static_output_engine_impl::get_fn_type() {
 	std::vector<Type*> argv;
 	StructType* retv;
-	for (auto r : rets) {
-		if (r < reg_offsets::ZMM0) {
-			//TODO
-		}
-	}
 
 	retv = StructType::get(*llvm_context_, { types.i64, types.i64, types.i512, types.i512}, false);
 	argv = {
@@ -1670,7 +1673,7 @@ void llvm_static_output_engine_impl::restore_callee_regs(IRBuilder<> &builder, A
 	}
 }
 
-Function *llvm_static_output_engine_impl::get_static_fn(std::shared_ptr<packet> pkt, std::shared_ptr<std::map<unsigned long, Function *>> fns) {
+Function *llvm_static_output_engine_impl::get_static_fn(std::shared_ptr<packet> pkt) {
 
 	write_pc_node *node = nullptr;
 	for (auto a : pkt->actions()) {
@@ -1681,8 +1684,8 @@ Function *llvm_static_output_engine_impl::get_static_fn(std::shared_ptr<packet> 
 		return nullptr;
 	if (node->const_target()) {
 
-		auto it = fns->find(node->const_target()+pkt->address());
-		auto ret = it != fns->end() ? it->second : nullptr;
+		auto it = fns_->find(node->const_target()+pkt->address());
+		auto ret = it != fns_->end() ? it->second : nullptr;
 		if (ret)
 			fixed_branches++;
 		return ret;

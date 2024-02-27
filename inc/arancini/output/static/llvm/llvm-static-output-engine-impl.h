@@ -59,6 +59,7 @@ private:
 	const std::vector<std::shared_ptr<ir::chunk>> &chunks_;
 	std::unique_ptr<::llvm::LLVMContext> llvm_context_;
 	std::unique_ptr<::llvm::Module> module_;
+	std::shared_ptr<std::map<unsigned long, ::llvm::Function *>> fns_ = std::make_shared<std::map<unsigned long, ::llvm::Function *>>();
 	bool in_br;
 
 	struct {
@@ -85,6 +86,8 @@ private:
 		::llvm::FunctionType *internal_call_handler;
 		::llvm::FunctionType *finalize;
 		::llvm::FunctionType *clk_fn;
+		::llvm::FunctionType *register_static_fn;
+		::llvm::FunctionType *lookup_static_fn;
 
 		::llvm::IntegerType *integer(unsigned width) {
 			switch(width) {
@@ -113,8 +116,9 @@ private:
 	void create_main_function(::llvm::Function *loop_fn);
 	void optimise();
 	void compile();
-	void lower_chunks(::llvm::SwitchInst *pcswitch, ::llvm::BasicBlock *contblock);
-	void lower_chunk(::llvm::IRBuilder<> *builder, ::llvm::BasicBlock *contblock, std::shared_ptr<ir::chunk> chunk, std::shared_ptr<std::map<unsigned long, ::llvm::Function *>> fns);
+	void lower_chunks(::llvm::Function *main_loop_fn);
+	void lower_chunk(::llvm::IRBuilder<> *builder, ::llvm::Function *main_loop_fn, std::shared_ptr<ir::chunk> chunk);
+	void lower_static_fn_lookup(::llvm::IRBuilder<> &builder, ::llvm::BasicBlock *contblock, ::llvm::Value *guestAddr);
 	::llvm::Value *lower_node(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
 		std::shared_ptr<ir::packet> pkt, ir::node *a);
 	::llvm::Value *lower_port(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
@@ -127,12 +131,13 @@ private:
 	void save_callee_regs(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, bool with_args=true);
 	void restore_callee_regs(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, bool with_rets=true);
 	// passes
-	::llvm::Function *get_static_fn(std::shared_ptr<ir::packet> pkt, std::shared_ptr<std::map<unsigned long, ::llvm::Function *>>);
+	::llvm::Function *get_static_fn(std::shared_ptr<ir::packet> pkt);
 	::llvm::Instruction *create_static_condbr(::llvm::IRBuilder<> *builder, std::shared_ptr<ir::packet> pkt, std::map<unsigned long, ::llvm::BasicBlock *> *blocks, ::llvm::BasicBlock *mid);
-	::llvm::FunctionType *get_fn_type(std::shared_ptr<ir::chunk>, ir::llvm_ret_visitor& ret, ir::llvm_arg_visitor& arg);
+	::llvm::FunctionType *get_fn_type();
 	std::vector<::llvm::Value *> load_args(::llvm::IRBuilder<> *builder, ::llvm::Argument *state_arg);
 	void unwrap_ret(::llvm::IRBuilder<> *builder, ::llvm::Value *value, ::llvm::Argument *state_arg);
 	std::vector<::llvm::Value*> wrap_ret(::llvm::IRBuilder<> *builder, ::llvm::Argument *state_arg);
+	void create_static_functions();
 	
 	::llvm::Value *createLoadFromCPU(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, unsigned long reg_idx);
 	void createStoreToCPU(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, unsigned int ret_idx, ::llvm::Value *ret, unsigned long reg_idx);

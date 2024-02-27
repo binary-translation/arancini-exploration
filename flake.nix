@@ -76,7 +76,7 @@
 	in
 	{
 		defaultPackage = build_pkgs.callPackage(
-		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2, llvmPackages, lib, gcc, fmt}:
+		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2, llvmPackages, lib, gcc, fmt, pkgsCross}:
 			stdenv.mkDerivation {
 				name = "arancini";
 				pname = "txlat";
@@ -91,6 +91,7 @@
 					pkg-config
                     fmt
 					clang
+					pkgsCross.riscv64.buildPackages.gcc
 				];
 				buildInputs = [
 					zlib
