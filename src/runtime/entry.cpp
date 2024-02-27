@@ -259,6 +259,26 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	return main_thread->get_cpu_state();
 }
 
+static std::unordered_map<unsigned long, void *> fn_addrs;
+
+/**
+ * Register a static function so it can be called from the main loop
+ */
+extern "C" void register_static_fn_addr(unsigned long guest_addr, void *fn_addr) {
+	fn_addrs.emplace(guest_addr, fn_addr);
+}
+
+/**
+ * Look up a static function. Returns nullptr if the function was not found.
+ */
+extern "C" void* lookup_static_fn_addr(unsigned long guest_addr){
+	if (auto item = fn_addrs.find(guest_addr); item != fn_addrs.end()) {
+		return item->second;
+	}
+
+	return nullptr;
+}
+
 /*
  * Entry point from /static/ code when the CPU jumps to an address that hasn't been
  * translated.
