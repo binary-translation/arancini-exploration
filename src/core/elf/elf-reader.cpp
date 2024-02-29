@@ -96,6 +96,7 @@ void elf_reader::parse()
 
 	Elf64_Ehdr elf_header = read<Elf64_Ehdr>(0);
 	entrypoint_ = elf_header.e_entry;
+	type_ = static_cast<elf_type>(elf_header.e_type);
 	parse_sections(elf_header.e_shoff, elf_header.e_shnum, elf_header.e_shentsize, elf_header.e_shstrndx);
 	parse_program_headers(elf_header.e_phoff, elf_header.e_phnum, elf_header.e_phentsize);
 }

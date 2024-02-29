@@ -179,12 +179,16 @@ private:
 	size_t mem_size_;
 };
 
+enum class elf_type { none, rel, exec, dyn, core };
+
 class elf_reader {
 public:
 	elf_reader(const std::string &filename);
 	~elf_reader();
 
 	void parse();
+
+	elf_type type() const { return type_; }
 
 	off_t get_entrypoint() const { return entrypoint_; }
 
@@ -198,6 +202,8 @@ private:
 	void *elf_data_;
 	size_t elf_data_size_;
 	off_t entrypoint_;
+
+	elf_type type_;
 
 	std::vector<std::shared_ptr<section>> sections_;
 	std::vector<std::shared_ptr<program_header>> program_headers_;
