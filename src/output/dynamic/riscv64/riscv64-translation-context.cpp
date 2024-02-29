@@ -717,7 +717,7 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 			builder_.srli(out_reg, out_reg, 32);
 			[[fallthrough]];
 		case 64:
-			builder_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), reg);
+			builder_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), out_reg);
 			break;
 		default:
 			throw std::runtime_error("unsupported xchg width");
