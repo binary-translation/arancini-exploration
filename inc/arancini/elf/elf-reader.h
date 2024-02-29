@@ -15,6 +15,8 @@ enum class section_type {
 	progbits = 1,
 	symbol_table = 2,
 	string_table = 3,
+	relocation_addend = 4,
+	relocation = 9,
 	dynamic_symbol_table = 11
 };
 enum class section_flags { shf_write = 1 };
@@ -194,6 +196,68 @@ private:
 	std::vector<std::string> strings_;
 };
 
+class rela {
+public:
+	rela(int type, uint64_t addend, uint64_t symbol, uint64_t offset)
+		: type_(type)
+		, addend_(addend)
+		, symbol_(symbol)
+		, offset_(offset)
+	{
+	}
+
+	[[nodiscard]] bool is_relative() const { return type_on_host() == R_RISCV_RELATIVE; }
+	[[nodiscard]] bool is_irelative() const { return type_ == R_X86_64_IRELATIVE; }
+	[[nodiscard]] bool is_tpoff() const { return type_ == R_X86_64_TPOFF64; }
+	[[nodiscard]] int type_on_host() const
+	{
+#if defined(ARCH_RISCV64)
+		switch (type_) {
+		case R_X86_64_NONE:
+			return R_RISCV_NONE;
+		case R_X86_64_64:
+			return R_RISCV_64;
+		case R_X86_64_PC32:
+			return R_RISCV_32_PCREL;
+		case R_X86_64_COPY:
+			return R_RISCV_COPY;
+		case R_X86_64_GLOB_DAT:
+		case R_X86_64_JUMP_SLOT:
+			return R_RISCV_64;
+		case R_X86_64_RELATIVE:
+			return R_RISCV_RELATIVE;
+		}
+#endif
+		return 0x1111;
+	};
+
+	[[nodiscard]] int type() const { return type_; }
+	[[nodiscard]] uint64_t addend() const { return addend_; }
+	[[nodiscard]] uint64_t symbol() const { return symbol_; }
+	[[nodiscard]] uint64_t offset() const { return offset_; }
+
+private:
+	int type_;
+	uint64_t addend_;
+	uint64_t symbol_;
+	uint64_t offset_;
+};
+
+class rela_table : public section {
+public:
+	rela_table(
+		const void *data, off_t address, size_t data_size, const std::string &name, section_flags flags, const std::vector<rela> &relocations)
+		: section(data, address, data_size, section_type::relocation_addend, name, flags)
+		, relocations_(relocations)
+	{
+	}
+
+	[[nodiscard]] const std::vector<rela> &relocations() const { return relocations_; }
+
+private:
+	std::vector<rela> relocations_;
+};
+
 enum class program_header_type { null_program_header, loadable, dynamic, interp, note, shlib, program_headers, tls };
 
 class program_header {
@@ -268,6 +332,9 @@ private:
 
 	void parse_symbol_table(
 		section_flags flags, const std::string &name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size, section_type type);
+
+	void parse_relocation_addend_table(
+		section_flags flags, const std::string &sec_name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size);
 
 #if __cplusplus > 202002L
 	constexpr const void *get_data_ptr(off_t offset) const { return (const void *)((uintptr_t)elf_data_ + offset); }
