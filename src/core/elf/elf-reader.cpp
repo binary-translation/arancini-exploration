@@ -124,7 +124,8 @@ void elf_reader::parse_section(
 {
 	switch (type) {
 	case section_type::symbol_table:
-		parse_symbol_table(flags, name, address, offset, size, link_offset, entry_size);
+	case section_type::dynamic_symbol_table:
+		parse_symbol_table(flags, name, address, offset, size, link_offset, entry_size, type);
 		break;
 
 	default:
@@ -134,7 +135,7 @@ void elf_reader::parse_section(
 }
 
 void elf_reader::parse_symbol_table(
-	section_flags flags, const std::string &name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size)
+	section_flags flags, const std::string &name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size, section_type type)
 {
 	std::vector<symbol> symbols;
 
@@ -142,10 +143,10 @@ void elf_reader::parse_symbol_table(
 		auto sym = read<Elf64_Sym>(offset + i);
 
 		std::string name = readstr(link_offset + sym.st_name);
-		symbols.push_back(symbol(name, sym.st_value, sym.st_size, sym.st_shndx, sym.st_info));
+		symbols.push_back(symbol(name, sym.st_value, sym.st_size, sym.st_shndx, sym.st_info, sym.st_other));
 	}
 
-	sections_.push_back(std::make_shared<symbol_table>(get_data_ptr(offset), address, size, symbols, name, flags));
+	sections_.push_back(std::make_shared<symbol_table>(get_data_ptr(offset), address, size, symbols, name, flags, type));
 }
 
 void elf_reader::parse_program_headers(off_t offset, int count, size_t size)

@@ -71,11 +71,16 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
 	oe->set_entrypoint(elf.get_entrypoint());
 
-	if (!cmdline.count("no-static")) {
-		// Loop over each symbol table, and translate the symbol.
-		for (auto s : elf.sections()) {
-			if (s->type() == section_type::symbol_table) {
-				auto st = std::static_pointer_cast<symbol_table>(s);
+	std::shared_ptr<symbol_table> dyn_sym;
+
+	// Loop over each symbol table, and translate the symbol.
+	for (auto &s : elf.sections()) {
+		if (s->type() == elf::section_type::dynamic_symbol_table) {
+			auto st = std::static_pointer_cast<symbol_table>(s);
+			dyn_sym = std::move(st);
+		} else if (s->type() == section_type::symbol_table) {
+			auto st = std::static_pointer_cast<symbol_table>(s);
+			if (!cmdline.count("no-static")) {
 				for (const auto &sym : st->symbols()) {
 					// if (allowed_symbols.count(sym.name())) {
 					if (sym.is_func() && sym.size()) {
@@ -150,7 +155,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	// parse and load it.
 	auto phobjsrc = tf.create_file(".S");
 
-	generate_guest_sections(phobjsrc, elf, load_phdrs, filename);
+	generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym);
 
 	if (!cmdline.count("static-binary")) {
 
@@ -167,6 +172,36 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 			+ " " + phobjsrc->name() + " -L " + arancini_runtime_lib_dir
 			+ " -l arancini-runtime-static -l arancini-input-x86-static -l arancini-output-riscv64-static -l arancini-ir-static" + " -L "
 			+ arancini_runtime_lib_dir + "/../../obj -l xed" + debug_info + " -Wl,-T,exec.lds,-rpath=" + arancini_runtime_lib_dir);
+	}
+}
+
+void txlat_engine::add_symbol_to_output(
+	const std::vector<std::shared_ptr<program_header>> &phbins, const std::map<off_t, unsigned int> &end_addresses, const symbol &sym, std::ofstream &s)
+{
+	auto type = sym.type();
+
+	unsigned int i = end_addresses.upper_bound(sym.value())->second;
+	const std::shared_ptr<program_header> &phdr = phbins[i / 2];
+
+	auto name = "__guest__" + sym.name();
+	if (sym.section_index() != SHN_UNDEF) {
+		s << ".set \"" << name << "\", __PH_" << std::dec << i / 2 << "_DATA_" << i % 2 << " + "
+		  << sym.value() - phdr->address() - (i % 2) * (phdr->data_size()) << '\n'
+		  << ".size \"" << name << "\", " << std::dec << sym.size() << '\n';
+	}
+	if (sym.is_global()) {
+		s << ".globl \"" << name << "\"\n";
+	} else if (sym.is_weak()) {
+		s << ".weak \"" << name << "\"\n";
+	}
+
+	s << ".type \"" << name << "\", " << type << '\n';
+	if (sym.is_hidden()) {
+		s << ".hidden \"" << name << "\"\n";
+	} else if (sym.is_internal()) {
+		s << ".internal \"" << name << "\"\n";
+	} else if (sym.is_protected()) {
+		s << ".protected \"" << name << "\"\n";
 	}
 }
 
@@ -235,8 +270,9 @@ void txlat_engine::optimise(arancini::output::o_static::static_output_engine &oe
 }
 
 void txlat_engine::generate_guest_sections(const std::shared_ptr<util::tempfile> &phobjsrc, elf::elf_reader &elf,
-	const std::vector<std::shared_ptr<elf::program_header>> &load_phdrs, const std::basic_string<char> &filename)
+	const std::vector<std::shared_ptr<elf::program_header>> &load_phdrs, const std::basic_string<char> &filename, const std::shared_ptr<symbol_table> &dyn_sym)
 {
+	std::map<off_t, unsigned int> end_addresses;
 	auto s = phobjsrc->open();
 
 	// FIXME Currently hardcoded to current directory. Not sure what else to do since the linker script needs to have this path in it.
@@ -268,6 +304,7 @@ void txlat_engine::generate_guest_sections(const std::shared_ptr<util::tempfile>
 
 		s << "__PH_" << std::dec << i << "_DATA_0: .incbin \"" << filename << "\", " << phdr->offset() << ", " << phdr->data_size() << std::endl;
 		if (phdr->mem_size() - phdr->data_size()) {
+			end_addresses[phdr->address() + phdr->mem_size()] = 2 * i + 1;
 			s << ".section .gph.load" << std::dec << i << ".2, \"a";
 			if (phdr->flags() & PF_W) {
 				s << 'w';
@@ -279,5 +316,9 @@ void txlat_engine::generate_guest_sections(const std::shared_ptr<util::tempfile>
 			// Using .zero n does not work with symbols
 			s << "__PH_" << std::dec << i << "_DATA_1: .rept " << std::dec << phdr->mem_size() - phdr->data_size() << "\n.byte 0\n.endr\n";
 		}
+	}
+
+	for (const auto &sym : dyn_sym->symbols()) {
+		add_symbol_to_output(load_phdrs, end_addresses, sym, s);
 	}
 }

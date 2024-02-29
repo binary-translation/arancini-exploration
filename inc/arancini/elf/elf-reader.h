@@ -10,7 +10,13 @@
 #include <elf.h>
 
 namespace arancini::elf {
-enum class section_type { null_section = 0, progbits = 1, symbol_table = 2, string_table = 3 };
+enum class section_type {
+	null_section = 0,
+	progbits = 1,
+	symbol_table = 2,
+	string_table = 3,
+	dynamic_symbol_table = 11
+};
 enum class section_flags { shf_write = 1 };
 
 class section {
@@ -54,12 +60,13 @@ public:
 
 class symbol {
 public:
-	symbol(const std::string &name, uint64_t value, size_t size, int shidx, unsigned char info)
+	symbol(const std::string &name, uint64_t value, size_t size, int shidx, unsigned char info, unsigned char other)
 		: name_(name)
 		, value_(value)
 		, size_(size)
 		, shidx_(shidx)
 		, info_(info)
+		, other_(other)
 	{
 #ifdef ARCH_X86_64
 		//HACK: for hello-world/histogram on x86
@@ -118,18 +125,53 @@ public:
 
 	bool is_func() const { return ELF64_ST_TYPE(info_) == STT_FUNC; }
 
+	[[nodiscard]] bool is_global() const { return ELF64_ST_BIND(info_) == STB_GLOBAL; }
+	[[nodiscard]] bool is_weak() const { return ELF64_ST_BIND(info_) == STB_WEAK; }
+
+	[[nodiscard]] const char *type() const
+	{
+		switch (ELF64_ST_TYPE(info_)) {
+		case STT_FILE:
+			// return "STT_FILE";
+		case STT_NOTYPE:
+			return "STT_NOTYPE";
+		case STT_OBJECT:
+			return "STT_OBJECT";
+		case STT_FUNC:
+			return "STT_FUNC";
+		case STT_SECTION:
+			return "STT_SECTION";
+		case STT_COMMON:
+			return "STT_COMMON";
+		case STT_TLS:
+			return "STT_TLS";
+		case STT_NUM:
+			return "STT_NUM";
+		case STT_GNU_IFUNC:
+			return "STT_GNU_IFUNC";
+		default:
+			return "UNKNOWN";
+		}
+	}
+
+	[[nodiscard]] bool is_hidden() const { return ELF64_ST_VISIBILITY(other_) == STV_HIDDEN; }
+	[[nodiscard]] bool is_internal() const { return ELF64_ST_VISIBILITY(other_) == STV_INTERNAL; }
+	[[nodiscard]] bool is_protected() const { return ELF64_ST_VISIBILITY(other_) == STV_PROTECTED; }
+
 private:
 	std::string name_;
 	uint64_t value_;
 	size_t size_;
 	int shidx_;
 	unsigned char info_;
+	unsigned char other_;
 };
 
 class symbol_table : public section {
 public:
-	symbol_table(const void *data, off_t address, size_t data_size, const std::vector<symbol> &symbols, const std::string &name, section_flags flags)
-		: section(data, address, data_size, section_type::symbol_table, name, flags)
+	symbol_table(
+		const void *data, off_t address, size_t data_size, const std::vector<symbol> &symbols, const std::string &name, section_flags flags, section_type type)
+		: section(data, address, data_size, type, name, flags)
 		, symbols_(symbols)
 	{
 	}
@@ -223,7 +265,9 @@ private:
 	void parse_sections(off_t offset, int count, size_t size, int name_table_index);
 	void parse_section(
 		section_type type, section_flags flags, const std::string &name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size);
-	void parse_symbol_table(section_flags flags, const std::string &name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size);
+
+	void parse_symbol_table(
+		section_flags flags, const std::string &name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size, section_type type);
 
 #if __cplusplus > 202002L
 	constexpr const void *get_data_ptr(off_t offset) const { return (const void *)((uintptr_t)elf_data_ + offset); }
