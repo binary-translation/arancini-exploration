@@ -156,12 +156,16 @@ enum class program_header_type { null_program_header, loadable, dynamic, interp,
 
 class program_header {
 public:
-	program_header(program_header_type type, const void *data, off_t address, size_t data_size, size_t mem_size)
+	program_header(
+		program_header_type type, const void *data, off_t address, size_t data_size, size_t mem_size, uint32_t flags, uint32_t offset, uint64_t align)
 		: type_(type)
 		, data_(data)
 		, address_(address)
 		, data_size_(data_size)
 		, mem_size_(mem_size)
+		, flags_(flags)
+		, offset_(offset)
+		, align_(align)
 	{
 	}
 
@@ -170,6 +174,9 @@ public:
 	off_t address() const { return address_; }
 	size_t data_size() const { return data_size_; }
 	size_t mem_size() const { return mem_size_; }
+	[[nodiscard]] uint32_t flags() const { return flags_; }
+	[[nodiscard]] uint32_t offset() const { return offset_; }
+	[[nodiscard]] uint64_t align() const { return align_; }
 
 private:
 	program_header_type type_;
@@ -177,6 +184,9 @@ private:
 	off_t address_;
 	size_t data_size_;
 	size_t mem_size_;
+	uint32_t flags_;
+	uint32_t offset_;
+	uint64_t align_;
 };
 
 enum class elf_type { none, rel, exec, dyn, core };

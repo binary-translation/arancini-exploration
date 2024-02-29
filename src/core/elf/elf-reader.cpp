@@ -153,7 +153,7 @@ void elf_reader::parse_program_headers(off_t offset, int count, size_t size)
 	for (int i = 0; i < count; i++) {
 		auto ph = read<Elf64_Phdr>(offset + (size * i));
 
-		program_headers_.push_back(
-			std::make_shared<program_header>((program_header_type)ph.p_type, get_data_ptr(ph.p_offset), ph.p_vaddr, ph.p_filesz, ph.p_memsz));
+		program_headers_.push_back(std::make_shared<program_header>(
+			(program_header_type)ph.p_type, get_data_ptr(ph.p_offset), ph.p_vaddr, ph.p_filesz, ph.p_memsz, ph.p_flags, ph.p_offset, ph.p_align));
 	}
 }
