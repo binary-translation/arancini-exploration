@@ -17,7 +17,8 @@ enum class section_type {
 	string_table = 3,
 	relocation_addend = 4,
 	relocation = 9,
-	dynamic_symbol_table = 11
+	dynamic_symbol_table = 11,
+	relr = 19
 };
 enum class section_flags { shf_write = 1 };
 
@@ -262,6 +263,22 @@ private:
 	std::vector<rela> relocations_;
 };
 
+class relr_array : public section {
+public:
+	relr_array(
+		const void *data, off_t address, size_t data_size, const std::string &name, section_flags flags, const std::vector<uint64_t> &relocations, off_t offset)
+		: section(data, address, data_size, section_type::relr, name, flags, offset)
+		, relocations_(relocations)
+	{
+	}
+
+	[[nodiscard]] const std::vector<uint64_t> &relocations() const { return relocations_; }
+
+private:
+	/// Each entry represents the runtime virtual address the RELR relocation needs to be applied to. This is probably different from the file offset.
+	std::vector<uint64_t> relocations_;
+};
+
 enum class program_header_type { null_program_header, loadable, dynamic, interp, note, shlib, program_headers, tls };
 
 class program_header {
@@ -318,6 +335,8 @@ public:
 	std::shared_ptr<section> get_section(int index) const { return sections_[index]; }
 	std::shared_ptr<program_header> get_program_header(int index) const { return program_headers_[index]; }
 
+	uint64_t read_relr_addend(off_t off) const { return read64(off); }
+
 private:
 	void *elf_data_;
 	size_t elf_data_size_;
@@ -339,6 +358,8 @@ private:
 
 	void parse_relocation_addend_table(
 		section_flags flags, const std::string &sec_name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size);
+
+	void parse_relr(section_flags flags, const std::string &sec_name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size);
 
 #if __cplusplus > 202002L
 	constexpr const void *get_data_ptr(off_t offset) const { return (const void *)((uintptr_t)elf_data_ + offset); }

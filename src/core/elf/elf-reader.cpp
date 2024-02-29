@@ -1,4 +1,5 @@
 #include <arancini/elf/elf-reader.h>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <elf.h>
@@ -130,6 +131,9 @@ void elf_reader::parse_section(
 	case section_type::relocation_addend:
 		parse_relocation_addend_table(flags, name, address, offset, size, link_offset, entry_size);
 		break;
+	case section_type::relr:
+		parse_relr(flags, name, address, offset, size, link_offset, entry_size);
+		break;
 	default:
 		sections_.push_back(std::make_shared<section>(get_data_ptr(offset), address, size, type, name, flags, offset));
 		break;
@@ -173,4 +177,30 @@ void elf_reader::parse_relocation_addend_table(
 	}
 
 	sections_.push_back(std::make_shared<rela_table>(get_data_ptr(offset), address, size, sec_name, flags, relas, offset));
+}
+
+void elf_reader::parse_relr(section_flags flags, const std::string &sec_name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size)
+{
+	std::vector<uint64_t> relrs;
+	off_t where;
+
+	for (size_t i = 0; i < size; i += entry_size) {
+		auto entry = read<size_t>(offset + i);
+
+		if ((entry & 1) == 0) {
+			where = (off_t)(entry);
+
+			relrs.push_back(where);
+			where += 8;
+		} else {
+			for (long j = 0; (entry >>= 1) != 0; j++) {
+				if ((entry & 1) != 0) {
+					relrs.push_back(where + 8 * j);
+				}
+			}
+			where += (CHAR_BIT * (sizeof(size_t)) - 1) * 8;
+		}
+	}
+
+	sections_.push_back(std::make_shared<relr_array>(get_data_ptr(offset), address, size, sec_name, flags, relrs, offset));
 }
