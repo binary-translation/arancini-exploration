@@ -112,6 +112,25 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	// --------------- //
 
 	// An output file was specified, so continue to build the translated binary.
+	std::string cxx_compiler = cmdline.at("cxx-compiler-path").as<std::string>();
+
+	if (cmdline.count("wrapper")) {
+		cxx_compiler = cmdline.at("wrapper").as<std::string>() + " " + cxx_compiler;
+	}
+
+	std::string arancini_runtime_lib_path = cmdline.at("runtime-lib-path").as<std::string>();
+	auto dir_start = arancini_runtime_lib_path.rfind("/");
+	std::string arancini_runtime_lib_dir = arancini_runtime_lib_path.substr(0, dir_start);
+
+	std::string debug_info = cmdline.count("debug-gen") ? " -g" : " -O3";
+
+	std::string verbose_link = cmdline.count("verbose-link") ? " -Wl,--verbose" : "";
+
+	if (cmdline.count("no-script")) {
+		run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + " -l arancini-runtime -L "
+			+ arancini_runtime_lib_dir + " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info + verbose_link);
+		return;
+	}
 
 	// Generate loadable sections
 	std::vector<std::pair<std::shared_ptr<tempfile>, std::shared_ptr<program_header>>> phbins;
@@ -174,18 +193,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		s << ".size __GPH,.-__GPH" << std::endl;
 	}
 
-    std::string cxx_compiler = cmdline.at("cxx-compiler-path").as<std::string>();
-
-	if (cmdline.count("wrapper")) {
-		cxx_compiler = cmdline.at("wrapper").as<std::string>() + " " + cxx_compiler;
-	}
-
-	std::string debug_info = cmdline.count("debug-gen") ? " -g" : "";
-
 	if (!cmdline.count("static-binary")) {
-		std::string arancini_runtime_lib_path = cmdline.at("runtime-lib-path").as<std::string>();
-		auto dir_start = arancini_runtime_lib_path.rfind("/");
-		std::string arancini_runtime_lib_dir = arancini_runtime_lib_path.substr(0, dir_start);
 
 
 		// Generate the final output binary by compiling everything together.

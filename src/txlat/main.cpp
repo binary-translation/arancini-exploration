@@ -55,9 +55,11 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 			"Link the generated binary statically to the arancini libraries inside this path. Requires to have built the arancini-runtime-static target. "
 			"Default specified by build system.") //
 		("wrapper", po::value<std::string>()) //
-        ("cxx-compiler-path", po::value<std::string>()->default_value("g++"), "Path to C++ compiler to use for translated binary") //
-        ("debug-gen", "Include debugging information in the generated output binary") //
-		("debug", "Enable debugging output");
+		("cxx-compiler-path", po::value<std::string>()->default_value("g++"), "Path to C++ compiler to use for translated binary") //
+		("debug-gen", "Include debugging information in the generated output binary") //
+		("debug", "Enable debugging output") //
+		("verbose-link", "Enable verbose output of the linker (-Wl,--verbose)") //
+		("no-script", "Do not use a linker script. Also does not include any data from the input binary. Mainly useful as a step to generate a linker script.");
 
     po::variables_map vm;
 	try {
