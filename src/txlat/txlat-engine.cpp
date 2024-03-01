@@ -73,6 +73,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
 	std::shared_ptr<symbol_table> dyn_sym;
 	std::vector<std::shared_ptr<rela_table>> relocations;
+	std::vector<std::shared_ptr<relr_array>> relocations_r;
 
 	// Loop over each symbol table, and translate the symbol.
 	for (auto &s : elf.sections()) {
@@ -82,6 +83,9 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		} else if (s->type() == elf::section_type::relocation_addend) {
 			auto st = std::static_pointer_cast<rela_table>(s);
 			relocations.push_back(std::move(st));
+		} else if (s->type() == elf::section_type::relr) {
+			auto st = std::static_pointer_cast<relr_array>(s);
+			relocations_r.push_back(std::move(st));
 		} else if (s->type() == section_type::symbol_table) {
 			auto st = std::static_pointer_cast<symbol_table>(s);
 			if (!cmdline.count("no-static")) {
@@ -328,7 +332,7 @@ void txlat_engine::optimise(arancini::output::o_static::static_output_engine &oe
 
 void txlat_engine::generate_guest_sections(const std::shared_ptr<util::tempfile> &phobjsrc, elf::elf_reader &elf,
 	const std::vector<std::shared_ptr<elf::program_header>> &load_phdrs, const std::basic_string<char> &filename, const std::shared_ptr<symbol_table> &dyn_sym,
-	const std::vector<std::shared_ptr<elf::rela_table>> &relocations)
+	const std::vector<std::shared_ptr<elf::rela_table>> &relocations, const std::vector<std::shared_ptr<elf::relr_array>> &relocations_r)
 {
 	std::map<off_t, unsigned int> end_addresses;
 	auto s = phobjsrc->open();
@@ -382,6 +386,19 @@ void txlat_engine::generate_guest_sections(const std::shared_ptr<util::tempfile>
 
 	// Manually emit relocations into the .grela section
 	s << ".section .grela, \"a\"\n";
+
+	for (const auto &relocs : relocations_r) {
+		for (const auto &reloc : relocs->relocations()) {
+			unsigned int i = end_addresses.upper_bound(reloc)->second;
+			const std::shared_ptr<program_header> &phdr = load_phdrs[i / 2];
+
+			// Reading this here because now the file_offset can be calculated from the encompassing phdr
+			uint64_t addend = elf.read_relr_addend(phdr->offset() - phdr->address() + reloc);
+
+			// FIXME hardcoded 3 as RELATIVE reloc type
+			s << ".quad 0x" << std::hex << reloc << "\n.quad 3\n.quad 0x" << addend << '\n';
+		}
+	}
 
 	// A Relocation consists of 3 quad words. First the offset, then type in the high 32 bit and symbol index in the low 32 bit of the second and the addend in
 	// the third

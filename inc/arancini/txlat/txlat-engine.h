@@ -10,6 +10,7 @@ class symbol;
 class symbol_table;
 class program_header;
 class rela_table;
+class relr_array;
 } // namespace arancini::elf
 
 namespace arancini::ir {
@@ -43,6 +44,7 @@ private:
 
 	static void generate_guest_sections(const std::shared_ptr<util::tempfile> &phobjsrc, elf::elf_reader &elf,
 		const std::vector<std::shared_ptr<elf::program_header>> &load_phdrs, const std::basic_string<char> &filename,
-		const std::shared_ptr<elf::symbol_table> &dyn_sym, const std::vector<std::shared_ptr<elf::rela_table>> &relocations);
+		const std::shared_ptr<elf::symbol_table> &dyn_sym, const std::vector<std::shared_ptr<elf::rela_table>> &relocations,
+		const std::vector<std::shared_ptr<elf::relr_array>> &relocations_r);
 };
 } // namespace arancini::txlat
