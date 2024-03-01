@@ -23,10 +23,11 @@ enum class section_flags { shf_write = 1 };
 
 class section {
 public:
-	section(const void *data, off_t address, size_t data_size, section_type type, const std::string &name, section_flags flags)
+	section(const void *data, off_t address, size_t data_size, section_type type, const std::string &name, section_flags flags, off_t offset)
 		: data_(data)
 		, address_(address)
 		, data_size_(data_size)
+		, offset_(offset)
 		, type_(type)
 		, name_(name)
 		, flags_(flags)
@@ -41,11 +42,13 @@ public:
 	size_t data_size() const { return data_size_; }
 
 	off_t address() const { return address_; }
+	off_t file_offset() const { return offset_; }
 
 private:
 	const void *data_;
 	off_t address_;
 	size_t data_size_;
+	off_t offset_;
 
 	section_type type_;
 	std::string name_;
@@ -54,8 +57,8 @@ private:
 
 class null_section : public section {
 public:
-	null_section(const std::string &name, section_flags flags)
-		: section(nullptr, 0, 0, section_type::null_section, name, flags)
+	null_section(const std::string &name, section_flags flags, off_t offset)
+		: section(nullptr, 0, 0, section_type::null_section, name, flags, offset)
 	{
 	}
 };
@@ -171,9 +174,9 @@ private:
 
 class symbol_table : public section {
 public:
-	symbol_table(
-		const void *data, off_t address, size_t data_size, const std::vector<symbol> &symbols, const std::string &name, section_flags flags, section_type type)
-		: section(data, address, data_size, type, name, flags)
+	symbol_table(const void *data, off_t address, size_t data_size, const std::vector<symbol> &symbols, const std::string &name, section_flags flags,
+		section_type type, off_t offset)
+		: section(data, address, data_size, type, name, flags, offset)
 		, symbols_(symbols)
 	{
 	}
@@ -186,8 +189,9 @@ private:
 
 class string_table : public section {
 public:
-	string_table(const void *data, off_t address, size_t data_size, const std::vector<std::string> &strings, const std::string &name, section_flags flags)
-		: section(data, address, data_size, section_type::string_table, name, flags)
+	string_table(
+		const void *data, off_t address, size_t data_size, const std::vector<std::string> &strings, const std::string &name, section_flags flags, off_t offset)
+		: section(data, address, data_size, section_type::string_table, name, flags, offset)
 		, strings_(strings)
 	{
 	}
@@ -246,8 +250,8 @@ private:
 class rela_table : public section {
 public:
 	rela_table(
-		const void *data, off_t address, size_t data_size, const std::string &name, section_flags flags, const std::vector<rela> &relocations)
-		: section(data, address, data_size, section_type::relocation_addend, name, flags)
+		const void *data, off_t address, size_t data_size, const std::string &name, section_flags flags, const std::vector<rela> &relocations, off_t offset)
+		: section(data, address, data_size, section_type::relocation_addend, name, flags, offset)
 		, relocations_(relocations)
 	{
 	}

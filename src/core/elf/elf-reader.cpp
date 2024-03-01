@@ -131,7 +131,7 @@ void elf_reader::parse_section(
 		parse_relocation_addend_table(flags, name, address, offset, size, link_offset, entry_size);
 		break;
 	default:
-		sections_.push_back(std::make_shared<section>(get_data_ptr(offset), address, size, type, name, flags));
+		sections_.push_back(std::make_shared<section>(get_data_ptr(offset), address, size, type, name, flags, offset));
 		break;
 	}
 }
@@ -148,7 +148,7 @@ void elf_reader::parse_symbol_table(
 		symbols.push_back(symbol(name, sym.st_value, sym.st_size, sym.st_shndx, sym.st_info, sym.st_other));
 	}
 
-	sections_.push_back(std::make_shared<symbol_table>(get_data_ptr(offset), address, size, symbols, name, flags, type));
+	sections_.push_back(std::make_shared<symbol_table>(get_data_ptr(offset), address, size, symbols, name, flags, type, offset));
 }
 
 void elf_reader::parse_program_headers(off_t offset, int count, size_t size)
@@ -172,5 +172,5 @@ void elf_reader::parse_relocation_addend_table(
 		relas.emplace_back(ELF64_R_TYPE(r.r_info), r.r_addend, ELF64_R_SYM(r.r_info), r.r_offset);
 	}
 
-	sections_.push_back(std::make_shared<rela_table>(get_data_ptr(offset), address, size, sec_name, flags, relas));
+	sections_.push_back(std::make_shared<rela_table>(get_data_ptr(offset), address, size, sec_name, flags, relas, offset));
 }
