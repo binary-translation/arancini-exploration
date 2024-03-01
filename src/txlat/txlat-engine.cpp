@@ -56,7 +56,8 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	tempfile_manager tf;
 
 	// Parse the input ELF file
-	elf_reader elf(cmdline.at("input").as<std::string>());
+	const auto &filename = cmdline.at("input").as<std::string>();
+	elf_reader elf(filename);
 	elf.parse();
 
 	// TODO: Figure the input engine out from ELF architecture header
@@ -133,21 +134,13 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	}
 
 	// Generate loadable sections
-	std::vector<std::pair<std::shared_ptr<tempfile>, std::shared_ptr<program_header>>> phbins;
+	std::vector<std::shared_ptr<program_header>> load_phdrs;
 
 	// For each program header, determine whether or not it's loadable, and generate a
 	// corresponding temporary file containing the binary contents of the segment.
-	for (auto p : elf.program_headers()) {
-        // TODO: fix
-        ::util::global_logger.debug("Program header: {}\n", (int)p->type());
+	for (const auto &p : elf.program_headers()) {
 		if (p->type() == program_header_type::loadable) {
-			// Create a temporary file, and record it in the phbins list.
-			auto phbin = tf.create_file(".bin");
-			phbins.push_back({ phbin, p });
-
-			// Open the file, and write the raw contents of the segment to it.
-			auto s = phbin->open();
-			s.write((const char *)p->data(), p->data_size());
+			load_phdrs.push_back(p);
 		}
 	}
 
@@ -156,51 +149,16 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	// should just include the original ELF file - but then the runtime would need to
 	// parse and load it.
 	auto phobjsrc = tf.create_file(".S");
-	{
-		auto s = phobjsrc->open();
 
-		// Put all segment data into the .gphdata section (guest program header data)
-		s << ".section .gphdata,\"a\"" << std::endl;
-
-		// For each segment...
-		for (unsigned int i = 0; i < phbins.size(); i++) {
-			// Create the metadata for the segment, which includes the load (virtual) address,
-			// the actual byte size of the segment, the size in memory, then the actual data
-			// itself.
-			s << ".align 16" << std::endl;
-			s << "__PH_" << std::dec << i << "_LOAD: .quad 0x" << std::hex << phbins[i].second->address() << std::endl;
-			s << "__PH_" << std::dec << i << "_FSIZE: .quad 0x" << std::hex << phbins[i].second->data_size() << std::endl;
-			s << "__PH_" << std::dec << i << "_MSIZE: .quad 0x" << std::hex << phbins[i].second->mem_size() << std::endl;
-			s << "__PH_" << std::dec << i << "_DATA: .incbin \"" << phbins[i].first->name() << "\"" << std::endl;
-
-			// Make sure the symbol is appropriately sized.
-			s << ".size __PH_" << std::dec << i << "_DATA,.-__PH_" << std::dec << i << "_DATA" << std::endl;
-		}
-
-		// Finally, create pointers to each guest program header in an array.
-		s << ".section .gph,\"a\"" << std::endl;
-		s << ".globl __GPH" << std::endl;
-		s << ".type __GPH,%object" << std::endl;
-		s << "__GPH:" << std::endl;
-		for (unsigned int i = 0; i < phbins.size(); i++) {
-			s << ".quad __PH_" << std::dec << i << "_LOAD" << std::endl;
-		}
-
-		// Null terminate the array.
-		s << ".quad 0" << std::endl;
-
-		// Size the symbol appropriately.
-		s << ".size __GPH,.-__GPH" << std::endl;
-	}
+	generate_guest_sections(phobjsrc, elf, load_phdrs, filename);
 
 	if (!cmdline.count("static-binary")) {
 
 
 		// Generate the final output binary by compiling everything together.
-		run_or_fail(
-			cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie " +
-				intermediate_file->name() + " " + phobjsrc->name() + " " + arancini_runtime_lib_path
-				+ " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info);
+		run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + " " + phobjsrc->name()
+			+ " -l arancini-runtime -L " + arancini_runtime_lib_dir + " -Wl,-T,exec.lds,-rpath=" + arancini_runtime_lib_dir + debug_info);
+
 	} else {
 		std::string arancini_runtime_lib_dir = cmdline.at("static-binary").as<std::string>();
 
@@ -208,7 +166,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie -static-libgcc -static-libstdc++ " + intermediate_file->name()
 			+ " " + phobjsrc->name() + " -L " + arancini_runtime_lib_dir
 			+ " -l arancini-runtime-static -l arancini-input-x86-static -l arancini-output-riscv64-static -l arancini-ir-static" + " -L "
-			+ arancini_runtime_lib_dir + "/../../obj -l xed" + debug_info +" -Wl,-rpath=" + arancini_runtime_lib_dir);
+			+ arancini_runtime_lib_dir + "/../../obj -l xed" + debug_info + " -Wl,-T,exec.lds,-rpath=" + arancini_runtime_lib_dir);
 	}
 }
 
@@ -276,3 +234,50 @@ void txlat_engine::optimise(arancini::output::o_static::static_output_engine &oe
     ::util::global_logger.info("Optimisation: dead flags elimination pass took {} us\n", std::chrono::duration_cast<std::chrono::microseconds>(dur).count());
 }
 
+void txlat_engine::generate_guest_sections(const std::shared_ptr<util::tempfile> &phobjsrc, elf::elf_reader &elf,
+	const std::vector<std::shared_ptr<elf::program_header>> &load_phdrs, const std::basic_string<char> &filename)
+{
+	auto s = phobjsrc->open();
+
+	// FIXME Currently hardcoded to current directory. Not sure what else to do since the linker script needs to have this path in it.
+	auto l = std::ofstream("guest-sections.lds");
+
+
+	// For each segment...
+	for (unsigned int i = 0; i < load_phdrs.size(); i++) {
+
+		auto phdr = load_phdrs[i];
+		end_addresses[phdr->address() + phdr->data_size()] = 2 * i;
+
+		off_t address = phdr->address();
+
+		// Add 2 sections per PT_LOAD header (one for initialized and one for uninitialized data.
+		l << ".gph.load" << std::dec << i << ".1 " << address << ": { *("
+		  << ".gph.load" << std::dec << i << ".1) } :gphdr" << std::dec << i << '\n';
+		l << ".gph.load" << std::dec << i << ".2 : { *("
+		  << ".gph.load" << std::dec << i << ".2) } :gphdr" << std::dec << i << '\n';
+
+		s << ".section .gph.load" << std::dec << i << ".1, \"a";
+		if (phdr->flags() & PF_W) {
+			s << 'w';
+		}
+		//			if (phdr->flags() & PF_X) {
+		//				s << 'x';
+		//			}
+		s << "\"\n";
+
+		s << "__PH_" << std::dec << i << "_DATA_0: .incbin \"" << filename << "\", " << phdr->offset() << ", " << phdr->data_size() << std::endl;
+		if (phdr->mem_size() - phdr->data_size()) {
+			s << ".section .gph.load" << std::dec << i << ".2, \"a";
+			if (phdr->flags() & PF_W) {
+				s << 'w';
+			}
+			//				if (phdr->flags() & PF_X) {
+			//					s << 'x';
+			//				}
+			s << "\", @nobits\n";
+			// Using .zero n does not work with symbols
+			s << "__PH_" << std::dec << i << "_DATA_1: .rept " << std::dec << phdr->mem_size() - phdr->data_size() << "\n.byte 0\n.endr\n";
+		}
+	}
+}
