@@ -72,12 +72,16 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	oe->set_entrypoint(elf.get_entrypoint());
 
 	std::shared_ptr<symbol_table> dyn_sym;
+	std::vector<std::shared_ptr<rela_table>> relocations;
 
 	// Loop over each symbol table, and translate the symbol.
 	for (auto &s : elf.sections()) {
 		if (s->type() == elf::section_type::dynamic_symbol_table) {
 			auto st = std::static_pointer_cast<symbol_table>(s);
 			dyn_sym = std::move(st);
+		} else if (s->type() == elf::section_type::relocation_addend) {
+			auto st = std::static_pointer_cast<rela_table>(s);
+			relocations.push_back(std::move(st));
 		} else if (s->type() == section_type::symbol_table) {
 			auto st = std::static_pointer_cast<symbol_table>(s);
 			if (!cmdline.count("no-static")) {
@@ -155,7 +159,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	// parse and load it.
 	auto phobjsrc = tf.create_file(".S");
 
-	generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym);
+	generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym, relocations, relocations_r);
 
 	if (!cmdline.count("static-binary")) {
 
@@ -172,6 +176,59 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 			+ " " + phobjsrc->name() + " -L " + arancini_runtime_lib_dir
 			+ " -l arancini-runtime-static -l arancini-input-x86-static -l arancini-output-riscv64-static -l arancini-ir-static" + " -L "
 			+ arancini_runtime_lib_dir + "/../../obj -l xed" + debug_info + " -Wl,-T,exec.lds,-rpath=" + arancini_runtime_lib_dir);
+	}
+
+
+	// Patch relocations in result binary
+	const auto &output = cmdline.at("output").as<std::string>();
+	elf_reader elf1 = { output };
+
+	elf1.parse();
+
+	std::shared_ptr<symbol_table> generated_dynsym;
+	std::vector<std::shared_ptr<rela_table>> generated_rela;
+
+	for (auto &s : elf1.sections()) {
+		if (s->type() == elf::section_type::dynamic_symbol_table) {
+			auto st = std::static_pointer_cast<symbol_table>(s);
+			generated_dynsym = std::move(st);
+		} else if (s->type() == elf::section_type::relocation_addend) {
+			auto st = std::static_pointer_cast<rela_table>(s);
+			generated_rela.push_back(std::move(st));
+		}
+	}
+
+	std::map<std::string, int> guest_symbol_to_index;
+
+	const std::vector<symbol> &guest_symbols = generated_dynsym->symbols();
+	for (size_t i = 0; i < guest_symbols.size(); ++i) {
+		const std::string &string = guest_symbols[i].name();
+		if (string.size() >= 9) {
+			guest_symbol_to_index.emplace(string.substr(9), i);
+		}
+	}
+
+	{
+		std::ofstream file(cmdline.at("output").as<std::string>(), std::ios::out | std::ios::binary | std::ios::in);
+
+		for (const auto &relocs : generated_rela) {
+			const std::vector<rela> &relocations1 = relocs->relocations();
+			for (size_t i = 0; i < relocations1.size(); ++i) {
+				const auto &reloc = relocations1[i];
+				unsigned int transform = reloc.type() & 0xf0000000;
+				if (transform == 0x10000000) { // symbol index needs to be adjusted to point to correct index in target dyn_sym table
+					unsigned int new_symbol = guest_symbol_to_index[dyn_sym->symbols()[reloc.symbol()].name()];
+					unsigned int buf = reloc.type() & ~0xf0000000;
+					file.seekp(relocs->file_offset() + 24 * i + 8);
+					file.write(reinterpret_cast<const char *>(&buf), sizeof(buf));
+					file.write(reinterpret_cast<const char *>(&new_symbol), sizeof(new_symbol));
+					// Write new_symbol to (relocs.file_offset() + 24 * i + 12) and reloc.type() & ~0xf0000000 to (relocs.file_offset() + 24 * i + 8)
+				} else if (transform) {
+					throw std::runtime_error("Invalid relocation transform type " + std::to_string(transform));
+				}
+			}
+		}
+		file.close();
 	}
 }
 
@@ -270,7 +327,8 @@ void txlat_engine::optimise(arancini::output::o_static::static_output_engine &oe
 }
 
 void txlat_engine::generate_guest_sections(const std::shared_ptr<util::tempfile> &phobjsrc, elf::elf_reader &elf,
-	const std::vector<std::shared_ptr<elf::program_header>> &load_phdrs, const std::basic_string<char> &filename, const std::shared_ptr<symbol_table> &dyn_sym)
+	const std::vector<std::shared_ptr<elf::program_header>> &load_phdrs, const std::basic_string<char> &filename, const std::shared_ptr<symbol_table> &dyn_sym,
+	const std::vector<std::shared_ptr<elf::rela_table>> &relocations)
 {
 	std::map<off_t, unsigned int> end_addresses;
 	auto s = phobjsrc->open();
@@ -320,5 +378,24 @@ void txlat_engine::generate_guest_sections(const std::shared_ptr<util::tempfile>
 
 	for (const auto &sym : dyn_sym->symbols()) {
 		add_symbol_to_output(load_phdrs, end_addresses, sym, s);
+	}
+
+	// Manually emit relocations into the .grela section
+	s << ".section .grela, \"a\"\n";
+
+	// A Relocation consists of 3 quad words. First the offset, then type in the high 32 bit and symbol index in the low 32 bit of the second and the addend in
+	// the third
+	for (const auto &relocs : relocations) {
+		for (const auto &reloc : relocs->relocations()) {
+			if (reloc.is_relative()) {
+				s << ".quad 0x" << std::hex << reloc.offset() << "\n.int 0x" << reloc.type_on_host() << "\n.int 0x" << reloc.symbol() << "\n.quad 0x"
+				  << reloc.addend() << '\n';
+			} else {
+				// Mark this relocation as needing adjustment on the symbol index (it needs to match the index of the symbol in the generated binary).
+				// Set the 4th highest bit of the type to indicate this.
+				s << ".quad 0x" << std::hex << reloc.offset() << "\n.int 0x" << (0x10000000 | reloc.type_on_host()) << "\n.int 0x" << reloc.symbol()
+				  << "\n.quad 0x" << reloc.addend() << '\n';
+			}
+		}
 	}
 }
