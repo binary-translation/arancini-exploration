@@ -58,12 +58,13 @@ void *MainLoopWrapper(void *args) {
 
 execution_context::execution_context(input::input_arch &ia, output::dynamic::dynamic_output_engine &oe, bool optimise)
 	: memory_(nullptr)
-	, memory_size_(0x100000000ull)
+	, memory_size_(0x10000000ull)
 	, brk_ { 0 }
 	, brk_limit_ { UINTPTR_MAX }
 	, te_(*this, ia, oe, optimise)
 {
 	allocate_guest_memory();
+	brk_ = reinterpret_cast<uintptr_t>(memory_);
 }
 
 execution_context::~execution_context() { }
@@ -80,7 +81,7 @@ void *execution_context::add_memory_region(off_t base_address, size_t size, bool
 	uintptr_t aligned_size = (size + base_ptr_off + 0xfff) & ~0xfffull;
 
     util::global_logger.info("amr: base-pointer={:#x} aligned-base-ptr={:#x} base-ptr-off={:#x} size={} aligned-size={}\n",
-                             base_ptr, aligned_base_ptr, base_ptr_off, size, aligned_size); 
+                             base_ptr, aligned_base_ptr, base_ptr_off, size, aligned_size);
 
 	mprotect((void *)aligned_base_ptr, aligned_size, PROT_READ | PROT_WRITE);
 
@@ -97,7 +98,7 @@ void execution_context::allocate_guest_memory()
 {
 	memory_ = mmap(GM_BASE, memory_size_, PROT_NONE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 	if (memory_ == MAP_FAILED) {
-		throw std::runtime_error("Unable to allocate guest memory");
+		throw std::runtime_error("Unable to allocate guest memory (" + std::to_string(errno) + ")");
 	}
 
 #if defined(ARCH_X86_64)
@@ -232,14 +233,14 @@ int execution_context::internal_call(void *cpu_state, int call)
            util::global_logger.debug("System call: mmap()\n");
 
 			// Hint to higher than already mapped memory if no hint
-			auto addr = x86_state->RDI == 0 ? (uintptr_t)get_memory_ptr((off_t)memory_size_ + 4096) : (uintptr_t)get_memory_ptr((int64_t)x86_state->RDI);
+			auto addr = x86_state->RDI == 0 ? (uintptr_t)memory_ + (off_t)memory_size_ + 4096 : (uintptr_t)get_memory_ptr((int64_t)x86_state->RDI);
 			uint64_t length = x86_state->RSI;
 			uint64_t prot = x86_state->RDX;
 			uint64_t flags = x86_state->R10;
 			uint64_t fd = x86_state->R8;
 			uint64_t offset = x86_state->R9;
 
-			if (flags & MAP_FIXED && (addr < (uintptr_t)get_memory_ptr(0) || (addr + length) > (uintptr_t)get_memory_ptr((off_t)memory_size_))) {
+			if (flags & MAP_FIXED && (addr < (uintptr_t)memory_ || (addr + length) > (uintptr_t)memory_ + memory_size_)) {
 				// Prevent overwriting non-guest memory
 				flags &= ~MAP_FIXED;
 				flags |= MAP_FIXED_NOREPLACE;
@@ -328,7 +329,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 			uint64_t request = x86_state->RSI;
 			switch (request) {
 			case TIOCGWINSZ:
-				arg += (uintptr_t)memory_;
+				arg = (uintptr_t)get_memory_ptr(arg);
 				break;
 			default:
                 util::global_logger.warn("Unknown ioctl request {}\n", request);
@@ -343,11 +344,11 @@ int execution_context::internal_call(void *cpu_state, int call)
         {
             util::global_logger.debug("System call: writev()\n");
 
-			auto iovec = (const struct iovec *)(x86_state->RSI + (uintptr_t(memory_)));
+			auto iovec = (const struct iovec *)get_memory_ptr(x86_state->RSI);
 			auto iocnt = x86_state->RDX;
 			struct iovec iovec_new[iocnt];
 			for (auto i = 0ull; i < iocnt; ++i) {
-				iovec_new[i].iov_base = reinterpret_cast<void *>((uintptr_t)iovec[i].iov_base + (uintptr_t)memory_);
+				iovec_new[i].iov_base = reinterpret_cast<void *>(get_memory_ptr(((uintptr_t)iovec[i].iov_base)));
 				iovec_new[i].iov_len = iovec[i].iov_len;
 			}
 
@@ -408,7 +409,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 			uint64_t flags = x86_state->R10;
 			auto new_addr = (uintptr_t)get_memory_ptr((int64_t)x86_state->R8);
 
-			if (flags & MREMAP_FIXED && (new_addr < (uintptr_t)get_memory_ptr(0) || (new_addr + new_size) > (uintptr_t)get_memory_ptr((off_t)memory_size_))) {
+			if (flags & MREMAP_FIXED && (new_addr < (uintptr_t)memory_ || new_addr + new_size > (uintptr_t)memory_ + memory_size_)) {
 				x86_state->RAX = -EINVAL;
 				// IDK
 				break;
@@ -435,11 +436,11 @@ int execution_context::internal_call(void *cpu_state, int call)
 				x86_state->RAX = 0;
 				break;
 			case 0x1003: // ARCH_GET_FS
-				(*((uint64_t *)(x86_state->RSI + (intptr_t)memory_))) = x86_state->FS;
+				*(uint64_t *)get_memory_ptr(x86_state->RSI) = x86_state->FS;
 				x86_state->RAX = 0;
 				break;
 			case 0x1004: // ARCH_GET_GS
-				(*((uint64_t *)(x86_state->RSI + (intptr_t)memory_))) = x86_state->GS;
+				*(uint64_t *)get_memory_ptr(x86_state->RSI) = x86_state->GS;
 				x86_state->RAX = 0;
 				break;
 			default:
@@ -473,7 +474,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 
 			// TODO Handle clear_child_tid in exit
 			auto et = threads_[cpu_state];
-			et->clear_child_tid_ = (int *)(x86_state->RDI + (uintptr_t)memory_);
+			et->clear_child_tid_ = (int *)get_memory_ptr(x86_state->RDI);
 			x86_state->RAX = gettid();
 			break;
 		}

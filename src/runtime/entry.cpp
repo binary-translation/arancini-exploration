@@ -272,8 +272,9 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	ctx_ = new execution_context(ia, oe, optimise);
 
 	// Create a memory area for the stack.
+	// FIXME hardcoded stack_size and memory size
 	unsigned long stack_size = 0x10000;
-	ctx_->add_memory_region(0x100000000 - stack_size, stack_size, true);
+	auto stack_base = ctx_->add_memory_region(0x10000000 - stack_size, stack_size, true);
 
 	// TODO: Load guest .text, .data, .bss sections via program headers
 	load_guest_program_headers(ctx_);
@@ -288,7 +289,8 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	__current_state = x86_state;
 	x86_state->PC = entry_point;
 
-	x86_state->RSP = setup_guest_stack(argc, argv, 0x100000000, ctx_, start);
+	x86_state->RSP
+		= setup_guest_stack(argc, argv, reinterpret_cast<intptr_t>(stack_base) - reinterpret_cast<intptr_t>(ctx_->get_memory_ptr(0)) + stack_size, ctx_, start);
 	x86_state->X87_STACK_BASE = (intptr_t)mmap(NULL, 80, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0) - (intptr_t)ctx_->get_memory_ptr(0);
 
 	// Report on various information for useful debugging purposes.
