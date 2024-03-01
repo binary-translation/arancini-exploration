@@ -104,7 +104,7 @@ struct guest_program_header_metadata {
 } __attribute__((packed));
 
 // The symbol that contains the list of pointers to the guest program header metadata structures.
-extern "C" const guest_program_header_metadata *__GPH[];
+// extern "C" const guest_program_header_metadata *__GPH[];
 
 /*
  * Loads a guest program header into emulated memory.
@@ -139,17 +139,17 @@ static void load_gph(execution_context *ctx, const guest_program_header_metadata
  */
 static void load_guest_program_headers(execution_context *ctx)
 {
-	// Get a pointer to the list of pointers to the metadata structures.
-	const guest_program_header_metadata **gphp = __GPH;
-
-	// Loop over the pointers until null.
-	while (*gphp) {
-		// Trigger loading of the GPH.
-		load_gph(ctx, *gphp);
-
-		// Advance the pointer.
-		gphp++;
-	}
+	//	// Get a pointer to the list of pointers to the metadata structures.
+	//	const guest_program_header_metadata **gphp = __GPH;
+	//
+	//	// Loop over the pointers until null.
+	//	while (*gphp) {
+	//		// Trigger loading of the GPH.
+	//		load_gph(ctx, *gphp);
+	//
+	//		// Advance the pointer.
+	//		gphp++;
+	//	}
 }
 
 static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, execution_context *execution_context, int start)

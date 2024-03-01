@@ -147,7 +147,7 @@ int execution_context::invoke(void *cpu_state) {
 		te_.chain(et->chain_address_, txln->get_code_ptr());
 	}
 
-	const dbt::native_call_result result = txln->invoke(cpu_state, memory_);
+	const dbt::native_call_result result = txln->invoke(cpu_state, nullptr);
 
 	et->chain_address_ = result.chain_address;
 
