@@ -46,6 +46,8 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 		("help,h", "Displays usage information") //
 		("input,I", po::value<std::string>()->required(), "The ELF file that is being translated") //
 		("output,O", po::value<std::string>(), "The output file that is generated (omit if you don't want to produce a translated binary)") //
+		("library,l", po::value<std::vector<std::string>>(),
+			"Translated versions of the libraries this binary depends on (relative or absolute path including filename)") //
 		("syntax", po::value<std::string>()->default_value("intel"),
 			"Specify the syntax to use when disassembling host instructions (x86 input only: att or intel)") //
 		("graph", po::value<std::string>(), "Creates a DOT graph file representing the input ELF translation") //

@@ -8,3 +8,5 @@
 - Run `scripts/linkerscript/gen_linker_script.sh <binary> <binary.lds>` with the generated binary and the saved linker script as inputs. 
   This will generate the file `<binary.lds>.new`.
 - Add `INCLUDE "guest-sections.lds"` as the first line in `SECTIONS` and `*(.grela)` as the first line in `.rela.dyn`
+- If you want a script for a shared library you want to change the order of the phdrs so the add gphdr are first as 
+  unsorted phdr will break loading.

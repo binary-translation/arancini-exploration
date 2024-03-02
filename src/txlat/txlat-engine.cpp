@@ -88,7 +88,8 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 			relocations_r.push_back(std::move(st));
 		} else if (s->type() == section_type::symbol_table) {
 			auto st = std::static_pointer_cast<symbol_table>(s);
-			if (!cmdline.count("no-static")) {
+			// TODO static translation of code in libraries
+			if (!cmdline.count("no-static") && elf.type() == elf_type::exec) {
 				for (const auto &sym : st->symbols()) {
 					// if (allowed_symbols.count(sym.name())) {
 					if (sym.is_func() && sym.size()) {
@@ -166,14 +167,34 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym, relocations, relocations_r);
 
 	if (!cmdline.count("static-binary")) {
+		std::string libs;
 
+		if (cmdline.count("library")) {
+			std::stringstream stringstream;
+			for (const auto &item : cmdline.at("library").as<std::vector<std::string>>()) {
+				stringstream << " " << item;
+			}
+			libs = stringstream.str();
+		}
 
-		// Generate the final output binary by compiling everything together.
-		run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + " " + phobjsrc->name()
-			+ " -l arancini-runtime -L " + arancini_runtime_lib_dir + " -Wl,-T,exec.lds,-rpath=" + arancini_runtime_lib_dir + debug_info);
+		if (elf.type() == elf::elf_type::exec) {
+			// Generate the final output binary by compiling everything together.
+			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + libs + " " + phobjsrc->name()
+				+ " -l arancini-runtime -L " + arancini_runtime_lib_dir + " -Wl,-T,exec.lds,-rpath=" + arancini_runtime_lib_dir + debug_info);
+		} else if (elf.type() == elf::elf_type::dyn) {
+			// Generate the final output library by compiling everything together.
+			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -shared " + intermediate_file->name() + " " + phobjsrc->name()
+				+ " -l arancini-runtime -L " + arancini_runtime_lib_dir + libs + " -Wl,-T,lib.lds,-rpath=" + arancini_runtime_lib_dir + debug_info);
+		} else {
+			throw std::runtime_error("Input elf type must be either an executable or shared object.");
+		}
 
 	} else {
 		std::string arancini_runtime_lib_dir = cmdline.at("static-binary").as<std::string>();
+
+		if (elf.type() != elf::elf_type::exec) {
+			throw std::runtime_error("Can't generate a static binary from a shared object.");
+		}
 
 		// Generate the final output binary by compiling everything together.
 		run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie -static-libgcc -static-libstdc++ " + intermediate_file->name()
