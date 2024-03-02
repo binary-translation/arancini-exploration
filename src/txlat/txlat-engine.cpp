@@ -164,7 +164,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	// parse and load it.
 	auto phobjsrc = tf.create_file(".S");
 
-	generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym, relocations, relocations_r);
+	std::map<uint64_t, std::string> ifuncs = generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym, relocations, relocations_r);
 
 	if (!cmdline.count("static-binary")) {
 		std::string libs;
@@ -241,7 +241,16 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 			for (size_t i = 0; i < relocations1.size(); ++i) {
 				const auto &reloc = relocations1[i];
 				unsigned int transform = reloc.type() & 0xf0000000;
-				if (transform == 0x10000000) { // symbol index needs to be adjusted to point to correct index in target dyn_sym table
+				if (transform == 0x20000000) { // addend needs to be replaced with value of symbol with name ifuncs[addend].
+					// ifunc tells us the symbol for the addend
+					uint64_t new_addend = guest_symbols[guest_symbol_to_index[ifuncs[reloc.addend()].substr(9)]].value();
+					unsigned int buf = reloc.type() & ~0xf0000000;
+					file.seekp(relocs->file_offset() + 24 * i + 8);
+					file.write(reinterpret_cast<const char *>(&buf), sizeof(buf));
+					file.seekp(4, std::ios::cur);
+					file.write(reinterpret_cast<const char *>(&new_addend), sizeof(new_addend));
+					// Write new_addend to (relocs.file_offset() + 24 * i + 16) and reloc.type() & ~0xf0000000 to (relocs.file_offset() + 24 * i + 8)
+				} else if (transform == 0x10000000) { // symbol index needs to be adjusted to point to correct index in target dyn_sym table
 					unsigned int new_symbol = guest_symbol_to_index[dyn_sym->symbols()[reloc.symbol()].name()];
 					unsigned int buf = reloc.type() & ~0xf0000000;
 					file.seekp(relocs->file_offset() + 24 * i + 8);
@@ -257,8 +266,8 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	}
 }
 
-void txlat_engine::add_symbol_to_output(
-	const std::vector<std::shared_ptr<program_header>> &phbins, const std::map<off_t, unsigned int> &end_addresses, const symbol &sym, std::ofstream &s)
+void txlat_engine::add_symbol_to_output(const std::vector<std::shared_ptr<program_header>> &phbins, const std::map<off_t, unsigned int> &end_addresses,
+	const symbol &sym, std::ofstream &s, std::map<uint64_t, std::string> &ifuncs)
 {
 	auto type = sym.type();
 
@@ -266,7 +275,58 @@ void txlat_engine::add_symbol_to_output(
 	const std::shared_ptr<program_header> &phdr = phbins[i / 2];
 
 	auto name = "__guest__" + sym.name();
-	if (sym.section_index() != SHN_UNDEF) {
+	if (strcmp(type, "STT_GNU_IFUNC") == 0) {
+
+		if (sym.section_index() != SHN_UNDEF) {
+			s << ".set \"" << name << "__ifunc\", __PH_" << std::dec << i / 2 << "_DATA_" << i % 2 << " + "
+			  << sym.value() - phdr->address() - (i % 2) * (phdr->data_size()) << '\n';
+		}
+
+		s << ".type \"" << name << "__ifunc\", "
+		  << "STT_FUNC" << '\n'
+		  << ".hidden \"" << name
+		  << "__ifunc\"\n"
+
+		  // Generate a stub that mimics a resolver with the following assembly code
+		  /*						  name:
+		   *  ff 25 00 00 00 00       jmp    QWORD PTR [rip+name_resolve]
+		   *  57                      push   rdi
+		   *  56                      push   rsi
+		   *  52                      push   rdx
+		   *  51                      push   rcx
+		   *  41 50                   push   r8
+		   *  51                      push   rcx
+		   *  51                      push   rcx
+		   *  e8 00 00 00 00          call   name_ifunc
+		   *  41 59                   pop    r9
+		   *  41 58                   pop    r8
+		   *  59                      pop    rcx
+		   *  5a                      pop    rdx
+		   *  5e                      pop    rsi
+		   *  5f                      pop    rdi
+		   *  48 89 05 00 00 00 00    mov    QWORD PTR [rip+name_resolve],rax
+		   *  ff e0                   jmp    rax
+		   */
+
+		  << ".section .data.resolve\n"
+		  << '\"' << name << "__resolve\": .quad 1f\n"
+		  << ".section .data.ifunc\n"
+		  << '\"' << name << "\":\n"
+		  << ".byte 0xff, 0x25\n"
+		  << "0: .zero 4\n"
+		  << "1: .byte 0x57, 0x56, 0x52, 0x51, 0x41, 0x50, 0x41, 0x51, 0xe8\n"
+		  << "2: .zero 4\n"
+		  << ".byte 0x41, 0x59, 0x41, 0x58, 0x59, 0x5a, 0x5e, 0x5f, 0x48, 0x89, 0x05\n"
+		  << "3: .zero 4\n"
+		  << ".byte 0xff, 0xe0\n"
+		  << ".reloc 0b, R_RISCV_32_PCREL, \"" << name << "__resolve\" - 4\n"
+		  << ".reloc 2b, R_RISCV_32_PCREL, \"" << name << "__ifunc\" - 4\n"
+		  << ".reloc 3b, R_RISCV_32_PCREL, \"" << name << "__resolve\" - 4\n";
+
+		type = "STT_FUNC";
+		ifuncs[sym.value()] = name;
+
+	} else if (sym.section_index() != SHN_UNDEF) {
 		s << ".set \"" << name << "\", __PH_" << std::dec << i / 2 << "_DATA_" << i % 2 << " + "
 		  << sym.value() - phdr->address() - (i % 2) * (phdr->data_size()) << '\n'
 		  << ".size \"" << name << "\", " << std::dec << sym.size() << '\n';
@@ -351,10 +411,11 @@ void txlat_engine::optimise(arancini::output::o_static::static_output_engine &oe
     ::util::global_logger.info("Optimisation: dead flags elimination pass took {} us\n", std::chrono::duration_cast<std::chrono::microseconds>(dur).count());
 }
 
-void txlat_engine::generate_guest_sections(const std::shared_ptr<util::tempfile> &phobjsrc, elf::elf_reader &elf,
+std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std::shared_ptr<util::tempfile> &phobjsrc, elf::elf_reader &elf,
 	const std::vector<std::shared_ptr<elf::program_header>> &load_phdrs, const std::basic_string<char> &filename, const std::shared_ptr<symbol_table> &dyn_sym,
 	const std::vector<std::shared_ptr<elf::rela_table>> &relocations, const std::vector<std::shared_ptr<elf::relr_array>> &relocations_r)
 {
+	std::map<uint64_t, std::string> ifuncs;
 	std::map<off_t, unsigned int> end_addresses;
 	auto s = phobjsrc->open();
 
@@ -402,7 +463,7 @@ void txlat_engine::generate_guest_sections(const std::shared_ptr<util::tempfile>
 	}
 
 	for (const auto &sym : dyn_sym->symbols()) {
-		add_symbol_to_output(load_phdrs, end_addresses, sym, s);
+		add_symbol_to_output(load_phdrs, end_addresses, sym, s, ifuncs);
 	}
 
 	// Manually emit relocations into the .grela section
@@ -425,7 +486,12 @@ void txlat_engine::generate_guest_sections(const std::shared_ptr<util::tempfile>
 	// the third
 	for (const auto &relocs : relocations) {
 		for (const auto &reloc : relocs->relocations()) {
-			if (reloc.is_relative()) {
+			if (reloc.is_irelative()) {
+				// Use a relative reloc to the stub function instead. Identify the needed function by the original addend.
+				if (ifuncs.count(reloc.addend())) {
+					s << ".quad 0x" << std::hex << reloc.offset() << "\n.quad 0x20000003\n.quad 0x" << reloc.addend() << '\n';
+				}
+			} else if (reloc.is_relative()) {
 				s << ".quad 0x" << std::hex << reloc.offset() << "\n.int 0x" << reloc.type_on_host() << "\n.int 0x" << reloc.symbol() << "\n.quad 0x"
 				  << reloc.addend() << '\n';
 			} else {
@@ -436,4 +502,6 @@ void txlat_engine::generate_guest_sections(const std::shared_ptr<util::tempfile>
 			}
 		}
 	}
+
+	return ifuncs;
 }
