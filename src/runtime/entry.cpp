@@ -216,6 +216,12 @@ static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, exe
 	return (intptr_t)stack_top;
 }
 
+extern "C" {
+lib_info *lib_info_list = nullptr;
+lib_info *lib_info_list_tail = nullptr;
+int lib_count = 0;
+}
+
 /*
  * Initialises the dynamic runtime for the guest program that is about to be executed.
  */

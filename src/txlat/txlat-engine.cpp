@@ -184,7 +184,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		} else if (elf.type() == elf::elf_type::dyn) {
 			// Generate the final output library by compiling everything together.
 			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -shared " + intermediate_file->name() + " " + phobjsrc->name()
-				+ " -l arancini-runtime -L " + arancini_runtime_lib_dir + libs + " -Wl,-T,lib.lds,-rpath=" + arancini_runtime_lib_dir + debug_info);
+				+ " init_lib.c -l arancini-runtime -L " + arancini_runtime_lib_dir + libs + " -Wl,-T,lib.lds,-rpath=" + arancini_runtime_lib_dir + debug_info);
 		} else {
 			throw std::runtime_error("Input elf type must be either an executable or shared object.");
 		}
@@ -445,6 +445,9 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 		//				s << 'x';
 		//			}
 		s << "\"\n";
+
+		s << ".ifndef guest_base\nguest_base:\n.globl guest_base\n.hidden guest_base\n";
+		s << ".endif\n";
 
 		s << "__PH_" << std::dec << i << "_DATA_0: .incbin \"" << filename << "\", " << phdr->offset() << ", " << phdr->data_size() << std::endl;
 		if (phdr->mem_size() - phdr->data_size()) {
