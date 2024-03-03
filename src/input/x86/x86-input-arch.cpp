@@ -151,6 +151,8 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_PSUBW:
   case XED_ICLASS_PSUBB:
   case XED_ICLASS_PCMPEQB:
+  case XED_ICLASS_PCMPEQW:
+  case XED_ICLASS_PCMPEQD:
   case XED_ICLASS_PCMPGTB:
   case XED_ICLASS_PCMPGTW:
   case XED_ICLASS_PCMPGTD:
@@ -220,7 +222,9 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_PUNPCKHWD:
 	case XED_ICLASS_PUNPCKHDQ:
 	case XED_ICLASS_PUNPCKHQDQ:
-  case XED_ICLASS_PACKUSWB:
+	case XED_ICLASS_PACKUSWB:
+	case XED_ICLASS_PACKSSWB:
+	case XED_ICLASS_PACKSSDW:
 		return std::make_unique<punpck_translator>(builder);
 
 	case XED_ICLASS_VADDSS:

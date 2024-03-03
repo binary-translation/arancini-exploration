@@ -1207,7 +1207,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto val = lower_port(builder, state_arg, pkt, wpn->value());
 
 		// For Debug only! This will break the static_csel pass
-		//builder.CreateStore(val, dest_mem);
+		// builder.CreateStore(val, dest_mem);
 		return builder.CreateStore(val, dest_reg);
 	}
 
@@ -1617,7 +1617,7 @@ void llvm_static_output_engine_impl::save_callee_regs(IRBuilder<> &builder, Argu
 	};
 	auto regs = { reg_offsets::PC, reg_offsets::RBX, reg_offsets::RSP,
 				  reg_offsets::RBP, reg_offsets::R12, reg_offsets::R13, reg_offsets::R14, reg_offsets::R15,
-				  reg_offsets::FS, reg_offsets::GS, reg_offsets::X87_STACK_BASE, reg_offsets::X87_STS
+				  reg_offsets::FS, reg_offsets::GS, reg_offsets::X87_STS, reg_offsets::X87_TAG, reg_offsets::X87_CTRL
 	};
 	for (auto reg : regs) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
@@ -1636,7 +1636,7 @@ void llvm_static_output_engine_impl::restore_callee_regs(IRBuilder<> &builder, A
 	auto rets = { reg_offsets::RAX, reg_offsets::RDX, reg_offsets::ZMM0, reg_offsets::ZMM1 };
 	auto regs = { reg_offsets::PC, reg_offsets::RBX, reg_offsets::RSP,
 				  reg_offsets::RBP, reg_offsets::R12, reg_offsets::R13, reg_offsets::R14, reg_offsets::R15,
-				  reg_offsets::FS, reg_offsets::GS, reg_offsets::X87_STACK_BASE, reg_offsets::X87_STS
+				  reg_offsets::FS, reg_offsets::GS, reg_offsets::X87_STACK_BASE, reg_offsets::X87_STS, reg_offsets::X87_TAG, reg_offsets::X87_CTRL
 	};
 	for (auto reg : regs) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "restore_"+std::to_string((unsigned long)reg));
