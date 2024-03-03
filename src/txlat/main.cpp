@@ -26,7 +26,8 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 		("cxx-compiler-path", po::value<std::string>()->default_value("g++"), "Path to C++ compiler to use for translated binary") //
 		("debug-gen", "Include debugging information in the generated output binary") //
 		("debug", "Enable debugging output") //
-		("dump-llvm", po::value<std::string>(), "Dump generated LLVM IR");
+		("dump-llvm", po::value<std::string>(), "Dump generated LLVM IR") //
+		("keep-objs", po::value<std::string>(), "Keep generated obj files in <prefix> for manual linking");
 
     po::variables_map vm;
 	try {

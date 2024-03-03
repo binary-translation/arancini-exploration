@@ -6,20 +6,31 @@
 #include <unistd.h>
 
 namespace arancini::util {
-class tempfile {
+class basefile {
 public:
-	tempfile(const std::string &name)
-		: name_(name)
-	{
-	}
+	basefile(const std::string &name)
+		: name_(name) {}
+	const std::string &name() const { return name_; }
+	virtual std::ofstream open() = 0;
 
+protected:
+	std::string name_;
+};
+
+class tempfile : public basefile {
+public:
+	tempfile(const std::string &name) : basefile(name) {};
 	~tempfile() { unlink(name_.c_str()); }
 
-	const std::string &name() const { return name_; }
+	std::ofstream open() override { return std::ofstream(name_); }
+};
 
-	std::ofstream open() { return std::ofstream(name_); }
+class persfile : public basefile {
+public:
+	persfile(const std::string &name) : basefile(name) {};
+
+	std::ofstream open() override { return std::ofstream(name_);}
 
 private:
-	std::string name_;
 };
 } // namespace arancini::util
