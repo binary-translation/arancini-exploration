@@ -3,6 +3,7 @@
 
 typedef struct lib_info {
 	unsigned char *base;
+	size_t *dynv;
 	struct lib_info *next;
 } lib_info;
 
@@ -12,7 +13,7 @@ extern int lib_count;
 
 extern unsigned char guest_base;
 
-static lib_info local_libinfo = { &guest_base, NULL };
+static lib_info local_libinfo = { &guest_base, &__guest___DYNAMIC, NULL };
 
 
 static __attribute__((constructor)) void init_lib()

@@ -1,5 +1,6 @@
 #include <arancini/runtime/exec/execution-context.h>
 #include <arancini/runtime/exec/execution-thread.h>
+#include <arancini/runtime/exec/guest_support.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
 #include <arancini/util/logger.h>
 #include <cstring>
@@ -160,7 +161,7 @@ static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, exe
 		;
 
 	// auxv entries are always 16 Bytes
-	stack_top -= ((envc + (argc - (start - 1))) & 1) * 8;
+	stack_top -= ((envc + (argc - (start - 1)) + 1) & 1) * 8;
 
 	// Add auxv to guest stack
 	{
@@ -191,6 +192,11 @@ static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, exe
 		// Zero terminated so environ[envc] will be zero and also needs to be copied
 		for (int i = envc - 1; i >= 0; i--) {
 			*(--stack) = (char *)(((uintptr_t)environ[i]) - (uintptr_t)execution_context->get_memory_ptr(0));
+		}
+
+		if (&GUEST(__environ) != nullptr) {
+			// Exists in guest so set it
+			GUEST(__environ) = stack;
 		}
 		stack_top = (intptr_t)stack - (intptr_t)execution_context->get_memory_ptr(0);
 	}
@@ -301,6 +307,36 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 
 	// Report on various information for useful debugging purposes.
     util::global_logger.info("state={} pc={:#x} stack={:#x}\n", fmt::ptr(x86_state), util::copy(x86_state->PC), util::copy(x86_state->RSP));
+
+	if (&GUEST(main_ctor_queue) != nullptr) {
+		size_t tls_cnt = 0;
+		tls_module *tls_tail = nullptr;
+
+		size_t tls_align = alignof(guest_pthread);
+
+		auto app_dso = new dso();
+		app_dso->dynv = &guest_exec_DYNAMIC;
+//		app_dso->base = &guest_exec_base; //Load offset assume 0 since not pie
+
+		auto dsos = new dso *[lib_count + 2];
+
+		lib_info *lib = lib_info_list;
+
+		for (int i = 0; i < lib_count; ++i, lib = lib->next) {
+			auto cur_dso = new dso();
+			cur_dso->dynv = lib->dynv;
+			cur_dso->base = lib->base;
+			dsos[i] = cur_dso;
+		}
+
+		dsos[lib_count] = app_dso;
+		dsos[lib_count + 1] = nullptr;
+
+		GUEST(main_ctor_queue) = dsos;
+
+		GUEST(__malloc_replaced) = 1; // Prevent guest musl from trying to free our allocations using their free
+
+	}
 
 	// Initialisation of the runtime is complete - return a pointer to the raw CPU state structure
 	// so that the static code can use it for emulation.

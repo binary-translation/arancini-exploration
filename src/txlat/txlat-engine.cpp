@@ -72,6 +72,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	oe->set_entrypoint(elf.get_entrypoint());
 
 	std::shared_ptr<symbol_table> dyn_sym;
+	std::shared_ptr<symbol_table> sym_t;
 	std::vector<std::shared_ptr<rela_table>> relocations;
 	std::vector<std::shared_ptr<relr_array>> relocations_r;
 
@@ -97,6 +98,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 					}
 				}
 			}
+			sym_t = std::move(st);
 		}
 	}
 
@@ -164,7 +166,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	// parse and load it.
 	auto phobjsrc = tf.create_file(".S");
 
-	std::map<uint64_t, std::string> ifuncs = generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym, relocations, relocations_r);
+	std::map<uint64_t, std::string> ifuncs = generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym, relocations, relocations_r, sym_t);
 
 	if (!cmdline.count("static-binary")) {
 		std::string libs;
@@ -267,14 +269,14 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 }
 
 void txlat_engine::add_symbol_to_output(const std::vector<std::shared_ptr<program_header>> &phbins, const std::map<off_t, unsigned int> &end_addresses,
-	const symbol &sym, std::ofstream &s, std::map<uint64_t, std::string> &ifuncs)
+	const symbol &sym, std::ofstream &s, std::map<uint64_t, std::string> &ifuncs, bool force_global, bool omit_prefix)
 {
 	auto type = sym.type();
 
 	unsigned int i = end_addresses.upper_bound(sym.value())->second;
 	const std::shared_ptr<program_header> &phdr = phbins[i / 2];
 
-	auto name = "__guest__" + sym.name();
+	auto name = omit_prefix ? sym.name() : "__guest__" + sym.name();
 	if (strcmp(type, "STT_GNU_IFUNC") == 0) {
 
 		if (sym.section_index() != SHN_UNDEF) {
@@ -331,7 +333,7 @@ void txlat_engine::add_symbol_to_output(const std::vector<std::shared_ptr<progra
 		  << sym.value() - phdr->address() - (i % 2) * (phdr->data_size()) << '\n'
 		  << ".size \"" << name << "\", " << std::dec << sym.size() << '\n';
 	}
-	if (sym.is_global()) {
+	if (force_global || sym.is_global()) {
 		s << ".globl \"" << name << "\"\n";
 	} else if (sym.is_weak()) {
 		s << ".weak \"" << name << "\"\n";
@@ -413,7 +415,8 @@ void txlat_engine::optimise(arancini::output::o_static::static_output_engine &oe
 
 std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std::shared_ptr<util::tempfile> &phobjsrc, elf::elf_reader &elf,
 	const std::vector<std::shared_ptr<elf::program_header>> &load_phdrs, const std::basic_string<char> &filename, const std::shared_ptr<symbol_table> &dyn_sym,
-	const std::vector<std::shared_ptr<elf::rela_table>> &relocations, const std::vector<std::shared_ptr<elf::relr_array>> &relocations_r)
+	const std::vector<std::shared_ptr<elf::rela_table>> &relocations, const std::vector<std::shared_ptr<elf::relr_array>> &relocations_r,
+	const std::shared_ptr<symbol_table> &sym_t)
 {
 	std::map<uint64_t, std::string> ifuncs;
 	std::map<off_t, unsigned int> end_addresses;
@@ -447,6 +450,9 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 		s << "\"\n";
 
 		s << ".ifndef guest_base\nguest_base:\n.globl guest_base\n.hidden guest_base\n";
+		if (elf.type() == elf::elf_type::exec) {
+			s << "guest_exec_base:\n.globl guest_exec_base\n";
+		}
 		s << ".endif\n";
 
 		s << "__PH_" << std::dec << i << "_DATA_0: .incbin \"" << filename << "\", " << phdr->offset() << ", " << phdr->data_size() << std::endl;
@@ -467,6 +473,22 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 
 	for (const auto &sym : dyn_sym->symbols()) {
 		add_symbol_to_output(load_phdrs, end_addresses, sym, s, ifuncs);
+	}
+
+	for (const auto &sym : sym_t->symbols()) {
+		if (sym.name() == "_DYNAMIC") {
+
+			add_symbol_to_output(load_phdrs, end_addresses, sym, s, ifuncs, true);
+			s << ".hidden __guest___DYNAMIC\n";
+			if (elf.type() == elf::elf_type::exec) {
+				symbol sy { "guest_exec_DYNAMIC", sym.value(), sym.size(), sym.section_index(), sym.info(), 0 };
+				add_symbol_to_output(load_phdrs, end_addresses, sy, s, ifuncs, true, true);
+			}
+		}
+		static const std::set<std::string> symbols_to_copy_global { "main_ctor_queue", "__malloc_replaced", "__libc", "__thread_list_lock", "__sysinfo" };
+		if (symbols_to_copy_global.count(sym.name())) {
+			add_symbol_to_output(load_phdrs, end_addresses, sym, s, ifuncs, true);
+		}
 	}
 
 	// Manually emit relocations into the .grela section
