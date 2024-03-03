@@ -69,8 +69,12 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	auto das = cmdline.at("syntax").as<std::string>() == "att" ? disassembly_syntax::att : disassembly_syntax::intel;
 	auto ia = std::make_unique<arancini::input::x86::x86_input_arch>(cmdline.count("debug") || cmdline.count("graph"), das);
 
+	std::string prefix = "";
+	if (cmdline.find("keep-objs") != cmdline.end()) {
+		prefix = cmdline.at("keep-objs").as<std::string>();
+	}
 	// Construct the output engine
-	auto intermediate_file = tf.create_file(".o");
+	auto intermediate_file = tf.create_file(prefix, ".o");
 	auto oe = std::make_shared<arancini::output::o_static::llvm::llvm_static_output_engine>(intermediate_file->name());
 	process_options(*oe, cmdline);
 
@@ -201,6 +205,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	// Generate loadable sections
 	std::vector<std::shared_ptr<program_header>> load_phdrs;
 	std::vector<std::shared_ptr<program_header>> tls;
+	std::vector<std::pair<std::shared_ptr<basefile>, std::shared_ptr<program_header>>> phbins;
 
 	// For each program header, determine whether or not it's loadable, and generate a
 	// corresponding temporary file containing the binary contents of the segment.
@@ -209,12 +214,23 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 			load_phdrs.push_back(p);
 		} else if (p->type() == program_header_type::tls) {
 			tls.push_back(p);
+			// Create a temporary file, and record it in the phbins list.
+			auto phbin = tf.create_file(prefix, ".bin");
+			phbins.push_back({ phbin, p });
+
+			// Open the file, and write the raw contents of the segment to it.
+			auto s = phbin->open();
+			s.write((const char *)p->data(), p->data_size());
 		}
 	}
 
-	// Now, we need to create an assembly file that includes the binary data for each program header,
-	// defines all dynsyms of the input binary with `__guest__` prefix, verbatim copies all relocations of the input binary and some metadata
-	auto phobjsrc = tf.create_file(".S");
+	// Now, we need to create an assembly file that includes the binary data for
+	// each program header, along with some associated metadata too.  TODO: Maybe we
+	// should just include the original ELF file - but then the runtime would need to
+	// parse and load it.
+	auto phobjsrc = tf.create_file(prefix, ".S");
+	{
+		auto s = phobjsrc->open();
 
 	std::map<uint64_t, std::string> ifuncs = generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym, relocations, relocations_r, sym_t, tls);
 		// Put all segment data into the .gphdata section (guest program header data)
