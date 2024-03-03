@@ -151,12 +151,15 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
 	// Generate loadable sections
 	std::vector<std::shared_ptr<program_header>> load_phdrs;
+	std::vector<std::shared_ptr<program_header>> tls;
 
 	// For each program header, determine whether or not it's loadable, and generate a
 	// corresponding temporary file containing the binary contents of the segment.
 	for (const auto &p : elf.program_headers()) {
 		if (p->type() == program_header_type::loadable) {
 			load_phdrs.push_back(p);
+		} else if (p->type() == program_header_type::tls) {
+			tls.push_back(p);
 		}
 	}
 
@@ -166,7 +169,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	// parse and load it.
 	auto phobjsrc = tf.create_file(".S");
 
-	std::map<uint64_t, std::string> ifuncs = generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym, relocations, relocations_r, sym_t);
+	std::map<uint64_t, std::string> ifuncs = generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym, relocations, relocations_r, sym_t, tls);
 
 	if (!cmdline.count("static-binary")) {
 		std::string libs;
@@ -185,8 +188,13 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 				+ " -l arancini-runtime -L " + arancini_runtime_lib_dir + " -Wl,-T,exec.lds,-rpath=" + arancini_runtime_lib_dir + debug_info);
 		} else if (elf.type() == elf::elf_type::dyn) {
 			// Generate the final output library by compiling everything together.
+			std::string tls_defines = tls.empty() ? ""
+												  : " -DTLS_LEN=" + std::to_string(tls[0]->data_size()) + " -DTLS_SIZE=" + std::to_string(tls[0]->mem_size())
+					+ " -DTLS_ALIGN=" + std::to_string(tls[0]->align());
+
 			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -shared " + intermediate_file->name() + " " + phobjsrc->name()
-				+ " init_lib.c -l arancini-runtime -L " + arancini_runtime_lib_dir + libs + " -Wl,-T,lib.lds,-rpath=" + arancini_runtime_lib_dir + debug_info);
+				+ tls_defines + " init_lib.c -l arancini-runtime -L " + arancini_runtime_lib_dir + libs + " -Wl,-T,lib.lds,-rpath=" + arancini_runtime_lib_dir
+				+ debug_info);
 		} else {
 			throw std::runtime_error("Input elf type must be either an executable or shared object.");
 		}
@@ -416,7 +424,7 @@ void txlat_engine::optimise(arancini::output::o_static::static_output_engine &oe
 std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std::shared_ptr<util::tempfile> &phobjsrc, elf::elf_reader &elf,
 	const std::vector<std::shared_ptr<elf::program_header>> &load_phdrs, const std::basic_string<char> &filename, const std::shared_ptr<symbol_table> &dyn_sym,
 	const std::vector<std::shared_ptr<elf::rela_table>> &relocations, const std::vector<std::shared_ptr<elf::relr_array>> &relocations_r,
-	const std::shared_ptr<symbol_table> &sym_t)
+	const std::shared_ptr<symbol_table> &sym_t, const std::vector<std::shared_ptr<elf::program_header>> &tls)
 {
 	std::map<uint64_t, std::string> ifuncs;
 	std::map<off_t, unsigned int> end_addresses;
@@ -425,6 +433,24 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 	// FIXME Currently hardcoded to current directory. Not sure what else to do since the linker script needs to have this path in it.
 	auto l = std::ofstream("guest-sections.lds");
 
+	if (tls.size() == 1) {
+		if (elf.type() == elf::elf_type::exec) {
+			size_t offset = tls[0]->mem_size() + (tls[0]->align() - 1); // Assume maximum misalignment penalty. Probably actually less. Correct at runtime.
+			s << ".section .data\nguest_exec_tls:\n"
+			  << ".quad 0\n" // next = NULL
+			  << ".quad guest_tls\n" // image = guest_tls
+			  << ".quad " << std::dec << tls[0]->data_size() << '\n' // len
+			  << ".quad " << tls[0]->mem_size() << '\n' // size
+			  << ".quad " << tls[0]->align() << '\n' // align
+			  << ".quad " << offset << '\n' // offset
+			  << ".globl guest_exec_tls\n"
+			  << "tls_offset:\n"
+			  << ".quad " << offset << '\n'
+			  << ".globl tls_offset\n";
+		}
+	} else if (tls.size() > 1) {
+		throw std::runtime_error("More than 1 TLS PHDR unsupported");
+	}
 
 	// For each segment...
 	for (unsigned int i = 0; i < load_phdrs.size(); i++) {
@@ -433,6 +459,14 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 		end_addresses[phdr->address() + phdr->data_size()] = 2 * i;
 
 		off_t address = phdr->address();
+		if (tls.size() == 1) {
+			// Other cases handled below
+
+			// TLS initialized data (.tdata) is part of one of the LOAD headers (typically at the start), add a symbol so we can initialize it at runtime.
+			if (phdr->offset() == tls[0]->offset()) {
+				s << "guest_tls:\n";
+			}
+		}
 
 		// Add 2 sections per PT_LOAD header (one for initialized and one for uninitialized data.
 		l << ".gph.load" << std::dec << i << ".1 " << address << ": { *("
@@ -516,6 +550,18 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 				if (ifuncs.count(reloc.addend())) {
 					s << ".quad 0x" << std::hex << reloc.offset() << "\n.quad 0x20000003\n.quad 0x" << reloc.addend() << '\n';
 				}
+			} else if (reloc.is_tpoff()) {
+				// For TP relative relocations, we only know the offset after mapping, but the emulated TLS is separate from the host TLS, so we can only
+				// perform those manually in library init. Add an array of offset, addend pairs to iterate over.
+
+				if(elf.type() == elf_type::exec) {
+					throw std::runtime_error("TP relative reloc in binary not supported.");
+				}
+
+				s << ".section .data.tp_reloc\n.ifndef __TPREL_INIT\n__TPREL_INIT:\n.endif\n"
+				  << "0: .quad 0x" << std::hex << reloc.offset() << ", 0x" << reloc.addend() << '\n'
+				  << ".reloc 0b, R_RISCV_64, 0x" << std::hex << reloc.offset() << '\n'
+				  << ".section .grela\n";
 			} else if (reloc.is_relative()) {
 				s << ".quad 0x" << std::hex << reloc.offset() << "\n.int 0x" << reloc.type_on_host() << "\n.int 0x" << reloc.symbol() << "\n.quad 0x"
 				  << reloc.addend() << '\n';
@@ -526,6 +572,13 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 				  << "\n.quad 0x" << reloc.addend() << '\n';
 			}
 		}
+	}
+
+	s << ".section .data.tp_reloc\n.ifndef __TPREL_INIT\n__TPREL_INIT:\n.endif\n.quad 0x0, 0x0\n"
+	  << ".globl __TPREL_INIT\n.type __TPREL_INIT, STT_OBJECT\n.size __TPREL_INIT, . - __TPREL_INIT \n.hidden __TPREL_INIT\n"
+	  << ".ifndef guest_tls\n.set guest_tls, 0\n.endif\n.globl guest_tls\n.hidden guest_tls\n";
+	if (elf.type() == elf_type::exec) {
+		s << ".ifndef tls_offset\ntls_offset:\n.quad 0\n.globl tls_offset\n.endif\n";
 	}
 
 	return ifuncs;

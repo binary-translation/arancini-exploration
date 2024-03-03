@@ -145,6 +145,8 @@ GUEST_DECL(extern volatile int, __sysinfo) __attribute__((weak));
 // Weak because they are declared in the executable, will always be there, so never point to NULL.
 extern size_t guest_exec_DYNAMIC __attribute__((weak));
 extern unsigned char guest_exec_base __attribute__((weak));
+extern tls_module guest_exec_tls __attribute__((weak));
+extern size_t tls_offset __attribute__((weak));
 }
 
 #else
@@ -154,5 +156,10 @@ extern unsigned char guest_exec_base __attribute__((weak));
 struct lib_info {
 	unsigned char *base;
 	size_t *dynv;
+	void *tls_image;
+	size_t tls_len;
+	size_t tls_size;
+	size_t tls_align;
+	uint64_t tls_offset;
 	struct lib_info *next;
 };

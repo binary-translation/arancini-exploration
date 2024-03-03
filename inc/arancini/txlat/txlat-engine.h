@@ -45,6 +45,7 @@ private:
 	static std::map<uint64_t, std::string> generate_guest_sections(const std::shared_ptr<util::tempfile> &phobjsrc, elf::elf_reader &elf,
 		const std::vector<std::shared_ptr<elf::program_header>> &load_phdrs, const std::basic_string<char> &filename,
 		const std::shared_ptr<elf::symbol_table> &dyn_sym, const std::vector<std::shared_ptr<elf::rela_table>> &relocations,
-		const std::vector<std::shared_ptr<elf::relr_array>> &relocations_r, const std::shared_ptr<elf::symbol_table> &sym_t);
+		const std::vector<std::shared_ptr<elf::relr_array>> &relocations_r, const std::shared_ptr<elf::symbol_table> &sym_t,
+		const std::vector<std::shared_ptr<elf::program_header>> &tls);
 };
 } // namespace arancini::txlat
