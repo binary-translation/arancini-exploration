@@ -120,17 +120,39 @@ void binop_translator::do_translate()
 		rslt = builder().insert_sub(lhs->val(), rhs->val());
 		break;
 	}
-	case XED_ICLASS_PCMPEQB: {
+	case XED_ICLASS_PCMPEQB:
+	case XED_ICLASS_PCMPEQW:
+	case XED_ICLASS_PCMPEQD: {
     auto lhs = read_operand(0);
     auto rhs = read_operand(1);
-    auto nr_bytes = lhs->val().type().width() == 64 ? 8 : 16;
-    lhs = builder().insert_bitcast(value_type::vector(value_type::u8(), nr_bytes), lhs->val());
-    rhs = builder().insert_bitcast(value_type::vector(value_type::u8(), nr_bytes), rhs->val());
+    auto nr_bits = lhs->val().type().width();
+	auto ty = value_type::v();
+	value_node *cst_0;
+	value_node *cst_1;
 
-    auto cst_0 = builder().insert_constant_u8(0x00);
-    auto cst_1 = builder().insert_constant_u8(0xFF);
+	switch (inst_class) {
+		case XED_ICLASS_PCMPEQB: {
+			ty = value_type::u8();
+			cst_0 = builder().insert_constant_u8(0x00);
+			cst_1 = builder().insert_constant_u8(0xFF);
+		} break;
+		case XED_ICLASS_PCMPEQW: {
+			ty = value_type::u16();
+			cst_0 = builder().insert_constant_u16(0x0000);
+			cst_1 = builder().insert_constant_u16(0xFFFF);
+		} break;
+		case XED_ICLASS_PCMPEQD: {
+			ty = value_type::u32();
+			cst_0 = builder().insert_constant_u32(0x00000000);
+			cst_1 = builder().insert_constant_u32(0xFFFFFFFF);
+		} break;
+		default: throw std::runtime_error("unhandled case in PCMPEQX");
+	}
 
-    for (int i = 0; i < nr_bytes; i++) {
+    lhs = builder().insert_bitcast(value_type::vector(ty, nr_bits/ty.width()), lhs->val());
+    rhs = builder().insert_bitcast(value_type::vector(ty, nr_bits/ty.width()), rhs->val());
+
+    for (int i = 0; i < nr_bits/ty.width(); i++) {
       auto equal = builder().insert_cmpeq(builder().insert_vector_extract(lhs->val(), i)->val(), builder().insert_vector_extract(rhs->val(), i)->val());
       auto res = builder().insert_csel(equal->val(), cst_1->val(), cst_0->val());
       lhs = builder().insert_vector_insert(lhs->val(), i, res->val());
