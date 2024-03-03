@@ -240,8 +240,6 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 
 	// Create the main execution thread.
 	auto main_thread = ctx_->create_execution_thread();
-	// At this point we can take the first per-thread timestamp
-	main_thread->clk_entry();
 
 	// Initialise the CPU state structure with the PC set to the entry point of
 	// the guest program, and an emulated stack pointer at the top of the
@@ -275,7 +273,10 @@ extern "C" int execute_internal_call(void *cpu_state, int call) { return ctx_->i
 
 extern "C" void finalize() { delete ctx_; exit(0); }
 
-extern "C" void clk_entry(void *cpu_state) { ctx_->get_thread(cpu_state)->clk_entry(); }
-extern "C" void clk_exit(void *cpu_state) { ctx_->get_thread(cpu_state)->clk_exit(); }
+#if defined(DEBUG)
+extern "C" void clk(void *cpu_state, char *s) { ctx_->get_thread(cpu_state)->clk(s); }
+#else
+extern "C" void clk(void *cpu_state, char *s) { }
+#endif
 
 extern "C" void alert() { std::cout << "Top of MainLoop!\n"; }

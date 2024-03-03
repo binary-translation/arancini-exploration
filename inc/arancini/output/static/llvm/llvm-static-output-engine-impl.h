@@ -84,6 +84,7 @@ private:
 		::llvm::FunctionType *dbt_invoke;
 		::llvm::FunctionType *internal_call_handler;
 		::llvm::FunctionType *finalize;
+		::llvm::FunctionType *clk_fn;
 
 		::llvm::IntegerType *integer(unsigned width) {
 			switch(width) {
