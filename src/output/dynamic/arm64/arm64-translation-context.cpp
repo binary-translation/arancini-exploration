@@ -166,7 +166,7 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
 	instruction_index_to_guest_[builder_.nr_instructions()] = address;
 
 	this_pc_ = address;
-    util::logger.info(address, ":", disasm);
+    util::global_logger.info("{}: {}\n", address, disasm);
 
     instr_cnt_++;
 
@@ -187,9 +187,8 @@ void arm64_translation_context::end_instruction() {
         for (const auto* node : nodes_)
             materialise(node);
     } catch (std::exception &e) {
-        util::logger.fatal(e.what());
-        util::logger.fatal(util::lazy_eval<>(&instruction_builder::dump, &builder_));
-        util::logger.fatal("Terminating exception raised; aborting");
+        util::global_logger.fatal("Encountered fatal exception during materialize {}\n", e.what());
+        util::global_logger.fatal("Current state of translated instructions {}\n", util::lazy_eval<>(&instruction_builder::dump, &builder_));
         std::abort();
     }
 }
@@ -206,9 +205,8 @@ void arm64_translation_context::end_block() {
 
         builder_.emit(writer());
     } catch (std::exception &e) {
-        util::logger.fatal(e.what());
-        util::logger.fatal(util::lazy_eval<>(&instruction_builder::dump, &builder_));
-        util::logger.fatal("Terminating exception raised; aborting");
+        util::global_logger.fatal("Encountered fatal exception during materialize {}\n", e.what());
+        util::global_logger.fatal("Current state of translated instructions {}\n", util::lazy_eval<>(&instruction_builder::dump, &builder_));
         std::abort();
     }
 }
@@ -226,7 +224,7 @@ void arm64_translation_context::materialise(const ir::node* n) {
     if (materialised_nodes_.count(n))
         return;
 
-    util::logger.debug("Handling:", util::const_lazy_eval<>(&ir::node::to_string, n));
+    util::global_logger.debug("Handling node: {}\n", util::const_lazy_eval<>(&ir::node::to_string, n));
     switch (n->kind()) {
     case node_kinds::read_reg:
         materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));

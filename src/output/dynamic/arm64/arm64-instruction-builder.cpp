@@ -4,8 +4,6 @@
 #include <arancini/util/logger.h>
 #include <array>
 #include <bitset>
-#include <exception>
-#include <optional>
 #include <sstream>
 #include <utility>
 #include <stdexcept>
@@ -41,8 +39,7 @@ void instruction_builder::emit(machine_code_writer &writer) {
                 op.op_type() == operand_type::vreg ||
                 (op.op_type() == operand_type::mem && op.memory().is_virtual())) {
                 dump(assembly);
-                util::logger.error(util::lazy_eval<>(&std::stringstream::str, &assembly));
-                throw std::runtime_error("Virtual register after register allocation: "
+				throw std::runtime_error("Virtual register after register allocation: "
                                          + insn.dump());
             }
         }
@@ -52,7 +49,7 @@ void instruction_builder::emit(machine_code_writer &writer) {
 
     size = asm_.assemble(assembly.str().c_str(), &encode);
 
-    util::logger.info(util::lazy_eval<>(&std::stringstream::str, &assembly));
+    util::global_logger.info("Generated translation\n{}\n", util::lazy_eval<>(&std::stringstream::str, &assembly));
 
     // TODO: write directly
     writer.copy_in(encode, size);
@@ -107,7 +104,7 @@ private:
 
 void instruction_builder::allocate() {
 	// reverse linear scan allocator
-    util::logger.debug("REGISTER ALLOCATION");
+    util::global_logger.debug("Register allocation\n");
 
 	std::unordered_map<unsigned int, unsigned int> vreg_to_preg;
 
@@ -122,7 +119,7 @@ void instruction_builder::allocate() {
 	for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
 		auto &insn = *RI;
 
-        util::logger.debug("considering instruction:", util::lazy_eval<>(&instruction::dump, &insn));
+        util::global_logger.debug("Considering instruction: {}\n", util::lazy_eval<>(&instruction::dump, &insn));
 
         bool has_unused_keep = false;
         std::array<std::pair<size_t, size_t>, 5> allocs;
@@ -147,7 +144,7 @@ void instruction_builder::allocate() {
 
 			// Only regs can be /real/ defs
 			if (o.is_def() && o.is_vreg() && !o.is_use()) {
-                util::logger.debug("  DEF ", util::lazy_eval<>(&operand::dump, &o));
+                util::global_logger.debug("Define register: {}\n", util::lazy_eval<>(&operand::dump, &o));
 
                 auto type = o.vreg().type();
 				unsigned int vri = o.vreg().index();
@@ -161,13 +158,13 @@ void instruction_builder::allocate() {
                     // No need to track this virtual register anymore, it is
                     // overwritten here by the def()
                     vreg_to_preg.erase(vri);
-                    util::logger.debug("  allocated to", util::lazy_eval<>(&operand::dump, &o), "-- releasing");
+                    util::global_logger.debug("Register allocated to {} -- releasing\n", util::lazy_eval<>(&operand::dump, &o));
                 } else if (o.is_keep()) {
                     has_unused_keep = true;
 
                     allocate(o, i);
 				} else {
-                    util::logger.debug("  not allocated - eliminating instruction");
+                    util::global_logger.debug("Register not allocated -- eliminating instruction\n");
 					insn.kill();
 					break;
 				}
@@ -184,12 +181,12 @@ void instruction_builder::allocate() {
 			// We only care about REG uses - but we also need to consider REGs used in MEM expressions
             const vreg_operand *vreg = nullptr;
             if (o.is_use() && (vreg = get_vreg_or_base(o)) != nullptr) {
-                util::logger.debug("  USE", util::lazy_eval<>(&operand::dump, &o));
+                util::global_logger.debug("Use register {}\n", util::lazy_eval<>(&operand::dump, &o));
                 auto type = vreg->type();
                 unsigned int vri = vreg->index();
 				if (!vreg_to_preg.count(vri)) {
                     allocate(o, i);
-                    util::logger.debug(" allocating vreg to", util::lazy_eval<>(&operand::dump, &o));
+                    util::global_logger.debug("Allocating virtual register to {}\n", util::lazy_eval<>(&operand::dump, &o));
 				} else {
 					o.allocate(vreg_to_preg.at(vri), type);
 				}
