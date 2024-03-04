@@ -232,7 +232,10 @@ void llvm_static_output_engine_impl::build()
 	IRBuilder<> builder(*llvm_context_);
 
 	builder.SetInsertPoint(entry_block);
+
+#if defined(DEBUG)
 	builder.CreateCall(clk_, {state_arg, builder.CreateGlobalStringPtr("do-loop")});
+#endif
 
 	// TODO: Input Arch Specific
 	auto program_counter = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 0) }, "pcptr");
@@ -251,9 +254,13 @@ void llvm_static_output_engine_impl::build()
 	builder.SetInsertPoint(switch_to_dbt);
 
 	auto switch_callee = module_->getOrInsertFunction("invoke_code", types.dbt_invoke);
+#if defined(DEBUG)
 	builder.CreateCall(clk_, {state_arg, builder.CreateGlobalStringPtr("do-dyn")});
+#endif
 	auto invoke_result = builder.CreateCall(switch_callee, { state_arg });
+#if defined(DEBUG)
 	builder.CreateCall(clk_, {state_arg, builder.CreateGlobalStringPtr("done-dyn")});
+#endif
 	/*
 	 * RETURN CODES:
 	 * 4: last instr was a ret  -> emit a return
@@ -274,9 +281,13 @@ void llvm_static_output_engine_impl::build()
 	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_SGT, invoke_result, ConstantInt::get(types.i32, 0)), internal_call_block, exit_block);
 
 	builder.SetInsertPoint(internal_call_block);
+#if defined(DEBUG)
 	builder.CreateCall(clk_, {state_arg, builder.CreateGlobalStringPtr("do-internal")});
+#endif
 	auto internal_call_callee = module_->getOrInsertFunction("execute_internal_call", types.internal_call_handler);
+#if defined(DEBUG)
 	builder.CreateCall(clk_, {state_arg, builder.CreateGlobalStringPtr("done-internal")});
+#endif
 	auto internal_call_result = builder.CreateCall(internal_call_callee, { state_arg, invoke_result });
 	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, internal_call_result, ConstantInt::get(types.i32, 0)), loop_block, exit_block);
 
@@ -293,7 +304,9 @@ void llvm_static_output_engine_impl::build()
 	builder.CreateBr(loop_block);
 
 	builder.SetInsertPoint(ret_block);
+#if defined(DEBUG)
 	builder.CreateCall(clk_, {state_arg, builder.CreateGlobalStringPtr("done-loop")});
+#endif
 	builder.CreateRetVoid();
 
 	if (e_.debug_dump_filename.has_value()) {
@@ -331,8 +344,6 @@ void llvm_static_output_engine_impl::lower_chunks(Function *main_loop)
 {
 	IRBuilder<> builder(*llvm_context_);
 
-	auto clk_ = module_->getOrInsertFunction("clk", types.clk_fn);
-
 	auto ret = llvm_ret_visitor();
 	auto arg = llvm_arg_visitor();
 
@@ -348,6 +359,8 @@ void llvm_static_output_engine_impl::lower_chunks(Function *main_loop)
 
 void llvm_static_output_engine_impl::lower_static_fn_lookup(IRBuilder<> &builder, BasicBlock *contblock, Value *guestAddr) {
 	auto LookupFn = module_->getOrInsertFunction("lookup_static_fn_addr", types.lookup_static_fn);
+
+	auto clk_ = module_->getOrInsertFunction("clk", types.clk_fn);
 
 	auto result = builder.CreateCall(LookupFn, { guestAddr });
 	auto cmp = builder.CreateCmp(CmpInst::Predicate::ICMP_NE, result, ConstantPointerNull::get(Type::getInt8PtrTy(*llvm_context_)));
@@ -378,7 +391,9 @@ void llvm_static_output_engine_impl::lower_static_fn_lookup(IRBuilder<> &builder
 	createStoreToCPU(builder, cpu_state, 1, call, 3);
 	createStoreToCPU(builder, cpu_state, 2, call, 27);
 	createStoreToCPU(builder, cpu_state, 3, call, 28);
+#if defined(DEBUG)
 	builder.CreateCall(clk_, {cpu_state, builder.CreateGlobalStringPtr("done-loop")});
+#endif
 	builder.CreateRetVoid();
 }
 
@@ -1372,9 +1387,13 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 			auto exit_block = BasicBlock::Create(*llvm_context_, "finalize",  current_bb->getParent());
 			auto cont_block = BasicBlock::Create(*llvm_context_, "cont",  current_bb->getParent());
 			save_all_regs(builder, state_arg);
+#if defined(DEBUG)
 			builder.CreateCall(clk_, {state_arg, builder.CreateGlobalStringPtr("do-syscall")});
+#endif
 			auto ret = builder.CreateCall(switch_callee, { state_arg, ConstantInt::get(types.i32, 1) });
+#if defined(DEBUG)
 			builder.CreateCall(clk_, {state_arg, builder.CreateGlobalStringPtr("done-syscall")});
+#endif
 			restore_all_regs(builder, state_arg);
 			builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, ret, ConstantInt::get(types.i32, 1)), exit_block, cont_block);
 
@@ -1455,11 +1474,13 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 {
 	std::map<unsigned long, BasicBlock *> blocks;
 
-	auto fn = fns->at(c->packets()[0]->address());
+	auto fn = fns_->at(c->packets()[0]->address());
+#if defined(DEBUG)
 	std::stringstream entry;
 	entry << "do-static-" << fn->getName().str();
 	std::stringstream exit;
 	exit << "done-static-" << fn->getName().str();
+#endif
 	auto state_arg = fn->getArg(0);
 
 	auto clk_ = module_->getOrInsertFunction("clk", types.clk_fn);
@@ -1470,7 +1491,9 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 	auto dyn = BasicBlock::Create(*llvm_context_, fn->getName()+"-dyn");
 
 	builder->SetInsertPoint(pre);
+#if defined(DEBUG)
 	builder->CreateCall(clk_, {state_arg, builder->CreateGlobalStringPtr(entry.str())});
+#endif
 	init_regs(*builder);
 	restore_callee_regs(*builder, state_arg, false);
 
@@ -1546,7 +1569,9 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 			}
 			case br_type::ret: {
 				save_callee_regs(*builder, state_arg, false);
+#if defined(DEBUG)
 				builder->CreateCall(clk_, {state_arg, builder->CreateGlobalStringPtr(exit.str())});
+#endif
 				builder->CreateAggregateRet(wrap_ret(builder, state_arg).data(), 4);
 				packet_block = nullptr;
 				break;
@@ -1556,7 +1581,9 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 
 	if (packet_block != nullptr) {
 		save_callee_regs(*builder, state_arg, false);
+#if defined(DEBUG)
 		builder->CreateCall(clk_, {state_arg, builder->CreateGlobalStringPtr(exit.str())});
+#endif
 		builder->CreateAggregateRet(wrap_ret(builder, state_arg).data(), 4);
 	}
 
@@ -1575,7 +1602,9 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 	save_callee_regs(*builder, state_arg);
 	builder->CreateCall(main_loop, { state_arg });
 	restore_callee_regs(*builder, state_arg);
+#if defined(DEBUG)
 	builder->CreateCall(clk_, {state_arg, builder->CreateGlobalStringPtr(exit.str())});
+#endif
 	builder->CreateAggregateRet(wrap_ret(builder, state_arg).data(), 4);
 
 	if (verifyFunction(*fn, &errs())) {

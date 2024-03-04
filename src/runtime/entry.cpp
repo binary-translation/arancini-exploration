@@ -442,10 +442,6 @@ extern "C" int execute_internal_call(void *cpu_state, int call) { return ctx_->i
 
 extern "C" void finalize() { delete ctx_; exit(0); }
 
-#if defined(DEBUG)
 extern "C" void clk(void *cpu_state, char *s) { ctx_->get_thread(cpu_state)->clk(s); }
-#else
-extern "C" void clk(void *cpu_state, char *s) { }
-#endif
 
 extern "C" void alert() { std::cout << "Top of MainLoop!\n"; }
