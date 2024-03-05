@@ -79,6 +79,19 @@ std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(
 	switch (p->type().width()) {
 	case 512: // FIXME proper
 	case 128: {
+		if (p->targets().size() > 1) {
+			if (reg1) {
+				RegisterOperand reg = builder_.next_register();
+				builder_.mv(reg, *reg1);
+				reg1 = reg;
+			}
+			if (reg2) {
+				RegisterOperand reg = builder_.next_register();
+				builder_.mv(reg, *reg2);
+				reg2 = reg;
+			}
+		}
+
 		RegisterOperand r1 = reg1 ? *reg1 : builder_.next_register();
 		RegisterOperand r2 = reg2 ? *reg2 : builder_.next_register();
 		auto [a, b] = treg_for_port_.emplace(std::piecewise_construct, std::forward_as_tuple(p), std::forward_as_tuple(r1, r2));
@@ -91,6 +104,13 @@ std::pair<TypedRegister &, bool> riscv64_translation_context::allocate_register(
 	case 16:
 	case 8:
 	case 1: {
+		if (p->targets().size() > 1) {
+			if (reg1) {
+				RegisterOperand reg = builder_.next_register();
+				builder_.mv(reg, *reg1);
+				reg1 = reg;
+			}
+		}
 		RegisterOperand r1 = reg1 ? *reg1 : builder_.next_register();
 		auto [a, b] = treg_for_port_.emplace(p, r1);
 		TypedRegister &tr = a->second;
