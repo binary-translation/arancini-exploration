@@ -59,6 +59,7 @@ translator::reg_offsets translator::xedreg_to_offset(xed_reg_enum_t reg)
 
   switch (regclass) {
   case XED_REG_CLASS_GPR: {
+	  // FIXME AH, CH, DH, BH give wrong offset
     auto largest_reg = xed_get_largest_enclosing_register(reg);
     return (translator::reg_offsets)((int)((largest_reg - XED_REG_RAX) * 8) + (int)reg_offsets::RAX);
   }
@@ -110,7 +111,7 @@ action_node *translator::write_operand(int opnum, port &value)
 				// x86_64 requires that the upper bits [63..16/8] are untouched
 				auto orig = read_reg(value_type::u64(), xedreg_to_offset(reg));
 				value_node *res;
-				if (reg >= XED_REG_AL && reg <= XED_REG_DIL) { // lower 8 bits
+				if (reg >= XED_REG_AL && reg <= XED_REG_R15B) { // lower 8 bits
 					res = builder_.insert_bit_insert(orig->val(), value, 0, 8);
 				} else { // bits [15..8]
 					res = builder_.insert_bit_insert(orig->val(), value, 8, 8);
@@ -240,6 +241,7 @@ value_node *translator::read_operand(int opnum)
 		case XED_REG_CLASS_GPR:
 			switch (xed_get_register_width_bits(reg)) {
 			case 8:
+				// FIXME AH, CH, DH, BH
 				return read_reg(value_type::u8(), xedreg_to_offset(reg));
 			case 16:
 				return read_reg(value_type::u16(), xedreg_to_offset(reg));
