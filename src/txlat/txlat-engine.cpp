@@ -505,8 +505,10 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 		}
 	}
 
-	for (const auto &sym : dyn_sym->symbols()) {
-		add_symbol_to_output(load_phdrs, end_addresses, sym, s, ifuncs);
+	if (dyn_sym) {
+		for (const auto &sym : dyn_sym->symbols()) {
+			add_symbol_to_output(load_phdrs, end_addresses, sym, s, ifuncs);
+		}
 	}
 
 	for (const auto &sym : sym_t->symbols()) {
