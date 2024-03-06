@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <set>
 
 #include <elf.h>
 
@@ -85,6 +86,10 @@ public:
 	unsigned char info() const { return info_; }
 
 	bool is_func() const { return ELF64_ST_TYPE(info_) == STT_FUNC; }
+
+	friend bool operator<(const symbol &lhs, const symbol &rhs) {
+		return lhs.value_ < rhs.value_;
+	}
 
 	[[nodiscard]] bool is_global() const { return ELF64_ST_BIND(info_) == STB_GLOBAL; }
 	[[nodiscard]] bool is_weak() const { return ELF64_ST_BIND(info_) == STB_WEAK; }

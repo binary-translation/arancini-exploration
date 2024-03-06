@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
+#include <set>
 
 using namespace arancini::elf;
 

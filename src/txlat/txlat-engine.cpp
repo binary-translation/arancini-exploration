@@ -84,9 +84,9 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	std::shared_ptr<symbol_table> sym_t;
 	std::vector<std::shared_ptr<rela_table>> relocations;
 	std::vector<std::shared_ptr<relr_array>> relocations_r;
-	std::set<unsigned long> translated_addrs;
-  	std::list<symbol> zero_size_symbol;
-  	auto static_size = 0;
+	std::set<symbol> unique_translated;
+	// pairs of symbols and maximum size (aka. until the end of the section)
+	std::vector<std::pair<symbol, size_t>> zero_size;
 
 	// Loop over each symbol table, and translate the symbol.
 	for (auto &s : elf.sections()) {
@@ -103,60 +103,45 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 			auto st = std::static_pointer_cast<symbol_table>(s);
 			// TODO static translation of code in libraries
 			if (!cmdline.count("no-static") && elf.type() == elf_type::exec) {
-				for (const auto &sym : st->symbols()) {
-          if (!sym.is_func())
-            continue;
-					std::cerr << "[DEBUG] PASS1: looking at symbol '" << sym.name() << "' @ 0x" << std::hex << sym.value() << std::endl;
-					if (sym.is_func() && !translated_addrs.count(sym.value())) {
-						translated_addrs.insert(sym.value());
-            // Don't translate symbols with a size of 0, we'll do this in a second pass.
-						if (!sym.size()) {
-							std::cerr << "[DEBUG] PASS1: selecting for PASS2 (0 size), symbol '" << sym.name() << "'" << std::endl;
-							zero_size_symbol.push_front(sym);
-							continue;
-						}
-						std::cerr << "[DEBUG] PASS1: translating symbol '" << sym.name() << "' [" << std::dec << sym.size() << " bytes]" << std::endl;
-						oe->add_chunk(translate_symbol(*ia, elf, sym));
-            static_size += sym.size();
-					} else {
-            std::cerr << "[DEBUG] PASS1: address already seen for '" << sym.name() << "' @ 0x" << std::hex << sym.value() << std::endl;
-          }
+				auto syms = st->symbols();
+				for (auto sym = syms.cbegin(); sym != syms.cend(); sym++) {
+					if (!sym->is_func())
+						continue;
+					::util::global_logger.debug("PASS1: looking at symbol {} @ 0x{:#x}\n", sym->name(), sym->value());
+					if (!sym->size()) {
+						size_t size = s->address()+s->data_size() - sym->value();
+						zero_size.push_back({*sym, size});
+						unique_translated.insert(*sym);
+						continue;
+					}
+					unique_translated.insert(*sym);
+					oe->add_chunk(translate_symbol(*ia, elf, *sym));
 				}
 			}
 			sym_t = std::move(st);
 		}
-    // Loop over symbols of size zero and optimistically translate
-		for (auto s : zero_size_symbol) {
-			std::cerr << "[DEBUG] PASS2: looking at symbol '" << s.name() << "' @ 0x" << std::hex << s.value() << std::endl;
-			// find the address of the symbol after s in the text section, and assume that the size of s is until there
-			auto next = *(std::next(translated_addrs.find(s.value()), 1));
-			auto size = next - s.value();
-
-			// find the section this symbol is in
-			// TODO: reverse mapping
-			for (auto sec : elf.sections()) {
-				if ((unsigned long)sec->address() <= s.value() && (unsigned long)sec->address()+sec->data_size() > s.value()) {
-					// Either out of bounds, or size is negative
-					if (s.value()+size > (unsigned long)sec->address()+sec->data_size() || (long)size < 0) {	
-						size = sec->address()+sec->data_size() - s.value();
-					}
-				}
-			}
-			auto fixed_sym = symbol(s.name(), s.value(), size, s.section_index(), s.info());
-			std::cerr << "[DEBUG] PASS2: translating symbol '" << s.name() << "' [" << std::dec << size << " bytes]"  << std::endl;
-			oe->add_chunk(translate_symbol(*ia, elf, fixed_sym));
-			static_size += size;
-		}
 	}
-  std::cout << "ahead-of-time: translated " << std::dec << static_size << " bytes" << std::endl;
 
+	//PASS2	
+	for ( const auto &p : zero_size) {
+		::util::global_logger.debug("PASS2: doing (0 size), symbol {}\n", p.first.name());
+		// find the address of the symbol after sym in the text section, and assume that the size of sym is until there
+		auto next = std::next(unique_translated.find(p.first), 1);
+		::util::global_logger.debug("PASS2: next symbol: {} @ 0x{:#x}\n", next->name(), next->value());
+		size_t size = next->value() - p.first.value();
+		if (size > p.second)
+			size = p.second;
+		auto fixed_sym = symbol(p.first.name(), p.first.value(), size, p.first.section_index(), p.first.info(), 0);
+
+		oe->add_chunk(translate_symbol(*ia, elf, fixed_sym));
+	}
 	// Generate a dot graph of the IR if required
 	if (cmdline.count("graph")) {
     generate_dot_graph(*oe, cmdline.at("graph").as<std::string>());
 	}
 
-  // Execute required optimisations from the command line
-  optimise(*oe, cmdline);
+	// Execute required optimisations from the command line
+	optimise(*oe, cmdline);
 
 	// Generate a dot graph of the optimized IR if required
 	if (cmdline.count("graph")) {
@@ -205,7 +190,6 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	// Generate loadable sections
 	std::vector<std::shared_ptr<program_header>> load_phdrs;
 	std::vector<std::shared_ptr<program_header>> tls;
-	std::vector<std::pair<std::shared_ptr<basefile>, std::shared_ptr<program_header>>> phbins;
 
 	// For each program header, determine whether or not it's loadable, and generate a
 	// corresponding temporary file containing the binary contents of the segment.
@@ -214,13 +198,6 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 			load_phdrs.push_back(p);
 		} else if (p->type() == program_header_type::tls) {
 			tls.push_back(p);
-			// Create a temporary file, and record it in the phbins list.
-			auto phbin = tf.create_file(prefix, ".bin");
-			phbins.push_back({ phbin, p });
-
-			// Open the file, and write the raw contents of the segment to it.
-			auto s = phbin->open();
-			s.write((const char *)p->data(), p->data_size());
 		}
 	}
 
@@ -229,54 +206,9 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	// should just include the original ELF file - but then the runtime would need to
 	// parse and load it.
 	auto phobjsrc = tf.create_file(prefix, ".S");
-	{
-		auto s = phobjsrc->open();
 
 	std::map<uint64_t, std::string> ifuncs = generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym, relocations, relocations_r, sym_t, tls);
-		// Put all segment data into the .gphdata section (guest program header data)
-		s << ".section .gphdata,\"a\"" << std::endl;
 
-		// For each segment...
-		for (unsigned int i = 0; i < phbins.size(); i++) {
-			// Create the metadata for the segment, which includes the load (virtual) address,
-			// the actual byte size of the segment, the size in memory, then the actual data
-			// itself.
-			s << ".align 16" << std::endl;
-			s << "__PH_" << std::dec << i << "_LOAD: .quad 0x" << std::hex << phbins[i].second->address() << std::endl;
-			s << "__PH_" << std::dec << i << "_FSIZE: .quad 0x" << std::hex << phbins[i].second->data_size() << std::endl;
-			s << "__PH_" << std::dec << i << "_MSIZE: .quad 0x" << std::hex << phbins[i].second->mem_size() << std::endl;
-			s << "__PH_" << std::dec << i << "_DATA: .incbin \"" << phbins[i].first->name() << "\"" << std::endl;
-
-			// Make sure the symbol is appropriately sized.
-			s << ".size __PH_" << std::dec << i << "_DATA,.-__PH_" << std::dec << i << "_DATA" << std::endl;
-		}
-
-		// Finally, create pointers to each guest program header in an array.
-		s << ".section .gph,\"a\"" << std::endl;
-		s << ".globl __GPH" << std::endl;
-		s << ".type __GPH,%object" << std::endl;
-		s << "__GPH:" << std::endl;
-		for (unsigned int i = 0; i < phbins.size(); i++) {
-			s << ".quad __PH_" << std::dec << i << "_LOAD" << std::endl;
-		}
-
-		// Null terminate the array.
-		s << ".quad 0" << std::endl;
-
-		// Size the symbol appropriately.
-		s << ".size __GPH,.-__GPH" << std::endl;
-	}
-
-	std::string cxx_compiler = cmdline.at("cxx-compiler-path").as<std::string>();
-
-	if (cmdline.count("wrapper")) {
-		cxx_compiler = cmdline.at("wrapper").as<std::string>() + " " + cxx_compiler;
-	}
-
-	std::string debug_info = cmdline.count("debug-gen") ? " -g" : "";
-	std::string arancini_runtime_lib_path = cmdline.at("runtime-lib-path").as<std::string>();
-	auto dir_start = arancini_runtime_lib_path.rfind("/");
-	std::string arancini_runtime_lib_dir = arancini_runtime_lib_path.substr(0, dir_start);
 
 	if (!cmdline.count("static-binary")) {
 		std::string libs;
@@ -291,7 +223,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
 		if (elf.type() == elf::elf_type::exec) {
 			// Generate the final output binary by compiling everything together.
-			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + libs + " " + phobjsrc->name()
+			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie -latomic " + intermediate_file->name() + libs + " " + phobjsrc->name()
 				+ " -l arancini-runtime -L " + arancini_runtime_lib_dir + " -Wl,-T,exec.lds,-rpath=" + arancini_runtime_lib_dir + debug_info);
 		} else if (elf.type() == elf::elf_type::dyn) {
 			// Generate the final output library by compiling everything together.
@@ -319,7 +251,6 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 			+ " -l arancini-runtime-static -l arancini-input-x86-static -l arancini-output-riscv64-static -l arancini-ir-static" + " -L "
 			+ arancini_runtime_lib_dir + "/../../obj -l xed" + debug_info + " -Wl,-T,exec.lds,-rpath=" + arancini_runtime_lib_dir);
 	}
-
 
 	// Patch relocations in result binary
 	const auto &output = cmdline.at("output").as<std::string>();
@@ -528,7 +459,7 @@ void txlat_engine::optimise(arancini::output::o_static::static_output_engine &oe
     ::util::global_logger.info("Optimisation: dead flags elimination pass took {} us\n", std::chrono::duration_cast<std::chrono::microseconds>(dur).count());
 }
 
-std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std::shared_ptr<util::tempfile> &phobjsrc, elf::elf_reader &elf,
+std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std::shared_ptr<util::basefile> &phobjsrc, elf::elf_reader &elf,
 	const std::vector<std::shared_ptr<elf::program_header>> &load_phdrs, const std::basic_string<char> &filename, const std::shared_ptr<symbol_table> &dyn_sym,
 	const std::vector<std::shared_ptr<elf::rela_table>> &relocations, const std::vector<std::shared_ptr<elf::relr_array>> &relocations_r,
 	const std::shared_ptr<symbol_table> &sym_t, const std::vector<std::shared_ptr<elf::program_header>> &tls)

@@ -519,9 +519,9 @@ int execution_context::internal_call(void *cpu_state, int call)
 	} else if (call == 3) {
 		auto x86_state = (x86::x86_cpu_state *)cpu_state;
 		auto pc = x86_state->PC;
-        util::global_logger.error("Poison Instr @ GuestPC:", pc);
+        util::global_logger.error("Poison Instr @ GuestPC: {}", pc);
 	}else {
-        util::global_logger.error("Unsupported internal call:", std::dec, call);
+        util::global_logger.error("Unsupported internal call: {}", call);
 		return 1;
 	}
 	return 0;

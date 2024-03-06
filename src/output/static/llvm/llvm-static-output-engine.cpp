@@ -1536,7 +1536,7 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 
 		if (!p->actions().empty()) {
 			for (const auto& a : p->actions()) {
-				lower_node(builder, state_arg, p, a.get());
+				lower_node(*builder, state_arg, p, a.get());
 			}
 		}
 
@@ -1704,22 +1704,22 @@ void llvm_static_output_engine_impl::restore_callee_regs(IRBuilder<> &builder, A
 
 Function *llvm_static_output_engine_impl::get_static_fn(std::shared_ptr<packet> pkt) {
 
-	write_pc_node *node = nullptr;
+	std::shared_ptr<action_node> node = nullptr;
 	for (auto a : pkt->actions()) {
-		if(a->kind() == node_kinds::write_pc && ((write_pc_node *)a)->updates_pc()==br_type::call)
-			node = (write_pc_node *)a;
+		if(a->kind() == node_kinds::write_pc && a->updates_pc()==br_type::call)
+			node = a;
 	}
-	if (!node)
-		return nullptr;
-	if (node->const_target()) {
+	if (node != nullptr) {
+		auto wpn = std::static_pointer_cast<write_pc_node>(node);
+		if (wpn->const_target()) {
 
-		auto it = fns_->find(node->const_target()+pkt->address());
-		auto ret = it != fns_->end() ? it->second : nullptr;
-		if (ret)
-			fixed_branches++;
-		return ret;
+			auto it = fns_->find(wpn->const_target()+pkt->address());
+			auto ret = it != fns_->end() ? it->second : nullptr;
+			if (ret)
+				fixed_branches++;
+			return ret;
+		}
 	}
-
 	return nullptr;
 };
 
