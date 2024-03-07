@@ -487,7 +487,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 #ifndef ARCH_X86_64
 		//auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
 		auto gs_reg = reg_to_alloca_.at(reg_offsets::GS);
-		address = builder.CreateAdd(address, builder.CreateLoad(types.i64, gs_reg));
+		//address = builder.CreateAdd(address, builder.CreateLoad(types.i64, gs_reg));
 #endif
 		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(ty, 256));
 
@@ -1065,7 +1065,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 #ifndef ARCH_X86_64
 		//auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
 		auto gs_reg = reg_to_alloca_.at(reg_offsets::GS);
-		lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, gs_reg));
+		//lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, gs_reg));
 #endif
 		lhs = builder.CreateLoad(rhs->getType(), builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256)), "Atomic LHS");
 		auto value_port = lower_port(builder, state_arg, pkt, n->val());
@@ -1219,7 +1219,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 #ifndef ARCH_X86_64
 		//auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
 		auto gs_reg = reg_to_alloca_.at(reg_offsets::GS);
-		address = builder.CreateAdd(address, builder.CreateLoad(types.i64, gs_reg));
+		//address = builder.CreateAdd(address, builder.CreateLoad(types.i64, gs_reg));
 #endif
 		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(value->getType(), 256));
 
@@ -1317,7 +1317,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 #ifndef ARCH_X86_64
 		//auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
 		auto gs_reg = reg_to_alloca_.at(reg_offsets::GS);
-		lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, gs_reg));
+		//lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, gs_reg));
 #endif
 		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
 
@@ -1353,7 +1353,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 #ifndef ARCH_X86_64
 		//auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
 		auto gs_reg = reg_to_alloca_.at(reg_offsets::GS);
-		lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, gs_reg));
+		//lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, gs_reg));
 #endif
 		auto rhs = lower_port(builder, state_arg, pkt, tan->rhs());
 		auto top = lower_port(builder, state_arg, pkt, tan->top());

@@ -559,7 +559,7 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 				add_symbol_to_output(load_phdrs, end_addresses, sy, s, ifuncs, true, true);
 			}
 		}
-		static const std::set<std::string> symbols_to_copy_global { "main_ctor_queue", "__malloc_replaced", "__libc", "__thread_list_lock", "__sysinfo" };
+		static const std::set<std::string> symbols_to_copy_global { "main_ctor_queue", "__malloc_replaced", "__libc", "__thread_list_lock", "__sysinfo", "__environ"};
 		if (symbols_to_copy_global.count(sym.name())) {
 			add_symbol_to_output(load_phdrs, end_addresses, sym, s, ifuncs, true);
 		}
