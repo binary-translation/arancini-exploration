@@ -101,15 +101,21 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 			relocations_r.push_back(std::move(st));
 		} else if (s->type() == section_type::symbol_table) {
 			auto st = std::static_pointer_cast<symbol_table>(s);
-			// TODO static translation of code in libraries
-			if (!cmdline.count("no-static") && elf.type() == elf_type::exec) {
+			if (!cmdline.count("no-static")) {
 				auto syms = st->symbols();
 				for (auto sym = syms.cbegin(); sym != syms.cend(); sym++) {
 					if (!sym->is_func())
 						continue;
 					::util::global_logger.debug("PASS1: looking at symbol {} @ 0x{:#x}\n", sym->name(), sym->value());
+					if (!sym->value()) {
+						oe->add_function_decl(sym->name());
+						continue;
+					}
 					if (!sym->size()) {
-						size_t size = s->address()+s->data_size() - sym->value();
+						// get the section the symbol is in
+
+						auto sec = elf.get_section(sym->section_index());
+						size_t size = sec->address()+sec->data_size() - sym->value();
 						zero_size.push_back({*sym, size});
 						unique_translated.insert(*sym);
 						continue;
@@ -126,11 +132,12 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	for ( const auto &p : zero_size) {
 		::util::global_logger.debug("PASS2: doing (0 size), symbol {}\n", p.first.name());
 		// find the address of the symbol after sym in the text section, and assume that the size of sym is until there
+		size_t size = p.second;
 		auto next = std::next(unique_translated.find(p.first), 1);
-		::util::global_logger.debug("PASS2: next symbol: {} @ 0x{:#x}\n", next->name(), next->value());
-		size_t size = next->value() - p.first.value();
-		if (size > p.second)
-			size = p.second;
+		if (next != unique_translated.end()) {
+			if (next->value() - p.first.value() < size)
+				size = next->value() - p.first.value();
+		}
 		auto fixed_sym = symbol(p.first.name(), p.first.value(), size, p.first.section_index(), p.first.info(), 0);
 
 		oe->add_chunk(translate_symbol(*ia, elf, fixed_sym));
