@@ -18,7 +18,7 @@ public:
 	}
 
 	virtual ~input_arch() { }
-	virtual void translate_chunk(ir::ir_builder &builder, off_t base_address, const void *code, size_t code_size, bool basic_block) = 0;
+	virtual void translate_chunk(ir::ir_builder &builder, off_t base_address, const void *code, size_t code_size, bool basic_block, const std::string &name) = 0;
 
 	bool debug() const { return debug_; }
 

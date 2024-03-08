@@ -49,13 +49,14 @@ class llvm_static_output_engine;
 
 class llvm_static_output_engine_impl {
 public:
-	llvm_static_output_engine_impl(const llvm_static_output_engine &e, const std::vector<std::shared_ptr<ir::chunk>> &chunks);
+	llvm_static_output_engine_impl(const llvm_static_output_engine &e, const std::vector<std::string> &extern_fns, const std::vector<std::shared_ptr<ir::chunk>> &chunks);
 
 	void generate();
 
 	unsigned long fixed_branches;
 private:
 	const llvm_static_output_engine &e_;
+	const std::vector<std::string> &extern_fns_;
 	const std::vector<std::shared_ptr<ir::chunk>> &chunks_;
 	std::unique_ptr<::llvm::LLVMContext> llvm_context_;
 	std::unique_ptr<::llvm::Module> module_;
@@ -137,6 +138,7 @@ private:
 	std::vector<::llvm::Value *> load_args(::llvm::IRBuilder<> *builder, ::llvm::Argument *state_arg);
 	void unwrap_ret(::llvm::IRBuilder<> *builder, ::llvm::Value *value, ::llvm::Argument *state_arg);
 	std::vector<::llvm::Value*> wrap_ret(::llvm::IRBuilder<> *builder, ::llvm::Argument *state_arg);
+	void create_function_decls();
 	void create_static_functions();
 	
 	::llvm::Value *createLoadFromCPU(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, unsigned long reg_idx);

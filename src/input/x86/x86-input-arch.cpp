@@ -339,9 +339,9 @@ The translator factory is implemented by the get_translator function.
 All the x86 translators implementations can be found in the
 src/input/x86/translators/ folder.
 */
-void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, const void *code, size_t code_size, bool basic_block)
+void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, const void *code, size_t code_size, bool basic_block, const std::string &name)
 {
-	builder.begin_chunk();
+	builder.begin_chunk(name);
 
 	initialise_xed();
 

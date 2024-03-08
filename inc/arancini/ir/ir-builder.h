@@ -17,7 +17,7 @@ public:
 
 	internal_function_resolver &ifr() const { return ifr_; }
 
-	virtual void begin_chunk()
+	virtual void begin_chunk(const std::string &name)
 	{
 		// Create Allocator for the current chunk. It will be aliased by all the action_node pointers. So it stays active after the chunk is finished until all
 		// references to the action_nodes are released

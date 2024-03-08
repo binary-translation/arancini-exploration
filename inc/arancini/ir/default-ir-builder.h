@@ -18,7 +18,7 @@ public:
 	{
 	}
 
-	virtual void begin_chunk() override;
+	virtual void begin_chunk(const std::string &name) override;
 	virtual void end_chunk() override;
 
 	virtual void begin_packet(off_t address, const std::string &disassembly = "") override;

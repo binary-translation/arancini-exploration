@@ -46,8 +46,8 @@ public:
 	{
 	}
 
-	virtual void begin_chunk() override {
-		ir_builder::begin_chunk();
+	virtual void begin_chunk(const std::string &name) override {
+		ir_builder::begin_chunk(name);
 		tctx_->begin_block();
 	}
 
@@ -159,12 +159,12 @@ translation *translation_engine::translate(unsigned long pc)
 
 	if (deadflags_) {
 		opt_dbt_ir_builder builder(ia_.get_internal_function_resolver(), ctx_, *deadflags_);
-		ia_.translate_chunk(builder, pc, code, 0x1000, true);
+		ia_.translate_chunk(builder, pc, code, 0x1000, true, "");
 		return builder.create_translation();
 	}
 
 	dbt_ir_builder builder(ia_.get_internal_function_resolver(), ctx_);
-	ia_.translate_chunk(builder, pc, code, 0x1000, true);
+	ia_.translate_chunk(builder, pc, code, 0x1000, true, "");
 	return builder.create_translation();
 }
 

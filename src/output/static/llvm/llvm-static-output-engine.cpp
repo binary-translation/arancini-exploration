@@ -55,7 +55,7 @@ using namespace ::llvm;
 
 llvm_static_output_engine::llvm_static_output_engine(const std::string &output_filename)
 	: static_output_engine(output_filename)
-	, oei_(std::make_unique<llvm_static_output_engine_impl>(*this, chunks()))
+	, oei_(std::make_unique<llvm_static_output_engine_impl>(*this, extern_fns(), chunks()))
 	, dbg_(false)
 {
 }
@@ -64,8 +64,9 @@ llvm_static_output_engine::~llvm_static_output_engine() = default;
 
 void llvm_static_output_engine::generate() { oei_->generate(); }
 
-llvm_static_output_engine_impl::llvm_static_output_engine_impl(const llvm_static_output_engine &e, const std::vector<std::shared_ptr<ir::chunk>> &chunks)
+llvm_static_output_engine_impl::llvm_static_output_engine_impl(const llvm_static_output_engine &e, const std::vector<std::string> &extern_fns, const std::vector<std::shared_ptr<ir::chunk>> &chunks)
 	: e_(e)
+	, extern_fns_(extern_fns)
 	, chunks_(chunks)
 	, llvm_context_(std::make_unique<LLVMContext>())
 	, module_(std::make_unique<Module>("generated", *llvm_context_))
@@ -173,13 +174,18 @@ void llvm_static_output_engine_impl::create_main_function(Function *loop_fn)
 	builder.CreateRet(ConstantInt::get(types.i32, 1));
 }
 
+void llvm_static_output_engine_impl::create_function_decls() {
+
+	for (auto n : extern_fns_) {
+		module_->getOrInsertFunction(n, get_fn_type());
+	}
+}
+
 void llvm_static_output_engine_impl::create_static_functions()
 {
 	for (auto c : chunks_) {
-		std::stringstream fn_name;
-		fn_name << "FN_" << std::hex << c->packets()[0]->address();
 
-		auto fn = Function::Create(get_fn_type(), GlobalValue::LinkageTypes::ExternalLinkage, fn_name.str(), *module_);
+		auto fn = Function::Create(get_fn_type(), GlobalValue::LinkageTypes::ExternalLinkage, c->name(), *module_);
 		fn->addParamAttr(0, Attribute::AttrKind::NonNull);
 		fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
 		fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
@@ -209,6 +215,7 @@ void llvm_static_output_engine_impl::build()
 	loop_fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
 	loop_fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
 
+	create_function_decls();
 	create_static_functions();
 
 	create_main_function(loop_fn);
