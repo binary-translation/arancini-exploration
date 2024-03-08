@@ -20,18 +20,18 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 
     // Determine logger level
     flag = getenv("ARANCINI_LOG_LEVEL");
-    util::basic_logging::levels level = util::basic_logging::levels::info;
+    util::global_logging::levels level = util::global_logging::levels::info;
     if (flag && util::global_logger.is_enabled()) {
         if (!strcmp(flag, "debug"))
-            level = util::basic_logging::levels::debug;
+            level = util::global_logging::levels::debug;
         else if (!strcmp(flag, "info"))
-            level = util::basic_logging::levels::info;
+            level = util::global_logging::levels::info;
         else if (!strcmp(flag, "warn"))
-            level = util::basic_logging::levels::warn;
+            level = util::global_logging::levels::warn;
         else if (!strcmp(flag, "error"))
-            level = util::basic_logging::levels::error;
+            level = util::global_logging::levels::error;
         else if (!strcmp(flag, "fatal"))
-            level = util::basic_logging::levels::fatal;
+            level = util::global_logging::levels::fatal;
         else throw std::runtime_error("ARANCINI_LOG_LEVEL must be set to one among: debug, info, warn, error or fatal");
     } else if (util::global_logger.is_enabled()) {
         std::cerr << "Logger enabled without explicit log level; setting log level to default [info]\n";
@@ -71,7 +71,7 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 		po::notify(vm);
 	} catch (std::exception &e) {
         ::util::global_logger.error("{}\n", e.what());
-        if (::util::global_logger.get_level() <= ::util::basic_logging::levels::error)
+        if (::util::global_logger.get_level() <= ::util::global_logging::levels::error)
             std::cerr << desc << '\n';
 		return std::nullopt;
 	}
