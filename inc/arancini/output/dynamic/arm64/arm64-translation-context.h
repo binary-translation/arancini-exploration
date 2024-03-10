@@ -1,8 +1,10 @@
 #pragma once
 
-#include "arancini/ir/value-type.h"
-#include "arancini/output/dynamic/arm64/arm64-instruction.h"
-#include "arm64-instruction-builder.h"
+#include <arancini/ir/value-type.h>
+#include <arancini/output/dynamic/arm64/arm64-instruction.h>
+#include <arancini/output/dynamic/arm64/arm64-instruction-builder.h>
+
+#include <arancini/util/logger.h>
 
 #include <arancini/ir/node.h>
 #include <arancini/ir/port.h>
@@ -11,11 +13,19 @@
 #include <unordered_map>
 
 namespace arancini::output::dynamic::arm64 {
+
+
+using arm64_dbt_logging = util::basic_logging;
+inline arm64_dbt_logging arm64_logger("[ARM64-DBT]");
+
 class arm64_translation_context : public translation_context {
 public:
 	arm64_translation_context(machine_code_writer &writer)
 		: translation_context(writer)
 	{
+        // TODO: should pass this as flag at creation
+        arm64_logger.enable(util::system_config::enable_global_logging);
+        arm64_logger.set_level(util::global_logger.get_level());
 	}
 
 	virtual void begin_block() override;

@@ -164,7 +164,7 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
 	instruction_index_to_guest_[builder_.nr_instructions()] = address;
 
 	this_pc_ = address;
-	std::cerr << "  " << std::hex << address << ": " << disasm << std::endl;
+    arm64_logger.info("Handling instruction at address {:#x}: {}\n", address, disasm);
 
     instr_cnt_++;
 
@@ -185,9 +185,8 @@ void arm64_translation_context::end_instruction() {
         for (auto node : nodes_)
             materialise(node.get());
     } catch (std::exception &e) {
-        std::cerr << e.what() << '\n';
-        builder_.dump(std::cerr);
-        std::cerr << "Terminating exception raised; aborting\n";
+        arm64_logger.fatal("Terminating exception raised {}\n", e.what());
+        arm64_logger.debug("Current translated instruction streams:\n{}\n", builder_.instructions());
         std::abort();
     }
 }
@@ -204,9 +203,8 @@ void arm64_translation_context::end_block() {
 
         builder_.emit(writer());
     } catch (std::exception &e) {
-        std::cerr << e.what() << '\n';
-        builder_.dump(std::cerr);
-        std::cerr << "Terminating exception raised; aborting\n";
+        arm64_logger.fatal("Terminating exception raised {}\n", e.what());
+        arm64_logger.debug("Current translated instruction streams:\n{}\n", builder_.instructions());
         std::abort();
     }
 }

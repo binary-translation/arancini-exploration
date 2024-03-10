@@ -438,8 +438,6 @@ struct operand {
 
         memory.set_base_reg(preg_operand(index, value_type));
 	}
-
-	void dump(std::ostream &os) const;
 protected:
     operand_variant op_;
 	bool use_, def_, keep_;
@@ -479,7 +477,7 @@ static operand usedef(const T &o)
 
 class instruction {
 public:
-    typedef std::array<operand, 5> operand_array;
+    typedef std::vector<operand> operand_array;
 
     template <typename... Args>
     instruction(const std::string& opc, Args&&... args)
@@ -487,7 +485,6 @@ public:
     {
         static_assert(sizeof...(Args) <= 5,
                       "aarch64 instructions accept at most 5 operands");
-        opcount_ = sizeof...(Args);
         operands_ = {std::forward<Args>(args)...};
     }
 
@@ -500,8 +497,6 @@ public:
     instruction &add_comment(const std::string &comment) { comment_ = comment; return *this; }
     instruction &set_branch(bool is_branch) { branch_ = is_branch; return *this; }
 
-	void dump(std::ostream &os) const;
-    std::string dump() const;
 	void kill() { opcode_.clear(); }
 
 	bool is_dead() const { return opcode_.empty(); }
@@ -511,10 +506,10 @@ public:
     std::string& opcode() { return opcode_; }
     const std::string& opcode() const { return opcode_; }
 
-    size_t operand_count() const { return opcount_; }
-
 	operand_array &operands() { return operands_; }
 	const operand_array &operands() const { return operands_; }
+
+    std::string comment() const { return comment_; }
 private:
     std::string opcode_;
     std::string comment_;
@@ -522,9 +517,178 @@ private:
     bool branch_ = false;
     bool label_ = false;
 
-    size_t opcount_ = 0;
     operand_array operands_;
 };
 
 } // namespace arancini::output::dynamic::arm64
+
+template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::preg_operand> {
+    template <typename PCTX> constexpr format_parse_context::iterator parse(const PCTX &parse_ctx) {
+        return parse_ctx.begin();
+    }
+
+    template <typename FCTX>
+    format_context::iterator format(const arancini::output::dynamic::arm64::preg_operand &pop, FCTX &format_ctx) const {
+        // TODO: maybe to_string should be defined here
+        return fmt::format_to(format_ctx.out(), "{}", to_string(pop));
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::vreg_operand> {
+    template <typename PCTX> constexpr format_parse_context::iterator parse(const PCTX &parse_ctx) {
+        return parse_ctx.begin();
+    }
+
+    template <typename FCTX>
+    format_context::iterator format(const arancini::output::dynamic::arm64::vreg_operand &vop, FCTX &format_ctx) const {
+        return fmt::format_to(format_ctx.out(), "%V{}_{}", vop.width(), vop.index());
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::memory_operand> {
+    template <typename PCTX> constexpr format_parse_context::iterator parse(const PCTX &parse_ctx) {
+        return parse_ctx.begin();
+    }
+
+    template <typename FCTX>
+    format_context::iterator format(const arancini::output::dynamic::arm64::memory_operand &mop, FCTX &format_ctx) const {
+        fmt::format_to(format_ctx.out(), "[");
+        
+		if (mop.is_virtual())
+            fmt::format_to(format_ctx.out(), "{}", mop.vreg_base());
+		else
+            fmt::format_to(format_ctx.out(), "{}", mop.preg_base());
+
+        if (!mop.offset().value()) 
+            fmt::format_to(format_ctx.out(), "]");
+
+        if (!mop.post_index())
+            fmt::format_to(format_ctx.out(), ", #{:#x}]", mop.offset().value());
+        else if (mop.pre_index())
+            fmt::format_to(format_ctx.out(), "!");
+
+        if (mop.post_index())
+            fmt::format_to(format_ctx.out(), "], #{:#x}", mop.offset().value());
+
+        return format_ctx.out();
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::label_operand> {
+    template <typename PCTX> constexpr format_parse_context::iterator parse(const PCTX &parse_ctx) {
+        return parse_ctx.begin();
+    }
+
+    template <typename FCTX>
+    format_context::iterator format(const arancini::output::dynamic::arm64::label_operand &lop, FCTX &format_ctx) const {
+        return fmt::format_to(format_ctx.out(), "{}", lop.name());
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::shift_operand> {
+    template <typename PCTX> constexpr format_parse_context::iterator parse(const PCTX &parse_ctx) {
+        return parse_ctx.begin();
+    }
+
+    template <typename FCTX>
+    format_context::iterator format(const arancini::output::dynamic::arm64::shift_operand &sop, FCTX &format_ctx) const {
+        if (!sop.modifier().empty())
+            fmt::format_to(format_ctx.out(), "{} ", sop.modifier());
+        return fmt::format_to(format_ctx.out(), "{:#x}", sop.value());
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::cond_operand> {
+    template <typename PCTX> constexpr format_parse_context::iterator parse(const PCTX &parse_ctx) {
+        return parse_ctx.begin();
+    }
+
+    template <typename FCTX>
+    format_context::iterator format(const arancini::output::dynamic::arm64::cond_operand &cop, FCTX &format_ctx) const {
+        return fmt::format_to(format_ctx.out(), "{}", cop.condition());
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::immediate_operand> {
+    template <typename PCTX> constexpr format_parse_context::iterator parse(const PCTX &parse_ctx) {
+        return parse_ctx.begin();
+    }
+
+    template <typename FCTX>
+    format_context::iterator format(const arancini::output::dynamic::arm64::immediate_operand &iop, FCTX &format_ctx) const {
+        return fmt::format_to(format_ctx.out(), "{:#x}", iop.value());
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::operand> {
+    template <typename PCTX> constexpr format_parse_context::iterator parse(const PCTX &parse_ctx) {
+        return parse_ctx.begin();
+    }
+
+    template <typename FCTX>
+    format_context::iterator format(const arancini::output::dynamic::arm64::operand &op, FCTX &format_ctx) const {
+        using operand_type = arancini::output::dynamic::arm64::operand_type;
+        switch (op.type()) {
+        case operand_type::cond:
+            return fmt::format_to(format_ctx.out(), "{}", op.cond());
+        case operand_type::label:
+            return fmt::format_to(format_ctx.out(), "{}", op.label());
+        case operand_type::shift:
+            return fmt::format_to(format_ctx.out(), "{}", op.shift());
+        case operand_type::imm:
+            return fmt::format_to(format_ctx.out(), "{}", op.immediate());
+        case operand_type::mem:
+            return fmt::format_to(format_ctx.out(), "{}", op.memory());
+        case operand_type::preg:
+            return fmt::format_to(format_ctx.out(), "{}", op.preg());
+        case operand_type::vreg:
+            return fmt::format_to(format_ctx.out(), "{}", op.vreg());
+        default:
+            // TODO: unclear what should be the behaviour here
+            return fmt::format_to(format_ctx.out(), "Unknown operand type");
+        }
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::instruction::operand_array> {
+    template <typename PCTX> constexpr format_parse_context::iterator parse(const PCTX &parse_ctx) {
+        return parse_ctx.begin();
+    }
+
+    template <typename FCTX>
+    format_context::iterator format(const arancini::output::dynamic::arm64::instruction::operand_array &op_array, FCTX &format_ctx) const {
+        // TODO: is this correct?
+        if (op_array.size() == 0) return format_ctx.out();
+
+        // TODO: maybe this can be simplified
+        for (size_t i = 0; i < op_array.size() - 1; ++i) {
+            fmt::format_to(format_ctx.out(), "{}, ", op_array[i]);
+        }
+
+        return fmt::format_to(format_ctx.out(), "{}", op_array[op_array.size()-1]);
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::instruction> {
+    template <typename PCTX> constexpr format_parse_context::iterator parse(const PCTX &parse_ctx) {
+        return parse_ctx.begin();
+    }
+
+    template <typename FCTX>
+    format_context::iterator format(const arancini::output::dynamic::arm64::instruction &insn, FCTX &format_ctx) const {
+        if (insn.comment().empty())
+            return fmt::format_to(format_ctx.out(), "{} {}", insn.opcode(), insn.operands());
+        return fmt::format_to(format_ctx.out(), "{} {} // {}", insn.opcode(), insn.operands(), insn.comment());
+    }
+};
 
