@@ -52,9 +52,15 @@ public:
         error,
         fatal
         };
+
+        level lowest_level = level::fatal;
+        level highest_level = level::debug;
     };
 
     using levels = typename levels_t::level;
+
+    level_policy() = default;
+    level_policy(levels level): level_(level) { }
 
     levels set_level(levels level) {
         level_ = level;
@@ -145,12 +151,19 @@ private lock_policy,
 public level_policy<logger_impl<enabled, lock_policy, level_policy>>
 {
 public:
+    using base_type = logger_impl<enabled, lock_policy, level_policy>;
+    using level_policy_type = level_policy<logger_impl<enabled, lock_policy, level_policy>>;
+
     logger_impl() = default;
 
     // Specify a prefix for all printed messages
-    logger_impl(const std::string &prefix): prefix_(prefix) { }
-
-    using base_type = logger_impl<enabled, lock_policy, level_policy>;
+    logger_impl(const std::string &prefix, bool enable = false, 
+                typename level_policy_type::levels level = level_policy_type::levels::lowest_level): 
+        prefix_(prefix),
+        enabled_(enable),
+        level_policy_type(level)
+    { 
+    }
 
     // Enable/disable logger
     //
@@ -190,7 +203,7 @@ public:
         static_assert(!(all_are_tuples<Args...>() && none_are_tuples<Args...>()), 
                   "Arguments must be all tuples or no tuples, not a mix.");
 
-        if (!prefix_.empty()) fmt::print("{}", prefix_);
+        if (!prefix_.empty()) fmt::print(dest, "{}", prefix_);
 
         if constexpr (all_are_tuples<Args...>()) {
             ((print(dest, std::forward<Args>(args))), ...);
