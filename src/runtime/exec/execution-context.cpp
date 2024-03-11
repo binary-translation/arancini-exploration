@@ -123,15 +123,15 @@ int execution_context::invoke(void *cpu_state) {
 
 	auto x86_state = (x86::x86_cpu_state *)cpu_state;
 
-    util::global_logger.separator(util::global_logging::levels::info, '=');
-    util::global_logger.info("INVOKE PC = {:#x}\n", util::copy(x86_state->PC));
-    util::global_logger.separator(util::global_logging::levels::info, '=');
-    util::global_logger.info("Registers:\n{}\n", *x86_state);
-    util::global_logger.separator(util::global_logging::levels::debug, '-');
-    util::global_logger.debug("STACK:\n");
+    util::global_logger.info("{}\n", util::logging_separator('=')).
+                        info("INVOKE PC = {:#x}\n", util::copy(x86_state->PC)).
+                        info("{}\n", util::logging_separator('='));
+    util::global_logger.info("Registers:\n{}\n", *x86_state).
+                        info("{}\n", util::logging_separator('-'));
+    util::global_logger.debug("STACK:\n").
+                        debug("{}\n", util::logging_separator('-'));
     //auto* memptr = reinterpret_cast<uint64_t*>(get_memory_ptr(0)) + x86_state->RSP;
     //x86::print_stack(std::cerr, memptr, 20);
-    util::global_logger.separator(util::global_logging::levels::debug, '-');
 
 	auto txln = te_.get_translation(x86_state->PC);
 	if (txln == nullptr) {

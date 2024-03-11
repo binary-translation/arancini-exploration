@@ -69,14 +69,6 @@ public:
 
     levels get_level() const { return level_; }
 
-    T &separator(levels level, char separator_character) {
-        if (level_ <= level) {
-            std::string separator(80, separator_character);
-            return static_cast<T*>(this)->log("{}\n", separator);
-        }
-        else return *static_cast<T*>(this);
-    }
-
     template<typename... Args>
     T &debug(Args&&... args) {
         if (level_ <= levels::debug)
@@ -312,6 +304,10 @@ inline global_logging global_logger;
 // In such cases, an explicit copy is needed
 template <typename T>
 T copy(const T& t) { return t; }
+
+inline std::string logging_separator(char separator_character = '=', std::size_t repeats = 80) {
+    return std::string(repeats, separator_character);
+}
 
 } // namespace util
 
