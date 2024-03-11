@@ -12,24 +12,24 @@ PHDRS
 phdr0 PT_PHDR PHDRS ;
 phdr1 PT_INTERP ; 
 # phdr2 0x70000003 ; # (PT_RISCV_ATTRIBUT)
-phdr3 PT_LOAD PHDRS FILEHDR ;
+gphdr0 PT_LOAD PHDRS FILEHDR;
+gphdr1 PT_LOAD ;
+gphdr2 PT_LOAD ;
+gphdr3 PT_LOAD ;
+phdr3 PT_LOAD ;
 phdr4 PT_LOAD ;
 phdr5 PT_DYNAMIC ; 
 phdr6 PT_NOTE ; 
 phdr7 PT_GNU_EH_FRAME ; 
 phdr8 PT_GNU_STACK FLAGS(6) ;
 phdr9 PT_GNU_RELRO ;
-gphdr0 PT_LOAD ;
-gphdr1 PT_LOAD ;
-gphdr2 PT_LOAD ;
-gphdr3 PT_LOAD ;
 }
 SECTIONS
 {
 	INCLUDE "guest-sections.lds"
   /* Read-only sections, merged into text segment: */
   PROVIDE (__executable_start = SEGMENT_START("text-segment", ALIGN(CONSTANT(MAXPAGESIZE))));
-  . = SEGMENT_START("text-segment", ALIGN(CONSTANT(MAXPAGESIZE))) + SIZEOF_HEADERS;
+  . = SEGMENT_START("text-segment", ALIGN(CONSTANT(MAXPAGESIZE)));
   .interp : { *(.interp) } :phdr1 :phdr3
   .note.ABI-tag : { *(.note.ABI-tag) } :phdr3 :phdr6
   .note.gnu.build-id : { *(.note.gnu.build-id) }
