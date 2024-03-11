@@ -162,10 +162,8 @@ public:
     // Does nothing when logger is disabled at compile-time
     bool enable(bool status) {
         if constexpr (enabled) {
-            lock_policy::lock();
-            enabled_ = status;
-            lock_policy::unlock();
-            return enabled_;
+            std::lock_guard<lock_policy> lock(*this);
+            return (enabled_ = status);
         }
     }
 
@@ -177,11 +175,8 @@ public:
     // Meant for use only be wrappers or in special other cases
     template<typename... Args>
     base_type &forced_log(FILE* dest, Args&&... args) {
-        lock_policy::lock();
-        forced_unsynch_log(dest, std::forward<Args>(args)...);
-        lock_policy::unlock();
-
-        return *this;
+        std::lock_guard<lock_policy> lock(*this);
+        return forced_unsynch_log(dest, std::forward<Args>(args)...);
     }
 
     // Basic interface for logging
