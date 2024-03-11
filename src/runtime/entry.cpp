@@ -61,14 +61,8 @@ static void segv_handler([[maybe_unused]] int signo, [[maybe_unused]] siginfo_t 
 	unsigned long rip = 0;
 #endif
 
-	uintptr_t emulated_base = (uintptr_t)ctx_->get_memory_ptr(0);
-	if ((uintptr_t)info->si_addr >= emulated_base) {
-        util::global_logger.fatal("SEGMENTATION FAULT: code={:#x}, rip={:#x}, host-virtual-address={}, guest-virtual-address={}\n",
-                                  info->si_code, rip, info->si_addr, reinterpret_cast<uintptr_t>(info->si_addr) - emulated_base);
-    } else {
-        util::global_logger.fatal("SEGMENTATION FAULT: code={:#x}, rip={:#x}, host-virtual-address={}\n",
+	util::global_logger.fatal("SEGMENTATION FAULT: code={:#x}, rip={:#x}, virtual-address={}\n",
                                   info->si_code, rip, info->si_addr);
-    }
 
 	unsigned i = 0;
 	auto range = ctx_->get_thread_range();
@@ -289,9 +283,6 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	// FIXME hardcoded stack_size and memory size
 	unsigned long stack_size = 0x10000;
 	auto stack_base = ctx_->add_memory_region(0x10000000 - stack_size, stack_size, true);
-
-	// TODO: Load guest .text, .data, .bss sections via program headers
-	load_guest_program_headers(ctx_);
 
 	// Create the main execution thread.
 	auto main_thread = ctx_->create_execution_thread();

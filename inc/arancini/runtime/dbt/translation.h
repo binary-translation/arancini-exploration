@@ -10,7 +10,7 @@ struct native_call_result {
 	uint64_t chain_address;
 };
 
-extern "C" native_call_result call_native(void *, void *, void *);
+extern "C" native_call_result call_native(void *, void *);
 
 class translation {
 
@@ -23,7 +23,7 @@ public:
 
 	~translation() { std::free(code_ptr_); }
 
-	native_call_result invoke(void *cpu_state, void *mem_base) { return call_native(code_ptr_, cpu_state, mem_base); }
+	native_call_result invoke(void *cpu_state) { return call_native(code_ptr_, cpu_state); }
 
 	[[nodiscard]] void *get_code_ptr() const { return code_ptr_; }
 	[[nodiscard]] size_t get_code_size() const { return code_size_; }

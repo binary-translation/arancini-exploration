@@ -18,7 +18,6 @@ using namespace arancini::ir;
 
 /**
  * Translations assumes FP holds pointer to CPU state.
- * Memory accesses need to use MEM_BASE.
  */
 
 static constexpr const unsigned long flag_idx = static_cast<const unsigned long>(std::min({ reg_idx::ZF, reg_idx::CF, reg_idx::OF, reg_idx::SF }));
@@ -499,10 +498,6 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 	Label *retry = builder_.alloc_label();
 	Label *end = builder_.alloc_label();
 
-	auto [reg, _] = allocate_register();
-
-	builder_.add(reg, dstAddr, MEM_BASE);
-
 	using load_reserve_type = decltype(&InstructionBuilder::lrd);
 	using store_conditional_type = decltype(&InstructionBuilder::scd);
 
@@ -510,7 +505,7 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 	store_conditional_type sc = n.val().type().element_width() == 32 ? &InstructionBuilder::scw : &InstructionBuilder::scd;
 	load_store_func_t store = n.val().type().element_width() == 32 ? &InstructionBuilder::sw : &InstructionBuilder::sd;
 
-	auto addr = AddressOperand { reg };
+	auto addr = AddressOperand { dstAddr };
 	// FIXME Correct memory ordering?
 	switch (n.op()) {
 
@@ -586,11 +581,7 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 	auto [zf, of, cf, sf] = allocate_in_order<reg_idx::ZF, reg_idx::OF, reg_idx::CF, reg_idx::SF>(&n.zero(), &n.overflow(), &n.carry(), &n.negative());
 	bool flags_needed = zf || of || cf || sf;
 
-	auto [reg, _] = allocate_register();
-
-	builder_.add(reg, dstAddr, MEM_BASE);
-
-	auto addr = AddressOperand { reg };
+	auto addr = AddressOperand { dstAddr };
 
 	auto &temp_result_reg = allocate_register().first;
 
@@ -995,15 +986,11 @@ TypedRegister &riscv64_translation_context::materialise_read_mem(const read_mem_
 	}
 	TypedRegister &addr_reg = *(materialise(n.address().owner())); // FIXME Assumes address has 64bit size in IR
 
-	auto [reg, _] = allocate_register();
-
-	builder_.add(reg, addr_reg, MEM_BASE);
-
-	AddressOperand addr { reg };
+	AddressOperand addr { addr_reg };
 
 	if (is_i128(n.val())) {
 		builder_.ld(out_reg.reg1(), addr);
-		builder_.ld(out_reg.reg2(), AddressOperand { reg, 8 });
+		builder_.ld(out_reg.reg2(), AddressOperand { addr_reg, 8 });
 		return out_reg;
 	}
 
@@ -1024,15 +1011,11 @@ void riscv64_translation_context::materialise_write_mem(const write_mem_node &n)
 	TypedRegister &src_reg = *materialise(n.value().owner());
 	TypedRegister &addr_reg = *materialise(n.address().owner());
 
-	auto [reg, _] = allocate_register(); // Temporary
-
-	builder_.add(reg, addr_reg, MEM_BASE); // FIXME Assumes address has 64bit size in IR
-
-	AddressOperand addr { reg };
+	AddressOperand addr { addr_reg };
 
 	if (is_i128(n.value())) {
 		builder_.sd(src_reg.reg1(), addr);
-		builder_.sd(src_reg.reg2(), AddressOperand { reg, 8 });
+		builder_.sd(src_reg.reg2(), AddressOperand { addr_reg, 8 });
 		return;
 	}
 

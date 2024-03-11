@@ -24,9 +24,6 @@ call_native:
     // Get state pointer into right register
     mv fp, a1
 
-    // Get mem base into register
-    mv t6, a2
-
     // Load x86 registers into RISCV ones
 
     ld x16, 8(fp)

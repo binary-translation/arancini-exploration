@@ -695,11 +695,11 @@ public:
 		// FP/RegFile Ptr (x8),
 		// zero (x0)
 		// Return to trampoline (x1)
-		// Memory base (x31),
+		// the permanently mapped registers (x16 to x23)
 		// thread pointer (x4)
 		// Return value (x10 + x11) can be used once first def
 
-		std::bitset<32> avail_physregs = 0x7F00F2E8;
+		std::bitset<32> avail_physregs = 0xFF00F2E8;
 		//		std::bitset<32> avail_float_physregs = 0xFFFFFFFFF;
 
 		Instruction *linked_instruction { nullptr };
