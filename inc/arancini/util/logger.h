@@ -192,7 +192,7 @@ public:
     // Meant for use only be wrappers or in special other cases
     template<typename... Args>
     base_type &forced_unsynch_log(FILE* dest, Args&&... args) {
-        static_assert(!(all_are_tuples<Args...>() && none_are_tuples<Args...>()), 
+        static_assert((all_are_tuples<Args...>() || none_are_tuples<Args...>()), 
                   "Arguments must be all tuples or no tuples, not a mix.");
 
         if (!prefix_.empty()) fmt::print(dest, "{}", prefix_);
