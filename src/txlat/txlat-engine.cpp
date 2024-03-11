@@ -144,8 +144,13 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	std::string verbose_link = cmdline.count("verbose-link") ? " -Wl,--verbose" : "";
 
 	if (cmdline.count("no-script")) {
-		run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + " -l arancini-runtime -L "
-			+ arancini_runtime_lib_dir + " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info + verbose_link);
+		if (elf.type() == elf_type::exec) {
+			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + " -l arancini-runtime -L "
+				+ arancini_runtime_lib_dir + " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info + verbose_link);
+		} else if (elf.type() == elf::elf_type::dyn) {
+			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -shared " + intermediate_file->name() + +" -l arancini-runtime -L "
+				+ arancini_runtime_lib_dir + " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info + verbose_link);
+		}
 		return;
 	}
 
