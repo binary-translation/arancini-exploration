@@ -46,10 +46,10 @@ void translator::dump_xed_encoding(void)
   	for (unsigned int opnum = 0; opnum < nops; opnum++) {
         auto operand = xed_inst_operand(insn, opnum);
         xed_operand_print(operand, buf, sizeof(buf) - 1);
-        if (util::global_logger.get_level() <= util::basic_logging::levels::info)
+        if (util::global_logger.get_level() <= util::global_logging::levels::info)
             util::global_logger.log("{} ", buf);
   	}
-    if (util::global_logger.get_level() <= util::basic_logging::levels::info)
+    if (util::global_logger.get_level() <= util::global_logging::levels::info)
         util::global_logger.log("\n", buf);
 }
 

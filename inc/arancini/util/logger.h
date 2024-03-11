@@ -1,11 +1,13 @@
 #pragma once
 
+#include <arancini/util/type-utils.h>
 #include <arancini/util/system-config.h>
 
 #include <fmt/core.h>
 #include <fmt/format.h>
 
 #include <mutex>
+#include <tuple>
 #include <functional>
 
 namespace util {
@@ -50,9 +52,15 @@ public:
         error,
         fatal
         };
+
+        level lowest_level = level::fatal;
+        level highest_level = level::debug;
     };
 
     using levels = typename levels_t::level;
+
+    level_policy() = default;
+    level_policy(levels level): level_(level) { }
 
     levels set_level(levels level) {
         level_ = level;
@@ -61,51 +69,50 @@ public:
 
     levels get_level() const { return level_; }
 
-    T &separator(levels level, char separator_character) {
-        if (level_ <= level) {
-            std::string separator(80, separator_character);
-            return static_cast<T*>(this)->log("{}\n", separator);
-        }
-        else return *static_cast<T*>(this);
-    }
-
     template<typename... Args>
     T &debug(Args&&... args) {
         if (level_ <= levels::debug)
-            return logger->log(stderr, "[DEBUG]   {}", fmt::format(std::forward<Args>(args)...));
+            return logger->log(stderr, 
+                               std::forward_as_tuple("[DEBUG]   "), 
+                               std::forward_as_tuple(std::forward<Args>(args)...));
         return *logger;
     }
 
     template<typename... Args>
     T &info(Args&&... args) {
         if (level_ <= levels::info)
-            return logger->log(stderr, "[INFO]    {}", fmt::format(std::forward<Args>(args)...));
+            return logger->log(stderr, 
+                               std::forward_as_tuple("[INFO]    "), 
+                               std::forward_as_tuple(std::forward<Args>(args)...));
         return *logger;
     }
 
     template<typename... Args>
     T &warn(Args&&... args) {
         if (level_ <= levels::warn)
-            return logger->log(stderr, "[WARNING] {}", fmt::format(std::forward<Args>(args)...));
+            return logger->log(stderr, 
+                               std::forward_as_tuple("[WARNING] "), 
+                               std::forward_as_tuple(std::forward<Args>(args)...));
         return *logger;
     }
 
     template<typename... Args>
     T &error(Args&&... args) {
         if (level_ <= levels::error)
-            return logger->log(stderr, "[ERROR]   {}", fmt::format(std::forward<Args>(args)...));
+            return logger->log(stderr, 
+                               std::forward_as_tuple("[ERROR]   "), 
+                               std::forward_as_tuple(std::forward<Args>(args)...));
         return *logger;
     }
 
     template<typename... Args>
     T &fatal(Args&&... args) {
         // Print FATAL messages even with disabled logger
-        if (!logger->is_enabled()) {
-            return logger->mandatory_log(stderr, "[FATAL]   {}", fmt::format(std::forward<Args>(args)...));
+        if (level_ <= levels::fatal) {
+            return logger->forced_log(stderr, 
+                                      std::forward_as_tuple("[FATAL]   "), 
+                                      std::forward_as_tuple(std::forward<Args>(args)...));
         }
-
-        if (level_ <= levels::fatal)
-            return logger->log(stderr, "[FATAL]   {}", fmt::format(std::forward<Args>(args)...));
         return *logger;
     }
 protected:
@@ -116,10 +123,12 @@ protected:
     virtual ~level_policy() { }
 };
 
-template <bool enable, typename lock_policy, template <typename logger> typename level_policy>
-class logger_impl;
 
 // Logger implementation using policies
+//
+// enabled: compile-time enable/disable setting for the logger
+// A disabled logger can still print messages using the forced_log() and
+// forced_unsynch_log() methods
 //
 // lock_policy: must provide lock() and unlock() - can be used for
 // synchronization
@@ -128,25 +137,34 @@ class logger_impl;
 // log())
 //
 // Logger can be customized with different policies
-template <typename lock_policy, template <typename logger> typename level_policy>
-class logger_impl<true, lock_policy, level_policy> final :
+template <bool enabled, typename lock_policy, template <typename logger> typename level_policy>
+class logger_impl:
 private lock_policy,
-public level_policy<logger_impl<true, lock_policy, level_policy>>
+public level_policy<logger_impl<enabled, lock_policy, level_policy>>
 {
 public:
+    using base_type = logger_impl<enabled, lock_policy, level_policy>;
+    using level_policy_type = level_policy<logger_impl<enabled, lock_policy, level_policy>>;
+
     logger_impl() = default;
 
     // Specify a prefix for all printed messages
-    logger_impl(const std::string &prefix): prefix_(prefix) { }
-
-    using base_type = logger_impl<true, lock_policy, level_policy>;
+    logger_impl(const std::string &prefix, bool enable = false, 
+                typename level_policy_type::levels level = level_policy_type::levels::lowest_level): 
+        prefix_(prefix),
+        enabled_(enable),
+        level_policy_type(level)
+    { 
+    }
 
     // Enable/disable logger
+    //
+    // Does nothing when logger is disabled at compile-time
     bool enable(bool status) {
-        lock_policy::lock();
-        enabled_ = status;
-        return enabled_;
-        lock_policy::unlock();
+        if constexpr (enabled) {
+            std::lock_guard<lock_policy> lock(*this);
+            return (enabled_ = status);
+        }
     }
 
     bool is_enabled() const { return enabled_; }
@@ -156,13 +174,32 @@ public:
     // Enables logging even when the logger is disabled
     // Meant for use only be wrappers or in special other cases
     template<typename... Args>
-    base_type &mandatory_log(FILE* dest, Args&&... args) {
-        lock_policy::lock();
-        if (!prefix_.empty()) fmt::print("{}", prefix_);
-        fmt::print(dest, std::forward<Args>(args)...);
-        lock_policy::unlock();
+    base_type &forced_log(FILE* dest, Args&&... args) {
+        std::lock_guard<lock_policy> lock(*this);
+        return forced_unsynch_log(dest, std::forward<Args>(args)...);
+    }
+
+    // Basic interface for logging
+    //
+    // Enables logging even when the logger is disabled
+    // No synchronization is used; irrespective of the lock policy
+    //
+    // Meant for use only be wrappers or in special other cases
+    template<typename... Args>
+    base_type &forced_unsynch_log(FILE* dest, Args&&... args) {
+        static_assert((all_are_tuples<Args...>() || none_are_tuples<Args...>()), 
+                  "Arguments must be all tuples or no tuples, not a mix.");
+
+        if (!prefix_.empty()) fmt::print(dest, "{}", prefix_);
+
+        if constexpr (all_are_tuples<Args...>()) {
+            ((print(dest, std::forward<Args>(args))), ...);
+        } else if constexpr (none_are_tuples<Args...>()) {
+            print(dest, std::forward_as_tuple(args...));
+        }
 
         return *this;
+
     }
 
     // Basic canonical interface for logging
@@ -171,59 +208,38 @@ public:
     // Arguments are given as for the {fmt} library
     template<typename... Args>
     base_type &log(FILE* dest, Args&&... args) {
-        if (enabled_) {
-            return mandatory_log(dest, std::forward<Args>(args)...);
+        if constexpr (enabled) {
+            if (enabled_) {
+                return forced_log(dest, std::forward<Args>(args)...);
+            }
         }
 
         return *this;
     }
     
-    // Basic interface for logging
+    // Basic canonical interface for logging for printing to stdout
+    //
+    // Arguments are given as for the {fmt} library
     template<typename... Args>
     base_type &log(Args&&... args) {
         return log(stdout, std::forward<Args>(args)...);
     }
 private:
-    bool enabled_ = true;
+    bool enabled_ = enabled;
     std::string prefix_;
-};
 
-// Dummy logger
-//
-// Does not print any messages, meant for compile-time disabling of the logger
-//
-// Maintains the same interface as the actual logger
-template <template <typename T> typename level_policy>
-class logger_impl<false, no_lock_policy, level_policy> final :
-public no_lock_policy,
-public level_policy<logger_impl<false, no_lock_policy, level_policy>>
-{
-public:
-    using base_type = logger_impl<false, no_lock_policy, level_policy>;
-    
-    // Specify a prefix for all printed messages
-    logger_impl() = default;
-    logger_impl(const std::string &prefix): prefix_(prefix) { }
-
-    bool enable(bool) { return false; }
-    bool is_enabled() const { return false; }
-
-    // FIXME: add attribute to specify that it should be ignored
-    template<typename... Args>
-    base_type &log([[gnu::unused]] Args&&...) { return *this; }
-
-    template<typename... Args>
-    base_type &log(FILE*, [[gnu::unused]] Args&&...) { return *this; }
-
-    // Basic interface for logging
-    template<typename... Args>
-    base_type &mandatory_log(FILE* dest, Args&&... args) {
-        if (!prefix_.empty()) fmt::print("{}", prefix_);
-        fmt::print(dest, std::forward<Args>(args)...);
-        return *this;
+    template <typename... Args>
+    void print(FILE* dest, std::tuple<Args...>&& printer_args) {
+        std::apply([dest](auto&& format, auto&&... args) {
+               fmt::print(dest, std::forward<decltype(format)>(format), std::forward<decltype(args)>(args)...);
+           }, printer_args);
     }
-private:
-    std::string prefix_;
+
+
+    template <typename... Args>
+    void print(FILE* dest, Args&&... printer_args) {
+        print(dest, std::forward_as_tuple(printer_args...));
+    }
 };
 
 // Lazy evaluation handlers
@@ -276,12 +292,17 @@ using basic_logging = details::logger_impl<system_config::enable_global_logging,
 using synch_logging = details::logger_impl<system_config::enable_global_logging, details::basic_lock_policy, details::level_policy>;
 
 // Global logger for generic logging in the project
-inline basic_logging global_logger;
+using global_logging = synch_logging;
+inline global_logging global_logger;
 
 // Perfect forward initialization sometimes doesn't work (e.g. packed structs)
 // In such cases, an explicit copy is needed
 template <typename T>
 T copy(const T& t) { return t; }
+
+inline std::string logging_separator(char separator_character = '=', std::size_t repeats = 80) {
+    return std::string(repeats, separator_character);
+}
 
 } // namespace util
 

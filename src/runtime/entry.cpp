@@ -71,8 +71,8 @@ static void segv_handler([[maybe_unused]] int signo, [[maybe_unused]] siginfo_t 
 	auto range = ctx_->get_thread_range();
 	for (auto it  = range.first; it != range.second; it++) {
             auto state = (x86_cpu_state*)it->second->get_cpu_state();
-            util::global_logger.log("Thread[{}] Guest PC: {:#x}\n", i, util::copy(state->PC));
-		    util::global_logger.log("Thread[{}] FS: {:#x}\n", i, util::copy(state->FS));
+            util::global_logger.info("Thread[{}] Guest PC: {:#x}\n", i, util::copy(state->PC));
+		    util::global_logger.info("Thread[{}] FS: {:#x}\n", i, util::copy(state->FS));
 			i++;
 	}
 
@@ -125,7 +125,7 @@ static void load_gph(execution_context *ctx, const guest_program_header_metadata
                              md->file_size, fmt::ptr(ptr));
 
     // FIXME: workaround for possible bug in {fmt}
-    if (util::global_logger.get_level() <= util::basic_logging::levels::info) 
+    if (util::global_logger.get_level() <= util::global_logging::levels::info) 
         util::global_logger.log("target={}\n", fmt::ptr(ptr));
 
 	// Copy the data from the host binary into the new allocated region of emulated
@@ -221,36 +221,32 @@ static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, exe
  */
 extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc, char **argv) {
     const char* flag = getenv("ARANCINI_ENABLE_LOG");
-    bool log_status = false;
     if (flag) {
-        if (!strcmp(flag, "true")) {
-            log_status = true;
-        } else if (!strcmp(flag, "false")) {
-            log_status = false;
-        } else throw std::runtime_error("ARANCINI_ENABLE_LOG must be set to either true or false");
+        if (util::case_ignore_string_equal(flag, "true"))
+            util::global_logger.enable(true);
+        else if (util::case_ignore_string_equal(flag, "false"))
+            util::global_logger.enable(false);
+        else throw std::runtime_error("ARANCINI_ENABLE_LOG must be set to either true or false");
     }
 
     // Determine logger level
     flag = getenv("ARANCINI_LOG_LEVEL");
-    util::basic_logging::levels level = util::basic_logging::levels::info;
     if (flag && util::global_logger.is_enabled()) {
-        if (!strcmp(flag, "debug"))
-            level = util::basic_logging::levels::debug;
-        else if (!strcmp(flag, "info"))
-            level = util::basic_logging::levels::info;
-        else if (!strcmp(flag, "warn"))
-            level = util::basic_logging::levels::warn;
-        else if (!strcmp(flag, "error"))
-            level = util::basic_logging::levels::error;
-        else if (!strcmp(flag, "fatal"))
-            level = util::basic_logging::levels::fatal;
-        else throw std::runtime_error("ARANCINI_LOG_LEVEL must be set to one among: debug, info, warn, error or fatal");
+        if (util::case_ignore_string_equal(flag, "debug"))
+            util::global_logger.set_level(util::global_logging::levels::debug);
+        else if (util::case_ignore_string_equal(flag, "info"))
+            util::global_logger.set_level(util::global_logging::levels::info);
+        else if (util::case_ignore_string_equal(flag, "warn"))
+            util::global_logger.set_level(util::global_logging::levels::warn);
+        else if (util::case_ignore_string_equal(flag, "error"))
+            util::global_logger.set_level(util::global_logging::levels::error);
+        else if (util::case_ignore_string_equal(flag, "fatal"))
+            util::global_logger.set_level(util::global_logging::levels::fatal);
+        else throw std::runtime_error("ARANCINI_LOG_LEVEL must be set to one among: debug, info, warn, error or fatal (case-insensitive)");
     } else if (util::global_logger.is_enabled()) {
         std::cerr << "Logger enabled without explicit log level; setting log level to default [info]\n";
+        util::global_logger.set_level(util::global_logging::levels::info);
     }
-
-    // Set logger level
-    util::global_logger.set_level(level);
 
     util::global_logger.info("arancini: dbt: initialise\n");
 

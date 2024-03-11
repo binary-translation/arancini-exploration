@@ -23,6 +23,10 @@ following flags:
 
 - `ARANCINI_LOG_LEVEL=(debug|info|warn|error|fatal)`
 
+Note that for all options to both `ARANCINI_ENABLE_LOG` and `ARANCINI_LOG_LEVEL`,
+it is possible to specify their setting in a case-insensitive manner. For
+instance, `ARANCINI_LOG_LEVEL=debug` and `ARANCINI_LOG_LEVEL=DEBUG` both work.
+
 The same flags apply when logging `txlat` itself, but they do not affect the
 produced binary.
 
