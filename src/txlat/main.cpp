@@ -9,36 +9,32 @@ namespace po = boost::program_options;
 
 static std::optional<po::variables_map> init_options(int argc, const char *argv[]) {
     const char* flag = getenv("ARANCINI_ENABLE_LOG");
-    bool log_status = false;
     if (flag) {
-        if (!strcmp(flag, "true")) {
-            log_status = true;
-        } else if (!strcmp(flag, "false")) {
-            log_status = false;
-        } else throw std::runtime_error("ARANCINI_ENABLE_LOG must be set to either true or false");
+        if (util::case_ignore_string_equal(flag, "true"))
+            util::global_logger.enable(true);
+        else if (util::case_ignore_string_equal(flag, "false"))
+            util::global_logger.enable(false);
+        else throw std::runtime_error("ARANCINI_ENABLE_LOG must be set to either true or false");
     }
 
     // Determine logger level
     flag = getenv("ARANCINI_LOG_LEVEL");
-    util::global_logging::levels level = util::global_logging::levels::info;
     if (flag && util::global_logger.is_enabled()) {
-        if (!strcmp(flag, "debug"))
-            level = util::global_logging::levels::debug;
-        else if (!strcmp(flag, "info"))
-            level = util::global_logging::levels::info;
-        else if (!strcmp(flag, "warn"))
-            level = util::global_logging::levels::warn;
-        else if (!strcmp(flag, "error"))
-            level = util::global_logging::levels::error;
-        else if (!strcmp(flag, "fatal"))
-            level = util::global_logging::levels::fatal;
-        else throw std::runtime_error("ARANCINI_LOG_LEVEL must be set to one among: debug, info, warn, error or fatal");
+        if (util::case_ignore_string_equal(flag, "debug"))
+            util::global_logger.set_level(util::global_logging::levels::debug);
+        else if (util::case_ignore_string_equal(flag, "info"))
+            util::global_logger.set_level(util::global_logging::levels::info);
+        else if (util::case_ignore_string_equal(flag, "warn"))
+            util::global_logger.set_level(util::global_logging::levels::warn);
+        else if (util::case_ignore_string_equal(flag, "error"))
+            util::global_logger.set_level(util::global_logging::levels::error);
+        else if (util::case_ignore_string_equal(flag, "fatal"))
+            util::global_logger.set_level(util::global_logging::levels::fatal);
+        else throw std::runtime_error("ARANCINI_LOG_LEVEL must be set to one among: debug, info, warn, error or fatal (case-insensitive)");
     } else if (util::global_logger.is_enabled()) {
         std::cerr << "Logger enabled without explicit log level; setting log level to default [info]\n";
+        util::global_logger.set_level(util::global_logging::levels::info);
     }
-
-    // Set logger level
-    util::global_logger.set_level(level);
 
 	po::options_description desc("Command-line options");
 

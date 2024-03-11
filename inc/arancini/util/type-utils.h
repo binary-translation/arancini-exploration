@@ -1,6 +1,9 @@
 #pragma once
 
 #include <tuple>
+#include <string>
+#include <cctype>
+#include <algorithm>
 #include <type_traits>
 
 namespace util {
@@ -22,6 +25,15 @@ constexpr bool all_are_tuples() {
 template<typename... Args>
 constexpr bool none_are_tuples() {
     return (!is_tuple<std::decay_t<Args>>::value && ...);
+}
+
+
+inline bool case_ignore_char_equal(char a, char b) {
+    return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
+}
+
+inline bool case_ignore_string_equal(const std::string &a, const std::string &b) {
+    return std::equal(a.begin(), a.end(), b.begin(), b.end(), case_ignore_char_equal);
 }
 
 } // namespace util
