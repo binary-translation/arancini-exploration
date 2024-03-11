@@ -593,20 +593,40 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 				switch (ban->op()) {
 					case binary_arith_op::bxor:
 					case binary_arith_op::band:
-					case binary_arith_op::bor: {
+					case binary_arith_op::bor:
 						lhs = builder.CreateBitCast(lhs, IntegerType::get(*llvm_context_, lhs->getType()->getPrimitiveSizeInBits())); break;
 					default: break;
-					}
+				}
+			} else if (lhs->getType()->isVectorTy() && ((VectorType *)lhs->getType())->getElementType()->isFloatingPointTy()) {
+				switch (ban->op()) {
+					case binary_arith_op::bxor:
+					case binary_arith_op::band:
+					case binary_arith_op::bor: {
+						auto ETy = ((VectorType *)lhs->getType())->getElementType();
+						auto ENum = ((VectorType *)lhs->getType())->getElementCount();
+						lhs = builder.CreateBitCast(lhs, VectorType::get(IntegerType::get(*llvm_context_, ETy->getPrimitiveSizeInBits()), ENum));
+					} break;
+					default: break;
 				}
 			}
 			if (rhs->getType()->isFloatingPointTy()) {
 				switch (ban->op()) {
 					case binary_arith_op::bxor:
 					case binary_arith_op::band:
-					case binary_arith_op::bor: {
+					case binary_arith_op::bor:
 						rhs = builder.CreateBitCast(lhs, IntegerType::get(*llvm_context_, rhs->getType()->getPrimitiveSizeInBits())); break;
 					default: break;
-					}
+				}
+			} else if (rhs->getType()->isVectorTy() && ((VectorType *)rhs->getType())->getElementType()->isFloatingPointTy()) {
+				switch (ban->op()) {
+					case binary_arith_op::bxor:
+					case binary_arith_op::band:
+					case binary_arith_op::bor: {
+						auto ETy = ((VectorType *)rhs->getType())->getElementType();
+						auto ENum = ((VectorType *)rhs->getType())->getElementCount();
+						rhs = builder.CreateBitCast(rhs, VectorType::get(IntegerType::get(*llvm_context_, ETy->getPrimitiveSizeInBits()), ENum));
+					} break;
+					default: break;
 				}
 			}
 
@@ -664,6 +684,30 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 				if (((IntegerType *)ltype)->getSignBit() && ((IntegerType *)ltype)->getSignBit())
 					return builder.CreateSRem(lhs, rhs);
 				return builder.CreateURem(lhs, rhs);
+			}
+			case binary_arith_op::cmpo: {
+				return builder.CreateCmp(CmpInst::FCMP_ORD, lhs, rhs);
+			}
+			case binary_arith_op::cmpu: {
+				return builder.CreateCmp(CmpInst::FCMP_UNO, lhs, rhs);
+			}
+			case binary_arith_op::cmpoeq: {
+				return builder.CreateCmp(CmpInst::FCMP_OEQ, lhs, rhs);
+			}
+			case binary_arith_op::cmpolt: {
+				return builder.CreateCmp(CmpInst::FCMP_OLT, lhs, rhs);
+			}
+			case binary_arith_op::cmpole: {
+				return builder.CreateCmp(CmpInst::FCMP_OLE, lhs, rhs);
+			}
+			case binary_arith_op::cmpune: {
+				return builder.CreateCmp(CmpInst::FCMP_UEQ, lhs, rhs);
+			}
+			case binary_arith_op::cmpunlt: {
+				return builder.CreateCmp(CmpInst::FCMP_UGE, lhs, rhs);
+			}
+			case binary_arith_op::cmpunle: {
+				return builder.CreateCmp(CmpInst::FCMP_UGT, lhs, rhs);
 			}
 			default:
 				throw std::runtime_error("unsupported binary operator " + std::to_string((int)ban->op()));
@@ -939,6 +983,12 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		auto v = lower_port(builder, state_arg, pkt, un->lhs());
 		if (v->getType()->isFloatingPointTy())
 			v = builder.CreateBitCast(v, IntegerType::getIntNTy(*llvm_context_, v->getType()->getPrimitiveSizeInBits()));
+		if (v->getType()->isVectorTy() && v->getType()->isFPOrFPVectorTy()) {
+			auto ETy = ((VectorType *)v->getType())->getElementType();
+			auto ENum  = ((VectorType *)v->getType())->getElementCount();
+			auto DstTy = VectorType::get(IntegerType::get(*llvm_context_, ETy->getPrimitiveSizeInBits()), ENum);
+			v = builder.CreateBitCast(v, DstTy);
+		}
 
 		switch (p.kind()) {
 		case port_kinds::value: {

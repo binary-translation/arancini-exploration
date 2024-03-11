@@ -23,11 +23,29 @@ void binop_translator::do_translate()
 	case XED_ICLASS_TEST:
 		rslt = builder().insert_and(op0->val(), op1->val());
 		break;
+	case XED_ICLASS_ANDPS: {
+		op0 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op0->val());
+		op1 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op1->val());
+		rslt = builder().insert_and(op0->val(), op1->val());
+		break;
+	}
+	case XED_ICLASS_ANDNPS: {
+		op0 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op0->val());
+		op0 = builder().insert_not(op0->val());
+		op1 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op1->val());
+		rslt = builder().insert_and(op0->val(), op1->val());
+		break;
+	}
 	case XED_ICLASS_OR:
 	case XED_ICLASS_POR:
 		rslt = builder().insert_or(op0->val(), op1->val());
 		break;
-
+	case XED_ICLASS_ORPS: {
+		op0 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op0->val());
+		op1 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op1->val());
+		rslt = builder().insert_or(op0->val(), op1->val());
+		break;
+	}
 	case XED_ICLASS_ADD:
 		rslt = builder().insert_add(op0->val(), op1->val());
 		break;
@@ -45,6 +63,12 @@ void binop_translator::do_translate()
     write_operand(0, dst->val());
     break;
   }
+	case XED_ICLASS_ADDPS: {
+		op0 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op0->val());
+		op1 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op1->val());
+		rslt = builder().insert_add(op0->val(), op1->val());
+		break;
+	}
 	case XED_ICLASS_ADC:
 		rslt = builder().insert_adc(op0->val(), op1->val(), auto_cast(op0->val().type(), read_reg(value_type::u1(), reg_offsets::CF))->val());
 		break;
@@ -360,6 +384,107 @@ void binop_translator::do_translate()
 
 		break;
 	}
+	case XED_ICLASS_CMPSS: {	
+		auto dest = read_operand(0);
+		auto op0 = read_operand(0);
+		auto op1 = read_operand(1);
+		auto op2 = read_operand(2);
+
+		auto true_val = builder().insert_constant_f32((float)0xFFFFFFFF);
+		auto false_val = builder().insert_constant_f32((float)0x00000000);
+
+		auto mask = builder().insert_constant_u8(3);
+
+		dest = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), dest->val());
+		op0 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op0->val());
+		op0 = builder().insert_vector_extract(op0->val(), 0);
+		op1 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op1->val());
+		op1 = builder().insert_vector_extract(op1->val(), 0);
+		op2 = builder().insert_and(op2->val(), mask->val());
+
+		/*
+		 * 0 - ordered eq
+		 * 1 - ordered lt
+		 * 2 - ordered le
+		 * 3 - unordered
+		 * 4 - unordered ne
+		 * 5 - unordered nlt
+		 * 6 - unordered nle
+		 * 7 - ordered
+		 */
+
+		builder().insert_br(builder().insert_label("check_op"));
+		cond_br_node *cbrs[7];
+		auto cnd = builder().insert_cmpeq(op2->val(), builder().insert_constant_u8(0)->val());
+		cbrs[0] = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
+		cnd = builder().insert_cmpeq(op2->val(), builder().insert_constant_u8(1)->val());
+		cbrs[1] = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
+		cnd = builder().insert_cmpeq(op2->val(), builder().insert_constant_u8(2)->val());
+		cbrs[2] = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
+		cnd = builder().insert_cmpeq(op2->val(), builder().insert_constant_u8(3)->val());
+		cbrs[3] = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
+		cnd = builder().insert_cmpeq(op2->val(), builder().insert_constant_u8(4)->val());
+		cbrs[4] = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
+		cnd = builder().insert_cmpeq(op2->val(), builder().insert_constant_u8(5)->val());
+		cbrs[5] = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
+		cnd = builder().insert_cmpeq(op2->val(), builder().insert_constant_u8(6)->val());
+		cbrs[6] = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
+		auto br = (br_node *)builder().insert_br(nullptr);	
+
+		br_node *brs[8];
+		auto lbl = builder().insert_label("op7");
+		br->add_br_target(lbl);
+		auto res = builder().insert_csel(builder().insert_binop(binary_arith_op::cmpo, op0->val(), op1->val())->val(), true_val->val(), false_val->val());
+		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
+		brs[7] = (br_node *)builder().insert_br(nullptr);
+
+		lbl = builder().insert_label("op6");
+		cbrs[6]->add_br_target(lbl);
+		res = builder().insert_csel(builder().insert_binop(binary_arith_op::cmpunle, op0->val(), op1->val())->val(), true_val->val(), false_val->val());
+		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
+		brs[6] = (br_node *)builder().insert_br(nullptr);
+
+		lbl = builder().insert_label("op5");
+		cbrs[5]->add_br_target(lbl);
+		res = builder().insert_csel(builder().insert_binop(binary_arith_op::cmpunlt, op0->val(), op1->val())->val(), true_val->val(), false_val->val());
+		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
+		brs[5] = (br_node *)builder().insert_br(nullptr);
+
+		lbl = builder().insert_label("op4");
+		cbrs[4]->add_br_target(lbl);
+		res = builder().insert_csel(builder().insert_binop(binary_arith_op::cmpune, op0->val(), op1->val())->val(), true_val->val(), false_val->val());
+		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
+		brs[4] = (br_node *)builder().insert_br(nullptr);
+
+		lbl = builder().insert_label("op3");
+		cbrs[3]->add_br_target(lbl);
+		res = builder().insert_csel(builder().insert_binop(binary_arith_op::cmpu, op0->val(), op1->val())->val(), true_val->val(), false_val->val());
+		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
+		brs[3] = (br_node *)builder().insert_br(nullptr);
+
+		lbl = builder().insert_label("op2");
+		cbrs[2]->add_br_target(lbl);
+		res = builder().insert_csel(builder().insert_binop(binary_arith_op::cmpole, op0->val(), op1->val())->val(), true_val->val(), false_val->val());
+		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
+		brs[2] = (br_node *)builder().insert_br(nullptr);
+
+		lbl = builder().insert_label("op1");
+		cbrs[1]->add_br_target(lbl);
+		res = builder().insert_csel(builder().insert_binop(binary_arith_op::cmpolt, op0->val(), op1->val())->val(), true_val->val(), false_val->val());
+		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
+		brs[1] = (br_node *)builder().insert_br(nullptr);
+
+		lbl = builder().insert_label("op0");
+		cbrs[0]->add_br_target(lbl);
+		res = builder().insert_csel(builder().insert_binop(binary_arith_op::cmpoeq, op0->val(), op1->val())->val(), true_val->val(), false_val->val());
+		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
+		brs[0] = (br_node *)builder().insert_br(nullptr);
+
+		lbl = builder().insert_label("end");
+		for (auto i = 0; i < 8; i++) {
+			brs[i]->add_br_target(lbl);
+		}
+	} break;
 	default:
 		throw std::runtime_error("unsupported binop");
 	}
@@ -373,6 +498,7 @@ void binop_translator::do_translate()
 	case XED_ICLASS_BSR:
   case XED_ICLASS_BSF:
 	case XED_ICLASS_COMISS:
+	case XED_ICLASS_CMPSS:
 	case XED_ICLASS_XADD:
 	case XED_ICLASS_ADDSD:
 		break;

@@ -123,10 +123,14 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_PXOR:
   case XED_ICLASS_AND:
   case XED_ICLASS_PAND:
+  case XED_ICLASS_ANDPS:
+  case XED_ICLASS_ANDNPS:
   case XED_ICLASS_OR:
   case XED_ICLASS_POR:
+  case XED_ICLASS_ORPS:
   case XED_ICLASS_ADD:
   case XED_ICLASS_ADDSD:
+  case XED_ICLASS_ADDPS:
   case XED_ICLASS_ADC:
   case XED_ICLASS_SUB:
   case XED_ICLASS_SBB:
@@ -156,6 +160,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_PCMPGTB:
   case XED_ICLASS_PCMPGTW:
   case XED_ICLASS_PCMPGTD:
+  case XED_ICLASS_CMPSS:
 	  return std::make_unique<binop_translator>(builder);
 
   case XED_ICLASS_PUSH:
@@ -227,6 +232,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_PACKSSDW:
 		return std::make_unique<punpck_translator>(builder);
 
+	case XED_ICLASS_XORPS:
 	case XED_ICLASS_VADDSS:
 	case XED_ICLASS_VSUBSS:
 	case XED_ICLASS_VDIVSS:
@@ -238,6 +244,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_CVTSD2SS:
 	case XED_ICLASS_CVTSI2SS:
 	case XED_ICLASS_CVTSI2SD:
+	case XED_ICLASS_CVTTSS2SI:
 		return std::make_unique<fpvec_translator>(builder);
 
 	case XED_ICLASS_PSHUFD:

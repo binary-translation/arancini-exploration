@@ -602,7 +602,15 @@ private:
 	port &lhs_;
 };
 
-enum class binary_arith_op { add, sub, mul, div, mod, band, bor, bxor, cmpeq, cmpne, cmpgt };
+enum class binary_arith_op {
+	add, sub, mul, div, mod,
+	band, bor, bxor,
+	cmpeq, cmpne, cmpgt,
+	// floating point stuff
+	cmpoeq, cmpolt, cmpole,
+	cmpune, cmpunlt, cmpunle,
+	cmpo, cmpu
+};
 
 class binary_arith_node : public arith_node {
 public:

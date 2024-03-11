@@ -163,6 +163,8 @@ public:
 	/// @return a write memory node: [addr] := value
 	action_node *insert_write_mem(port &addr, port &value) { return create_and_insert<write_mem_node>(addr, value); }
 
+
+	value_node *insert_binop(binary_arith_op op, port &lhs, port &rhs) { return create_and_insert<binary_arith_node>(op, lhs, rhs); }
 	/// @brief addition
 	/// @param lhs first operand
 	/// @param rhs second operand

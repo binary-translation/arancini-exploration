@@ -17,6 +17,11 @@ void fpvec_translator::do_translate()
 	auto src2 = read_operand(2);
 
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
+	case XED_ICLASS_XORPS: {
+		dest = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), dest->val());
+		src1 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), src1->val());
+		src2 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), src2->val());
+	} break;
 	case XED_ICLASS_VADDSS:
 	case XED_ICLASS_VSUBSS:
 	case XED_ICLASS_VDIVSS:
@@ -58,12 +63,23 @@ void fpvec_translator::do_translate()
     write_operand(0, dest->val());
     break;
   }
+  case XED_ICLASS_CVTTSS2SI: {
+	if (src1->val().type().element_width() == 128) {
+		src1 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), src1->val());
+		src1 = builder().insert_vector_extract(src1->val(), 0);
+	}
+	break;
+  }
 
 	default:
 		throw std::runtime_error("Unknown fpvec instruction");
 	}
 
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
+	case XED_ICLASS_XORPS: {
+		auto res = builder().insert_xor(src1->val(), src2->val());
+		write_operand(0, res->val());
+	} break;
 	case XED_ICLASS_VADDSS:
 	case XED_ICLASS_VADDSD: {
 
@@ -106,6 +122,11 @@ void fpvec_translator::do_translate()
 		auto res = builder().insert_convert(value_type::f32(), src1->val(), fp_convert_type::round);
 		dest = builder().insert_vector_insert(dest->val(), 0, res->val());
 
+		write_operand(0, dest->val());
+		break;
+	}
+	case XED_ICLASS_CVTTSS2SI: {
+		dest = builder().insert_convert(dest->val().type(), src1->val(), fp_convert_type::trunc);
 		write_operand(0, dest->val());
 		break;
 	}
