@@ -172,8 +172,8 @@ public:
         if constexpr (enabled) {
             lock_policy::lock();
             enabled_ = status;
-            return enabled_;
             lock_policy::unlock();
+            return enabled_;
         }
     }
 
