@@ -49,14 +49,14 @@ class llvm_static_output_engine;
 
 class llvm_static_output_engine_impl {
 public:
-	llvm_static_output_engine_impl(const llvm_static_output_engine &e, const std::vector<std::string> &extern_fns, const std::vector<std::shared_ptr<ir::chunk>> &chunks);
+	llvm_static_output_engine_impl(const llvm_static_output_engine &e, const std::vector<std::pair<unsigned long, std::string>> &extern_fns, const std::vector<std::shared_ptr<ir::chunk>> &chunks);
 
 	void generate();
 
 	unsigned long fixed_branches;
 private:
 	const llvm_static_output_engine &e_;
-	const std::vector<std::string> &extern_fns_;
+	const std::vector<std::pair<unsigned long, std::string>> &extern_fns_;
 	const std::vector<std::shared_ptr<ir::chunk>> &chunks_;
 	std::unique_ptr<::llvm::LLVMContext> llvm_context_;
 	std::unique_ptr<::llvm::Module> module_;
@@ -143,5 +143,6 @@ private:
 	
 	::llvm::Value *createLoadFromCPU(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, unsigned long reg_idx);
 	void createStoreToCPU(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, unsigned int ret_idx, ::llvm::Value *ret, unsigned long reg_idx);
+	void debug_dump();
 };
 } // namespace arancini::output::o_static::llvm

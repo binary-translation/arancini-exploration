@@ -17,6 +17,7 @@ enum class section_type {
 	symbol_table = 2,
 	string_table = 3,
 	relocation_addend = 4,
+	dynamic =6,
 	relocation = 9,
 	dynamic_symbol_table = 11,
 	relr = 19
@@ -239,6 +240,19 @@ private:
 	std::vector<uint64_t> relocations_;
 };
 
+class plt_table : public section {
+public:
+	plt_table(
+		const void *data, off_t address, size_t data_size, const std::string &name, section_flags flags, const std::vector<std::pair<unsigned long, unsigned long>> &stubs, off_t offset)
+		: section(data, address, data_size, section_type::progbits, name, flags, offset)
+		, stubs_(stubs)
+	{}
+
+	[[nodiscard]] const std::vector<std::pair<unsigned long, unsigned long>> &stubs() const { return stubs_; }
+private:
+	std::vector<std::pair<unsigned long, unsigned long>> stubs_;
+};
+
 enum class program_header_type { null_program_header, loadable, dynamic, interp, note, shlib, program_headers, tls };
 
 class program_header {
@@ -321,6 +335,12 @@ private:
 
 	void parse_relr(section_flags flags, const std::string &sec_name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size);
 
+	void parse_progbits(section_flags flags, const std::string &sec_name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size);
+
+	void parse_dynamic(section_flags flags, const std::string &sec_name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size);
+
+	void parse_plt();
+	void parse_got();
 #if __cplusplus > 202002L
 	constexpr const void *get_data_ptr(off_t offset) const { return (const void *)((uintptr_t)elf_data_ + offset); }
 #else

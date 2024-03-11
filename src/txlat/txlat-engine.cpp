@@ -64,6 +64,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	const auto &filename = cmdline.at("input").as<std::string>();
 	elf_reader elf(filename);
 	elf.parse();
+	bool is_exec = elf.type()==elf::elf_type::exec;
 
 	// TODO: Figure the input engine out from ELF architecture header
 	auto das = cmdline.at("syntax").as<std::string>() == "att" ? disassembly_syntax::att : disassembly_syntax::intel;
@@ -75,13 +76,14 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	}
 	// Construct the output engine
 	auto intermediate_file = tf.create_file(prefix, ".o");
-	auto oe = std::make_shared<arancini::output::o_static::llvm::llvm_static_output_engine>(intermediate_file->name());
+	auto oe = std::make_shared<arancini::output::o_static::llvm::llvm_static_output_engine>(intermediate_file->name(), is_exec);
 	process_options(*oe, cmdline);
 
 	oe->set_entrypoint(elf.get_entrypoint());
 
 	std::shared_ptr<symbol_table> dyn_sym;
 	std::shared_ptr<symbol_table> sym_t;
+	std::shared_ptr<plt_table> plt_tab;
 	std::vector<std::shared_ptr<rela_table>> relocations;
 	std::vector<std::shared_ptr<relr_array>> relocations_r;
 	std::set<symbol> unique_translated;
@@ -90,7 +92,12 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
 	// Loop over each symbol table, and translate the symbol.
 	for (auto &s : elf.sections()) {
-		if (s->type() == elf::section_type::dynamic_symbol_table) {
+		if (s->type() == elf::section_type::progbits) {
+			if (s->name() == ".plt") {
+				auto st = std::static_pointer_cast<plt_table>(s);
+				plt_tab = std::move(st);
+			}
+		} else if (s->type() == elf::section_type::dynamic_symbol_table) {
 			auto st = std::static_pointer_cast<symbol_table>(s);
 			dyn_sym = std::move(st);
 		} else if (s->type() == elf::section_type::relocation_addend) {
@@ -107,10 +114,8 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 					if (!sym->is_func())
 						continue;
 					::util::global_logger.debug("PASS1: looking at symbol {} @ 0x{:#x}\n", sym->name(), sym->value());
-					if (!sym->value()) {
-						oe->add_function_decl(sym->name());
+					if (!sym->value())
 						continue;
-					}
 					if (!sym->size()) {
 						// get the section the symbol is in
 
@@ -128,7 +133,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		}
 	}
 
-	//PASS2	
+	// PASS2	
 	for ( const auto &p : zero_size) {
 		::util::global_logger.debug("PASS2: doing (0 size), symbol {}\n", p.first.name());
 		// find the address of the symbol after sym in the text section, and assume that the size of sym is until there
@@ -142,6 +147,25 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
 		oe->add_chunk(translate_symbol(*ia, elf, fixed_sym));
 	}
+
+	// Generate decls for external functions found in the relocation table
+	
+	for (auto rs : relocations) {
+		for (auto r : rs->relocations()) {
+			auto sym_idx = r.symbol();
+			auto dst = r.offset();
+			auto sym = dyn_sym->symbols().at(sym_idx);
+
+			::util::global_logger.debug("Searching decl for {} @ {:#x}\n", sym.name(), dst);
+			for (const auto &st : plt_tab->stubs()) {
+				if (st.second == dst) {
+					::util::global_logger.debug("Adding decl for {} @ {:#x}\n", sym.name(), st.first);
+					oe->add_function_decl(st.first, "__arancini__"+sym.name());
+				}
+			}
+		}
+	}
+
 	// Generate a dot graph of the IR if required
 	if (cmdline.count("graph")) {
     generate_dot_graph(*oe, cmdline.at("graph").as<std::string>());
@@ -238,7 +262,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 												  : " -DTLS_LEN=" + std::to_string(tls[0]->data_size()) + " -DTLS_SIZE=" + std::to_string(tls[0]->mem_size())
 					+ " -DTLS_ALIGN=" + std::to_string(tls[0]->align());
 
-			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -shared " + intermediate_file->name() + " " + phobjsrc->name()
+			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -fPIC -shared " + intermediate_file->name() + " " + phobjsrc->name()
 				+ tls_defines + " init_lib.c -l arancini-runtime -L " + arancini_runtime_lib_dir + libs + " -Wl,-T,lib.lds,-rpath=" + arancini_runtime_lib_dir
 				+ debug_info);
 		} else {
@@ -422,7 +446,7 @@ std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arc
 	default_ir_builder irb(ia.get_internal_function_resolver(), true);
 
 	auto start = std::chrono::high_resolution_clock::now();
-	ia.translate_chunk(irb, sym.value(), symbol_data, sym.size(), false, "__guest__"+sym.name());
+	ia.translate_chunk(irb, sym.value(), symbol_data, sym.size(), false, "__arancini__"+sym.name());
 	auto dur = std::chrono::high_resolution_clock::now() - start;
 
     ::util::global_logger.info("Symbol translation time: {} us\n", std::chrono::duration_cast<std::chrono::microseconds>(dur).count());

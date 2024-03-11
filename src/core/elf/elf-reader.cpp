@@ -1,3 +1,4 @@
+#include "arancini/util/logger.h"
 #include <arancini/elf/elf-reader.h>
 #include <climits>
 #include <cstdio>
@@ -135,6 +136,12 @@ void elf_reader::parse_section(
 	case section_type::relr:
 		parse_relr(flags, name, address, offset, size, link_offset, entry_size);
 		break;
+	case section_type::progbits:
+		parse_progbits(flags, name, address, offset, size, link_offset, entry_size);
+		break;
+	case section_type::dynamic:
+		parse_dynamic(flags, name, address, offset, size, link_offset, entry_size);
+		break;
 	default:
 		sections_.push_back(std::make_shared<section>(get_data_ptr(offset), address, size, type, name, flags, offset));
 		break;
@@ -204,4 +211,37 @@ void elf_reader::parse_relr(section_flags flags, const std::string &sec_name, of
 	}
 
 	sections_.push_back(std::make_shared<relr_array>(get_data_ptr(offset), address, size, sec_name, flags, relrs, offset));
+}
+
+struct [[gnu::packed]] plt_entry {
+	unsigned char jumpq[6];
+	unsigned char pushq[5];
+	unsigned char jump[5];
+};
+
+void elf_reader::parse_progbits(section_flags flags, const std::string &sec_name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size) {
+	if (sec_name == ".plt") {
+		std::vector<std::pair<unsigned long, unsigned long>> stubs;
+
+		// TODO: arch specific
+		for (off_t i = 0; i < size; i+=sizeof(struct plt_entry)) {
+			auto e = read<plt_entry>(offset+i);
+			// offset from the jump instr
+			// +   addr of the jump instr
+			// +    len of the jump instr
+			off_t got_addr = e.jumpq[3]<<8 | e.jumpq[2];
+			got_addr += (address+i+6);
+
+			stubs.push_back(std::make_pair(address+i, got_addr));
+		}
+		sections_.push_back(std::make_shared<plt_table>(get_data_ptr(offset), address, size, sec_name, flags, stubs, offset));
+		return;
+	}
+	
+	sections_.push_back(std::make_shared<section>(get_data_ptr(offset), address, size, section_type::progbits, sec_name, flags, offset));
+}
+
+void elf_reader::parse_dynamic(section_flags flags, const std::string &sec_name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size) {
+	// maybe we need that later?
+	sections_.push_back(std::make_shared<section>(get_data_ptr(offset), address, size, section_type::dynamic, sec_name, flags, offset));
 }

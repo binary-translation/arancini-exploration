@@ -19,10 +19,10 @@ public:
 
 	const std::string &output_filename() const { return output_filename_; }
 
-	void add_function_decl(const std::string &name) { extern_fns_.push_back(name); }
+	void add_function_decl(const unsigned long rel_addr, const std::string &name) { extern_fns_.push_back({rel_addr, name}); }
 	void add_chunk(std::shared_ptr<ir::chunk> c) { chunks_.push_back(c); }
 
-	const std::vector<std::string> &extern_fns() const { return extern_fns_; }
+	const std::vector<std::pair<unsigned long, std::string>> &extern_fns() const { return extern_fns_; }
 	const std::vector<std::shared_ptr<ir::chunk>> &chunks() const { return chunks_; }
 
 	void set_entrypoint(off_t ep) { ep_ = ep; }
@@ -33,7 +33,7 @@ public:
     virtual ~static_output_engine() = default;
 private:
 	std::string output_filename_;
-	std::vector<std::string> extern_fns_;
+	std::vector<std::pair<unsigned long, std::string>> extern_fns_;
 	std::vector<std::shared_ptr<ir::chunk>> chunks_;
 	off_t ep_;
 };

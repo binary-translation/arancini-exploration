@@ -26,6 +26,7 @@
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
+#include <llvm/Support/CodeGen.h>
 #include <llvm/Transforms/Utils/Mem2Reg.h>
 #include "llvm/Transforms/AggressiveInstCombine/AggressiveInstCombine.h"
 #include "llvm/Transforms/IPO/DeadArgumentElimination.h"
@@ -53,10 +54,11 @@ using namespace arancini::output::o_static::llvm;
 using namespace arancini::ir;
 using namespace ::llvm;
 
-llvm_static_output_engine::llvm_static_output_engine(const std::string &output_filename)
+llvm_static_output_engine::llvm_static_output_engine(const std::string &output_filename, const bool is_exec)
 	: static_output_engine(output_filename)
 	, oei_(std::make_unique<llvm_static_output_engine_impl>(*this, extern_fns(), chunks()))
 	, dbg_(false)
+	, is_exec_(is_exec)
 {
 }
 
@@ -64,7 +66,7 @@ llvm_static_output_engine::~llvm_static_output_engine() = default;
 
 void llvm_static_output_engine::generate() { oei_->generate(); }
 
-llvm_static_output_engine_impl::llvm_static_output_engine_impl(const llvm_static_output_engine &e, const std::vector<std::string> &extern_fns, const std::vector<std::shared_ptr<ir::chunk>> &chunks)
+llvm_static_output_engine_impl::llvm_static_output_engine_impl(const llvm_static_output_engine &e, const std::vector<std::pair<unsigned long, std::string>> &extern_fns, const std::vector<std::shared_ptr<ir::chunk>> &chunks)
 	: e_(e)
 	, extern_fns_(extern_fns)
 	, chunks_(chunks)
@@ -73,6 +75,7 @@ llvm_static_output_engine_impl::llvm_static_output_engine_impl(const llvm_static
 	, in_br(false)
 	, fixed_branches(0)
 {
+	module_->setPICLevel(PICLevel::BigPIC);
 }
 
 void llvm_static_output_engine_impl::generate()
@@ -177,7 +180,8 @@ void llvm_static_output_engine_impl::create_main_function(Function *loop_fn)
 void llvm_static_output_engine_impl::create_function_decls() {
 
 	for (auto n : extern_fns_) {
-		module_->getOrInsertFunction(n, get_fn_type());
+		auto fn = static_cast<Function *>(module_->getOrInsertFunction(n.second, get_fn_type()).getCallee());
+		(*fns_)[n.first] = fn;
 	}
 }
 
@@ -210,18 +214,27 @@ void llvm_static_output_engine_impl::build()
 	auto rfdom = mdb.createAnonymousAliasScopeDomain("reg-file");
 	reg_file_alias_scope_ = mdb.createAnonymousAliasScope(rfdom, "reg-file-scope");
 
-	auto loop_fn = Function::Create(types.loop_fn, GlobalValue::LinkageTypes::ExternalLinkage, "MainLoop", *module_);
-	loop_fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
-	loop_fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
-	loop_fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
+	// Only the executable needs a MainLoop and main
+	Function *loop_fn;
+	if (e_.is_exec()) {
+		loop_fn = Function::Create(types.loop_fn, GlobalValue::LinkageTypes::ExternalLinkage, "MainLoop", *module_);
+		loop_fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
+		loop_fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
+		loop_fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
+
+		create_main_function(loop_fn);
+	} else {
+		loop_fn = static_cast<Function *>(module_->getOrInsertFunction("MainLoop", types.loop_fn).getCallee());
+	}
 
 	create_function_decls();
 	create_static_functions();
-
-	create_main_function(loop_fn);
-
 	// TODO: Input Arch Specific (maybe need some kind of descriptor?)
 
+	if (e_.is_exec()) {
+		lower_chunks(loop_fn);
+		debug_dump();
+	}
 	auto state_arg = loop_fn->getArg(0);
 
 	auto entry_block = BasicBlock::Create(*llvm_context_, "entry", loop_fn);
@@ -316,6 +329,14 @@ void llvm_static_output_engine_impl::build()
 #endif
 	builder.CreateRetVoid();
 
+	debug_dump();
+
+	if (verifyFunction(*loop_fn, &errs())) {
+		throw std::runtime_error("function verification failed");
+	}
+}
+
+void llvm_static_output_engine_impl::debug_dump() {
 	if (e_.debug_dump_filename.has_value()) {
 		std::error_code EC;
 		std::string filename = e_.debug_dump_filename.value() + ".ll";
@@ -327,10 +348,6 @@ void llvm_static_output_engine_impl::build()
 
 		module_->print(file, nullptr);
 		file.close();
-	}
-
-	if (verifyFunction(*loop_fn, &errs())) {
-		throw std::runtime_error("function verification failed");
 	}
 }
 
@@ -1615,6 +1632,7 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 	builder->CreateAggregateRet(wrap_ret(builder, state_arg).data(), 4);
 
 	if (verifyFunction(*fn, &errs())) {
+		module_->print(errs(), nullptr);
 		throw std::runtime_error("function verification failed");
 	}
 }
