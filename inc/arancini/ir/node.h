@@ -1117,6 +1117,8 @@ public:
 
 	virtual void accept(visitor &v) override
 	{
+		if (v.seen_node(this))
+			return;
 		action_node::accept(v);
 		v.visit_internal_call_node(*this);
 	}

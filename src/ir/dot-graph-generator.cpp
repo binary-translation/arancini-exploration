@@ -14,6 +14,7 @@ void dot_graph_generator::visit_chunk(chunk &c)
 	os_ << "digraph chunk {" << std::endl;
 	default_visitor::visit_chunk(c);
 	os_ << " }" << std::endl;
+	current_packet_ = nullptr;
 }
 
 void dot_graph_generator::visit_packet(packet &p)
