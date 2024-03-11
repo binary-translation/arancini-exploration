@@ -163,10 +163,8 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		}
 	}
 
-	// Now, we need to create an assembly file that includes the binary data for
-	// each program header, along with some associated metadata too.  TODO: Maybe we
-	// should just include the original ELF file - but then the runtime would need to
-	// parse and load it.
+	// Now, we need to create an assembly file that includes the binary data for each program header,
+	// defines all dynsyms of the input binary with `__guest__` prefix, verbatim copies all relocations of the input binary and some metadata
 	auto phobjsrc = tf.create_file(".S");
 
 	std::map<uint64_t, std::string> ifuncs = generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym, relocations, relocations_r, sym_t, tls);
