@@ -7,10 +7,7 @@ tail -n+3 | head -n-2 | sed 's/^[[:blank:]]*//' | tr -s '[:blank:]' '\t' | \
 	align=$( echo "$flags_and_align" | sed 's/.*\(0x.*\)/\1/' )
 	flags=$( echo "$flags_and_align" | sed 's/\(.*\)0x.*/\1/' | tr -cd RWE )
     echo "flags for type $pt_type offset $pt_offset is $flags" 1>&2
-	if [[ $pt_type == "PHDR" ]] || (
-	[[ $pt_type == "LOAD" ]] &&
-	grep '[RE]' <<<"$flags" >/dev/null &&
-	[[ $(( $pt_offset )) -lt $(( 0x1000 )) ]] ); then
+	if [[ $pt_type == "PHDR" ]]; then
 		phdr_keyword="PHDRS"; else phdr_keyword=""
 	fi;
 	if [[ $pt_type == "GNU_STACK" ]]; then

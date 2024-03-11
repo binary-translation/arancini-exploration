@@ -10,3 +10,6 @@
 - Add `INCLUDE "guest-sections.lds"` as the first line in `SECTIONS` and `*(.grela)` as the first line in `.rela.dyn`
 - If you want a script for a shared library you want to change the order of the phdrs so the add gphdr are first as 
   unsorted phdr will break loading.
+- Change the order of the phdrs so the add gphdr are first (after PT_INTERP for executables) as unsorted phdr will break
+  loading.
+- Add PHDRS and FILEHDR to gphdr0 if the script is for an executable.
