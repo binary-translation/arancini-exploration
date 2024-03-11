@@ -16,6 +16,9 @@ class relr_array;
 namespace arancini::ir {
 class chunk;
 }
+namespace arancini::native_lib {
+struct nlib_function;
+}
 
 namespace arancini::input {
 class input_arch;
@@ -41,6 +44,7 @@ private:
   void optimise(arancini::output::o_static::static_output_engine &oe, const boost::program_options::variables_map &cmdline);
 	static void add_symbol_to_output(const std::vector<std::shared_ptr<elf::program_header>> &phbins, const std::map<off_t, unsigned int> &end_addresses,
 		const elf::symbol &sym, std::ofstream &s, std::map<uint64_t, std::string> &ifuncs, bool force_global = false, bool omit_prefix = false);
+	static std::shared_ptr<ir::chunk> generate_wrapper(input::input_arch &ia, const native_lib::nlib_function &func);
 
 	static std::map<uint64_t, std::string> generate_guest_sections(const std::shared_ptr<util::basefile> &phobjsrc, elf::elf_reader &elf,
 		const std::vector<std::shared_ptr<elf::program_header>> &load_phdrs, const std::basic_string<char> &filename,

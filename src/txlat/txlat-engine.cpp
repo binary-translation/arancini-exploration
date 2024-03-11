@@ -126,6 +126,21 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		} else if (s->type() == elf::section_type::dynamic_symbol_table) {
 			auto st = std::static_pointer_cast<symbol_table>(s);
 			dyn_sym = std::move(st);
+#ifdef NLIB
+			for (const auto &sym : dyn_sym->symbols()) {
+				if (nlibs.has_value()) {
+					if (sym.section_index() != SHN_UNDEF) {
+						// The current binary defines this symbol so the wrapper should go here
+						if (nlibs->native_functions().count(sym.name())) {
+							// We have an external symbol of the right name
+							const nlib_function &func = nlibs->native_functions().at(sym.name());
+							needed_nlibs.insert(func.libname);
+							oe->add_chunk(generate_wrapper(*ia, func));
+						}
+					}
+				}
+			}
+#endif
 		} else if (s->type() == elf::section_type::relocation_addend) {
 			auto st = std::static_pointer_cast<rela_table>(s);
 			relocations.push_back(std::move(st));
@@ -452,6 +467,17 @@ void txlat_engine::add_symbol_to_output(const std::vector<std::shared_ptr<progra
 	} else if (sym.is_protected()) {
 		s << ".protected \"" << name << "\"\n";
 	}
+}
+
+std::shared_ptr<chunk> txlat_engine::generate_wrapper(arancini::input::input_arch &ia, const nlib_function &func)
+{
+	default_ir_builder irb(ia.get_internal_function_resolver(), true);
+
+	auto start = std::chrono::high_resolution_clock::now();
+	ia.gen_wrapper(irb, func);
+	auto dur = std::chrono::high_resolution_clock::now() - start;
+
+	return irb.get_chunk();
 }
 
 /*

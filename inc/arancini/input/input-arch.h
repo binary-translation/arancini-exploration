@@ -3,7 +3,9 @@
 #include <cstdlib>
 #include <memory>
 #include <vector>
-
+namespace arancini::native_lib {
+class nlib_function;
+}
 namespace arancini::ir {
 class ir_builder;
 class internal_function_resolver;
@@ -19,6 +21,8 @@ public:
 
 	virtual ~input_arch() { }
 	virtual void translate_chunk(ir::ir_builder &builder, off_t base_address, const void *code, size_t code_size, bool basic_block, const std::string &name) = 0;
+
+	virtual void gen_wrapper(ir::ir_builder &builder, const native_lib::nlib_function &func) = 0;
 
 	bool debug() const { return debug_; }
 
