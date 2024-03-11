@@ -25,16 +25,19 @@ if (TARGET arancini-output-x86)
     target_link_libraries(arancini-runtime
                           PUBLIC
                           arancini-output-x86)
+    install(TARGETS arancini-output-x86 LIBRARY)
 elseif (TARGET arancini-output-arm64)
     add_library(arancini-trampoline OBJECT dbt/trampoline.arm64.S)
     target_link_libraries(arancini-runtime
                           PUBLIC
                           arancini-output-arm64)
+    install(TARGETS arancini-output-arm64 LIBRARY)
 elseif (TARGET arancini-output-riscv64)
     add_library(arancini-trampoline OBJECT dbt/trampoline.riscv64.S)
     target_link_libraries(arancini-runtime
                           PUBLIC
                           arancini-output-riscv64)
+    install(TARGETS arancini-output-riscv64 LIBRARY)
     target_link_libraries(arancini-runtime-static
                           PRIVATE
                           arancini-output-riscv64-static)

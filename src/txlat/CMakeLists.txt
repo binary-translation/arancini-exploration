@@ -25,3 +25,6 @@ target_link_libraries(txlat
 
 install(TARGETS arancini-core arancini-ir arancini-input-x86 arancini-output-llvm LIBRARY)
 install(TARGETS txlat RUNTIME)
+
+set_target_properties(txlat PROPERTIES
+        INSTALL_RPATH "\$ORIGIN/../lib")
