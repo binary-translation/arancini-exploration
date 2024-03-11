@@ -55,6 +55,8 @@ using optional = std::optional<T>;
 using namespace arancini::output::o_static::llvm;
 using namespace arancini::ir;
 using namespace ::llvm;
+using arancini::input::x86::off_to_idx;
+using arancini::input::x86::regnames;
 
 llvm_static_output_engine::llvm_static_output_engine(const std::string &output_filename, const bool is_exec)
 	: static_output_engine(output_filename)
@@ -450,21 +452,6 @@ void llvm_static_output_engine_impl::lower_static_fn_lookup(IRBuilder<> &builder
 	builder.CreateRetVoid();
 }
 
-static const char *regnames[] = {
-#define DEFREG(ctype, ltype, name) "" #name,
-#include <arancini/input/x86/reg.def>
-#undef DEFREG
-};
-
-static std::string reg_name(int regidx)
-{
-	if ((size_t)regidx < (sizeof(regnames) / sizeof(regnames[0]))) {
-		return regnames[regidx];
-	}
-
-	return "guestreg";
-}
-
 Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, port &p)
 {
 	auto n = p.owner();
@@ -556,7 +543,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 	case node_kinds::read_reg: {
 		auto rrn = (read_reg_node *)n;
 		//auto src_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, rrn->regidx()) },
-		//	reg_name(rrn->regidx()));
+		//	idx_to_reg_name(rrn->regidx()));
 		auto src_reg = reg_to_alloca_.at((reg_offsets)rrn->regoff());
 
 		if (auto src_reg_i = ::llvm::dyn_cast<Instruction>(src_reg)) {
@@ -1289,7 +1276,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		// std::cerr << "wreg name=" << wrn->regname() << std::endl;
 
 		//auto dest_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, wrn->regidx()) },
-		//	reg_name(wrn->regidx()));
+		//	idx_to_reg_name(wrn->regidx()));
 		auto dest_reg = reg_to_alloca_.at((reg_offsets)wrn->regoff());
 
 		//auto *reg_type = ((GetElementPtrInst*)dest_reg)->getResultElementType();

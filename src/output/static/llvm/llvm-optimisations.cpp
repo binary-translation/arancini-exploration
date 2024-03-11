@@ -19,15 +19,10 @@ using namespace arancini::output::o_static::llvm;
 using namespace arancini::ir;
 using namespace ::llvm;
 
-static const std::unordered_map<reg_offsets, char*>regnames = {
-#define DEFREG(ctype, ltype, name) { reg_offsets::name, "" #name},
-#include <arancini/input/x86/reg.def>
-#undef DEFREG
-};
 
 static std::ostream& print(std::ostream& out, std::set<reg_offsets>& regs) {
 	for (auto r : regs) {
-		out << regnames.at(r) << ", ";
+		out << offset_to_name(r) << ", ";
 	}
 	out << std::endl;
 	return out;

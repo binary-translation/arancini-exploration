@@ -1,6 +1,6 @@
 #pragma once
 
-#include <arancini/runtime/exec/x86/x86-cpu-state.h>
+#include <arancini/input/registers.h>
 #include <cstdlib>
 #include <memory>
 #include <map>
@@ -21,6 +21,7 @@ namespace arancini::ir {
 namespace arancini::input::x86::translators {
 
 using namespace arancini::ir;
+using namespace arancini::input::x86;
 
 enum class translation_result { normal, noop, end_of_block, fail };
 
@@ -52,24 +53,6 @@ protected:
     /// @return a tree computing: x87_stack_base + (x87_stack_top_index * 10) + (stack_idx * 10)
     value_node *compute_fpu_stack_addr(int stack_idx);
 
-    enum class reg_offsets {
-#define DEFREG(ctype, ltype, name) name = X86_OFFSET_OF(name),
-#include <arancini/input/x86/reg.def>
-#undef DEFREG
-    };
-
-    static constexpr unsigned long counter_base_  = __COUNTER__;
-    std::map<unsigned long, unsigned long> off_to_idx {
-#define DEFREG(ctype, ltype, name) {X86_OFFSET_OF(name), __COUNTER__ - counter_base_ -1},
-#include <arancini/input/x86/reg.def>
-#undef DEFREG
-    };
-
-    std::map<unsigned long, const char *> off_to_name {
-#define DEFREG(ctype, ltype, name) { X86_OFFSET_OF(name), #name },
-#include <arancini/input/x86/reg.def>
-#undef DEFREG
-    };
 
     action_node *write_reg(reg_offsets reg, port & value);
     value_node *read_reg(const value_type &vt, reg_offsets reg);
@@ -78,8 +61,6 @@ protected:
     ///        Should only be used in helper functions, not in instruction translation directly. Use a reg_offsets value directly.
     ///        Only use if you cannot do so, e.g., for EAX if it is not exposed as an operand by XED (unlikely)
     reg_offsets xedreg_to_offset(xed_reg_enum_t reg);
-    unsigned long offset_to_idx(reg_offsets reg);
-    const char *offset_to_name(reg_offsets reg);
 
     enum flag_op {
       ignore,
