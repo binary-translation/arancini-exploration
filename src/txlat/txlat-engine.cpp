@@ -6,6 +6,7 @@
 #include <arancini/ir/default-ir-builder.h>
 #include <arancini/ir/dot-graph-generator.h>
 #include <arancini/ir/opt.h>
+#include <arancini/native_lib/native-lib.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
 #include <arancini/txlat/txlat-engine.h>
 #include <arancini/util/tempfile-manager.h>
@@ -13,6 +14,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
+#include <optional>
 #include <ostream>
 #include <string>
 
@@ -24,6 +26,7 @@ using namespace arancini::input::x86;
 using namespace arancini::output;
 using namespace arancini::output::o_static::llvm;
 using namespace arancini::util;
+using namespace arancini::native_lib;
 
 static std::set<std::string> allowed_symbols
 = { "cmpstr", "cmpnum", "swap", "_qsort", "_start", "test", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
@@ -67,6 +70,21 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	// Create a manager for temporary files, as we'll be creating a series of them.  When
 	// this object is destroyed, all temporary files are automatically unlinked.
 	tempfile_manager tf;
+
+	std::optional<NativeLibs> nlibs;
+	std::set<std::string> needed_nlibs;
+#ifdef NLIB
+	if (cmdline.count("nlib") && !cmdline.count("no-static")) {
+		const auto &filename = cmdline.at("nlib").as<std::string>();
+		std::ifstream a(filename);
+		nlibs.emplace(a);
+
+		if (!nlibs->parse()) {
+			::util::global_logger.warn("Parsing nlib file {} failed.\n", filename);
+			nlibs = std::nullopt;
+		}
+	}
+#endif
 
 	// Parse the input ELF file
 	const auto &filename = cmdline.at("input").as<std::string>();
@@ -244,10 +262,8 @@ next:
 		}
 	}
 
-	// Now, we need to create an assembly file that includes the binary data for
-	// each program header, along with some associated metadata too.  TODO: Maybe we
-	// should just include the original ELF file - but then the runtime would need to
-	// parse and load it.
+	// Now, we need to create an assembly file that includes the binary data for each program header,
+	// defines all dynsyms of the input binary with `__guest__` prefix, verbatim copies all relocations of the input binary and some metadata
 	auto phobjsrc = tf.create_file(prefix, ".S");
 
 	std::map<uint64_t, std::string> ifuncs = generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym, relocations, relocations_r, sym_t, tls);
