@@ -1,5 +1,6 @@
 #include <arancini/runtime/exec/execution-context.h>
 #include <arancini/runtime/exec/execution-thread.h>
+#include <arancini/runtime/exec/guest_support.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
 #include <arancini/util/logger.h>
 #include <cstring>
@@ -42,6 +43,8 @@ static arancini::output::dynamic::riscv64::riscv64_dynamic_output_engine oe;
 #error "Unsupported dynamic output architecture"
 #endif
 
+extern "C" int execute_internal_call(void *cpu_state, int call);
+
 // HACK: for Debugging
 static x86_cpu_state *__current_state;
 
@@ -58,14 +61,8 @@ static void segv_handler([[maybe_unused]] int signo, [[maybe_unused]] siginfo_t 
 	unsigned long rip = 0;
 #endif
 
-	uintptr_t emulated_base = (uintptr_t)ctx_->get_memory_ptr(0);
-	if ((uintptr_t)info->si_addr >= emulated_base) {
-        util::global_logger.fatal("SEGMENTATION FAULT: code={:#x}, rip={:#x}, host-virtual-address={}, guest-virtual-address={}\n",
-                                  info->si_code, rip, info->si_addr, reinterpret_cast<uintptr_t>(info->si_addr) - emulated_base);
-    } else {
-        util::global_logger.fatal("SEGMENTATION FAULT: code={:#x}, rip={:#x}, host-virtual-address={}\n",
+	util::global_logger.fatal("SEGMENTATION FAULT: code={:#x}, rip={:#x}, virtual-address={}\n",
                                   info->si_code, rip, info->si_addr);
-    }
 
 	unsigned i = 0;
 	auto range = ctx_->get_thread_range();
@@ -104,7 +101,7 @@ struct guest_program_header_metadata {
 } __attribute__((packed));
 
 // The symbol that contains the list of pointers to the guest program header metadata structures.
-extern "C" const guest_program_header_metadata *__GPH[];
+// extern "C" const guest_program_header_metadata *__GPH[];
 
 /*
  * Loads a guest program header into emulated memory.
@@ -139,17 +136,17 @@ static void load_gph(execution_context *ctx, const guest_program_header_metadata
  */
 static void load_guest_program_headers(execution_context *ctx)
 {
-	// Get a pointer to the list of pointers to the metadata structures.
-	const guest_program_header_metadata **gphp = __GPH;
-
-	// Loop over the pointers until null.
-	while (*gphp) {
-		// Trigger loading of the GPH.
-		load_gph(ctx, *gphp);
-
-		// Advance the pointer.
-		gphp++;
-	}
+	//	// Get a pointer to the list of pointers to the metadata structures.
+	//	const guest_program_header_metadata **gphp = __GPH;
+	//
+	//	// Loop over the pointers until null.
+	//	while (*gphp) {
+	//		// Trigger loading of the GPH.
+	//		load_gph(ctx, *gphp);
+	//
+	//		// Advance the pointer.
+	//		gphp++;
+	//	}
 }
 
 static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, execution_context *execution_context, int start)
@@ -160,7 +157,7 @@ static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, exe
 		;
 
 	// auxv entries are always 16 Bytes
-	stack_top -= ((envc + (argc - (start - 1))) & 1) * 8;
+	stack_top -= ((envc + (argc - (start - 1)) + 1) & 1) * 8;
 
 	// Add auxv to guest stack
 	{
@@ -192,6 +189,11 @@ static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, exe
 		for (int i = envc - 1; i >= 0; i--) {
 			*(--stack) = (char *)(((uintptr_t)environ[i]) - (uintptr_t)execution_context->get_memory_ptr(0));
 		}
+
+		if (&GUEST(__environ) != nullptr) {
+			// Exists in guest so set it
+			GUEST(__environ) = stack;
+		}
 		stack_top = (intptr_t)stack - (intptr_t)execution_context->get_memory_ptr(0);
 	}
 	// Copy argv to guest stack
@@ -214,6 +216,12 @@ static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, exe
 	}
 
 	return (intptr_t)stack_top;
+}
+
+extern "C" {
+lib_info *lib_info_list = nullptr;
+lib_info *lib_info_list_tail = nullptr;
+int lib_count = 0;
 }
 
 /*
@@ -268,11 +276,9 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	ctx_ = new execution_context(ia, oe, optimise);
 
 	// Create a memory area for the stack.
+	// FIXME hardcoded stack_size and memory size
 	unsigned long stack_size = 0x10000;
-	ctx_->add_memory_region(0x100000000 - stack_size, stack_size, true);
-
-	// TODO: Load guest .text, .data, .bss sections via program headers
-	load_guest_program_headers(ctx_);
+	auto stack_base = ctx_->add_memory_region(0x10000000 - stack_size, stack_size, true);
 
 	// Create the main execution thread.
 	auto main_thread = ctx_->create_execution_thread();
@@ -284,11 +290,118 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	__current_state = x86_state;
 	x86_state->PC = entry_point;
 
-	x86_state->RSP = setup_guest_stack(argc, argv, 0x100000000, ctx_, start);
+	x86_state->RSP
+		= setup_guest_stack(argc, argv, reinterpret_cast<intptr_t>(stack_base) - reinterpret_cast<intptr_t>(ctx_->get_memory_ptr(0)) + stack_size, ctx_, start);
 	x86_state->X87_STACK_BASE = (intptr_t)mmap(NULL, 80, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0) - (intptr_t)ctx_->get_memory_ptr(0);
 
 	// Report on various information for useful debugging purposes.
     util::global_logger.info("state={} pc={:#x} stack={:#x}\n", fmt::ptr(x86_state), util::copy(x86_state->PC), util::copy(x86_state->RSP));
+
+	if (&GUEST(main_ctor_queue) != nullptr) {
+		size_t tls_cnt = 0;
+		tls_module *tls_tail = nullptr;
+
+		size_t tls_align = alignof(guest_pthread);
+
+		auto app_dso = new dso();
+		app_dso->dynv = &guest_exec_DYNAMIC;
+//		app_dso->base = &guest_exec_base; //Load offset assume 0 since not pie
+		if (&guest_exec_tls) {
+			app_dso->tls_id = tls_cnt = 1;
+			app_dso->tls = guest_exec_tls;
+			// Correct over alignment
+			app_dso->tls.offset -= app_dso->tls.align - 1 - ((-((uintptr_t)app_dso->tls.image + app_dso->tls.size)) & (app_dso->tls.align - 1));
+			GUEST(__libc).tls_head = tls_tail = &app_dso->tls;
+
+#define MAXP2(a, b) (-(-(a) & -(b)))
+			tls_align = MAXP2(tls_align, app_dso->tls.align);
+		}
+
+		auto dsos = new dso *[lib_count + 2];
+
+		lib_info *lib = lib_info_list;
+
+		for (int i = 0; i < lib_count; ++i, lib = lib->next) {
+			auto cur_dso = new dso();
+			cur_dso->dynv = lib->dynv;
+			cur_dso->base = lib->base;
+			if (lib->tls_len) {
+
+				cur_dso->tls = { nullptr, lib->tls_image, lib->tls_len, lib->tls_size, lib->tls_align, lib->tls_offset };
+				cur_dso->tls_id = tls_cnt++;
+				tls_align = MAXP2(tls_align, cur_dso->tls.align);
+#undef MAXP2
+				if (tls_tail) {
+					tls_tail->next = &cur_dso->tls;
+				} else {
+					GUEST(__libc).tls_head = &cur_dso->tls;
+				}
+				tls_tail = &cur_dso->tls;
+			}
+			dsos[i] = cur_dso;
+		}
+
+		dsos[lib_count] = app_dso;
+		dsos[lib_count + 1] = nullptr;
+
+		GUEST(main_ctor_queue) = dsos;
+
+		GUEST(__malloc_replaced) = 1; // Prevent guest musl from trying to free our allocations using their free
+
+		GUEST(__libc).tls_cnt = tls_cnt;
+		GUEST(__libc).tls_align = tls_align;
+
+#define ALIGN(x, y) (((x) + (y)-1) & -(y))
+		GUEST(__libc).tls_size = ALIGN((1 + tls_cnt) * sizeof(void *) + tls_offset + sizeof(guest_pthread) + tls_align * 2, tls_align);
+#undef ALIGN
+
+		guest_pthread_t td;
+		auto *mem = new unsigned char[GUEST(__libc).tls_size]();
+
+		// adapted from __copy_tls in musl
+		{
+			struct tls_module *p;
+			size_t i;
+			uintptr_t *dtv;
+
+			dtv = (uintptr_t *)mem;
+
+			mem += GUEST(__libc).tls_size - sizeof(guest_pthread);
+			mem -= (uintptr_t)mem & (GUEST(__libc).tls_align - 1);
+			td = (guest_pthread_t)mem;
+
+			for (i = 1, p = GUEST(__libc).tls_head; p; i++, p = p->next) {
+				dtv[i] = (uintptr_t)(mem - p->offset);
+				memcpy(mem - p->offset, p->image, p->len);
+			}
+			dtv[0] = GUEST(__libc).tls_cnt;
+			td->dtv = dtv;
+		}
+
+		//adapted from __init_tp in musl
+		{
+			td->self = td;
+
+			x86_state->FS = reinterpret_cast<uint64_t>(td);
+
+			GUEST(__libc).can_do_threads = 1;
+
+			// Hacky supposedly unstable ABI
+			td->detach_state = DT_JOINABLE;
+
+			// Simulate set_tid_address syscall
+			x86_state->RAX = 218;
+			x86_state->RDI = (uintptr_t)&GUEST(__thread_list_lock);
+			execute_internal_call(x86_state, 1);
+
+			td->tid = (int32_t)x86_state->RAX;
+
+			td->locale = &GUEST(__libc).global_locale;
+			td->robust_list.head = &td->robust_list.head;
+			td->sysinfo = GUEST(__sysinfo);
+			td->next = td->prev = td;
+		}
+	}
 
 	// Initialisation of the runtime is complete - return a pointer to the raw CPU state structure
 	// so that the static code can use it for emulation.

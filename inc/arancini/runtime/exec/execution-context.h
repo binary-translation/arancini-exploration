@@ -26,7 +26,7 @@ public:
 
 	std::shared_ptr<execution_thread> create_execution_thread();
 	std::pair<std::map<void *, std::shared_ptr<execution_thread>>::const_iterator, std::map<void *, std::shared_ptr<execution_thread>>::const_iterator> get_thread_range();
-	void *get_memory_ptr(off_t base_address) const { return (void *)((uintptr_t)memory_ + base_address); }
+	void *get_memory_ptr(off_t base_address) const { return (void *)(base_address); }
 
 	int invoke(void *cpu_state);
 	int internal_call(void *cpu_state, int call);

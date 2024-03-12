@@ -1,4 +1,5 @@
 #include <arancini/elf/elf-reader.h>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <elf.h>
@@ -96,6 +97,7 @@ void elf_reader::parse()
 
 	Elf64_Ehdr elf_header = read<Elf64_Ehdr>(0);
 	entrypoint_ = elf_header.e_entry;
+	type_ = static_cast<elf_type>(elf_header.e_type);
 	parse_sections(elf_header.e_shoff, elf_header.e_shnum, elf_header.e_shentsize, elf_header.e_shstrndx);
 	parse_program_headers(elf_header.e_phoff, elf_header.e_phnum, elf_header.e_phentsize);
 }
@@ -123,17 +125,23 @@ void elf_reader::parse_section(
 {
 	switch (type) {
 	case section_type::symbol_table:
-		parse_symbol_table(flags, name, address, offset, size, link_offset, entry_size);
+	case section_type::dynamic_symbol_table:
+		parse_symbol_table(flags, name, address, offset, size, link_offset, entry_size, type);
 		break;
-
+	case section_type::relocation_addend:
+		parse_relocation_addend_table(flags, name, address, offset, size, link_offset, entry_size);
+		break;
+	case section_type::relr:
+		parse_relr(flags, name, address, offset, size, link_offset, entry_size);
+		break;
 	default:
-		sections_.push_back(std::make_shared<section>(get_data_ptr(offset), address, size, type, name, flags));
+		sections_.push_back(std::make_shared<section>(get_data_ptr(offset), address, size, type, name, flags, offset));
 		break;
 	}
 }
 
 void elf_reader::parse_symbol_table(
-	section_flags flags, const std::string &name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size)
+	section_flags flags, const std::string &name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size, section_type type)
 {
 	std::vector<symbol> symbols;
 
@@ -141,10 +149,10 @@ void elf_reader::parse_symbol_table(
 		auto sym = read<Elf64_Sym>(offset + i);
 
 		std::string name = readstr(link_offset + sym.st_name);
-		symbols.push_back(symbol(name, sym.st_value, sym.st_size, sym.st_shndx, sym.st_info));
+		symbols.push_back(symbol(name, sym.st_value, sym.st_size, sym.st_shndx, sym.st_info, sym.st_other));
 	}
 
-	sections_.push_back(std::make_shared<symbol_table>(get_data_ptr(offset), address, size, symbols, name, flags));
+	sections_.push_back(std::make_shared<symbol_table>(get_data_ptr(offset), address, size, symbols, name, flags, type, offset));
 }
 
 void elf_reader::parse_program_headers(off_t offset, int count, size_t size)
@@ -152,7 +160,47 @@ void elf_reader::parse_program_headers(off_t offset, int count, size_t size)
 	for (int i = 0; i < count; i++) {
 		auto ph = read<Elf64_Phdr>(offset + (size * i));
 
-		program_headers_.push_back(
-			std::make_shared<program_header>((program_header_type)ph.p_type, get_data_ptr(ph.p_offset), ph.p_vaddr, ph.p_filesz, ph.p_memsz));
+		program_headers_.push_back(std::make_shared<program_header>(
+			(program_header_type)ph.p_type, get_data_ptr(ph.p_offset), ph.p_vaddr, ph.p_filesz, ph.p_memsz, ph.p_flags, ph.p_offset, ph.p_align));
 	}
+}
+
+void elf_reader::parse_relocation_addend_table(
+	section_flags flags, const std::string &sec_name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size)
+{
+	std::vector<rela> relas;
+
+	for (size_t i = 0; i < size; i += entry_size) {
+		auto r = read<Elf64_Rela>(offset + i);
+
+		relas.emplace_back(ELF64_R_TYPE(r.r_info), r.r_addend, ELF64_R_SYM(r.r_info), r.r_offset);
+	}
+
+	sections_.push_back(std::make_shared<rela_table>(get_data_ptr(offset), address, size, sec_name, flags, relas, offset));
+}
+
+void elf_reader::parse_relr(section_flags flags, const std::string &sec_name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size)
+{
+	std::vector<uint64_t> relrs;
+	off_t where;
+
+	for (size_t i = 0; i < size; i += entry_size) {
+		auto entry = read<size_t>(offset + i);
+
+		if ((entry & 1) == 0) {
+			where = (off_t)(entry);
+
+			relrs.push_back(where);
+			where += 8;
+		} else {
+			for (long j = 0; (entry >>= 1) != 0; j++) {
+				if ((entry & 1) != 0) {
+					relrs.push_back(where + 8 * j);
+				}
+			}
+			where += (CHAR_BIT * (sizeof(size_t)) - 1) * 8;
+		}
+	}
+
+	sections_.push_back(std::make_shared<relr_array>(get_data_ptr(offset), address, size, sec_name, flags, relrs, offset));
 }

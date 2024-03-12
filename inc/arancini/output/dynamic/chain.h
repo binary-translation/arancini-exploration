@@ -32,8 +32,8 @@ private:
 class chain_machine_code_writer : public machine_code_writer {
 public:
 	chain_machine_code_writer(void *target, size_t sizeE)
-		: machine_code_writer(alloc_, (void *)((uintptr_t)target & ~0xfull), ((uintptr_t)target & 0xfull), sizeE + size())
-		, alloc_(sizeE + size())
+		: machine_code_writer(alloc_, (void *)((uintptr_t)target & ~0xfull), ((uintptr_t)target & 0xfull), sizeE + ((uintptr_t)target & 0xfull))
+		, alloc_(sizeE + ((uintptr_t)target & 0xfull))
 	{
 	}
 
