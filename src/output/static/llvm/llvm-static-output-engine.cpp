@@ -597,10 +597,10 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			// Sometimes we need to extend some types
 			// For example when comparing a flag to an immediate
 			if (lhs->getType()->isIntegerTy()) {
-				if (lhs->getType()->getIntegerBitWidth() > rhs->getType()->getIntegerBitWidth())
+				if (lhs->getType()->getIntegerBitWidth() > rhs->getType()->getPrimitiveSizeInBits())
 					rhs = builder.CreateSExt(rhs, lhs->getType());
 
-				if (lhs->getType()->getIntegerBitWidth() < rhs->getType()->getIntegerBitWidth())
+				if (lhs->getType()->getIntegerBitWidth() < rhs->getType()->getPrimitiveSizeInBits())
 					lhs = builder.CreateSExt(lhs, rhs->getType());
 			}
 
@@ -1202,9 +1202,21 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 	        auto address = local_var_to_llvm_addr_.at(rln->local());
 	        ::llvm::Type *ty;
 	        switch (rln->local()->type().width()) {
+					case 8: ty = types.i8; break;
 	                case 80: ty = types.f80; break;
-	                case 64: ty = types.f80; break;
-	                default: throw std::runtime_error("unsupported read_local width"+std::to_string(rln->local()->type().width()));
+	                case 32: {
+						if (rln->local()->type().is_integer())
+							ty = types.i32;
+						else
+							ty = types.f32;
+					} break;
+	                case 64: {
+						if (rln->local()->type().is_integer())
+							ty = types.i64;
+						else
+							ty = types.f64;
+					} break;
+					default: throw std::runtime_error("unsupported read_local width: "+std::to_string(rln->local()->type().width()));
 	        }
 	        auto load = builder.CreateLoad(ty, address, "read_local");
 	        load->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(load->getContext(), guest_mem_alias_scope_));
@@ -1417,6 +1429,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
 		AtomicRMWInst *out = nullptr;
 		switch(ban->op()) {
+			case binary_atomic_op::band: builder.CreateAtomicRMW(AtomicRMWInst::And, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
 			case binary_atomic_op::add: builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
 			case binary_atomic_op::sub: builder.CreateAtomicRMW(AtomicRMWInst::Sub, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
 			case binary_atomic_op::xadd: out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
@@ -1505,13 +1518,26 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
         auto val = lower_port(builder, state_arg, pkt, wln->write_value());
         ::llvm::Type *ty;
         switch (wln->write_value().type().width()) {
+                case 8: ty = types.i8; break;
                 case 80: ty = types.f80; break;
-                case 64: ty = types.f80; break;
-                default: throw std::runtime_error("unsupported alloca width");
+	            case 32: {
+					if (wln->local()->type().is_integer())
+						ty = types.i32;
+					else
+						ty = types.f32;
+				} break;
+                case 64: {
+						if (wln->local()->type().is_integer())
+							ty = types.i64;
+						else
+							ty = types.f64;
+				} break;
+				default: throw std::runtime_error("unsupported alloca width: " + std::to_string(wln->write_value().type().width()));
         }
-        auto var_ptr = builder.CreateAlloca(ty, nullptr, "local var");
-        local_var_to_llvm_addr_[wln->local()] = var_ptr;
+		if (local_var_to_llvm_addr_.find(wln->local()) == local_var_to_llvm_addr_.end())
+			local_var_to_llvm_addr_[wln->local()] = builder.CreateAlloca(ty, nullptr, "local var");
 
+		auto var_ptr = local_var_to_llvm_addr_.at(wln->local());
         auto store = builder.CreateStore(val, var_ptr);
         store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), guest_mem_alias_scope_));
         return store;

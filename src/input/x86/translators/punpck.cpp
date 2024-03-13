@@ -155,7 +155,7 @@ void punpck_translator::do_translate()
       auto word = (i < nr_splits) ? builder().insert_vector_extract(dst->val(), i) : builder().insert_vector_extract(src->val(), i - nr_splits);
       auto neg_test = builder().insert_cmpgt(builder().insert_constant_s16(0)->val(), word->val());
       cond_br_node *br_neg = (cond_br_node *)builder().insert_cond_br(neg_test->val(), nullptr);
-      auto overflow_test = builder().insert_and(word->val(), builder().insert_constant_s16(0xFF00)->val());
+      auto overflow_test = builder().insert_cmpne(builder().insert_and(word->val(), builder().insert_constant_s16(0xFF00)->val())->val(), builder().insert_constant_s16(0)->val());
       cond_br_node *br_of = (cond_br_node *)builder().insert_cond_br(overflow_test->val(), nullptr);
 
       // word fits in u8, set dst to truncated word

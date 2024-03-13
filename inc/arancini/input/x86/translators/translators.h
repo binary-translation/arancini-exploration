@@ -163,5 +163,6 @@ private:
   DEFINE_TRANSLATOR(control)
   DEFINE_TRANSLATOR(interrupt)
   DEFINE_TRANSLATOR(io)
+  DEFINE_TRANSLATOR(unimplemented)
 } // namespace arancini::input::x86::translators
 
