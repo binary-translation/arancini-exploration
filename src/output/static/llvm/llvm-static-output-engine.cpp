@@ -4,6 +4,7 @@
 #include "arancini/ir/visitor.h"
 #include "arancini/output/static/llvm/llvm-static-visitor.h"
 #include "arancini/runtime/exec/x86/x86-cpu-state.h"
+#include "arancini/util/logger.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Config/llvm-config.h"
 #include <arancini/ir/chunk.h>
@@ -26,6 +27,7 @@
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
+#include "llvm/IR/GlobalAlias.h"
 #include <llvm/Support/CodeGen.h>
 #include <llvm/Transforms/Utils/Mem2Reg.h>
 #include "llvm/Transforms/AggressiveInstCombine/AggressiveInstCombine.h"
@@ -75,7 +77,6 @@ llvm_static_output_engine_impl::llvm_static_output_engine_impl(const llvm_static
 	, in_br(false)
 	, fixed_branches(0)
 {
-	module_->setPICLevel(PICLevel::BigPIC);
 }
 
 void llvm_static_output_engine_impl::generate()
@@ -189,6 +190,18 @@ void llvm_static_output_engine_impl::create_static_functions()
 {
 	for (auto c : chunks_) {
 
+		auto it = fns_->find(c->packets()[0]->address());
+		if (it != fns_->end()) {
+
+			auto old = it->second;
+			GlobalAlias::create(get_fn_type(),
+								old->getAddressSpace(),
+								GlobalValue::LinkageTypes::ExternalLinkage,
+								c->name(),
+								old,
+								module_.get());
+			continue;
+		}
 		auto fn = Function::Create(get_fn_type(), GlobalValue::LinkageTypes::ExternalLinkage, c->name(), *module_);
 		fn->addParamAttr(0, Attribute::AttrKind::NonNull);
 		fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
@@ -214,6 +227,9 @@ void llvm_static_output_engine_impl::build()
 	auto rfdom = mdb.createAnonymousAliasScopeDomain("reg-file");
 	reg_file_alias_scope_ = mdb.createAnonymousAliasScope(rfdom, "reg-file-scope");
 
+	create_function_decls();
+	create_static_functions();
+
 	// Only the executable needs a MainLoop and main
 	Function *loop_fn;
 	if (e_.is_exec()) {
@@ -227,13 +243,12 @@ void llvm_static_output_engine_impl::build()
 		loop_fn = static_cast<Function *>(module_->getOrInsertFunction("MainLoop", types.loop_fn).getCallee());
 	}
 
-	create_function_decls();
-	create_static_functions();
 	// TODO: Input Arch Specific (maybe need some kind of descriptor?)
 
-	if (e_.is_exec()) {
+	if (!e_.is_exec()) {
 		lower_chunks(loop_fn);
 		debug_dump();
+		return;
 	}
 	auto state_arg = loop_fn->getArg(0);
 
@@ -1549,6 +1564,7 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 	std::map<unsigned long, BasicBlock *> blocks;
 
 	auto fn = fns_->at(c->packets()[0]->address());
+	if (fn->begin() != fn->end()) return;
 #if defined(DEBUG)
 	std::stringstream entry;
 	entry << "do-static-" << fn->getName().str();
@@ -1852,7 +1868,7 @@ void llvm_static_output_engine_impl::compile()
 	}
 
 	TargetOptions TO;
-	auto RM = std::optional<Reloc::Model>();
+	auto RM = std::optional<Reloc::Model>(Reloc::Model::PIC_);
 #if defined(ARCH_RISCV64)
 	//Add multiply(M), atomics(A), single(F) and double(D) precision float and compressed(C) extensions
 	const char *features = "+m,+a,+f,+d,+c";
@@ -1870,6 +1886,7 @@ void llvm_static_output_engine_impl::compile()
 	auto TM = T->createTargetMachine(TT, cpu, features, TO, RM);
 
 	module_->setDataLayout(TM->createDataLayout());
+	module_->setPICLevel(PICLevel::BigPIC);
 
 	std::error_code EC;
 	raw_fd_ostream output_file(e_.output_filename(), EC, sys::fs::OF_None);

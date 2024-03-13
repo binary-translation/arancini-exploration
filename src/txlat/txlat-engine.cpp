@@ -155,6 +155,10 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 			auto sym_idx = r.symbol();
 			auto dst = r.offset();
 			auto sym = dyn_sym->symbols().at(sym_idx);
+			for ( auto s : sym_t->symbols()) {
+				if (s.name().compare(sym.name()))
+					goto next;
+			}
 
 			::util::global_logger.debug("Searching decl for {} @ {:#x}\n", sym.name(), dst);
 			for (const auto &st : plt_tab->stubs()) {
@@ -163,6 +167,8 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 					oe->add_function_decl(st.first, "__arancini__"+sym.name());
 				}
 			}
+next:
+			;
 		}
 	}
 

@@ -89,12 +89,12 @@
 					git
 					cmake
 					pkg-config
-                    fmt
 					clang
 					pkgsCross.riscv64.buildPackages.gcc
 					m4
 				];
 				buildInputs = [
+                    fmt
 					zlib
 					boost
 					patched-xed
