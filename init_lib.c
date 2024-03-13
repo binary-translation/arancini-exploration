@@ -19,6 +19,7 @@ typedef struct lib_info {
 	size_t tls_size;
 	size_t tls_align;
 	uint64_t tls_offset;
+	uint64_t **dtp_mod;
 	struct lib_info *next;
 } lib_info;
 
@@ -34,11 +35,13 @@ typedef struct {
 } tp_reloc;
 extern tp_reloc __TPREL_INIT[];
 
+extern uint64_t* __DTPMOD_INIT;
+
 extern size_t __guest___DYNAMIC;
 extern unsigned char guest_base;
 extern unsigned char guest_tls;
 
-static lib_info local_libinfo = { &guest_base, &__guest___DYNAMIC, &guest_tls, TLS_LEN, TLS_SIZE, TLS_ALIGN, 0, NULL };
+static lib_info local_libinfo = { &guest_base, &__guest___DYNAMIC, &guest_tls, TLS_LEN, TLS_SIZE, TLS_ALIGN, 0, &__DTPMOD_INIT, NULL };
 
 
 static __attribute__((constructor)) void init_lib()

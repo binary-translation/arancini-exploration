@@ -175,6 +175,7 @@ public:
 	[[nodiscard]] bool is_relative() const { return type_on_host() == R_RISCV_RELATIVE; }
 	[[nodiscard]] bool is_irelative() const { return type_ == R_X86_64_IRELATIVE; }
 	[[nodiscard]] bool is_tpoff() const { return type_ == R_X86_64_TPOFF64; }
+	[[nodiscard]] bool is_dtpmod() const { return type_ == R_X86_64_DTPMOD64; }
 	[[nodiscard]] int type_on_host() const
 	{
 #if defined(ARCH_RISCV64)

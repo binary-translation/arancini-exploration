@@ -330,6 +330,11 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 
 				cur_dso->tls = { nullptr, lib->tls_image, lib->tls_len, lib->tls_size, lib->tls_align, lib->tls_offset };
 				cur_dso->tls_id = tls_cnt++;
+
+				for (uint64_t** dtp_mod = lib->dtp_mod;  *dtp_mod ; dtp_mod++) {
+					*(*dtp_mod) = tls_cnt;
+				}
+
 				tls_align = MAXP2(tls_align, cur_dso->tls.align);
 #undef MAXP2
 				if (tls_tail) {

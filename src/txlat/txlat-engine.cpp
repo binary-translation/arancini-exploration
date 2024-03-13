@@ -639,6 +639,21 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 				  << "0: .quad 0x" << std::hex << reloc.offset() << ", 0x" << reloc.addend() << '\n'
 				  << ".reloc 0b, R_RISCV_64, 0x" << std::hex << reloc.offset() << '\n'
 				  << ".section .grela\n";
+			} else if (reloc.is_dtpmod()) {
+
+				if (elf.type() == elf_type::exec) {
+					throw std::runtime_error("DTPMOD reloc in binary not supported.");
+				}
+
+				if (reloc.symbol() != 0 || reloc.addend() != 0) {
+					throw std::runtime_error("DTPMOD reloc with non-0 symbol/addend unsupported.");
+				}
+
+				s << ".section .data.dtpmod_reloc\n.ifndef __DTPMOD_INIT\n__DTPMOD_INIT:\n.endif\n"
+				  << "0: .quad 0x" << std::hex << reloc.offset() << '\n'
+				  << ".reloc 0b, R_RISCV_64, 0x" << std::hex << reloc.offset() << '\n'
+				  << ".section .grela\n";
+
 			} else if (reloc.is_relative()) {
 				s << ".quad 0x" << std::hex << reloc.offset() << "\n.int 0x" << reloc.type_on_host() << "\n.int 0x" << reloc.symbol() << "\n.quad 0x"
 				  << reloc.addend() << '\n';
@@ -653,6 +668,8 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 
 	s << ".section .data.tp_reloc\n.ifndef __TPREL_INIT\n__TPREL_INIT:\n.endif\n.quad 0x0, 0x0\n"
 	  << ".globl __TPREL_INIT\n.type __TPREL_INIT, STT_OBJECT\n.size __TPREL_INIT, . - __TPREL_INIT \n.hidden __TPREL_INIT\n"
+	  << ".section .data.dtpmod_reloc\n.ifndef __DTPMOD_INIT\n__DTPMOD_INIT:\n.endif\n.quad 0x0\n"
+	  << ".globl __DTPMOD_INIT\n.type __DTPMOD_INIT, STT_OBJECT\n.size __DTPMOD_INIT, . - __DTPMOD_INIT \n.hidden __DTPMOD_INIT\n"
 	  << ".ifndef guest_tls\n.set guest_tls, 0\n.endif\n.globl guest_tls\n.hidden guest_tls\n";
 	if (elf.type() == elf_type::exec) {
 		s << ".ifndef tls_offset\ntls_offset:\n.quad 0\n.globl tls_offset\n.endif\n";
