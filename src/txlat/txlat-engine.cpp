@@ -188,7 +188,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		if (elf.type() == elf::elf_type::exec) {
 			// Generate the final output binary by compiling everything together.
 			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + libs + " " + phobjsrc->name()
-				+ " -l arancini-runtime -L " + arancini_runtime_lib_dir + " -Wl,-T,exec.lds,-rpath=" + arancini_runtime_lib_dir + debug_info);
+				+ " -l arancini-runtime -L " + arancini_runtime_lib_dir + " -Wl,-T,arm64.lds.new,-rpath=" + arancini_runtime_lib_dir + debug_info);
 		} else if (elf.type() == elf::elf_type::dyn) {
 			// Generate the final output library by compiling everything together.
 			std::string tls_defines = tls.empty() ? ""
@@ -213,7 +213,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie -static-libgcc -static-libstdc++ " + intermediate_file->name()
 			+ " " + phobjsrc->name() + " -L " + arancini_runtime_lib_dir
 			+ " -l arancini-runtime-static -l arancini-input-x86-static -l arancini-output-riscv64-static -l arancini-ir-static" + " -L "
-			+ arancini_runtime_lib_dir + "/../../obj -l xed" + debug_info + " -Wl,-T,exec.lds,-rpath=" + arancini_runtime_lib_dir);
+			+ arancini_runtime_lib_dir + "/../../obj -l xed" + debug_info + " -Wl,-T,arm64.lds.new,-rpath=" + arancini_runtime_lib_dir);
 	}
 
 
