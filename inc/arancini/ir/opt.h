@@ -27,8 +27,9 @@ public:
 	~deadflags_opt_visitor(void)
 	{
 		if (nr_flags_total_ != 0) {
-			std::cout << "Dead flags opt pass stats: optimised " << nr_flags_opt_total_ << "/" << nr_flags_total_ << " ("
-					  << 100 * nr_flags_opt_total_ / nr_flags_total_ << "%)" << std::endl;
+            util::global_logger.info("Dead flags opt pass stats: optimised {}/{} ({}%)\n", 
+			                         nr_flags_opt_total_, nr_flags_total_, 
+                                     100 * nr_flags_opt_total_ / nr_flags_total_);
 		}
 	}
 
@@ -43,7 +44,6 @@ public:
 
 			(*p)->accept(*this);
 		}
-		// std::cout << "Dead flags opt pass @ " << c.address() << ": optimised out " << nr_flags_opt_ << "/" << nr_flags_ << " flags" << std::endl;
 		nr_flags_total_ += nr_flags_;
 		nr_flags_opt_total_ += nr_flags_opt_;
 	}
