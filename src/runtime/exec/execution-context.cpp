@@ -155,7 +155,7 @@ int execution_context::invoke(void *cpu_state) {
 	}
 
 	pthread_mutex_unlock(&big_fat_lock);
-	const dbt::native_call_result result = txln->invoke(cpu_state, nullptr);
+	const dbt::native_call_result result = txln->invoke(cpu_state);
 
 	et->chain_address_ = result.chain_address;
 
