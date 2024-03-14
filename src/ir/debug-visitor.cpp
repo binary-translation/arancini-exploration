@@ -16,7 +16,7 @@ void debug_visitor::visit_chunk(chunk &c)
 
 	apply_indent();
 
-	os_ << "chunk " << chunk_name_ << std::endl;
+    fmt::print(out_, "chunk {}\n", chunk_name_);
 	indent();
 
 	default_visitor::visit_chunk(c);
@@ -31,7 +31,7 @@ void debug_visitor::visit_packet(packet &p)
 
 	apply_indent();
 
-	os_ << "packet " << std::hex << &p << std::endl;
+    fmt::print(out_, "packet {}\n", fmt::ptr(&p));
 	indent();
 
 	default_visitor::visit_packet(p);
@@ -46,7 +46,7 @@ void debug_visitor::visit_label_node(label_node &n)
 	default_visitor::visit_label_node(n);
 
 	apply_indent();
-    os_ << fmt::format("{}: label\n", get_node_name(&n));
+    fmt::print(out_, "{}: label\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_cond_br_node(cond_br_node &n)
@@ -54,7 +54,7 @@ void debug_visitor::visit_cond_br_node(cond_br_node &n)
 	default_visitor::visit_cond_br_node(n);
 
 	apply_indent();
-    os_ << fmt::format("{}: cond-br\n", get_node_name(&n));
+    fmt::print(out_, "{}: cond-br\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_read_pc_node(read_pc_node &n)
@@ -62,7 +62,7 @@ void debug_visitor::visit_read_pc_node(read_pc_node &n)
 	default_visitor::visit_read_pc_node(n);
 
 	apply_indent();
-    os_ << fmt::format("{}: read-pc\n", get_node_name(&n));
+    fmt::print(out_, "{}: read-pc\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_write_pc_node(write_pc_node &n)
@@ -70,7 +70,7 @@ void debug_visitor::visit_write_pc_node(write_pc_node &n)
 	default_visitor::visit_write_pc_node(n);
 
 	apply_indent();
-    os_ << fmt::format("{}: write-pc\n", get_node_name(&n));
+    fmt::print(out_, "{}: write-pc\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_constant_node(constant_node &n)
@@ -78,7 +78,7 @@ void debug_visitor::visit_constant_node(constant_node &n)
 	default_visitor::visit_constant_node(n);
 
 	apply_indent();
-    os_ << fmt::format("{}: const {:#x}\n", get_node_name(&n), n.const_val_i());
+    fmt::print(out_, "{}: const {:#x}\n", get_node_name(&n), n.const_val_i());
 }
 
 void debug_visitor::visit_read_reg_node(read_reg_node &n)
@@ -86,7 +86,7 @@ void debug_visitor::visit_read_reg_node(read_reg_node &n)
 	default_visitor::visit_read_reg_node(n);
 
 	apply_indent();
-    os_ << fmt::format("{}: read-reg {}\n", get_node_name(&n), n.regname());
+    fmt::print(out_, "{}: read-reg {}\n", get_node_name(&n), n.regname());
 }
 
 void debug_visitor::visit_read_mem_node(read_mem_node &n)
@@ -94,7 +94,7 @@ void debug_visitor::visit_read_mem_node(read_mem_node &n)
 	default_visitor::visit_read_mem_node(n);
 
 	apply_indent();
-    os_ << fmt::format("{}: read-mem\n", get_node_name(&n));
+    fmt::print(out_, "{}: read-mem\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_write_reg_node(write_reg_node &n)
@@ -102,7 +102,7 @@ void debug_visitor::visit_write_reg_node(write_reg_node &n)
 	default_visitor::visit_write_reg_node(n);
 
 	apply_indent();
-    os_ << fmt::format("{}: write-reg {} {}\n", get_node_name(&n), n.regname(), get_port_name(n.value()));
+    fmt::print(out_, "{}: write-reg {} {}\n", get_node_name(&n), n.regname(), get_port_name(n.value()));
 }
 
 void debug_visitor::visit_write_mem_node(write_mem_node &n)
@@ -112,7 +112,7 @@ void debug_visitor::visit_write_mem_node(write_mem_node &n)
 	apply_indent();
 
     // TA: FIX
-    os_ << fmt::format("{}: write-mem {} {}\n", get_node_name(&n), get_port_name(n.address()), get_port_name(n.value()));
+    fmt::print(out_, "{}: write-mem {} {}\n", get_node_name(&n), get_port_name(n.address()), get_port_name(n.value()));
 }
 
 void debug_visitor::visit_unary_arith_node(unary_arith_node &n)
@@ -131,7 +131,7 @@ void debug_visitor::visit_unary_arith_node(unary_arith_node &n)
     auto match = matches.get(n.op(), "?");
 
     // TA: refactor
-    os_ << fmt::format("{}: {} {}\n", get_node_name(&n), match, get_port_name(n.lhs()));
+    fmt::print(out_, "{}: {} {}\n", get_node_name(&n), match, get_port_name(n.lhs()));
 }
 
 void debug_visitor::visit_binary_arith_node(binary_arith_node &n)
@@ -158,7 +158,7 @@ void debug_visitor::visit_binary_arith_node(binary_arith_node &n)
     auto match = matches.get(n.op(), "?");
 
     // TA: refactor
-    os_ << fmt::format("{}: {} {}\n", get_node_name(&n), match, get_port_name(n.rhs()));
+    fmt::print(out_, "{}: {} {}\n", get_node_name(&n), match, get_port_name(n.rhs()));
 }
 
 void debug_visitor::visit_ternary_arith_node(ternary_arith_node &n)
@@ -176,7 +176,7 @@ void debug_visitor::visit_ternary_arith_node(ternary_arith_node &n)
     auto match = matches.get(n.op(), "?");
 
     // TA: refactor
-    os_ << fmt::format("{}: {} {}, {}\n", get_node_name(&n), match, get_port_name(n.lhs()), get_port_name(n.top()));
+    fmt::print(out_, "{}: {} {}, {}\n", get_node_name(&n), match, get_port_name(n.lhs()), get_port_name(n.top()));
 }
 
 void debug_visitor::visit_unary_atomic_node(unary_atomic_node &n)
@@ -194,7 +194,7 @@ void debug_visitor::visit_unary_atomic_node(unary_atomic_node &n)
     auto match = matches.get(n.op(), "?");
 
     // TA: refactor
-    os_ << fmt::format("{}: {} {}\n", get_node_name(&n), match, get_port_name(n.lhs()));
+    fmt::print(out_, "{}: {} {}\n", get_node_name(&n), match, get_port_name(n.lhs()));
 }
 
 void debug_visitor::visit_binary_atomic_node(binary_atomic_node &n)
@@ -220,7 +220,7 @@ void debug_visitor::visit_binary_atomic_node(binary_atomic_node &n)
     auto match = matches.get(n.op(), "?");
 
     // TA: refactor
-    os_ << fmt::format("{}: {} {}, {}\n", get_node_name(&n), match, get_port_name(n.address()),
+    fmt::print(out_, "{}: {} {}, {}\n", get_node_name(&n), match, get_port_name(n.address()),
                                               get_port_name(n.rhs()));
 }
 
@@ -240,7 +240,7 @@ void debug_visitor::visit_ternary_atomic_node(ternary_atomic_node &n)
     auto match = matches.get(n.op(), "?");
 
     // TA: refactor
-    os_ << fmt::format("{}: {} {}, {}, {}\n", get_node_name(&n), match, get_port_name(n.address()),
+    fmt::print(out_, "{}: {} {}, {}, {}\n", get_node_name(&n), match, get_port_name(n.address()),
                                               get_port_name(n.rhs()), get_port_name(n.top()));
 }
 
@@ -261,7 +261,7 @@ void debug_visitor::visit_cast_node(cast_node &n) {
     auto match = matches.get(n.op(), "?");
 
     // TA: refactor
-    os_ << fmt::format("{}: {} {} -> {}\n", get_node_name(&n), match, get_port_name(n.source_value()), n.val().type());
+    fmt::print(out_, "{}: {} {} -> {}\n", get_node_name(&n), match, get_port_name(n.source_value()), n.val().type());
 }
 
 void debug_visitor::visit_csel_node(csel_node &n)
@@ -269,7 +269,7 @@ void debug_visitor::visit_csel_node(csel_node &n)
 	default_visitor::visit_csel_node(n);
 
 	apply_indent();
-    os_ << fmt::format("{}: csel\n", get_node_name(&n));
+    fmt::print(out_, "{}: csel\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_bit_shift_node(bit_shift_node &n)
@@ -277,7 +277,7 @@ void debug_visitor::visit_bit_shift_node(bit_shift_node &n)
 	default_visitor::visit_bit_shift_node(n);
 
 	apply_indent();
-    os_ << fmt::format("{}: bit-shift\n", get_node_name(&n));
+    fmt::print(out_, "{}: bit-shift\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_bit_extract_node(bit_extract_node &n)
@@ -285,7 +285,7 @@ void debug_visitor::visit_bit_extract_node(bit_extract_node &n)
 	default_visitor::visit_bit_extract_node(n);
 
 	apply_indent();
-    os_ << fmt::format("{}: bit-extract\n", get_node_name(&n));
+    fmt::print(out_, "{}: bit-extract\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_bit_insert_node(bit_insert_node &n)
@@ -293,7 +293,7 @@ void debug_visitor::visit_bit_insert_node(bit_insert_node &n)
 	default_visitor::visit_bit_insert_node(n);
 
 	apply_indent();
-    os_ << fmt::format("{}: bit-insert\n", get_node_name(&n));
+    fmt::print(out_, "{}: bit-insert\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_vector_extract_node(vector_extract_node &n)
@@ -301,7 +301,7 @@ void debug_visitor::visit_vector_extract_node(vector_extract_node &n)
 	default_visitor::visit_vector_extract_node(n);
 
 	apply_indent();
-    os_ << fmt::format("{}: vector-extract\n", get_node_name(&n));
+    fmt::print(out_, "{}: vector-extract\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_vector_insert_node(vector_insert_node &n)
@@ -309,5 +309,6 @@ void debug_visitor::visit_vector_insert_node(vector_insert_node &n)
 	default_visitor::visit_vector_insert_node(n);
 
 	apply_indent();
-    os_ << fmt::format("{}: vector-insert\n", get_node_name(&n));
+    fmt::print(out_, "{}: vector-insert\n", get_node_name(&n));
 }
+

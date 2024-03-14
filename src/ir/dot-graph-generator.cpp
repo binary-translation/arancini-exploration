@@ -11,15 +11,15 @@ using namespace arancini::ir;
 
 void dot_graph_generator::visit_chunk(chunk &c)
 {
-	os_ << "digraph chunk {" << std::endl;
+    fmt::print(out_, "digraph chunk {\n");
 	default_visitor::visit_chunk(c);
-	os_ << " }" << std::endl;
+    fmt::print(out_, "}\n");
 }
 
 void dot_graph_generator::visit_packet(packet &p)
 {
-	os_ << "subgraph cluster_" << std::hex << &p << " {" << std::endl;
-	os_ << "label = \"@0x" << std::hex << p.address() << ": " << p.disassembly() << "\";" << std::endl;
+    fmt::print(out_, "subgraph cluster_{} {\nlabel = \"@{:#x}: {}\";\n", 
+               fmt::ptr(&p), p.address(), p.disassembly()); 
 
 	if (current_packet_ && !current_packet_->actions().empty() && !p.actions().empty()) {
 		add_edge(current_packet_->actions().back().get(), p.actions().front().get(), "blue2");
@@ -30,7 +30,7 @@ void dot_graph_generator::visit_packet(packet &p)
 
 	default_visitor::visit_packet(p);
 
-	os_ << "}" << std::endl;
+    fmt::print("}\n");
 }
 
 void dot_graph_generator::visit_node(node &n)

@@ -3,14 +3,13 @@
 #include <arancini/util/static-map.h>
 #include <arancini/ir/default-visitor.h>
 
-#include <iostream>
 #include <set>
 
 namespace arancini::ir {
 class dot_graph_generator : public default_visitor {
 public:
-	dot_graph_generator(std::ostream &os)
-		: os_(os)
+	dot_graph_generator(FILE *out)
+		: out_(out)
 		, current_packet_(nullptr)
 		, last_action_(nullptr)
 		, cur_node_(nullptr)
@@ -49,14 +48,14 @@ public:
 	virtual void visit_internal_call_node(internal_call_node &n) override;
 
 private:
-	std::ostream &os_;
+	FILE *out_;
 	packet *current_packet_;
 	action_node *last_action_;
 	node *cur_node_;
 	std::set<node *> seen_;
 
 	void add_node(const node *n, const std::string &label) { 
-        os_ << fmt::format("N{} [shape=Mrecord, label=\"{}\"]\n", fmt::ptr(n), label);
+        fmt::print(out_, "N{} [shape=Mrecord, label=\"{}\"]\n", fmt::ptr(n), label);
     }
 
 	std::string compute_port_label(const port *p) const
@@ -94,7 +93,7 @@ private:
             fmt::format_to(std::back_inserter(str), ", label=\"{}\"", label);
 		}
 
-        os_ << fmt::format("{}]\n", str);
+        fmt::print(out_, "{}]\n", str);
 	}
 };
 } // namespace arancini::ir
