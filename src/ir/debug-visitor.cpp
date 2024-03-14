@@ -5,6 +5,8 @@
 #include <arancini/ir/port.h>
 #include <arancini/input/x86/translators/translators.h>
 
+#include <arancini/util/static-map.h>
+
 using namespace arancini::ir;
 
 void debug_visitor::visit_chunk(chunk &c)
@@ -44,8 +46,7 @@ void debug_visitor::visit_label_node(label_node &n)
 	default_visitor::visit_label_node(n);
 
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
-	os_ << "label" << std::endl;
+    os_ << fmt::format("{}: label\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_cond_br_node(cond_br_node &n)
@@ -53,8 +54,7 @@ void debug_visitor::visit_cond_br_node(cond_br_node &n)
 	default_visitor::visit_cond_br_node(n);
 
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
-	os_ << "cond-br " << get_port_name(n.cond()) << std::endl;
+    os_ << fmt::format("{}: cond-br\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_read_pc_node(read_pc_node &n)
@@ -62,8 +62,7 @@ void debug_visitor::visit_read_pc_node(read_pc_node &n)
 	default_visitor::visit_read_pc_node(n);
 
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
-	os_ << "read-pc" << std::endl;
+    os_ << fmt::format("{}: read-pc\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_write_pc_node(write_pc_node &n)
@@ -71,8 +70,7 @@ void debug_visitor::visit_write_pc_node(write_pc_node &n)
 	default_visitor::visit_write_pc_node(n);
 
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
-	os_ << "write-pc" << std::endl;
+    os_ << fmt::format("{}: write-pc\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_constant_node(constant_node &n)
@@ -80,8 +78,7 @@ void debug_visitor::visit_constant_node(constant_node &n)
 	default_visitor::visit_constant_node(n);
 
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
-	os_ << "const #0x" << std::hex << n.const_val_i() << std::endl;
+    os_ << fmt::format("{}: const {:#x}\n", get_node_name(&n), n.const_val_i());
 }
 
 void debug_visitor::visit_read_reg_node(read_reg_node &n)
@@ -89,8 +86,7 @@ void debug_visitor::visit_read_reg_node(read_reg_node &n)
 	default_visitor::visit_read_reg_node(n);
 
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
-	os_ << "read-reg " << n.regname() << std::endl;
+    os_ << fmt::format("{}: read-reg {}\n", get_node_name(&n), n.regname());
 }
 
 void debug_visitor::visit_read_mem_node(read_mem_node &n)
@@ -98,8 +94,7 @@ void debug_visitor::visit_read_mem_node(read_mem_node &n)
 	default_visitor::visit_read_mem_node(n);
 
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
-	os_ << "read-mem" << std::endl;
+    os_ << fmt::format("{}: read-mem\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_write_reg_node(write_reg_node &n)
@@ -107,8 +102,7 @@ void debug_visitor::visit_write_reg_node(write_reg_node &n)
 	default_visitor::visit_write_reg_node(n);
 
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
-	os_ << "write-reg " << n.regname() << ", " << get_port_name(n.value()) << std::endl;
+    os_ << fmt::format("{}: write-reg {} {}\n", get_node_name(&n), n.regname(), get_port_name(n.value()));
 }
 
 void debug_visitor::visit_write_mem_node(write_mem_node &n)
@@ -116,206 +110,158 @@ void debug_visitor::visit_write_mem_node(write_mem_node &n)
 	default_visitor::visit_write_mem_node(n);
 
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
-	os_ << "write-mem " << get_port_name(n.address()) << ", " << get_port_name(n.value()) << std::endl;
+
+    // TA: FIX
+    os_ << fmt::format("{}: write-mem {} {}\n", get_node_name(&n), get_port_name(n.address()), get_port_name(n.value()));
 }
 
 void debug_visitor::visit_unary_arith_node(unary_arith_node &n)
 {
 	default_visitor::visit_unary_arith_node(n);
 
+    // TA: refactor
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
 
-	switch (n.op()) {
-	case unary_arith_op::bnot:
-		os_ << "not ";
-		break;
-	case unary_arith_op::neg:
-		os_ << "neg ";
-		break;
-	case unary_arith_op::complement:
-		os_ << "complement ";
-		break;
-	}
+    util::static_map<unary_arith_op, const char *, 3> matches {
+        { unary_arith_op::bnot,       "not"        },   
+        { unary_arith_op::neg,        "neg"        },   
+        { unary_arith_op::complement, "complement" },   
+    };
 
-	os_ << get_port_name(n.lhs()) << std::endl;
+    auto match = matches.get(n.op(), "?");
+
+    // TA: refactor
+    os_ << fmt::format("{}: {} {}\n", get_node_name(&n), match, get_port_name(n.lhs()));
 }
 
 void debug_visitor::visit_binary_arith_node(binary_arith_node &n)
 {
 	default_visitor::visit_binary_arith_node(n);
 
+    // TA: refactor
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
 
-	switch (n.op()) {
-	case binary_arith_op::add:
-		os_ << "add ";
-		break;
-	case binary_arith_op::band:
-		os_ << "and ";
-		break;
-	case binary_arith_op::bor:
-		os_ << "or ";
-		break;
-	case binary_arith_op::bxor:
-		os_ << "xor ";
-		break;
-	case binary_arith_op::cmpeq:
-		os_ << "cmp-eq ";
-		break;
-	case binary_arith_op::cmpne:
-		os_ << "cmp-ne ";
-		break;
-	case binary_arith_op::cmpgt:
-		os_ << "cmp-gt ";
-		break;
-	case binary_arith_op::div:
-		os_ << "div ";
-		break;
-	case binary_arith_op::mul:
-		os_ << "mul ";
-		break;
-	case binary_arith_op::sub:
-		os_ << "sub ";
-		break;
-	case binary_arith_op::mod:
-		os_ << "mod ";
-		break;
-	}
+    util::static_map<binary_arith_op, const char *, 10> matches {
+        { binary_arith_op::add,     "add"    },   
+        { binary_arith_op::band,    "and"    },   
+        { binary_arith_op::bor,     "or"     },   
+        { binary_arith_op::bxor,    "xor"    },   
+        { binary_arith_op::cmpeq,   "cmp-eq" },   
+        { binary_arith_op::cmpne,   "cmp-ne" },   
+        { binary_arith_op::cmpgt,   "cmp-gt" },   
+        { binary_arith_op::div,     "div"    },   
+        { binary_arith_op::mul,     "mul"    },   
+        { binary_arith_op::sub,     "sub"    },   
+        { binary_arith_op::mod,     "mod"    },   
+    };
 
-	os_ << get_port_name(n.lhs()) << ", " << get_port_name(n.rhs()) << std::endl;
+    auto match = matches.get(n.op(), "?");
+
+    // TA: refactor
+    os_ << fmt::format("{}: {} {}\n", get_node_name(&n), match, get_port_name(n.rhs()));
 }
 
 void debug_visitor::visit_ternary_arith_node(ternary_arith_node &n)
 {
 	default_visitor::visit_ternary_arith_node(n);
 
+    // TA: refactor
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
 
-	switch (n.op()) {
-	case ternary_arith_op::adc:
-		os_ << "adc ";
-		break;
-	case ternary_arith_op::sbb:
-		os_ << "sbb ";
-		break;
-	}
-	os_ << get_port_name(n.lhs()) << ", " << get_port_name(n.rhs()) << ", " << get_port_name(n.top()) << std::endl;
+    util::static_map<ternary_arith_op, const char *, 2> matches {
+        { ternary_arith_op::adc, "adc" },   
+        { ternary_arith_op::sbb, "sbb" },
+    };
+
+    auto match = matches.get(n.op(), "?");
+
+    // TA: refactor
+    os_ << fmt::format("{}: {} {}, {}\n", get_node_name(&n), match, get_port_name(n.lhs()), get_port_name(n.top()));
 }
 
 void debug_visitor::visit_unary_atomic_node(unary_atomic_node &n)
 {
 	default_visitor::visit_unary_atomic_node(n);
 
+    // TA: refactor
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
 
-	switch (n.op()) {
-	case unary_atomic_op::neg:
-		os_ << "atomic neg ";
-		break;
-	case unary_atomic_op::bnot:
-		os_ << "atomic not ";
-		break;
-	}
+    util::static_map<unary_atomic_op, const char *, 2> matches {
+        { unary_atomic_op::neg,  "atomic neg" },   
+        { unary_atomic_op::bnot, "atomic not" },
+    };
 
-	os_ << get_port_name(n.lhs()) << std::endl;
+    auto match = matches.get(n.op(), "?");
+
+    // TA: refactor
+    os_ << fmt::format("{}: {} {}\n", get_node_name(&n), match, get_port_name(n.lhs()));
 }
 
 void debug_visitor::visit_binary_atomic_node(binary_atomic_node &n)
 {
 	default_visitor::visit_binary_atomic_node(n);
 
+    // TA: refactor
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
 
-	switch (n.op()) {
-	case binary_atomic_op::add:
-		os_ << "atomic add ";
-		break;
-	case binary_atomic_op::sub:
-		os_ << "atomic sub ";
-		break;
-	case binary_atomic_op::band:
-		os_ << "atomic and ";
-		break;
-	case binary_atomic_op::bor:
-		os_ << "atomic or ";
-		break;
-	case binary_atomic_op::xadd:
-		os_ << "atomic xadd ";
-		break;
-	case binary_atomic_op::bxor:
-		os_ << "atomic xor ";
-		break;
-	case binary_atomic_op::btc:
-		os_ << "atomic btc ";
-		break;
-	case binary_atomic_op::btr:
-		os_ << "atomic btr ";
-		break;
-	case binary_atomic_op::bts:
-		os_ << "atomic bts ";
-		break;
-  case binary_atomic_op::xchg:
-    os_ << "atomic xchg ";
-    break;
-	}
+    util::static_map<binary_atomic_op, const char *, 9> matches {
+        { binary_atomic_op::add,  "atomic add"   },   
+        { binary_atomic_op::sub,  "atomic sub"   },
+        { binary_atomic_op::band, "atomic and"   },
+        { binary_atomic_op::bor,  "atomic or"    },
+        { binary_atomic_op::xadd, "atomic xadd"  },
+        { binary_atomic_op::bxor, "atomic xor"   },
+        { binary_atomic_op::btc,  "atomic btc"   },
+        { binary_atomic_op::btr,  "atomic btr"   },
+        { binary_atomic_op::bts,  "atomic bts"   },
+        { binary_atomic_op::xchg, "atomic xchg"  },
+    };
 
-	os_ << get_port_name(n.address()) << ", " << get_port_name(n.rhs()) << std::endl;
+    auto match = matches.get(n.op(), "?");
+
+    // TA: refactor
+    os_ << fmt::format("{}: {} {}, {}\n", get_node_name(&n), match, get_port_name(n.address()),
+                                              get_port_name(n.rhs()));
 }
 
 void debug_visitor::visit_ternary_atomic_node(ternary_atomic_node &n)
 {
 	default_visitor::visit_ternary_atomic_node(n);
-
+   
+    // TA: refactor
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
 
-	switch (n.op()) {
-	case ternary_atomic_op::adc:
-		os_ << "atomic adc ";
-		break;
-	case ternary_atomic_op::sbb:
-		os_ << "atomic sbb ";
-		break;
-	case ternary_atomic_op::cmpxchg:
-		os_ << "atomic cmpxchg ";
-		break;
-	}
+    util::static_map<ternary_atomic_op, const char *, 3> matches {
+        { ternary_atomic_op::adc,       "atomic adc"       },   
+        { ternary_atomic_op::sbb,       "atomic sbb"       },
+        { ternary_atomic_op::cmpxchg,   "atomic cmpxchg"   },
+    };
 
-	os_ << get_port_name(n.address()) << ", " << get_port_name(n.rhs()) << ", " << get_port_name(n.top()) << std::endl;
+    auto match = matches.get(n.op(), "?");
+
+    // TA: refactor
+    os_ << fmt::format("{}: {} {}, {}, {}\n", get_node_name(&n), match, get_port_name(n.address()),
+                                              get_port_name(n.rhs()), get_port_name(n.top()));
 }
 
-void debug_visitor::visit_cast_node(cast_node &n)
-{
+void debug_visitor::visit_cast_node(cast_node &n) {
 	default_visitor::visit_cast_node(n);
 
+    // TA: refactor
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
 
-	switch (n.op()) {
-	case cast_op::bitcast:
-		os_ << "bitcast ";
-		break;
-	case cast_op::convert:
-		os_ << "convert ";
-		break;
-	case cast_op::sx:
-		os_ << "sx ";
-		break;
-	case cast_op::trunc:
-		os_ << "trunc ";
-		break;
-	case cast_op::zx:
-		os_ << "zx ";
-		break;
-	}
+    util::static_map<cast_op, const char *, 5> matches {
+        { cast_op::bitcast, "bitcast"       },   
+        { cast_op::convert, "convert"       },
+        { cast_op::sx,      "sign-extend"   },
+        { cast_op::trunc,   "truncate"      },
+        { cast_op::zx,      "zero-extend"   }
+    };
 
-	os_ << get_port_name(n.source_value()) << " -> " << n.val().type().to_string() << std::endl;
+    auto match = matches.get(n.op(), "?");
+
+    // TA: refactor
+    os_ << fmt::format("{}: {} {} -> {}\n", get_node_name(&n), match, get_port_name(n.source_value()), n.val().type());
 }
 
 void debug_visitor::visit_csel_node(csel_node &n)
@@ -323,8 +269,7 @@ void debug_visitor::visit_csel_node(csel_node &n)
 	default_visitor::visit_csel_node(n);
 
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
-	os_ << "csel" << std::endl;
+    os_ << fmt::format("{}: csel\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_bit_shift_node(bit_shift_node &n)
@@ -332,8 +277,7 @@ void debug_visitor::visit_bit_shift_node(bit_shift_node &n)
 	default_visitor::visit_bit_shift_node(n);
 
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
-	os_ << "bit-shift" << std::endl;
+    os_ << fmt::format("{}: bit-shift\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_bit_extract_node(bit_extract_node &n)
@@ -341,8 +285,7 @@ void debug_visitor::visit_bit_extract_node(bit_extract_node &n)
 	default_visitor::visit_bit_extract_node(n);
 
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
-	os_ << "bit-extract" << std::endl;
+    os_ << fmt::format("{}: bit-extract\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_bit_insert_node(bit_insert_node &n)
@@ -350,8 +293,7 @@ void debug_visitor::visit_bit_insert_node(bit_insert_node &n)
 	default_visitor::visit_bit_insert_node(n);
 
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
-	os_ << "bit-insert" << std::endl;
+    os_ << fmt::format("{}: bit-insert\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_vector_extract_node(vector_extract_node &n)
@@ -359,8 +301,7 @@ void debug_visitor::visit_vector_extract_node(vector_extract_node &n)
 	default_visitor::visit_vector_extract_node(n);
 
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
-	os_ << "vector-extract" << std::endl;
+    os_ << fmt::format("{}: vector-extract\n", get_node_name(&n));
 }
 
 void debug_visitor::visit_vector_insert_node(vector_insert_node &n)
@@ -368,6 +309,5 @@ void debug_visitor::visit_vector_insert_node(vector_insert_node &n)
 	default_visitor::visit_vector_insert_node(n);
 
 	apply_indent();
-	os_ << get_node_name(&n) << ": ";
-	os_ << "vector-insert" << std::endl;
+    os_ << fmt::format("{}: vector-insert\n", get_node_name(&n));
 }

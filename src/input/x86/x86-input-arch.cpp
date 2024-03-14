@@ -3,6 +3,8 @@
 #include <arancini/ir/ir-builder.h>
 #include <arancini/util/logger.h>
 
+#include <fmt/core.h>
+
 using namespace arancini::ir;
 using namespace arancini::input;
 using namespace arancini::input::x86;
@@ -355,7 +357,8 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 		xed_error_enum_t xed_error = xed_decode(&xedd, &mc[offset], code_size - offset);
 		if (xed_error != XED_ERROR_NONE) {
-			throw std::runtime_error("unable to decode instruction: " + std::to_string(xed_error));
+			throw std::runtime_error(fmt::format("unable to decode instruction {} inst: {:#x}", 
+                                                  std::to_string(xed_error), base_address + offset));
 		}
 
 		xed_uint_t length = xed_decoded_inst_get_length(&xedd);
