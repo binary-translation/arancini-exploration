@@ -12,8 +12,7 @@
 #include <arancini/util/tempfile.h>
 #include <chrono>
 #include <cstdlib>
-#include <iostream>
-#include <ostream>
+#include <cstdio>
 #include <string>
 
 using namespace arancini::txlat;
@@ -462,27 +461,28 @@ std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arc
 
 void txlat_engine::generate_dot_graph(arancini::output::o_static::static_output_engine &oe, std::string filename)
 {
-	std::ostream *o;
+    ::util::global_logger.info("Generating dot graph to: {}\n", filename);
 
-    std::cout << "Generating dot graph to: " << filename << std::endl;
-
-	if (filename == "-") {
-		o = &std::cout;
-	} else {
-		o = new std::ofstream(filename);
-		if (!((std::ofstream *)o)->is_open()) {
-			throw std::runtime_error("unable to open file for graph output");
-		}
+    FILE *out = stdout;
+	if (filename != "-") {
+        out = std::fopen(filename.c_str(), "w");
+        if (!out) {
+            ::util::global_logger.error("Unable to file for graph output\n");
+            return;
+        }
 	}
 
-	dot_graph_generator dgg(*o);
+	dot_graph_generator dgg(out);
 	for (auto c : oe.chunks()) {
 		c->accept(dgg);
 	}
 
-	if (o != &std::cout) {
-		delete o;
-	}
+    if (out != stdout) {
+        if (std::fclose(out)) {
+            ::util::global_logger.warn("Unable to close graph output file: {}\n", 
+                                       std::error_code(errno, std::system_category()).message());
+        }
+    }
 }
 
 void txlat_engine::optimise(arancini::output::o_static::static_output_engine &oe, const boost::program_options::variables_map &cmdline)

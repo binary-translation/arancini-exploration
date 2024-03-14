@@ -1,9 +1,11 @@
 #pragma once
 
+#include <arancini/util/static-map.h>
+
+#include <fmt/core.h>
+
 #include <string>
 #include <vector>
-#include <sstream>
-#include <iomanip>
 
 namespace arancini::ir {
 enum class value_type_class { none, signed_integer, unsigned_integer, floating_point };
@@ -81,39 +83,6 @@ public:
 			return value_type(value_type_class::unsigned_integer, element_width_, nr_elements_);
 		throw std::logic_error(__FILE__ ":" + std::to_string(__LINE__) + ": Initial type must be an integer");
 	}
-
-	std::string to_string() const
-	{
-		std::stringstream s;
-
-		if (nr_elements_ > 1) {
-			s << "v" << std::dec << nr_elements_;
-		}
-
-		switch (tc_) {
-		case value_type_class::none:
-			return "v";
-
-		case value_type_class::signed_integer:
-			s << "s";
-			break;
-
-		case value_type_class::unsigned_integer:
-			s << "u";
-			break;
-		case value_type_class::floating_point:
-			s << "f";
-			break;
-		default:
-			s << "?";
-			break;
-		}
-
-		s << std::dec << std::to_string(element_width_);
-
-		return s.str();
-	}
-
 private:
 	value_type_class tc_;
 	int element_width_;
@@ -135,4 +104,29 @@ private:
 	value_type return_type_;
 	std::vector<value_type> param_types_;
 };
+
 } // namespace arancini::ir
+
+template <>
+struct fmt::formatter<arancini::ir::value_type> {
+    template <typename PCTX> constexpr format_parse_context::iterator parse(const PCTX &parse_ctx) {
+        return parse_ctx.begin();
+    }
+
+    template <typename FCTX>
+    format_context::iterator format(const arancini::ir::value_type &value, FCTX &format_ctx) const {
+        if (value.nr_elements() > 1) 
+            fmt::format_to(format_ctx.out(), "v{}", value.nr_elements());
+
+        util::static_map<arancini::ir::value_type_class, char, 4> matches {
+            { arancini::ir::value_type_class::none, 'v' },
+            { arancini::ir::value_type_class::signed_integer, 's' },
+            { arancini::ir::value_type_class::unsigned_integer, 'u' },
+            { arancini::ir::value_type_class::floating_point, 'f' },
+        };
+
+        auto match = matches.get(value.type_class(), '?');
+        return fmt::format_to(format_ctx.out(), "{}{}", match, value.element_width());
+    }
+};
+

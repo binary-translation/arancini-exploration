@@ -1,14 +1,15 @@
 #pragma once
 
+#include <arancini/util/static-map.h>
 #include <arancini/ir/default-visitor.h>
-#include <iostream>
+
 #include <set>
 
 namespace arancini::ir {
 class dot_graph_generator : public default_visitor {
 public:
-	dot_graph_generator(std::ostream &os)
-		: os_(os)
+	dot_graph_generator(FILE *out)
+		: out_(out)
 		, current_packet_(nullptr)
 		, last_action_(nullptr)
 		, cur_node_(nullptr)
@@ -47,44 +48,30 @@ public:
 	virtual void visit_internal_call_node(internal_call_node &n) override;
 
 private:
-	std::ostream &os_;
+	FILE *out_;
 	packet *current_packet_;
 	action_node *last_action_;
 	node *cur_node_;
 	std::set<node *> seen_;
 
-	void add_node(const node *n, const std::string &label) { os_ << std::hex << "N" << n << " [shape=Mrecord, label=\"" << label << "\"]" << std::endl; }
+	void add_node(const node *n, const std::string &label) { 
+        fmt::print(out_, "N{} [shape=Mrecord, label=\"{}\"]\n", fmt::ptr(n), label);
+    }
 
 	std::string compute_port_label(const port *p) const
 	{
-		std::stringstream s;
+        // TA: FIXME
+        util::static_map<port_kinds, std::string, 5> matches = {
+            { port_kinds::value, "value"},
+            { port_kinds::constant, "#"},
+            { port_kinds::negative, "N"},
+            { port_kinds::overflow, "V"},
+            { port_kinds::carry, "C"},
+            { port_kinds::zero, "Z"}
+        };
 
-		switch (p->kind()) {
-		case port_kinds::value:
-			s << "value";
-			break;
-		case port_kinds::constant:
-			s << "#";
-			break;
-		case port_kinds::negative:
-			s << "N";
-			break;
-		case port_kinds::overflow:
-			s << "V";
-			break;
-		case port_kinds::carry:
-			s << "C";
-			break;
-		case port_kinds::zero:
-			s << "Z";
-			break;
-		default:
-			s << "?";
-			break;
-		}
-
-		s << ":" << p->type().to_string();
-		return s.str();
+        auto match = matches.get(p->kind(), "?");
+		return fmt::format("{}:{}", match, p->type());
 	}
 
 	void add_port_edge(const port *from, const node *to, const std::string &link = "") { add_edge(from->owner(), to, "black", compute_port_label(from), link); }
@@ -93,20 +80,20 @@ private:
 
 	void add_edge(const node *from, const node *to, const std::string &colour = "black", const std::string &label = "", const std::string &link = "")
 	{
-		os_ << std::hex << "N" << from << " -> "
-			<< "N" << to;
+        std::string str;
+        fmt::format_to(std::back_inserter(str), "N{} -> N{}", fmt::ptr(from), fmt::ptr(to));
 
 		if (link != "") {
-			os_ << ":" << link;
+            fmt::format_to(std::back_inserter(str), ":{}", link);
 		}
 
-		os_ << " [color=" << colour;
+        fmt::format_to(std::back_inserter(str), " [color={}", colour);
 
 		if (label != "") {
-			os_ << ", label=\"" << label << "\"";
+            fmt::format_to(std::back_inserter(str), ", label=\"{}\"", label);
 		}
 
-		os_ << "]" << std::endl;
+        fmt::print(out_, "{}]\n", str);
 	}
 };
 } // namespace arancini::ir

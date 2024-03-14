@@ -8,8 +8,8 @@
 namespace arancini::ir {
 class debug_visitor : public default_visitor {
 public:
-	debug_visitor(std::ostream &os)
-		: os_(os)
+	debug_visitor(FILE *out)
+		: out_(out)
 		, level_(0)
 		, chunk_idx_(0)
 		, packet_idx_(0)
@@ -44,7 +44,7 @@ public:
 	virtual void visit_vector_insert_node(vector_insert_node &n) override;
 
 private:
-	std::ostream &os_;
+    FILE *out_;
 	int level_;
 
 	std::string chunk_name_;
@@ -56,16 +56,14 @@ private:
 	std::map<const node *, std::string> node_names_;
 
 	std::string get_node_name(const node *n) const { return node_names_.at(n); }
-	std::string get_port_name(const port &n) const { return node_names_.at(n.owner()) + ":v(" + n.type().to_string() + ")"; }
+	std::string get_port_name(const port &n) const { return fmt::format("{}:v({})", node_names_.at(n.owner()), n.type()); }
 
 	void indent() { level_++; }
 	void outdent() { level_--; }
 
 	void apply_indent()
 	{
-		for (int i = 0; i < level_; i++) {
-			os_ << "  ";
-		}
+        fmt::print(out_, "{: >{}", "", level_);
 	}
 };
 } // namespace arancini::ir
