@@ -1,8 +1,10 @@
 #pragma once
 
-#include <iomanip>
-#include <sstream>
+#include <fmt/core.h>
+
 #include <string>
+#include <vector>
+#include <unordered_map>
 
 namespace arancini::ir {
 enum class value_type_class { none, signed_integer, unsigned_integer, floating_point };
@@ -10,27 +12,29 @@ enum class value_type_class { none, signed_integer, unsigned_integer, floating_p
 class value_type {
 public:
 	static value_type v() { return value_type(value_type_class::none, 0); }
-	static value_type u1() { return value_type(value_type_class::unsigned_integer, 1); }
-	static value_type u8() { return value_type(value_type_class::unsigned_integer, 8); }
-	static value_type u16() { return value_type(value_type_class::unsigned_integer, 16); }
-	static value_type u32() { return value_type(value_type_class::unsigned_integer, 32); }
-	static value_type u64() { return value_type(value_type_class::unsigned_integer, 64); }
-	static value_type u128() { return value_type(value_type_class::unsigned_integer, 128); }
-	static value_type u256() { return value_type(value_type_class::unsigned_integer, 256); }
-	static value_type u512() { return value_type(value_type_class::unsigned_integer, 512); }
-	static value_type s8() { return value_type(value_type_class::signed_integer, 8); }
-	static value_type s16() { return value_type(value_type_class::signed_integer, 16); }
-	static value_type s32() { return value_type(value_type_class::signed_integer, 32); }
-	static value_type s64() { return value_type(value_type_class::signed_integer, 64); }
-	static value_type s128() { return value_type(value_type_class::signed_integer, 128); }
-	static value_type f32() { return value_type(value_type_class::floating_point, 32); }
-	static value_type f64() { return value_type(value_type_class::floating_point, 64); }
-  static value_type f80() { return value_type(value_type_class::floating_point, 80); } // x87 double extended-precision
+	static value_type u1() { return value_type(value_type_class::unsigned_integer, 1, 1); }
+	static value_type u8() { return value_type(value_type_class::unsigned_integer, 8, 1); }
+	static value_type u16() { return value_type(value_type_class::unsigned_integer, 16, 1); }
+	static value_type u32() { return value_type(value_type_class::unsigned_integer, 32, 1); }
+	static value_type u64() { return value_type(value_type_class::unsigned_integer, 64, 1); }
+	static value_type u128() { return value_type(value_type_class::unsigned_integer, 128, 1); }
+	static value_type u256() { return value_type(value_type_class::unsigned_integer, 256, 1); }
+	static value_type u512() { return value_type(value_type_class::unsigned_integer, 512, 1); }
+	static value_type s8() { return value_type(value_type_class::signed_integer, 8, 1); }
+	static value_type s16() { return value_type(value_type_class::signed_integer, 16, 1); }
+	static value_type s32() { return value_type(value_type_class::signed_integer, 32, 1); }
+	static value_type s64() { return value_type(value_type_class::signed_integer, 64, 1); }
+	static value_type s128() { return value_type(value_type_class::signed_integer, 128, 1); }
+	static value_type f32() { return value_type(value_type_class::floating_point, 32, 1); }
+	static value_type f64() { return value_type(value_type_class::floating_point, 64, 1); }
+    static value_type f80() { return value_type(value_type_class::floating_point, 80, 1); } // x87 double extended-precision
 
 	static value_type vector(const value_type &underlying_type, int nr_elements)
 	{
 		return value_type(underlying_type.tc_, underlying_type.element_width_, nr_elements);
 	}
+
+    value_type() = default;
 
 	value_type(value_type_class tc, int element_width, int nr_elements = 1)
 		: tc_(tc)
@@ -78,39 +82,6 @@ public:
 			return value_type(value_type_class::unsigned_integer, element_width_, nr_elements_);
 		throw std::logic_error(__FILE__ ":" + std::to_string(__LINE__) + ": Initial type must be an integer");
 	}
-
-	std::string to_string() const
-	{
-		std::stringstream s;
-
-		if (nr_elements_ > 1) {
-			s << "v" << std::dec << nr_elements_;
-		}
-
-		switch (tc_) {
-		case value_type_class::none:
-			return "v";
-
-		case value_type_class::signed_integer:
-			s << "s";
-			break;
-
-		case value_type_class::unsigned_integer:
-			s << "u";
-			break;
-		case value_type_class::floating_point:
-			s << "f";
-			break;
-		default:
-			s << "?";
-			break;
-		}
-
-		s << std::dec << std::to_string(element_width_);
-
-		return s.str();
-	}
-
 private:
 	value_type_class tc_;
 	int element_width_;
@@ -132,4 +103,33 @@ private:
 	value_type return_type_;
 	std::vector<value_type> param_types_;
 };
+
 } // namespace arancini::ir
+
+template <>
+struct fmt::formatter<arancini::ir::value_type> {
+    template <typename PCTX> constexpr format_parse_context::iterator parse(const PCTX &parse_ctx) {
+        return parse_ctx.begin();
+    }
+
+    template <typename FCTX>
+    format_context::iterator format(const arancini::ir::value_type &value, FCTX &format_ctx) const {
+        if (value.nr_elements() > 1) 
+            fmt::format_to(format_ctx.out(), "v{}", value.nr_elements());
+
+        std::unordered_map<arancini::ir::value_type_class, char> match {
+            { arancini::ir::value_type_class::none, 'v' },
+            { arancini::ir::value_type_class::signed_integer, 's' },
+            { arancini::ir::value_type_class::unsigned_integer, 'u' },
+            { arancini::ir::value_type_class::floating_point, 'f' },
+        };
+
+        char c = '?';
+        auto it = match.begin();
+        if ((it = match.find(value.type_class())) != match.end())
+            c = it->second;
+
+        return fmt::format_to(format_ctx.out(), "{}{}", c, value.element_width());
+    }
+};
+

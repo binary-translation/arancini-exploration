@@ -57,34 +57,22 @@ private:
 
 	std::string compute_port_label(const port *p) const
 	{
-		std::stringstream s;
+        // TA: FIXME
+        std::unordered_map<port_kinds, std::string> match = {
+            { port_kinds::value, "value"},
+            { port_kinds::constant, "#"},
+            { port_kinds::negative, "N"},
+            { port_kinds::overflow, "V"},
+            { port_kinds::carry, "C"},
+            { port_kinds::zero, "Z"}
+        };
 
-		switch (p->kind()) {
-		case port_kinds::value:
-			s << "value";
-			break;
-		case port_kinds::constant:
-			s << "#";
-			break;
-		case port_kinds::negative:
-			s << "N";
-			break;
-		case port_kinds::overflow:
-			s << "V";
-			break;
-		case port_kinds::carry:
-			s << "C";
-			break;
-		case port_kinds::zero:
-			s << "Z";
-			break;
-		default:
-			s << "?";
-			break;
-		}
+        std::string value = "?";
+        auto it = match.begin();
+        if ((it = match.find(p->kind())) != match.end())
+            value = it->second;
 
-		s << ":" << p->type().to_string();
-		return s.str();
+		return fmt::format("{}:{}", value, p->type());
 	}
 
 	void add_port_edge(const port *from, const node *to, const std::string &link = "") { add_edge(from->owner(), to, "black", compute_port_label(from), link); }
