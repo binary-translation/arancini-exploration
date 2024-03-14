@@ -155,7 +155,7 @@ void punpck_translator::do_translate()
       auto word = (i < nr_splits) ? builder().insert_vector_extract(dst->val(), i) : builder().insert_vector_extract(src->val(), i - nr_splits);
       auto neg_test = builder().insert_cmpgt(builder().insert_constant_s16(0)->val(), word->val());
       cond_br_node *br_neg = (cond_br_node *)builder().insert_cond_br(neg_test->val(), nullptr);
-      auto overflow_test = builder().insert_and(word->val(), builder().insert_constant_s16(0xFF00)->val());
+      auto overflow_test = builder().insert_cmpne(builder().insert_and(word->val(), builder().insert_constant_s16(0xFF00)->val())->val(), builder().insert_constant_s16(0)->val());
       cond_br_node *br_of = (cond_br_node *)builder().insert_cond_br(overflow_test->val(), nullptr);
 
       // word fits in u8, set dst to truncated word
@@ -179,6 +179,67 @@ void punpck_translator::do_translate()
       br_end2->add_br_target(end_label);
     }
     write_operand(0, dst_bytes->val());
+    break;
+  }
+  case XED_ICLASS_PACKSSDW:
+  case XED_ICLASS_PACKSSWB: {
+    auto bits = op0->val().type().width();
+	auto pre_ty = value_type::v();
+	auto pst_ty = value_type::v();
+	value_node *cmp_max;
+	value_node *cmp_min;
+	value_node *ins_max;
+	value_node *ins_min;
+	switch(inst) {
+		case XED_ICLASS_PACKSSDW: {
+			pre_ty = value_type::s32();
+			pst_ty = value_type::s16();
+			cmp_max = builder().insert_constant_s32(0x00007FFF);
+			cmp_min = builder().insert_constant_s32(0xFFFF8000);
+			ins_max = builder().insert_constant_s16(0x7FFF);
+			ins_min = builder().insert_constant_s16(0x8000);
+		} break;
+		case XED_ICLASS_PACKSSWB: {
+			pre_ty = value_type::s16();
+			pst_ty = value_type::s8();
+			cmp_max = builder().insert_constant_s16(0x007F);
+			cmp_min = builder().insert_constant_s16(0xFF80);
+			ins_max = builder().insert_constant_s8(0x7F);
+			ins_min = builder().insert_constant_s8(0x80);
+		} break;
+	}
+    auto dst = builder().insert_bitcast(value_type::vector(pre_ty, bits/pre_ty.width()), op0->val());
+    auto src = builder().insert_bitcast(value_type::vector(pre_ty, bits/pre_ty.width()), op1->val());
+    auto result = builder().insert_bitcast(value_type::vector(pst_ty, bits/pst_ty.width()), op0->val());
+
+    for (int i = 0; i < bits/pst_ty.width(); i++) {
+		// word/double word
+		auto word = (i < bits/pre_ty.width()) ? builder().insert_vector_extract(dst->val(), i) : builder().insert_vector_extract(src->val(), i - bits/pre_ty.width());
+      	auto gt_max = builder().insert_cmpgt(word->val(), cmp_max->val());
+      	cond_br_node *br_max = (cond_br_node *)builder().insert_cond_br(gt_max->val(), nullptr);
+      	auto lt_min = builder().insert_cmpgt(cmp_min->val(), word->val());
+      	cond_br_node *br_min = (cond_br_node *)builder().insert_cond_br(lt_min->val(), nullptr);
+
+		// element fits
+      	result = builder().insert_vector_insert(result->val(), i, builder().insert_trunc(pst_ty, word->val())->val());
+      	br_node *br_end = (br_node *)builder().insert_br(nullptr);
+
+      	// set element to min
+      	auto min_label = builder().insert_label("lt_min");
+      	br_min->add_br_target(min_label);
+      	result = builder().insert_vector_insert(result->val(), i, ins_min->val());
+      	br_node *br_end2 = (br_node *)builder().insert_br(nullptr);
+
+      	// set element tot max
+      	auto max_label = builder().insert_label("gt_max");
+      	br_max->add_br_target(max_label);
+      	result = builder().insert_vector_insert(result->val(), i, ins_max->val());
+
+      	auto end_label = builder().insert_label("end");
+      	br_end->add_br_target(end_label);
+      	br_end2->add_br_target(end_label);
+    }
+    write_operand(0, result->val());
     break;
   }
 

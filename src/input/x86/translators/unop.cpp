@@ -39,6 +39,7 @@ void unop_translator::do_translate()
 
   case XED_ICLASS_BSWAP: {
     auto src = read_operand(0);
+	auto VTy = src->val().type();
     auto nr_bytes = src->val().type().width() == 32 ? 4 : 8;
 
     src = builder().insert_bitcast(value_type::vector(value_type::u8(), nr_bytes), src->val());
@@ -47,6 +48,7 @@ void unop_translator::do_translate()
     for (int i = 0; i < nr_bytes; i++) {
       rslt = builder().insert_vector_insert(rslt->val(), i, builder().insert_vector_extract(src->val(), nr_bytes - i - 1)->val());
     }
+    rslt = builder().insert_bitcast(VTy, rslt->val());
 
     break;
   }

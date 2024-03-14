@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <set>
 
 #include <elf.h>
 
@@ -16,6 +17,7 @@ enum class section_type {
 	symbol_table = 2,
 	string_table = 3,
 	relocation_addend = 4,
+	dynamic =6,
 	relocation = 9,
 	dynamic_symbol_table = 11,
 	relr = 19
@@ -73,52 +75,7 @@ public:
 		, shidx_(shidx)
 		, info_(info)
 		, other_(other)
-	{
-#ifdef ARCH_X86_64
-		//HACK: for hello-world/histogram on x86
-		if (name == "__set_thread_area") {
-		     info_ = 2;
-		     size_ = 16;
-		}
-		if (name == "memcpy") {
-		     info_ = 2;
-		     size_ = 50;
-		}
-		if (name == "_start") {
-		     info_ = 2;
-		     size_ = 22;
-		}
-		if (name == "_start_c") {
-		     info_ = 2;
-		     // hello-world: size_ = 241;
-		     size_ = 249;
-		}
-		if (name == "_init") {
-		     info_ = 2;
-		     size_ = 3;
-		}
-		if (name == "__syscall_cp_asm") {
-		     info_ = 2;
-		     size_ = 42;
-		}
-		if (name == "memset") {
-		     info_ = 2;
-		     size_ = 196;
-		}
-		if (name == "__clone") {
-		     info_ = 2;
-		     size_ = 57;
-		}
-		if (name == "sem_timedwait") {
-		     info_ = 2;
-		     size_ = 219;
-		}
-		if (name == "memmove") {
-		     info_ = 2;
-		     size_ = 37;
-		}
-#endif
-	}
+	{}
 
 	const std::string &name() const { return name_; }
 
@@ -130,6 +87,10 @@ public:
 	unsigned char info() const { return info_; }
 
 	bool is_func() const { return ELF64_ST_TYPE(info_) == STT_FUNC; }
+
+	friend bool operator<(const symbol &lhs, const symbol &rhs) {
+		return lhs.value_ < rhs.value_;
+	}
 
 	[[nodiscard]] bool is_global() const { return ELF64_ST_BIND(info_) == STB_GLOBAL; }
 	[[nodiscard]] bool is_weak() const { return ELF64_ST_BIND(info_) == STB_WEAK; }
@@ -214,6 +175,7 @@ public:
 	[[nodiscard]] bool is_relative() const { return type_on_host() == R_RISCV_RELATIVE; }
 	[[nodiscard]] bool is_irelative() const { return type_ == R_X86_64_IRELATIVE; }
 	[[nodiscard]] bool is_tpoff() const { return type_ == R_X86_64_TPOFF64; }
+	[[nodiscard]] bool is_dtpmod() const { return type_ == R_X86_64_DTPMOD64; }
 	[[nodiscard]] int type_on_host() const
 	{
 #if defined(ARCH_RISCV64)
@@ -277,6 +239,19 @@ public:
 private:
 	/// Each entry represents the runtime virtual address the RELR relocation needs to be applied to. This is probably different from the file offset.
 	std::vector<uint64_t> relocations_;
+};
+
+class plt_table : public section {
+public:
+	plt_table(
+		const void *data, off_t address, size_t data_size, const std::string &name, section_flags flags, const std::vector<std::pair<unsigned long, unsigned long>> &stubs, off_t offset)
+		: section(data, address, data_size, section_type::progbits, name, flags, offset)
+		, stubs_(stubs)
+	{}
+
+	[[nodiscard]] const std::vector<std::pair<unsigned long, unsigned long>> &stubs() const { return stubs_; }
+private:
+	std::vector<std::pair<unsigned long, unsigned long>> stubs_;
 };
 
 enum class program_header_type { null_program_header, loadable, dynamic, interp, note, shlib, program_headers, tls };
@@ -361,6 +336,12 @@ private:
 
 	void parse_relr(section_flags flags, const std::string &sec_name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size);
 
+	void parse_progbits(section_flags flags, const std::string &sec_name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size);
+
+	void parse_dynamic(section_flags flags, const std::string &sec_name, off_t address, off_t offset, size_t size, off_t link_offset, size_t entry_size);
+
+	void parse_plt();
+	void parse_got();
 #if __cplusplus > 202002L
 	constexpr const void *get_data_ptr(off_t offset) const { return (const void *)((uintptr_t)elf_data_ + offset); }
 #else

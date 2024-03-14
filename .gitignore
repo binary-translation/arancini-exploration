@@ -5,16 +5,22 @@
 **/*.out
 **/*-txl
 **/*.zip
+**/*.txt
+**/*.dump
+**/*.log
 out/
-tags
 build/
+bench/
+test/downloads
 build*/
 .cache/
 .vscode/
-lib/keystone
 generated.S
 cmake-build-*
 compile_commands.json
+result
 
 **/*.dot
 **/*.dot.*
+
+*.ll

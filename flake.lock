@@ -3,11 +3,11 @@
     "fadec-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1683630338,
-        "narHash": "sha256-NgBcr/PMDwsp1wcEwbWe70id0q9P9ipR6YA4rW5qBOg=",
+        "lastModified": 1688307171,
+        "narHash": "sha256-uje/mRj7WijOU6eUhvubyBiFlgK/1cZvnRg3hfYgaV4=",
         "owner": "aengelke",
         "repo": "fadec",
-        "rev": "f9ccffce4d3a319c8d654d36fe7ceddbfc4447fe",
+        "rev": "4ac9b8e12e488d061bbca70502e6798da69992d3",
         "type": "github"
       },
       "original": {
@@ -21,11 +21,11 @@
         "systems": "systems"
       },
       "locked": {
-        "lastModified": 1685518550,
-        "narHash": "sha256-o2d0KcvaXzTrPRIo0kOLV0/QXHhDQ5DTi+OxcjO8xqY=",
+        "lastModified": 1701680307,
+        "narHash": "sha256-kAuep2h5ajznlPMD9rnQyffWG8EM/C73lejGofXvdM8=",
         "owner": "numtide",
         "repo": "flake-utils",
-        "rev": "a1720a10a6cfe8234c0e93907ffe81be440f4cef",
+        "rev": "4022d587cbbfd70fe950c1e2083a02621806a725",
         "type": "github"
       },
       "original": {
@@ -37,11 +37,11 @@
     "mbuild-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1659030943,
-        "narHash": "sha256-nVHHiaPbf+b+RntjUGjLLGS53e6c+seXIBx7AcTtiWU=",
+        "lastModified": 1696509461,
+        "narHash": "sha256-GjBEnMZh3T2k3Xoa/D2HLMZT1wTPcRRlSpjm1bBM2WE=",
         "owner": "intelxed",
         "repo": "mbuild",
-        "rev": "75cb46e6536758f1a3cdb3d6bd83a4a9fd0338bb",
+        "rev": "c07bd90b71c608c615a7fa643d373f11ba355a24",
         "type": "github"
       },
       "original": {
@@ -52,11 +52,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1686737040,
-        "narHash": "sha256-R+JicNaI9mcxodtHkci894txjt4IMsfOnlAarA/r0xQ=",
+        "lastModified": 1704842529,
+        "narHash": "sha256-OTeQA+F8d/Evad33JMfuXC89VMetQbsU4qcaePchGr4=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "6d1d80a232a355a65dc4d3bfea1f108e8dac1340",
+        "rev": "eabe8d3eface69f5bb16c18f8662a702f50c20d5",
         "type": "github"
       },
       "original": {
@@ -93,11 +93,11 @@
     "xed-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1686143699,
-        "narHash": "sha256-Gv8zQDdUC8ICpFEEyMPVHpMcQEmmVimmk/9dQQ2CRI0=",
+        "lastModified": 1703097202,
+        "narHash": "sha256-xtegQroruk8DOKz5ybe5HZSo+HPCl6dn8xRgXGh0uSg=",
         "owner": "intelxed",
         "repo": "xed",
-        "rev": "4dc77137f651def2ece4ac0416607b215c18e6e4",
+        "rev": "2b5c29a1ab4ede026050c857306912da77503eaf",
         "type": "github"
       },
       "original": {

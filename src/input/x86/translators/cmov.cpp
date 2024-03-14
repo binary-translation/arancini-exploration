@@ -21,6 +21,7 @@ void cmov_translator::do_translate()
 	case XED_ICLASS_CMOVBE:
 		cond = compute_cond(cond_type::be);
 		break;
+	case XED_ICLASS_FCMOVE:
 	case XED_ICLASS_CMOVZ:
 		cond = compute_cond(cond_type::z);
 		break;
@@ -36,6 +37,7 @@ void cmov_translator::do_translate()
 	case XED_ICLASS_CMOVLE:
 		cond = compute_cond(cond_type::le);
 		break;
+	case XED_ICLASS_FCMOVNE:
 	case XED_ICLASS_CMOVNZ:
 		cond = compute_cond(cond_type::nz);
 		break;

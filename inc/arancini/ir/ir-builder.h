@@ -17,7 +17,7 @@ public:
 
 	internal_function_resolver &ifr() const { return ifr_; }
 
-	virtual void begin_chunk()
+	virtual void begin_chunk(const std::string &name)
 	{
 		// Create Allocator for the current chunk. It will be aliased by all the action_node pointers. So it stays active after the chunk is finished until all
 		// references to the action_nodes are released
@@ -131,7 +131,7 @@ public:
 	/// @brief Returns a node representing a write of the emulated program counter.
 	/// @param value The new value of the emulated PC.
 	/// @return A write pc node.
-	action_node *insert_write_pc(port &value) { return create_and_insert<write_pc_node>(value); }
+	action_node *insert_write_pc(port &value, br_type br_type, unsigned long target = 0) { return create_and_insert<write_pc_node>(value, br_type, target); }
 
 	/// @brief read register
 	/// @param vt value type
@@ -163,6 +163,8 @@ public:
 	/// @return a write memory node: [addr] := value
 	action_node *insert_write_mem(port &addr, port &value) { return create_and_insert<write_mem_node>(addr, value); }
 
+
+	value_node *insert_binop(binary_arith_op op, port &lhs, port &rhs) { return create_and_insert<binary_arith_node>(op, lhs, rhs); }
 	/// @brief addition
 	/// @param lhs first operand
 	/// @param rhs second operand

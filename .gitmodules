@@ -7,3 +7,6 @@
 [submodule "lib/fadec"]
 	path = lib/fadec
 	url = https://github.com/aengelke/fadec.git
+[submodule "scripts/a2a-benchmarks"]
+	path = scripts/a2a-benchmarks
+	url = git@github.com:rgouicem/a2a-benchmarks.git

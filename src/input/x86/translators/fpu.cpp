@@ -1,6 +1,7 @@
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/ir/ir-builder.h>
 #include <arancini/ir/node.h>
+#include <arancini/ir/internal-function-resolver.h>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
@@ -140,18 +141,35 @@ void fpu_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_FIADD:
   case XED_ICLASS_FISUB: {
     // xed encoding: fisub st(0) memint
     auto st0 = read_operand(0);
     auto op = read_operand(1);
     auto conv = builder().insert_convert(st0->val().type(), op->val());
-    auto res = builder().insert_sub(st0->val(), conv->val());
+
+	value_node *res;
+	switch(inst_class) {
+		case XED_ICLASS_FISUB: res = builder().insert_sub(st0->val(), conv->val()); break;
+		case XED_ICLASS_FIADD: res = builder().insert_add(st0->val(), conv->val()); break;
+		default: res = nullptr; break;
+	}
 
     write_operand(0, res->val());
 
     // TODO FPU flags
     break;
   }
+  case XED_ICLASS_FRNDINT: {
+	auto st0 = read_operand(0);
+	auto width = st0->val().type().width();
+	value_type toint = value_type::s64();
+	if (width == 32)
+		toint = value_type::s32();
+
+    auto conv = builder().insert_convert(toint, st0->val());
+	write_operand(0, builder().insert_convert(st0->val().type(), conv->val())->val());
+  } break;
 
   case XED_ICLASS_FMUL:
   case XED_ICLASS_FMULP: {
@@ -175,6 +193,22 @@ void fpu_translator::do_translate()
     // xed encoding: fdiv st(i) st(j)
     auto dst = read_operand(0);
     auto src = read_operand(1);
+
+    if (src->val().type().width() != 80) {
+      src = builder().insert_convert(dst->val().type(), src->val());
+    }
+
+    auto res = builder().insert_div(dst->val(), src->val());
+    write_operand(0, res->val());
+
+    // TODO FPU flags
+    break;
+  }
+  case XED_ICLASS_FDIVR:
+  case XED_ICLASS_FDIVRP: {
+    // xed encoding: fdiv st(i) st(j)
+    auto src = read_operand(0);
+    auto dst = read_operand(1);
 
     if (src->val().type().width() != 80) {
       src = builder().insert_convert(dst->val().type(), src->val());
@@ -249,7 +283,23 @@ void fpu_translator::do_translate()
     // TODO set C1 flag to 0
     break;
   }
-
+  case XED_ICLASS_F2XM1:
+  case XED_ICLASS_FYL2XP1:
+  case XED_ICLASS_FYL2X:
+  case XED_ICLASS_FLDL2E:
+  case XED_ICLASS_FLDL2T:
+  case XED_ICLASS_FLDPI:
+  case XED_ICLASS_FLDLG2:
+  case XED_ICLASS_FLDLN2:
+  case XED_ICLASS_FPATAN:
+  case XED_ICLASS_FIMUL:
+  case XED_ICLASS_FPREM1:
+  case XED_ICLASS_FSQRT:
+  case XED_ICLASS_SQRTSD:
+  case XED_ICLASS_SQRTSS:
+  case XED_ICLASS_FXAM: {
+		builder().insert_internal_call(builder().ifr().resolve("handle_poison"), {});
+  } break;
   case XED_ICLASS_FCOMI:
   case XED_ICLASS_FCOMIP:
   case XED_ICLASS_FUCOMI:
@@ -298,7 +348,6 @@ void fpu_translator::do_translate()
 
     break;
   }
-
   default:
 	  throw std::runtime_error("unsupported fpu operation");
   }
@@ -311,6 +360,7 @@ void fpu_translator::do_translate()
   case XED_ICLASS_FSUBRP:
   case XED_ICLASS_FMULP:
   case XED_ICLASS_FDIVP:
+  case XED_ICLASS_FDIVRP:
   case XED_ICLASS_FCOMIP:
   case XED_ICLASS_FUCOMIP:
 	  fpu_stack_top_move(1);

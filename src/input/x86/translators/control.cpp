@@ -1,6 +1,7 @@
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/ir/node.h>
 #include <arancini/ir/ir-builder.h>
+#include <arancini/ir/internal-function-resolver.h>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
@@ -37,6 +38,10 @@ void control_translator::do_translate()
   case XED_ICLASS_CLC:
     write_reg(reg_offsets::CF, builder().insert_constant_u1(0)->val());
     break;
+  case XED_ICLASS_STMXCSR:
+  case XED_ICLASS_LDMXCSR:
+	builder().insert_internal_call(builder().ifr().resolve("handle_poison"), {});
+	break;
 
 	default:
 		throw std::runtime_error("unhandled control register instruction");
