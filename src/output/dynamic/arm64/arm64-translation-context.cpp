@@ -1,8 +1,9 @@
-#include "arancini/ir/node.h"
-#include "arancini/ir/port.h"
-#include "arancini/ir/value-type.h"
-#include "arancini/output/dynamic/arm64/arm64-instruction.h"
+#include <arancini/ir/node.h>
+#include <arancini/ir/port.h>
+#include <arancini/ir/value-type.h>
+#include <arancini/output/dynamic/arm64/arm64-instruction.h>
 #include <arancini/output/dynamic/arm64/arm64-translation-context.h>
+#include <arancini/util/static-map.h>
 
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
 
@@ -12,7 +13,6 @@
 #include <stdexcept>
 #include <string>
 #include <cstddef>
-#include <unordered_map>
 
 using namespace arancini::output::dynamic::arm64;
 using namespace arancini::ir;
@@ -23,22 +23,27 @@ preg_operand context_block_reg(preg_operand::x29);
 static constexpr bool supports_lse = false;
 
 #define X86_OFFSET_OF(reg) __builtin_offsetof(struct arancini::runtime::exec::x86::x86_cpu_state, reg)
-enum class reg_offsets {
+enum class reg_definitions {
 #define DEFREG(ctype, ltype, name) name = X86_OFFSET_OF(name),
 #include <arancini/input/x86/reg.def>
 #undef DEFREG
 };
+
+template <typename T>
+reg_definitions get_reg_definition(T index) {
+    return static_cast<reg_definitions>(index);
+}
 
 const preg_operand ZF(preg_operand::x10);
 const preg_operand CF(preg_operand::x11);
 const preg_operand OF(preg_operand::x12);
 const preg_operand SF(preg_operand::x13);
 
-static std::unordered_map<unsigned long, vreg_operand> flag_map {
-	{ (unsigned long)reg_offsets::ZF, {} },
-	{ (unsigned long)reg_offsets::CF, {} },
-	{ (unsigned long)reg_offsets::OF, {} },
-	{ (unsigned long)reg_offsets::SF, {} },
+static util::static_map<reg_definitions, vreg_operand, 4> flag_map {
+	{ reg_definitions::ZF, {} },
+	{ reg_definitions::CF, {} },
+	{ reg_definitions::OF, {} },
+	{ reg_definitions::SF, {} },
 };
 
 static value_type addr_type() {
@@ -354,7 +359,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
 
     auto &src_vregs = materialise_port(n.value());
     if (is_flag_port(n.value())) {
-        const auto &src_vreg = flag_map.at(n.regoff());
+        const auto &src_vreg = flag_map.at(get_reg_definition(n.regoff()));
         auto addr = guestreg_memory_operand(n.regoff());
         builder_.strb(src_vreg, addr, "write flag: " + std::string(n.regname()));
         return;
@@ -486,7 +491,7 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
     }
 
     builder_.str(new_pc_vregs[0],
-                 guestreg_memory_operand(static_cast<int>(reg_offsets::PC)),
+                 guestreg_memory_operand(static_cast<int>(reg_definitions::PC)),
                  "write program counter");
 }
 
@@ -534,10 +539,10 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
     const auto &rhs_vreg = rhs_vregs[0];
     const auto &dest_vreg = dest_vregs[0];
 
-    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg(n.carry(), value_type::u1());
+    flag_map.at(reg_definitions::ZF) = alloc_vreg(n.zero(), value_type::u1());
+    flag_map.at(reg_definitions::SF) = alloc_vreg(n.negative(), value_type::u1());
+    flag_map.at(reg_definitions::OF) = alloc_vreg(n.overflow(), value_type::u1());
+    flag_map.at(reg_definitions::CF) = alloc_vreg(n.carry(), value_type::u1());
 
     // TODO: check
     const char* mod = nullptr;
@@ -595,7 +600,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             builder_.subs(dest_vreg, lhs_vreg, rhs_vreg, shift_operand(mod, immediate_operand(0, value_type::u16())));
         for (size_t i = 1; i < dest_vregs.size(); ++i)
             builder_.sbcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
-        builder_.setcc(flag_map[(unsigned long)reg_offsets::CF], "compute flag: CF");
+        builder_.setcc(flag_map.at(reg_definitions::CF), "compute flag: CF");
         break;
 	case binary_arith_op::mul:
         switch (dest_width) {
@@ -700,19 +705,19 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 	}
 
     // FIXME Another write-reg node generated?
-	builder_.setz(flag_map[(unsigned long)reg_offsets::ZF], "compute flag: ZF");
-	builder_.sets(flag_map[(unsigned long)reg_offsets::SF], "compute flag: SF");
-	builder_.seto(flag_map[(unsigned long)reg_offsets::OF], "compute flag: OF");
+	builder_.setz(flag_map.at(reg_definitions::ZF), "compute flag: ZF");
+	builder_.sets(flag_map.at(reg_definitions::SF), "compute flag: SF");
+	builder_.seto(flag_map.at(reg_definitions::OF), "compute flag: OF");
 
     if (n.op() != binary_arith_op::sub)
-        builder_.setc(flag_map[(unsigned long)reg_offsets::CF], "compute flag: CF");
+        builder_.setc(flag_map.at(reg_definitions::CF), "compute flag: CF");
 }
 
 void arm64_translation_context::materialise_ternary_arith(const ternary_arith_node &n) {
-    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg(n.carry(), value_type::u1());
+    flag_map.at(reg_definitions::ZF) = alloc_vreg(n.zero(), value_type::u1());
+    flag_map.at(reg_definitions::SF) = alloc_vreg(n.negative(), value_type::u1());
+    flag_map.at(reg_definitions::OF) = alloc_vreg(n.overflow(), value_type::u1());
+    flag_map.at(reg_definitions::CF) = alloc_vreg(n.carry(), value_type::u1());
 
 	const auto &dest_vregs = alloc_vregs(n.val());
     const auto &lhs_vregs = materialise_port(n.lhs());
@@ -770,10 +775,10 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
         }
     }
 
-	builder_.setz(flag_map[(unsigned long)reg_offsets::ZF], "compute flag: ZF");
-	builder_.sets(flag_map[(unsigned long)reg_offsets::SF], "compute flag: SF");
-	builder_.seto(flag_map[(unsigned long)reg_offsets::OF], "compute flag: OF");
-    builder_.setc(flag_map[(unsigned long)reg_offsets::CF], "compute flag: CF");
+	builder_.setz(flag_map.at(reg_definitions::ZF), "compute flag: ZF");
+	builder_.sets(flag_map.at(reg_definitions::SF), "compute flag: SF");
+	builder_.seto(flag_map.at(reg_definitions::OF), "compute flag: OF");
+    builder_.setc(flag_map.at(reg_definitions::CF), "compute flag: CF");
 }
 
 void arm64_translation_context::materialise_binary_atomic(const binary_atomic_node &n) {
@@ -790,10 +795,10 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
     const auto &dest_vreg = dest_vregs[0];
 
     // No need to handle flags: they are not visible to other PEs
-    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg(n.carry(), value_type::u1());
+    flag_map.at(reg_definitions::ZF) = alloc_vreg(n.zero(), value_type::u1());
+    flag_map.at(reg_definitions::SF) = alloc_vreg(n.negative(), value_type::u1());
+    flag_map.at(reg_definitions::OF) = alloc_vreg(n.overflow(), value_type::u1());
+    flag_map.at(reg_definitions::CF) = alloc_vreg(n.carry(), value_type::u1());
 
     memory_operand mem_addr(add_membase(addr_regs[0]));
 
@@ -823,7 +828,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             throw std::runtime_error("Atomic LDADD cannot handle sizes > 64-bit");
         }
         if (n.op() == binary_atomic_op::sub)
-            builder_.setcc(flag_map[(unsigned long)reg_offsets::CF]);
+            builder_.setcc(flag_map.at(reg_definitions::CF));
         break;
 	case binary_atomic_op::bor:
         switch (n.val().type().element_width()) {
@@ -999,12 +1004,12 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
 		throw std::runtime_error("unsupported binary atomic operation " + std::to_string((int)n.op()));
 	}
 
-	builder_.setz(flag_map[(unsigned long)reg_offsets::ZF], "write flag: ZF");
-	builder_.sets(flag_map[(unsigned long)reg_offsets::SF], "write flag: SF");
-	builder_.seto(flag_map[(unsigned long)reg_offsets::OF], "write flag: OF");
+	builder_.setz(flag_map.at(reg_definitions::ZF), "write flag: ZF");
+	builder_.sets(flag_map.at(reg_definitions::SF), "write flag: SF");
+	builder_.seto(flag_map.at(reg_definitions::OF), "write flag: OF");
 
     if (n.op() != binary_atomic_op::sub)
-        builder_.setc(flag_map[(unsigned long)reg_offsets::CF], "write flag: CF");
+        builder_.setc(flag_map.at(reg_definitions::CF), "write flag: CF");
 }
 
 void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_node &n) {
@@ -1028,10 +1033,10 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
                                  std::to_string(n.rhs().type().nr_elements()) + " x " + std::to_string(n.rhs().type().element_width()));
     }
 
-    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg(n.carry(), value_type::u1());
+    flag_map.at(reg_definitions::ZF) = alloc_vreg(n.zero(), value_type::u1());
+    flag_map.at(reg_definitions::SF) = alloc_vreg(n.negative(), value_type::u1());
+    flag_map.at(reg_definitions::OF) = alloc_vreg(n.overflow(), value_type::u1());
+    flag_map.at(reg_definitions::CF) = alloc_vreg(n.carry(), value_type::u1());
 
     auto mem_addr = memory_operand(add_membase(addr_vregs[0]));
 
@@ -1552,7 +1557,7 @@ void arm64_translation_context::materialise_internal_call(const internal_call_no
     if (n.fn().name() == "handle_syscall") {
         auto pc_vreg = mov_immediate(this_pc_ + 2, value_type::u64());
         builder_.str(pc_vreg,
-                     guestreg_memory_operand(static_cast<int>(reg_offsets::PC)),
+                     guestreg_memory_operand(static_cast<int>(reg_definitions::PC)),
                      "update program counter to handle system call");
         ret_ = 1;
     } else if (n.fn().name() == "handle_int") {
