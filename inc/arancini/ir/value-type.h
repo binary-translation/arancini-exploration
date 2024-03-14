@@ -1,10 +1,11 @@
 #pragma once
 
+#include <arancini/util/static-map.h>
+
 #include <fmt/core.h>
 
 #include <string>
 #include <vector>
-#include <unordered_map>
 
 namespace arancini::ir {
 enum class value_type_class { none, signed_integer, unsigned_integer, floating_point };
@@ -117,19 +118,15 @@ struct fmt::formatter<arancini::ir::value_type> {
         if (value.nr_elements() > 1) 
             fmt::format_to(format_ctx.out(), "v{}", value.nr_elements());
 
-        std::unordered_map<arancini::ir::value_type_class, char> match {
+        util::static_map<arancini::ir::value_type_class, char, 4> matches {
             { arancini::ir::value_type_class::none, 'v' },
             { arancini::ir::value_type_class::signed_integer, 's' },
             { arancini::ir::value_type_class::unsigned_integer, 'u' },
             { arancini::ir::value_type_class::floating_point, 'f' },
         };
 
-        char c = '?';
-        auto it = match.begin();
-        if ((it = match.find(value.type_class())) != match.end())
-            c = it->second;
-
-        return fmt::format_to(format_ctx.out(), "{}{}", c, value.element_width());
+        auto match = matches.get(value.type_class(), '?');
+        return fmt::format_to(format_ctx.out(), "{}{}", match, value.element_width());
     }
 };
 

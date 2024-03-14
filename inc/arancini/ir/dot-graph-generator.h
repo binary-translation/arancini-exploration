@@ -1,6 +1,8 @@
 #pragma once
 
+#include <arancini/util/static-map.h>
 #include <arancini/ir/default-visitor.h>
+
 #include <iostream>
 #include <set>
 
@@ -53,12 +55,14 @@ private:
 	node *cur_node_;
 	std::set<node *> seen_;
 
-	void add_node(const node *n, const std::string &label) { os_ << std::hex << "N" << n << " [shape=Mrecord, label=\"" << label << "\"]" << std::endl; }
+	void add_node(const node *n, const std::string &label) { 
+        os_ << fmt::format("N{} [shape=Mrecord, label=\"{}\"]\n", fmt::ptr(n), label);
+    }
 
 	std::string compute_port_label(const port *p) const
 	{
         // TA: FIXME
-        std::unordered_map<port_kinds, std::string> match = {
+        util::static_map<port_kinds, std::string, 5> matches = {
             { port_kinds::value, "value"},
             { port_kinds::constant, "#"},
             { port_kinds::negative, "N"},
@@ -67,12 +71,8 @@ private:
             { port_kinds::zero, "Z"}
         };
 
-        std::string value = "?";
-        auto it = match.begin();
-        if ((it = match.find(p->kind())) != match.end())
-            value = it->second;
-
-		return fmt::format("{}:{}", value, p->type());
+        auto match = matches.get(p->kind(), "?");
+		return fmt::format("{}:{}", match, p->type());
 	}
 
 	void add_port_edge(const port *from, const node *to, const std::string &link = "") { add_edge(from->owner(), to, "black", compute_port_label(from), link); }
@@ -81,20 +81,20 @@ private:
 
 	void add_edge(const node *from, const node *to, const std::string &colour = "black", const std::string &label = "", const std::string &link = "")
 	{
-		os_ << std::hex << "N" << from << " -> "
-			<< "N" << to;
+        std::string str;
+        fmt::format_to(std::back_inserter(str), "N{} -> N{}", fmt::ptr(from), fmt::ptr(to));
 
 		if (link != "") {
-			os_ << ":" << link;
+            fmt::format_to(std::back_inserter(str), ":{}", link);
 		}
 
-		os_ << " [color=" << colour;
+        fmt::format_to(std::back_inserter(str), " [color={}", colour);
 
 		if (label != "") {
-			os_ << ", label=\"" << label << "\"";
+            fmt::format_to(std::back_inserter(str), ", label=\"{}\"", label);
 		}
 
-		os_ << "]" << std::endl;
+        os_ << fmt::format("{}]\n", str);
 	}
 };
 } // namespace arancini::ir
