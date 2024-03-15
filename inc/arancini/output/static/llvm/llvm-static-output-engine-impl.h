@@ -134,6 +134,7 @@ private:
 	void restore_callee_regs(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, bool with_rets=true);
 	// passes
 	::llvm::Function *get_static_fn(std::shared_ptr<ir::packet> pkt);
+	::llvm::Instruction *create_static_br(::llvm::IRBuilder<> *builder, std::shared_ptr<ir::packet> pkt, std::map<unsigned long, ::llvm::BasicBlock *> *blocks, ::llvm::BasicBlock *mid);
 	::llvm::Instruction *create_static_condbr(::llvm::IRBuilder<> *builder, std::shared_ptr<ir::packet> pkt, std::map<unsigned long, ::llvm::BasicBlock *> *blocks, ::llvm::BasicBlock *mid);
 	::llvm::FunctionType *get_fn_type();
 	std::vector<::llvm::Value *> load_args(::llvm::IRBuilder<> *builder, ::llvm::Argument *state_arg);

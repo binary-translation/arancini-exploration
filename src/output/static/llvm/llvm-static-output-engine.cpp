@@ -1695,7 +1695,14 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 				}
 				break;
 			}
-			case br_type::br:
+			case br_type::br: {
+				auto condbr = create_static_br(builder, p, &blocks, mid);
+				if (!condbr) {
+					builder->CreateBr(mid);
+				}
+				packet_block = nullptr;
+				break;
+			}
 			case br_type::csel: {
 				auto condbr = create_static_condbr(builder, p, &blocks, mid);
 				if (!condbr) {

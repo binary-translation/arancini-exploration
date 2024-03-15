@@ -258,7 +258,54 @@ void llvm_arg_visitor::resolve_waiting() {
 	}
 }
 
-Instruction *llvm_static_output_engine_impl::create_static_condbr(IRBuilder<> *builder, std::shared_ptr<packet> pkt, std::map<unsigned long, BasicBlock *> *blocks, BasicBlock *mid) {
+Instruction *llvm_static_output_engine_impl::create_static_br(
+	IRBuilder<> *builder, std::shared_ptr<packet> pkt, std::map<unsigned long, BasicBlock *> *blocks, BasicBlock *mid)
+{
+	auto it = builder->GetInsertPoint();
+	if ((--it)->getOpcode() != Instruction::Store)
+		return nullptr;
+
+	if (it->getOperand(1)->getName()!="regPC") {
+		return nullptr;
+	}
+
+	auto addr = dyn_cast<ConstantInt>(it->getOperand(0));
+
+	BasicBlock *follow_block = mid;
+	std::map<unsigned long, BasicBlock *>::iterator bb_it;
+
+	// Add can constant fold on creation
+	if (addr) {
+		bb_it = blocks->find(addr->getZExtValue());
+		follow_block = bb_it != blocks->end() ? bb_it->second : mid;
+	} else {
+		auto addr1 = dyn_cast<ConstantExpr>(it->getOperand(0));
+		ConstantInt *pc_val = nullptr;
+		ConstantInt *offs = nullptr;
+		if (addr1 && addr1->getOpcode() == Instruction::Add) {
+			auto pc = dyn_cast<ConstantExpr>(addr1->getOperand(0));
+			if (pc && pc->getOpcode() == Instruction::PtrToInt) {
+				pc = dyn_cast<ConstantExpr>(pc->getOperand(0));
+				if (pc && pc->getOpcode() == Instruction::GetElementPtr) {
+					pc_val = dyn_cast<ConstantInt>(pc->getOperand(1));
+				}
+			}
+			offs = dyn_cast<ConstantInt>(addr1->getOperand(1));
+		}
+		if (offs && pc_val) {
+			bb_it = blocks->find(offs->getZExtValue() + pc_val->getZExtValue());
+			follow_block = bb_it != blocks->end() ? bb_it->second : mid;
+		}
+	}
+
+	if (follow_block != mid)
+		fixed_branches++;
+	return builder->CreateBr(follow_block);
+};
+
+Instruction *llvm_static_output_engine_impl::create_static_condbr(
+	IRBuilder<> *builder, std::shared_ptr<packet> pkt, std::map<unsigned long, BasicBlock *> *blocks, BasicBlock *mid)
+{
 	auto it = builder->GetInsertPoint();
 	if ((--it)->getOpcode() != Instruction::Store)
 		return nullptr;
