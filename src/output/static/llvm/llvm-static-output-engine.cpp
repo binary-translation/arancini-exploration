@@ -1728,7 +1728,13 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 	dyn->insertInto(fn);
 
 	builder->SetInsertPoint(mid);
-	auto pc = builder->CreateLoad(types.i64, pc_ptr, "local-pc");
+	Value* pc = builder->CreateLoad(types.i64, pc_ptr, "local-pc");
+	if (!e_.is_exec()) {
+		Value *gvar = module_->getOrInsertGlobal("guest_base", types.i8);
+		gvar = builder->CreateGEP(types.i8, gvar, ConstantInt::get(types.i64, 0));
+		gvar = builder->CreatePtrToInt(gvar, types.i64);
+		pc = builder->CreateSub(pc, gvar);
+	}
 	auto fnswitch = builder->CreateSwitch(pc, dyn);
 
 	for (auto p : blocks) {

@@ -278,13 +278,51 @@ Instruction *llvm_static_output_engine_impl::create_static_condbr(IRBuilder<> *b
 	if (true_addr) {
 		bb_it = blocks->find(true_addr->getZExtValue());
 		true_block = bb_it != blocks->end() ? bb_it->second : mid;
+	} else {
+		auto true_addr1 = dyn_cast<ConstantExpr>(it->getOperand(1));
+		ConstantInt *pc_val = nullptr;
+		ConstantInt *offs = nullptr;
+		if (true_addr1 && true_addr1->getOpcode() == Instruction::Add) {
+
+			auto pc = dyn_cast<ConstantExpr>(true_addr1->getOperand(0));
+			if (pc && pc->getOpcode() == Instruction::PtrToInt) {
+				pc = dyn_cast<ConstantExpr>(pc->getOperand(0));
+				if (pc && pc->getOpcode() == Instruction::GetElementPtr) {
+					pc_val = dyn_cast<ConstantInt>(pc->getOperand(1));
+				}
+			}
+			offs = dyn_cast<ConstantInt>(true_addr1->getOperand(1));
+		}
+		if (offs && pc_val) {
+			bb_it = blocks->find(offs->getZExtValue() + pc_val->getZExtValue());
+			true_block = bb_it != blocks->end() ? bb_it->second : mid;
+		}
 	}
 
 	if (false_addr) {
 		bb_it = blocks->find(false_addr->getZExtValue());
 		false_block = bb_it != blocks->end() ? bb_it->second : mid;
 	}
+	else {
+		auto false_addr1 = dyn_cast<ConstantExpr>(it->getOperand(2));
+		ConstantInt *pc_val = nullptr;
+		ConstantInt* offs = nullptr;
+		if (false_addr1 && false_addr1->getOpcode() == Instruction::Add) {
 
+			auto pc = dyn_cast<ConstantExpr>(false_addr1->getOperand(0));
+			if (pc && pc->getOpcode() == Instruction::PtrToInt) {
+				pc = dyn_cast<ConstantExpr>(pc->getOperand(0));
+				if (pc && pc->getOpcode() == Instruction::GetElementPtr) {
+					pc_val = dyn_cast<ConstantInt>(pc->getOperand(1));
+				}
+			}
+			offs = dyn_cast<ConstantInt>(false_addr1->getOperand(1));
+		}
+		if (offs && pc_val) {
+			bb_it = blocks->find(offs->getZExtValue() + pc_val->getZExtValue());
+			false_block = bb_it != blocks->end() ? bb_it->second : mid;
+		}
+	}
 	if (true_block != mid && false_block != mid)
 		fixed_branches++;
 	return builder->CreateCondBr(cond, true_block, false_block);
