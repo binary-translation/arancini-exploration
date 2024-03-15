@@ -208,6 +208,7 @@ void llvm_static_output_engine_impl::create_static_functions()
 		fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
 		fn->addParamAttr(0, Attribute::getWithDereferenceableBytes(*llvm_context_, sizeof(runtime::exec::x86::x86_cpu_state)));
 		fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
+		fn->addParamAttr(0, Attribute::getWithAlignment(*llvm_context_, Align(16)));
 		(*fns_)[c->packets()[0]->address()] = fn;
 	}
 }
@@ -237,6 +238,7 @@ void llvm_static_output_engine_impl::build()
 		loop_fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
 		loop_fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
 		loop_fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
+		loop_fn->addParamAttr(0, Attribute::getWithAlignment(*llvm_context_, Align(16)));
 
 		create_main_function(loop_fn);
 	} else {
