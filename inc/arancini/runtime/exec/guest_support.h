@@ -162,5 +162,6 @@ struct lib_info {
 	size_t tls_align;
 	uint64_t tls_offset;
 	uint64_t **dtp_mod;
+	uint64_t *func_map;
 	struct lib_info *next;
 };

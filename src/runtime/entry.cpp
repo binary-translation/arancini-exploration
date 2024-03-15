@@ -224,6 +224,8 @@ lib_info *lib_info_list_tail = nullptr;
 int lib_count = 0;
 }
 
+static std::unordered_map<unsigned long, void *> fn_addrs;
+
 /*
  * Initialises the dynamic runtime for the guest program that is about to be executed.
  */
@@ -326,6 +328,11 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 			auto cur_dso = new dso();
 			cur_dso->dynv = lib->dynv;
 			cur_dso->base = lib->base;
+
+			for (uint64_t* func_map = lib->func_map;  *func_map ; func_map+=2) {
+				fn_addrs.emplace(func_map[0], (void*)func_map[1]);
+			}
+
 			if (lib->tls_len) {
 
 				cur_dso->tls = { nullptr, lib->tls_image, lib->tls_len, lib->tls_size, lib->tls_align, lib->tls_offset };
@@ -413,8 +420,6 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	// so that the static code can use it for emulation.
 	return main_thread->get_cpu_state();
 }
-
-static std::unordered_map<unsigned long, void *> fn_addrs;
 
 /**
  * Register a static function so it can be called from the main loop

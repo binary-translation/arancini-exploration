@@ -247,6 +247,18 @@ void llvm_static_output_engine_impl::build()
 
 	if (!e_.is_exec()) {
 		lower_chunks(loop_fn);
+
+		{
+			func_map_.push_back(ConstantInt::get(types.i64, 0));
+			func_map_.push_back(ConstantInt::get(types.i64, 0));
+
+			ArrayType *ty = ArrayType::get(types.i64, func_map_.size());
+			auto *gvar = reinterpret_cast<GlobalVariable *>(module_->getOrInsertGlobal("__FUNCMAP", ty));
+			gvar->setInitializer(ConstantArray::get(ty, func_map_));
+			gvar->setLinkage(GlobalValue::ExternalLinkage);
+			gvar->setVisibility(GlobalValue::HiddenVisibility);
+		}
+
 		debug_dump();
 		return;
 	}
@@ -1590,7 +1602,16 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 	std::map<unsigned long, BasicBlock *> blocks;
 
 	auto fn = fns_->at(c->packets()[0]->address());
-	if (fn->begin() != fn->end()) return;
+	if (fn->begin() != fn->end())
+		return;
+
+	{
+		Constant *gvar = module_->getOrInsertGlobal("guest_base", types.i8);
+		gvar = reinterpret_cast<Constant *>(builder->CreateGEP(types.i8, gvar, ConstantInt::get(types.i64, c->packets()[0]->address())));
+		func_map_.push_back(gvar);
+		func_map_.push_back(fn);
+	}
+
 #if defined(DEBUG)
 	std::stringstream entry;
 	entry << "do-static-" << fn->getName().str();
