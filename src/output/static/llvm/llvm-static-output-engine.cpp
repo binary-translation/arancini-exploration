@@ -796,8 +796,14 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 	case node_kinds::read_pc: {
 		// auto src_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 0) }, "pcptr");
 		// return builder.CreateLoad(types.i64, src_reg);
+		Value *val = ConstantInt::get(types.i64, pkt->address());
+		if (!e_.is_exec()) {
+			Value *gvar = module_->getOrInsertGlobal("guest_base", types.i8);
+			val = builder.CreateGEP(types.i8, gvar, val);
+			val = builder.CreatePtrToInt(val, types.i64);
+		}
 
-		return ConstantInt::get(types.i64, pkt->address());
+		return val;
 	}
 
 	case node_kinds::cast: {
