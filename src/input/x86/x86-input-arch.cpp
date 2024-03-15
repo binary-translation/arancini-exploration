@@ -400,7 +400,10 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 	nr_chunk++;
 
 	size_t offset = 0;
-    std::string disasm;
+	std::string disasm;
+	
+	translation_result r;
+	
 	while (offset < code_size) {
 		xed_decoded_inst_t xedd;
 		xed_decoded_inst_zero(&xedd);
@@ -439,6 +442,13 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 		offset += length;
 		base_address += length;
+	}
+
+	if (r==translation_result::normal) {
+		//End of translation but no set of PC
+		builder.begin_packet(0);
+		builder.insert_write_pc(builder.insert_constant_u64(base_address + offset)->val(), br_type::br);
+		builder.end_packet();
 	}
 
 	builder.end_chunk();
