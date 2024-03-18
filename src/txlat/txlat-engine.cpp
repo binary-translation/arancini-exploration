@@ -215,11 +215,11 @@ next:
 
 	if (cmdline.count("no-script")) {
 		if (elf.type() == elf_type::exec) {
-			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + " -l arancini-runtime -L "
-				+ arancini_runtime_lib_dir + " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info + verbose_link);
+			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + "-L "
+				+ arancini_runtime_lib_dir + " -l arancini-runtime -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info + verbose_link);
 		} else if (elf.type() == elf::elf_type::dyn) {
-			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -shared " + intermediate_file->name() + +" -l arancini-runtime -L "
-				+ arancini_runtime_lib_dir + " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info + verbose_link);
+			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -shared " + intermediate_file->name() + "-L "
+				+ arancini_runtime_lib_dir + " -l arancini-runtime -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info + verbose_link);
 		}
 		return;
 	}
@@ -260,8 +260,9 @@ next:
 
 		if (elf.type() == elf::elf_type::exec) {
 			// Generate the final output binary by compiling everything together.
-			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie -latomic " + intermediate_file->name() + libs + " " + phobjsrc->name()
-				+ " -l arancini-runtime -L " + arancini_runtime_lib_dir + " -Wl,-T,exec.lds,-rpath=" + arancini_runtime_lib_dir + debug_info);
+			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie -latomic " + intermediate_file->name() + libs + " "
+				+ phobjsrc->name() + " -L " + arancini_runtime_lib_dir + " -l arancini-runtime -Wl,-T,exec.lds,-rpath=" + arancini_runtime_lib_dir
+				+ debug_info);
 		} else if (elf.type() == elf::elf_type::dyn) {
 			// Generate the final output library by compiling everything together.
 			std::string tls_defines = tls.empty() ? ""
@@ -269,8 +270,8 @@ next:
 					+ " -DTLS_ALIGN=" + std::to_string(tls[0]->align());
 
 			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -fPIC -shared " + intermediate_file->name() + " " + phobjsrc->name()
-				+ tls_defines + " init_lib.c -l arancini-runtime -L " + arancini_runtime_lib_dir + libs + " -Wl,-T,lib.lds,-rpath=" + arancini_runtime_lib_dir
-				+ debug_info);
+				+ tls_defines + " init_lib.c -L " + arancini_runtime_lib_dir + " -l arancini-runtime " + libs
+				+ " -Wl,-T,lib.lds,-rpath=" + arancini_runtime_lib_dir + debug_info);
 		} else {
 			throw std::runtime_error("Input elf type must be either an executable or shared object.");
 		}

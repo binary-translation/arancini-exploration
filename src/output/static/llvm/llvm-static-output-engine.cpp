@@ -1913,7 +1913,17 @@ void llvm_static_output_engine_impl::optimise()
 void llvm_static_output_engine_impl::compile()
 {
 	std::cout << "Fixed branches: " << fixed_branches << std::endl;
+#ifndef CROSS_TRANSLATE
 	auto TT = sys::getDefaultTargetTriple();
+#elif defined(ARCH_RISCV64)
+	auto TT = "riscv64-unknown-linux-gnu";
+#elif defined(ARCH_AARCH64)
+	auto TT = "aarch64-unknown-linux-gnu";
+#error Please check if the triple above is correct
+#elif defined(ARCH_X86_64)
+	auto TT = "x86_64-unknown-linux-gnu";
+#error Please check if the triple above is correct
+#endif
 	module_->setTargetTriple(TT);
 
 	std::string error_message;

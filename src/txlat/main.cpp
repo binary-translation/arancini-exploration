@@ -48,12 +48,24 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 			"Specify the syntax to use when disassembling host instructions (x86 input only: att or intel)") //
 		("graph", po::value<std::string>(), "Creates a DOT graph file representing the input ELF translation") //
 		("no-static", "Do not do any static translation") //
-        ("runtime-lib-path", po::value<std::string>()->default_value(ARANCINI_LIBPATH), "Path to arancini libraries (defaults specified by build system)") //
+#ifndef CROSS_TRANSLATE
+		("runtime-lib-path", po::value<std::string>()->default_value(ARANCINI_LIBPATH), "Path to arancini libraries (defaults specified by build system)") //
 		("static-binary", po::value<std::string>()->implicit_value(ARANCINI_LIBDIR)->zero_tokens(),
 			"Link the generated binary statically to the arancini libraries inside this path. Requires to have built the arancini-runtime-static target. "
 			"Default specified by build system.") //
-		("wrapper", po::value<std::string>()) //
 		("cxx-compiler-path", po::value<std::string>()->default_value("g++"), "Path to C++ compiler to use for translated binary") //
+#else
+		("runtime-lib-path", po::value<std::string>()->required(),
+			"Path to arancini libraries. This txlat is configured to cross translate, so you are"
+			" required to provide the path of the arancini-runtime library compiled for " DBT_ARCH_STR ". ") //
+		("static-binary", po::value<std::string>(),
+			"Link the generated binary statically to the arancini libraries inside this path. Requires to have built the arancini-runtime-static target "
+			"for " DBT_ARCH_STR ". ") //
+		("cxx-compiler-path", po::value<std::string>()->required(),
+			"Path to C++ compiler to use for translated binary. This txlat is configured to cross translate, so you are required to provide a valid "
+			"cross-compiler for " DBT_ARCH_STR ". ") //
+#endif
+		("wrapper", po::value<std::string>()) //
 		("debug-gen", "Include debugging information in the generated output binary") //
 		("debug", "Enable debugging output") //
 		("verbose-link", "Enable verbose output of the linker (-Wl,--verbose)") //
