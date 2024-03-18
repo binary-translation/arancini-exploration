@@ -295,6 +295,26 @@ next:
 			libs = stringstream.str();
 		}
 
+		{
+			std::stringstream stringstream;
+			for (const auto &nlib : needed_nlibs) {
+
+				if (nlib.find('/') != std::string::npos) {
+					// Path not file name
+					stringstream << " " << nlib;
+				} else { // File name
+					if ((strncmp(nlib.c_str(), "lib", 3) == 0) && (strncmp(nlib.c_str() + (nlib.size() - 3), ".so", 3) == 0)) {
+						stringstream << " -l" << nlib.substr(3, nlib.size() - 6); //Starts with lib and ends with .so use -l
+					}
+					else {
+						stringstream << " " << nlib;
+					}
+				}
+			}
+
+			libs += stringstream.str();
+		}
+
 		if (elf.type() == elf::elf_type::exec) {
 			// Generate the final output binary by compiling everything together.
             run_or_fail(fmt::format("{} -o {} -no-pie -latomic {} {} {} -larancini-runtime -L {} -Wl,-T,{}.exec.lds,-rpath={} {} {}",
