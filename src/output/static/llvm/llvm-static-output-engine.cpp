@@ -1936,7 +1936,7 @@ void llvm_static_output_engine_impl::compile()
 	}
 
 	TargetOptions TO;
-	auto RM = std::optional<Reloc::Model>(Reloc::Model::PIC_);
+	auto RM = optional<Reloc::Model>(Reloc::Model::PIC_);
 #if defined(ARCH_RISCV64)
 	//Add multiply(M), atomics(A), single(F) and double(D) precision float and compressed(C) extensions
 	const char *features = "+m,+a,+f,+d,+c";
