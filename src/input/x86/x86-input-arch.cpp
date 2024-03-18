@@ -422,7 +422,7 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 		xed_uint_t length = xed_decoded_inst_get_length(&xedd);
 
-		auto r = translate_instruction(builder, base_address, &xedd, debug(), da_, disasm);
+		r = translate_instruction(builder, base_address, &xedd, debug(), da_, disasm);
 
 		if (r == translation_result::fail) {
 			throw std::runtime_error("instruction translation failure: " + std::to_string(xed_error));
@@ -447,7 +447,7 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 	if (r==translation_result::normal) {
 		//End of translation but no set of PC
 		builder.begin_packet(0);
-		builder.insert_write_pc(builder.insert_constant_u64(base_address + offset)->val(), br_type::br);
+		builder.insert_write_pc(builder.insert_constant_u64(base_address)->val(), br_type::br);
 		builder.end_packet();
 	}
 
