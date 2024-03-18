@@ -192,26 +192,35 @@ void llvm_static_output_engine_impl::create_static_functions()
 {
 	for (auto c : chunks_) {
 
-		auto it = fns_->find(c->packets()[0]->address());
-		if (it != fns_->end()) {
+		off_t addr = c->packets()[0]->address();
+		if (addr != 0) {
 
-			auto old = it->second;
-			GlobalAlias::create(get_fn_type(),
-								old->getAddressSpace(),
-								GlobalValue::LinkageTypes::ExternalLinkage,
-								c->name(),
-								old,
-								module_.get());
-			continue;
+			auto it = fns_->find(addr);
+			if (it != fns_->end()) {
+
+				auto old = it->second;
+				GlobalAlias::create(get_fn_type(), old->getAddressSpace(), GlobalValue::LinkageTypes::ExternalLinkage, c->name(), old, module_.get());
+				continue;
+			}
+			auto fn = Function::Create(get_fn_type(), GlobalValue::LinkageTypes::ExternalLinkage, c->name(), *module_);
+			fn->addParamAttr(0, Attribute::AttrKind::NonNull);
+			fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
+			fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
+			fn->addParamAttr(0, Attribute::getWithDereferenceableBytes(*llvm_context_, sizeof(runtime::exec::x86::x86_cpu_state)));
+			fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
+			fn->addParamAttr(0, Attribute::getWithAlignment(*llvm_context_, Align(16)));
+			(*fns_)[addr] = fn;
+		} else {
+			// Wrapper
+			auto fn = Function::Create(get_fn_type(), GlobalValue::LinkageTypes::ExternalLinkage, c->name(), *module_);
+			fn->addParamAttr(0, Attribute::AttrKind::NonNull);
+			fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
+			fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
+			fn->addParamAttr(0, Attribute::getWithDereferenceableBytes(*llvm_context_, sizeof(runtime::exec::x86::x86_cpu_state)));
+			fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
+			fn->addParamAttr(0, Attribute::getWithAlignment(*llvm_context_, Align(16)));
+			(*wrapper_fns_)[c->name()] = fn;
 		}
-		auto fn = Function::Create(get_fn_type(), GlobalValue::LinkageTypes::ExternalLinkage, c->name(), *module_);
-		fn->addParamAttr(0, Attribute::AttrKind::NonNull);
-		fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
-		fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
-		fn->addParamAttr(0, Attribute::getWithDereferenceableBytes(*llvm_context_, sizeof(runtime::exec::x86::x86_cpu_state)));
-		fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
-		fn->addParamAttr(0, Attribute::getWithAlignment(*llvm_context_, Align(16)));
-		(*fns_)[c->packets()[0]->address()] = fn;
 	}
 }
 
@@ -1229,6 +1238,10 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 	        load->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(load->getContext(), guest_mem_alias_scope_));
 	        return load;
 	}
+	case node_kinds::internal_call: {
+		if (p.kind() == port_kinds::value)
+			return lower_node(builder, state_arg, pkt, n);
+	}
 	default:
 		throw std::runtime_error("materialize_port: unsupported port node kind " + std::to_string((int)n->kind()));
 	}
@@ -1516,9 +1529,15 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		return out;
 	}
 	case node_kinds::internal_call: {
-        auto icn = (internal_call_node *)a;
-        auto switch_callee = module_->getOrInsertFunction("execute_internal_call", types.internal_call_handler);
-        if (icn->fn().name() == "handle_syscall") {
+		auto icn = (internal_call_node *)a;
+
+		auto existing = node_ports_to_llvm_values_.find(&icn->val());
+		if (existing != node_ports_to_llvm_values_.end())
+			return existing->second;
+
+
+		auto switch_callee = module_->getOrInsertFunction("execute_internal_call", types.internal_call_handler);
+		if (icn->fn().name() == "handle_syscall") {
 
 			auto clk_ = module_->getOrInsertFunction("clk", types.clk_fn);
 
@@ -1544,11 +1563,62 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 			builder.SetInsertPoint(cont_block);
 			return ret;
-        }
-        if (icn->fn().name() == "handle_poison" || icn->fn().name() == "hlt") {
-                return builder.CreateCall(switch_callee, { state_arg, ConstantInt::get(types.i32, 3) });
-        }
-        throw std::runtime_error("unsupported internal call type" + icn->fn().name());
+		}
+		if (icn->fn().name() == "handle_poison" || icn->fn().name() == "hlt") {
+			return builder.CreateCall(switch_callee, { state_arg, ConstantInt::get(types.i32, 3) });
+		} else {
+			const port &ret = icn->val();
+			const std::vector<port *> &args = icn->args();
+			const internal_function &func = icn->fn();
+
+			Type *retty;
+			if (ret.type().is_floating_point()) {
+				if (ret.type().element_width() == 32) {
+					retty = types.f32;
+				} else if (ret.type().element_width() == 64) {
+					retty = types.f64;
+				}
+			} else if (ret.type().is_integer()) {
+				switch (ret.type().width()) {
+				case 1:
+					retty = types.i1;
+					break;
+				case 8:
+					retty = types.i8;
+					break;
+				case 16:
+					retty = types.i16;
+					break;
+				case 32:
+					retty = types.i32;
+					break;
+				case 64:
+					retty = types.i64;
+					break;
+				default:
+					throw std::runtime_error("unsupported register width " + std::to_string(ret.type().width()) + " in internal_call return");
+				}
+			} else if (ret.type().type_class() == value_type_class::none) {
+				retty = types.vd;
+			}
+			std::vector<Type *> argtys;
+			std::vector<Value *> arg_vals;
+
+			for (const auto arg : args) {
+				auto arg_val = lower_port(builder, state_arg, pkt, *arg);
+				argtys.push_back(arg_val->getType());
+				arg_vals.push_back(arg_val);
+			}
+
+			FunctionType *ftype = FunctionType::get(retty, argtys, false);
+			const FunctionCallee &ext_func = module_->getOrInsertFunction(func.name(), ftype);
+
+			CallInst *out = builder.CreateCall(ext_func, arg_vals);
+
+			node_ports_to_llvm_values_[&icn->val()] = out;
+
+			return out;
+		}
 	}
 	case node_kinds::write_local: {
         auto wln = (write_local_node *)a;
@@ -1618,15 +1688,39 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 {
 	std::map<unsigned long, BasicBlock *> blocks;
 
-	auto fn = fns_->at(c->packets()[0]->address());
-	if (fn->begin() != fn->end())
-		return;
+	off_t addr = c->packets()[0]->address();
+	Function *fn;
+	if (addr != 0) {
+		fn = fns_->at(addr);
+		auto it = wrapper_fns_->find(c->name() + "_wrapper");
+		if (it != wrapper_fns_->end()) {
+			// Don't translate if we have a wrapper
+			auto old = it->second;
+			fn->replaceAllUsesWith(old);
+			fn->eraseFromParent();
+			GlobalAlias::create(get_fn_type(), old->getAddressSpace(), GlobalValue::LinkageTypes::ExternalLinkage, c->name(), old, module_.get());
+			(*fns_)[addr] = old;
+			return;
+		}
+		if (fn->begin() != fn->end())
+			return;
 
-	{
-		Constant *gvar = module_->getOrInsertGlobal("guest_base", types.i8);
-		gvar = reinterpret_cast<Constant *>(builder->CreateGEP(types.i8, gvar, ConstantInt::get(types.i64, c->packets()[0]->address())));
-		func_map_.push_back(gvar);
-		func_map_.push_back(fn);
+		{
+			Constant *gvar = module_->getOrInsertGlobal("guest_base", types.i8);
+			gvar = reinterpret_cast<Constant *>(builder->CreateGEP(types.i8, gvar, ConstantInt::get(types.i64, addr)));
+			func_map_.push_back(gvar);
+			func_map_.push_back(fn);
+		}
+	} else {
+		// Wrapper
+		fn = wrapper_fns_->at(c->name());
+
+		{
+			// __arancini__ prefix has length 12, _wrapper suffix has length 8
+			Constant *gvar = module_->getOrInsertGlobal("__guest__" + c->name().substr(12, c->name().size() - (8 + 12)), types.i8);
+			func_map_.push_back(gvar);
+			func_map_.push_back(fn);
+		}
 	}
 
 #if defined(DEBUG)

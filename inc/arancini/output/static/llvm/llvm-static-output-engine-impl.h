@@ -61,6 +61,7 @@ private:
 	std::unique_ptr<::llvm::LLVMContext> llvm_context_;
 	std::unique_ptr<::llvm::Module> module_;
 	std::shared_ptr<std::map<unsigned long, ::llvm::Function *>> fns_ = std::make_shared<std::map<unsigned long, ::llvm::Function *>>();
+	std::shared_ptr<std::map<std::string, ::llvm::Function *>> wrapper_fns_ = std::make_shared<std::map<std::string, ::llvm::Function *>>();
 	std::vector<::llvm::Constant *> func_map_;
 	bool in_br;
 

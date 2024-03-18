@@ -457,7 +457,7 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 void x86_input_arch::gen_wrapper(ir_builder &builder, const native_lib::nlib_function &func)
 {
 
-	builder.begin_chunk(func.fname + "_wrapper");
+	builder.begin_chunk("__arancini__" + func.fname + "_wrapper");
 	builder.begin_packet(0);
 
 	std::vector<value_type> params = func.sig.parameter_types();
