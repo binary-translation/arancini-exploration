@@ -509,5 +509,21 @@ void x86_input_arch::gen_wrapper(ir_builder &builder, const native_lib::nlib_fun
 		throw std::runtime_error("Float return types unsupported in native lib wrapper.");
 	}
 	builder.end_packet();
+
+	// Simulate return
+	builder.begin_packet(1);
+
+	// FIXME Copy pasted from ret translation
+
+	auto rsp = builder.insert_read_reg(value_type::u64(), static_cast<unsigned long>(reg_offsets::RSP), static_cast<unsigned long>(reg_idx::RSP), "RSP");
+	auto retaddr = builder.insert_read_mem(value_type::u64(), rsp->val());
+
+	auto new_rsp = builder.insert_add(rsp->val(), builder.insert_constant_u64(8)->val());
+	builder.insert_write_reg(static_cast<unsigned long>(reg_offsets::RSP), static_cast<unsigned long>(reg_idx::RSP), "RSP", new_rsp->val());
+
+	builder.insert_write_pc(retaddr->val(), br_type::ret);
+
+	builder.end_packet();
+
 	builder.end_chunk();
 }
