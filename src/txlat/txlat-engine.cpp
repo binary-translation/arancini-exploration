@@ -133,7 +133,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		}
 	}
 
-	// PASS2	
+	// PASS2
 	for ( const auto &p : zero_size) {
 		::util::global_logger.debug("PASS2: doing (0 size), symbol {}\n", p.first.name());
 		// find the address of the symbol after sym in the text section, and assume that the size of sym is until there
@@ -149,14 +149,16 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	}
 
 	// Generate decls for external functions found in the relocation table
-	
-	for (auto rs : relocations) {
+
+	for (const auto& rs : relocations) {
 		for (auto r : rs->relocations()) {
 			auto sym_idx = r.symbol();
 			auto dst = r.offset();
 			auto sym = dyn_sym->symbols().at(sym_idx);
-			for ( auto s : sym_t->symbols()) {
-				if (s.name().compare(sym.name()))
+			if (!sym.is_func())
+				continue;
+			for (const auto& s : sym_t->symbols()) {
+				if (s.name() == sym.name() && s.section_index() != SHN_UNDEF)
 					goto next;
 			}
 
