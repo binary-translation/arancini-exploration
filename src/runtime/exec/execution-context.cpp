@@ -512,6 +512,10 @@ int execution_context::internal_call(void *cpu_state, int call)
             util::global_logger.debug("System call: exit()\n");
 			native_syscall(__NR_exit, x86_state->RDI);
             break;
+		case 324: //membarrier
+			util::global_logger.debug("System call: membarrier()\n");
+			native_syscall(__NR_rseq, x86_state->RDI, x86_state->RSI);
+			break;
 		default:
             util::global_logger.error("Unsupported system call: {:#x}\n", util::copy(x86_state->RAX));
 			return 1;

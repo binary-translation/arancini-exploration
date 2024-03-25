@@ -468,7 +468,7 @@ void binop_translator::do_translate()
 		auto dest = read_operand(0);
 		auto op0 = read_operand(0);
 		auto op1 = read_operand(1);
-		auto op2 = read_operand(2);
+		auto op2 = (constant_node *)read_operand(2);
 
 		value_node *true_val;
 		value_node *false_val;
@@ -495,7 +495,7 @@ void binop_translator::do_translate()
 		op0 = builder().insert_vector_extract(op0->val(), 0);
 		op1 = builder().insert_bitcast(VecTy, op1->val());
 		op1 = builder().insert_vector_extract(op1->val(), 0);
-		op2 = builder().insert_and(op2->val(), mask->val());
+		auto op_code = op2->const_val_i();
 
 		/*
 		 * 0 - ordered eq
@@ -508,77 +508,19 @@ void binop_translator::do_translate()
 		 * 7 - ordered
 		 */
 
-		builder().insert_br(builder().insert_label("check_op"));
-		cond_br_node *cbrs[7];
-		auto cnd = builder().insert_cmpeq(op2->val(), builder().insert_constant_u8(0)->val());
-		cbrs[0] = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
-		cnd = builder().insert_cmpeq(op2->val(), builder().insert_constant_u8(1)->val());
-		cbrs[1] = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
-		cnd = builder().insert_cmpeq(op2->val(), builder().insert_constant_u8(2)->val());
-		cbrs[2] = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
-		cnd = builder().insert_cmpeq(op2->val(), builder().insert_constant_u8(3)->val());
-		cbrs[3] = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
-		cnd = builder().insert_cmpeq(op2->val(), builder().insert_constant_u8(4)->val());
-		cbrs[4] = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
-		cnd = builder().insert_cmpeq(op2->val(), builder().insert_constant_u8(5)->val());
-		cbrs[5] = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
-		cnd = builder().insert_cmpeq(op2->val(), builder().insert_constant_u8(6)->val());
-		cbrs[6] = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
-		auto br = (br_node *)builder().insert_br(nullptr);	
-
-		br_node *brs[8];
-		auto lbl = builder().insert_label("op7");
-		br->add_br_target(lbl);
-		auto res = builder().insert_csel(builder().insert_binop(binary_arith_op::cmpo, op0->val(), op1->val())->val(), true_val->val(), false_val->val());
-		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
-		brs[7] = (br_node *)builder().insert_br(nullptr);
-
-		lbl = builder().insert_label("op6");
-		cbrs[6]->add_br_target(lbl);
-		res = builder().insert_csel(builder().insert_binop(binary_arith_op::cmpunle, op0->val(), op1->val())->val(), true_val->val(), false_val->val());
-		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
-		brs[6] = (br_node *)builder().insert_br(nullptr);
-
-		lbl = builder().insert_label("op5");
-		cbrs[5]->add_br_target(lbl);
-		res = builder().insert_csel(builder().insert_binop(binary_arith_op::cmpunlt, op0->val(), op1->val())->val(), true_val->val(), false_val->val());
-		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
-		brs[5] = (br_node *)builder().insert_br(nullptr);
-
-		lbl = builder().insert_label("op4");
-		cbrs[4]->add_br_target(lbl);
-		res = builder().insert_csel(builder().insert_binop(binary_arith_op::cmpune, op0->val(), op1->val())->val(), true_val->val(), false_val->val());
-		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
-		brs[4] = (br_node *)builder().insert_br(nullptr);
-
-		lbl = builder().insert_label("op3");
-		cbrs[3]->add_br_target(lbl);
-		res = builder().insert_csel(builder().insert_binop(binary_arith_op::cmpu, op0->val(), op1->val())->val(), true_val->val(), false_val->val());
-		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
-		brs[3] = (br_node *)builder().insert_br(nullptr);
-
-		lbl = builder().insert_label("op2");
-		cbrs[2]->add_br_target(lbl);
-		res = builder().insert_csel(builder().insert_binop(binary_arith_op::cmpole, op0->val(), op1->val())->val(), true_val->val(), false_val->val());
-		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
-		brs[2] = (br_node *)builder().insert_br(nullptr);
-
-		lbl = builder().insert_label("op1");
-		cbrs[1]->add_br_target(lbl);
-		res = builder().insert_csel(builder().insert_binop(binary_arith_op::cmpolt, op0->val(), op1->val())->val(), true_val->val(), false_val->val());
-		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
-		brs[1] = (br_node *)builder().insert_br(nullptr);
-
-		lbl = builder().insert_label("op0");
-		cbrs[0]->add_br_target(lbl);
-		res = builder().insert_csel(builder().insert_binop(binary_arith_op::cmpoeq, op0->val(), op1->val())->val(), true_val->val(), false_val->val());
-		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
-		brs[0] = (br_node *)builder().insert_br(nullptr);
-
-		lbl = builder().insert_label("end");
-		for (auto i = 0; i < 8; i++) {
-			brs[i]->add_br_target(lbl);
+		value_node *cond;
+		switch (op_code) {
+			case 0: cond = builder().insert_binop(binary_arith_op::cmpoeq, op0->val(), op1->val()); break;
+			case 1: cond = builder().insert_binop(binary_arith_op::cmpolt, op0->val(), op1->val()); break;
+			case 2: cond = builder().insert_binop(binary_arith_op::cmpole, op0->val(), op1->val()); break;
+			case 3: cond = builder().insert_binop(binary_arith_op::cmpu, op0->val(), op1->val()); break;
+			case 4: cond = builder().insert_binop(binary_arith_op::cmpune, op0->val(), op1->val()); break;
+			case 5: cond = builder().insert_binop(binary_arith_op::cmpunlt, op0->val(), op1->val()); break;
+			case 6: cond = builder().insert_binop(binary_arith_op::cmpunle, op0->val(), op1->val()); break;
+			case 7: cond = builder().insert_binop(binary_arith_op::cmpo, op0->val(), op1->val()); break;
 		}
+		auto res = builder().insert_csel(cond->val(), true_val->val(), false_val->val());
+		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
 	} break;
 	case XED_ICLASS_MAXSS:
 	case XED_ICLASS_MAXSD:
