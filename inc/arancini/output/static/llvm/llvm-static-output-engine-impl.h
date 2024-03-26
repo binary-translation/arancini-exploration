@@ -143,6 +143,7 @@ private:
 	std::vector<::llvm::Value*> wrap_ret(::llvm::IRBuilder<> *builder, ::llvm::Argument *state_arg);
 	void create_function_decls();
 	void create_static_functions();
+	::llvm::PHINode *create_static_fn_switch(::llvm::IRBuilder<> &builder, ::llvm::Value *pc, ::llvm::BasicBlock *cont_block);
 	
 	::llvm::Value *createLoadFromCPU(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, unsigned long reg_idx);
 	void createStoreToCPU(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, unsigned int ret_idx, ::llvm::Value *ret, unsigned long reg_idx);

@@ -182,6 +182,27 @@ void llvm_static_output_engine_impl::create_main_function(Function *loop_fn)
 	builder.CreateRet(ConstantInt::get(types.i32, 1));
 }
 
+::llvm::PHINode *llvm_static_output_engine_impl::create_static_fn_switch(::llvm::IRBuilder<> &builder, ::llvm::Value *pc, ::llvm::BasicBlock *cont_block) {
+	auto *pc_switch = builder.CreateSwitch(pc, cont_block);
+
+	auto *call_block = BasicBlock::Create(*llvm_context_, "call_static_fn", cont_block->getParent());
+	builder.SetInsertPoint(call_block);
+	auto *fn_addr = builder.CreatePHI(get_fn_type()->getPointerTo(), chunks_.size());
+	for (const auto f : *fns_) {
+		auto *b = BasicBlock::Create(*llvm_context_, "Call" + f.second->getName(), cont_block->getParent());
+		builder.SetInsertPoint(b);
+		fn_addr->addIncoming(f.second, b);
+		builder.CreateBr(call_block);
+		pc_switch->addCase(ConstantInt::get(types.i64, f.first), b);
+	}
+
+	builder.SetInsertPoint(call_block);
+	return fn_addr;
+//	auto *call = builder.CreateCall(get_fn_type(), fn_addr, args);
+//	call->setCallingConv(CallingConv::Arancini);
+//	return call;
+}
+
 void llvm_static_output_engine_impl::create_function_decls() {
 
 	for (auto n : extern_fns_) {
@@ -426,16 +447,22 @@ void llvm_static_output_engine_impl::lower_chunks(Function *main_loop)
 }
 
 void llvm_static_output_engine_impl::lower_static_fn_lookup(IRBuilder<> &builder, BasicBlock *contblock, Value *guestAddr) {
+	auto lookup_block = BasicBlock::Create(*llvm_context_, "lookup", contblock->getParent());
 	auto LookupFn = module_->getOrInsertFunction("lookup_static_fn_addr", types.lookup_static_fn);
 
 	auto clk_ = module_->getOrInsertFunction("clk", types.clk_fn);
 
+	auto *fn_addr_phi = create_static_fn_switch(builder, guestAddr, lookup_block);
+
+	builder.SetInsertPoint(lookup_block);
 	auto result = builder.CreateCall(LookupFn, { guestAddr });
+	fn_addr_phi->addIncoming(result, lookup_block);
 	auto cmp = builder.CreateCmp(CmpInst::Predicate::ICMP_NE, result, ConstantPointerNull::get(Type::getInt8PtrTy(*llvm_context_)));
 
-	auto b = BasicBlock::Create(*llvm_context_, "call_static_fn", contblock->getParent());
+	auto *b = fn_addr_phi->getParent();
 
 	builder.CreateCondBr(cmp, b, contblock);
+
 	auto cpu_state = contblock->getParent()->getArg(0);
 
 	builder.SetInsertPoint(b);
@@ -465,8 +492,7 @@ void llvm_static_output_engine_impl::lower_static_fn_lookup(IRBuilder<> &builder
 	}
 	assert(args.size() == 18 && "Expected 18 arguments");
 
-	auto f = builder.CreateBitCast(result, get_fn_type()->getPointerTo());
-	auto call = builder.CreateCall(get_fn_type(), f, args);
+	auto call = builder.CreateCall(get_fn_type(), fn_addr_phi, args);
 	call->setCallingConv(CallingConv::Arancini);
 
 	assert(call->getType()->isStructTy() && "Expected return type to be struct type");
