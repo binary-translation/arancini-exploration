@@ -230,8 +230,8 @@ void llvm_static_output_engine_impl::build()
 	auto rfdom = mdb.createAnonymousAliasScopeDomain("reg-file");
 	reg_file_alias_scope_ = mdb.createAnonymousAliasScope(rfdom, "reg-file-scope");
 
-	create_function_decls();
 	create_static_functions();
+	create_function_decls();
 
 	// Only the executable needs a MainLoop and main
 	Function *loop_fn;

@@ -157,10 +157,6 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 			auto sym = dyn_sym->symbols().at(sym_idx);
 			if (!sym.is_func())
 				continue;
-			for (const auto& s : sym_t->symbols()) {
-				if (s.name() == sym.name() && s.section_index() != SHN_UNDEF)
-					goto next;
-			}
 
 			::util::global_logger.debug("Searching decl for {} @ {:#x}\n", sym.name(), dst);
 			for (const auto &st : plt_tab->stubs()) {
