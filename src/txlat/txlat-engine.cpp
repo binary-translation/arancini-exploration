@@ -13,6 +13,7 @@
 #include <arancini/util/tempfile.h>
 #include <chrono>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <optional>
 #include <ostream>
@@ -286,6 +287,8 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
 	std::map<uint64_t, std::string> ifuncs = generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym, relocations, relocations_r, sym_t, tls);
 
+	std::filesystem::copy(intermediate_file->name(), cmdline.at("output").as<std::string>() + ".int.o", std::filesystem::copy_options::overwrite_existing);
+	std::filesystem::copy(phobjsrc->name(), cmdline.at("output").as<std::string>() + ".int.S", std::filesystem::copy_options::overwrite_existing);
 
 	if (!cmdline.count("static-binary")) {
 		std::string libs;
@@ -319,6 +322,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		}
 
 		if (elf.type() == elf::elf_type::exec) {
+			run_or_fail(cxx_compiler + " -c -o " + cmdline.at("output").as<std::string>() + ".int.S.o -no-pie " + phobjsrc->name());
 			// Generate the final output binary by compiling everything together.
             run_or_fail(fmt::format("{} -o {} -no-pie -latomic {} {} {} -larancini-runtime -L {} -Wl,-T,{}.exec.lds,-rpath={} {} {}",
                         cxx_compiler, cmdline.at("output").as<std::string>(), intermediate_file->name(), libs, phobjsrc->name(),
@@ -329,6 +333,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 												  : " -DTLS_LEN=" + std::to_string(tls[0]->data_size()) + " -DTLS_SIZE=" + std::to_string(tls[0]->mem_size())
 					+ " -DTLS_ALIGN=" + std::to_string(tls[0]->align());
 
+			run_or_fail(cxx_compiler + " -c -o " + cmdline.at("output").as<std::string>() + ".int.S.o -fPIC -shared " + phobjsrc->name());
 			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -fPIC -shared " + intermediate_file->name() + " " + phobjsrc->name()
 				+ tls_defines + " init_lib.c -L " + arancini_runtime_lib_dir + " -l arancini-runtime " + libs
 				+ " -Wl,-T,lib.lds,-rpath=" + arancini_runtime_lib_dir + debug_info);
@@ -348,6 +353,9 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
                                 "/../../obj -l xed {} -Wl,-T,{}.exec.lds,-rpath={}", cxx_compiler, cmdline.at("output").as<std::string>(), intermediate_file->name(),
                                 phobjsrc->name(), arancini_runtime_lib_dir, arancini_runtime_lib_dir, debug_info, architecture, arancini_runtime_lib_dir));
 	}
+
+	std::filesystem::copy(
+		cmdline.at("output").as<std::string>(), cmdline.at("output").as<std::string>() + ".int", std::filesystem::copy_options::overwrite_existing);
 
 	// Patch relocations in result binary
 	const auto &output = cmdline.at("output").as<std::string>();
