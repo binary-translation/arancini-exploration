@@ -64,7 +64,13 @@ public:
 		if (original == nullptr) {
 			// Increment the next allocation by the size of the current allocation, aligned
 			// by 16 bytes.
-			next_allocation_ = (void *)((uintptr_t)next_allocation_ + ((current_allocation_size_ + 15) & ~0xfull));
+#ifdef NDEBUG
+#define SPACE 0
+#else
+#define SPACE 0x3f0
+#endif
+			next_allocation_ = (void *)((uintptr_t)next_allocation_ + ((current_allocation_size_ + 15 + SPACE) & ~0xfull));
+#undef SPACE
 
 			if ((uintptr_t)next_allocation_ > ((uintptr_t)arena_.base() + arena_.size())) {
 				throw std::runtime_error("out of memory");
