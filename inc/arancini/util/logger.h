@@ -226,6 +226,16 @@ public:
     base_type &log(Args&&... args) {
         return log(stdout, std::forward<Args>(args)...);
     }
+
+	template <auto f, typename... Args> std::conditional_t<enabled, std::invoke_result_t<decltype(f), Args...>, std::string> optional_call(Args &&...args)
+	{
+		if constexpr (!enabled) {
+			return {};
+		} else {
+			return f(std::forward<Args>(args)...);
+		}
+	}
+
 private:
     bool enabled_ = enabled;
     std::string prefix_;
