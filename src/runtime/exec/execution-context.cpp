@@ -124,11 +124,12 @@ std::shared_ptr<execution_thread> execution_context::create_execution_thread()
 int execution_context::invoke(void *cpu_state) {
     if (!cpu_state) throw std::invalid_argument("invoke() received null CPU state");
 
-	auto et = threads_[cpu_state];
+	auto &et = threads_[cpu_state];
 	if (!et) throw std::runtime_error("unable to resolve execution thread");
 
 	auto x86_state = (x86::x86_cpu_state *)cpu_state;
 
+	//FIXME logging separator is relatively expensive. If this is called often optimize it.
     util::global_logger.info("{}\n", util::logging_separator('=')).
                         info("INVOKE PC = {:#x}\n", util::copy(x86_state->PC)).
                         info("{}\n", util::logging_separator('='));
