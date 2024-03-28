@@ -536,6 +536,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		}
 
 		LoadInst *li = builder.CreateLoad(ty, address_ptr);
+		builder.CreateFence(AtomicOrdering::Acquire);
 		li->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(li->getContext(), guest_mem_alias_scope_));
 		return li;
 	}
@@ -1335,6 +1336,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 			address_ptr_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, guest_mem_alias_scope_));
 		}
 
+		builder.CreateFence(AtomicOrdering::Release);
 		auto store = builder.CreateStore(value, address_ptr);
 		store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), guest_mem_alias_scope_));
 		return store;
@@ -1434,6 +1436,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 			return existing->second;
 
 		lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
+		builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
 		AtomicRMWInst *out = nullptr;
 		switch(ban->op()) {
 			case binary_atomic_op::band: builder.CreateAtomicRMW(AtomicRMWInst::And, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
@@ -1453,6 +1456,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 			return out;
 		}
 		auto ret = builder.CreateLoad(rhs->getType(), builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256)), "Atomic result");
+		builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
 		node_ports_to_llvm_values_[&ban->val()] = ret;
 		return ret;
 	}
@@ -1469,15 +1473,18 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto rax_node = tan->rhs().owner();
 		assert((rax_node->kind() == node_kinds::read_reg) || "Cmpxcg[top] is not a register");
 		auto reg_idx = ((read_reg_node *)rax_node)->regidx();
-		auto rax_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, reg_idx) });
+		//auto rax_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, reg_idx) });
+		auto rax_reg = reg_to_alloca_.at(reg_offsets::RAX);
 
 		Value *out;
 		switch(tan->op()) {
 			case ternary_atomic_op::cmpxchg: {
 				lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
+				builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
 				auto instr = builder.CreateAtomicCmpXchg(lhs, rhs, top, Align(1), AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
 				auto new_rax_val = builder.CreateSelect(builder.CreateExtractValue(instr, 1), rhs, builder.CreateExtractValue(instr, 0));
 				builder.CreateStore(builder.CreateZExt(new_rax_val, types.i64), rax_reg);
+				builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
 
 				return instr;
 			}

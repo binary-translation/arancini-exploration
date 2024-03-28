@@ -132,10 +132,10 @@ int execution_context::invoke(void *cpu_state) {
     util::global_logger.info("{}\n", util::logging_separator('=')).
                         info("INVOKE PC = {:#x}\n", util::copy(x86_state->PC)).
                         info("{}\n", util::logging_separator('='));
-    util::global_logger.info("Registers:\n{}\n", *x86_state).
-                        info("{}\n", util::logging_separator('-'));
-    util::global_logger.debug("STACK:\n").
-                        debug("{}\n", util::logging_separator('-'));
+    //util::global_logger.info("Registers:\n{}\n", *x86_state).
+    //                    info("{}\n", util::logging_separator('-'));
+    //util::global_logger.debug("STACK:\n").
+    //                    debug("{}\n", util::logging_separator('-'));
     //auto* memptr = reinterpret_cast<uint64_t*>(get_memory_ptr(0)) + x86_state->RSP;
     //x86::print_stack(std::cerr, memptr, 20);
 
@@ -388,6 +388,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 
 			auto et = create_execution_thread();
 			auto new_x86_state = (x86::x86_cpu_state *)et->get_cpu_state();
+			util::global_logger.debug("New CPU state: {:#x}\n", (uintptr_t)new_x86_state);
 			memcpy(new_x86_state, x86_state, sizeof(*x86_state));
 
 			new_x86_state->RAX = 0;
