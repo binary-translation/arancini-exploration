@@ -1545,8 +1545,8 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 			builder.SetInsertPoint(cont_block);
 			return ret;
         }
-        if (icn->fn().name() == "handle_poison") {
-                return builder.CreateCall(switch_callee, { state_arg, ConstantInt::get(types.i32, 2) });
+        if (icn->fn().name() == "handle_poison" || icn->fn().name() == "hlt") {
+                return builder.CreateCall(switch_callee, { state_arg, ConstantInt::get(types.i32, 3) });
         }
         throw std::runtime_error("unsupported internal call type" + icn->fn().name());
 	}

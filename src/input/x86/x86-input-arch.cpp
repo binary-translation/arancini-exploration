@@ -112,7 +112,6 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 		return std::make_unique<cmov_translator>(builder);
 
 	case XED_ICLASS_NOP:
-	case XED_ICLASS_HLT:
 	case XED_ICLASS_CPUID:
 	case XED_ICLASS_PREFETCHNTA:
   case XED_ICLASS_PAUSE:
@@ -338,7 +337,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_FYL2X:
   case XED_ICLASS_F2XM1:
 		return std::make_unique<fpu_translator>(builder);
-
+  case XED_ICLASS_HLT:
 	case XED_ICLASS_INT:
 	case XED_ICLASS_INT3:
 	case XED_ICLASS_SYSCALL:

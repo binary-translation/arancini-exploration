@@ -38,6 +38,12 @@ void interrupt_translator::do_translate()
 		break;
 	}
 
+	case XED_ICLASS_HLT:
+	{
+		builder().insert_internal_call(builder().ifr().resolve("hlt"), {});
+		break;
+	}
+
 	default:
 		throw std::runtime_error("unsupported interrupt operation");
 	}
