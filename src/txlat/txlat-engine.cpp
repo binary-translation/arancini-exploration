@@ -533,14 +533,6 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 		end_addresses[phdr->address() + phdr->data_size()] = 2 * i;
 
 		off_t address = phdr->address();
-		if (tls.size() == 1) {
-			// Other cases handled below
-
-			// TLS initialized data (.tdata) is part of one of the LOAD headers (typically at the start), add a symbol so we can initialize it at runtime.
-			if (phdr->offset() == tls[0]->offset()) {
-				s << "guest_tls:\n";
-			}
-		}
 
 		// Add 2 sections per PT_LOAD header (one for initialized and one for uninitialized data.
 		l << ".gph.load" << std::dec << i << ".1 " << address << ": { *("
@@ -556,6 +548,16 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 		//				s << 'x';
 		//			}
 		s << "\"\n";
+
+		if (tls.size() == 1) {
+			// Other cases handled below
+
+			// TLS initialized data (.tdata) is part of one of the LOAD headers (typically at the start), add a symbol so we can initialize it at runtime.
+			if (phdr->offset() == tls[0]->offset()) {
+				s << "guest_tls:\n";
+			}
+		}
+
 
 		s << ".ifndef guest_base\nguest_base:\n.globl guest_base\n.hidden guest_base\n";
 		if (elf.type() == elf::elf_type::exec) {
