@@ -135,7 +135,7 @@ void mov_translator::do_translate()
     } else { // movsd xmm1, xmm2
       auto dst = read_operand(0);
       src = builder().insert_bit_extract(src->val(), 0, 64);
-      dst = builder().insert_bit_insert(dst->val(), src->val(), 0, 64);
+      src = builder().insert_bit_insert(dst->val(), src->val(), 0, 64);
     }
     write_operand(0, src->val());
     break;
