@@ -1,6 +1,6 @@
 #pragma once
 
-#include <map>
+#include <unordered_map>
 
 namespace arancini::runtime::dbt {
 class translation;
@@ -21,6 +21,6 @@ public:
 	void insert(unsigned long addr, translation *obj) { translations_[addr] = obj; }
 
 private:
-	std::map<unsigned long, translation *> translations_;
+	std::unordered_map<unsigned long, translation *> translations_;
 };
 } // namespace arancini::runtime::dbt
