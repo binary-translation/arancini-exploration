@@ -1158,14 +1158,13 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			return lower_node(builder, state_arg, pkt, n);
 
 		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
-		auto lhs = lower_port(builder, state_arg, pkt, ban->address());
+		auto lhs = lower_port(builder, state_arg, pkt, ban->val());
 #ifndef ARCH_X86_64
 		//auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
 		auto gs_reg = reg_to_alloca_.at(reg_offsets::GS);
 		//lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, gs_reg));
 #endif
-		lhs = builder.CreateLoad(rhs->getType(), builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256)), "Atomic LHS");
-		auto value_port = lower_port(builder, state_arg, pkt, n->val());
+		auto value_port = lower_port(builder, state_arg, pkt, ban->operation_value());
 
 		if (p.kind() == port_kinds::zero) {
 			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, value_port, ConstantInt::get(value_port->getType(), 0)), types.i8);
@@ -1437,28 +1436,52 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 		lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
 		builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
-		AtomicRMWInst *out = nullptr;
-		switch(ban->op()) {
-			case binary_atomic_op::band: builder.CreateAtomicRMW(AtomicRMWInst::And, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
-			case binary_atomic_op::add: builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
-			case binary_atomic_op::sub: builder.CreateAtomicRMW(AtomicRMWInst::Sub, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
-			case binary_atomic_op::xadd: out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
-			case binary_atomic_op::bor: out = builder.CreateAtomicRMW(AtomicRMWInst::Or, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
-			case binary_atomic_op::xchg: out = builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent); break;
-			default: throw std::runtime_error("unsupported bin atomic operation " + std::to_string((int)ban->op()));
+		AtomicRMWInst *out;
+		Value *val;
+		switch (ban->op()) {
+		case binary_atomic_op::band:
+			out = builder.CreateAtomicRMW(AtomicRMWInst::And, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent);
+			val = builder.CreateAnd(out, rhs);
+			break;
+		case binary_atomic_op::add:
+			out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent);
+			val = builder.CreateAdd(out, rhs);
+			break;
+		case binary_atomic_op::sub:
+			out = builder.CreateAtomicRMW(AtomicRMWInst::Sub, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent);
+			val = builder.CreateSub(out, rhs);
+			break;
+		case binary_atomic_op::xadd:
+			//			out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent);
+			throw std::runtime_error("Should not happen");
+			break;
+		case binary_atomic_op::bor:
+			out = builder.CreateAtomicRMW(AtomicRMWInst::Or, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent);
+			val = builder.CreateOr(out, rhs);
+			break;
+		case binary_atomic_op::xchg:
+			out = builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent);
+			val = rhs;
+			break;
+		default:
+			throw std::runtime_error("unsupported bin atomic operation " + std::to_string((int)ban->op()));
 		}
-		if (out) {
-			switch (ban->op()) {
-				//case binary_atomic_op::xadd: out = builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, out, Align(64), AtomicOrdering::SequentiallyConsistent); break;
-				default: break;
-			}
-			node_ports_to_llvm_values_[&ban->val()] = out;
-			return out;
-		}
-		auto ret = builder.CreateLoad(rhs->getType(), builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256)), "Atomic result");
-		builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
-		node_ports_to_llvm_values_[&ban->val()] = ret;
-		return ret;
+		//		if (out) {
+		//			switch (ban->op()) {
+		//			// case binary_atomic_op::xadd: out = builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, out, Align(64),
+		//AtomicOrdering::SequentiallyConsistent);
+		//			// break;
+		//			default:
+		//				break;
+		//			}
+		node_ports_to_llvm_values_[&ban->val()] = out;
+		node_ports_to_llvm_values_[&ban->operation_value()] = val;
+		return out;
+		//		}
+		//		auto ret = builder.CreateLoad(rhs->getType(), builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256)), "Atomic result");
+		//		builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
+		//		node_ports_to_llvm_values_[&ban->val()] = ret;
+		//		return ret;
 	}
 	case node_kinds::ternary_atomic: {
 		auto tan = (ternary_atomic_node *)a;
