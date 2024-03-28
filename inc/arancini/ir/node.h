@@ -692,6 +692,7 @@ public:
 		, negative_(port_kinds::negative, value_type::u1(), this)
 		, overflow_(port_kinds::overflow, value_type::u1(), this)
 		, carry_(port_kinds::carry, value_type::u1(), this)
+		, operation_value_(port_kinds::operation_value, vt, this)
 	{
 	}
 
@@ -700,11 +701,13 @@ public:
 	port &negative() { return negative_; }
 	port &overflow() { return overflow_; }
 	port &carry() { return carry_; }
+	port &operation_value() { return operation_value_; }
 
 	const port &zero() const { return zero_; }
 	const port &negative() const { return negative_; }
 	const port &overflow() const { return overflow_; }
 	const port &carry() const { return carry_; }
+	const port &operation_value() const { return operation_value_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -715,7 +718,7 @@ public:
 	}
 
 private:
-	port zero_, negative_, overflow_, carry_;
+	port zero_, negative_, overflow_, carry_, operation_value_;
 };
 
 enum class unary_atomic_op { neg, bnot };

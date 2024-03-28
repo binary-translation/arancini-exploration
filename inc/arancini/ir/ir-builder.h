@@ -253,13 +253,13 @@ public:
 	///         tmp := [mem] + reg
 	///         reg := [mem]
 	///         [mem] := tmp
-	action_node *insert_atomic_xadd(port &mem, port &reg) { return create_and_insert<binary_atomic_node>(binary_atomic_op::xadd, mem, reg); }
+	atomic_node *insert_atomic_xadd(port &mem, port &reg) { return create_and_insert<binary_atomic_node>(binary_atomic_op::add, mem, reg); }
 
 	/// @brief atomic exchange
 	/// @param mem: the memory address used in the instruction
 	/// @param reg: the register used in the instruction
 	/// @return an atomic xchg node: [mem] := reg, reg := [mem]
-	action_node *insert_atomic_xchg(port &mem, port &reg) { return create_and_insert<binary_atomic_node>(binary_atomic_op::xchg, mem, reg); }
+	atomic_node *insert_atomic_xchg(port &mem, port &reg) { return create_and_insert<binary_atomic_node>(binary_atomic_op::xchg, mem, reg); }
 
 	/// @brief atomic compare-exchange
 	/// @param dst: destination operand, needs to be a memory address
