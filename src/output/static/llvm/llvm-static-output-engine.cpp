@@ -538,27 +538,29 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		}
 
 		LoadInst *li = builder.CreateLoad(ty, address_ptr);
-		li->setOrdering(AtomicOrdering::Acquire);
+		bool is_stack = false;
 		if (rmn->address().owner()->kind() == node_kinds::binary_arith) {
 			auto ban = (binary_arith_node *)rmn->address().owner();
 			if (ban->lhs().owner()->kind() == node_kinds::read_reg) {
 				auto rrn = (read_reg_node *)ban->lhs().owner();
 				if (rrn->regoff() == (unsigned long)reg_offsets::RSP) {
-					li->setOrdering(AtomicOrdering::Unordered);
+					is_stack = true;
 				}
 			} else if (ban->rhs().owner()->kind() == node_kinds::read_reg) {
 				auto rrn = (read_reg_node *)ban->rhs().owner();
 				if (rrn->regoff() == (unsigned long)reg_offsets::RSP) {
-					li->setOrdering(AtomicOrdering::Unordered);
+					is_stack = true;
 				}
 			}
 		}
 		else if (rmn->address().owner()->kind() == node_kinds::read_reg) {
 			auto rrn = (read_reg_node *)rmn->address().owner();
 			if (rrn->regoff() == (unsigned long)reg_offsets::RSP) {
-				li->setOrdering(AtomicOrdering::Unordered);
+				is_stack = true;
 			}
 		}
+		if (!is_stack)
+			builder.CreateFence(AtomicOrdering::Acquire);
 		li->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(li->getContext(), guest_mem_alias_scope_));
 		return li;
 	}
@@ -1356,29 +1358,31 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		if (auto address_ptr_i = ::llvm::dyn_cast<Instruction>(address_ptr)) {
 			address_ptr_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, guest_mem_alias_scope_));
 		}
-
-		auto store = builder.CreateStore(value, address_ptr);
-		store->setOrdering(AtomicOrdering::Release);
+		
+		bool is_stack = false;
 		if (wmn->address().owner()->kind() == node_kinds::binary_arith) {
 			auto ban = (binary_arith_node *)wmn->address().owner();
 			if (ban->lhs().owner()->kind() == node_kinds::read_reg) {
 				auto rrn = (read_reg_node *)ban->lhs().owner();
 				if (rrn->regoff() == (unsigned long)reg_offsets::RSP) {
-					store->setOrdering(AtomicOrdering::Unordered);
+					is_stack = true;
 				}
 			} else if (ban->rhs().owner()->kind() == node_kinds::read_reg) {
 				auto rrn = (read_reg_node *)ban->rhs().owner();
 				if (rrn->regoff() == (unsigned long)reg_offsets::RSP) {
-					store->setOrdering(AtomicOrdering::Unordered);
+					is_stack = true;
 				}
 			}
 		}
 		else if (wmn->address().owner()->kind() == node_kinds::read_reg) {
 			auto rrn = (read_reg_node *)wmn->address().owner();
 			if (rrn->regoff() == (unsigned long)reg_offsets::RSP) {
-				store->setOrdering(AtomicOrdering::Unordered);
+				is_stack = true;
 			}
 		}
+		if (!is_stack)
+			builder.CreateFence(AtomicOrdering::Release);
+		auto store = builder.CreateStore(value, address_ptr);
 		store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), guest_mem_alias_scope_));
 		return store;
 	}
