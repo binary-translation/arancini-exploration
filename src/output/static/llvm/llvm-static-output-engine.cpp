@@ -28,6 +28,8 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
 #include "llvm/IR/GlobalAlias.h"
+#include <llvm/Support/AtomicOrdering.h>
+#include <llvm/Support/Casting.h>
 #include <llvm/Support/CodeGen.h>
 #include <llvm/Transforms/Utils/Mem2Reg.h>
 #include "llvm/Transforms/AggressiveInstCombine/AggressiveInstCombine.h"
@@ -536,7 +538,27 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		}
 
 		LoadInst *li = builder.CreateLoad(ty, address_ptr);
-		builder.CreateFence(AtomicOrdering::Acquire);
+		li->setOrdering(AtomicOrdering::Acquire);
+		if (rmn->address().owner()->kind() == node_kinds::binary_arith) {
+			auto ban = (binary_arith_node *)rmn->address().owner();
+			if (ban->lhs().owner()->kind() == node_kinds::read_reg) {
+				auto rrn = (read_reg_node *)ban->lhs().owner();
+				if (rrn->regoff() == (unsigned long)reg_offsets::RSP) {
+					li->setOrdering(AtomicOrdering::Unordered);
+				}
+			} else if (ban->rhs().owner()->kind() == node_kinds::read_reg) {
+				auto rrn = (read_reg_node *)ban->rhs().owner();
+				if (rrn->regoff() == (unsigned long)reg_offsets::RSP) {
+					li->setOrdering(AtomicOrdering::Unordered);
+				}
+			}
+		}
+		else if (rmn->address().owner()->kind() == node_kinds::read_reg) {
+			auto rrn = (read_reg_node *)rmn->address().owner();
+			if (rrn->regoff() == (unsigned long)reg_offsets::RSP) {
+				li->setOrdering(AtomicOrdering::Unordered);
+			}
+		}
 		li->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(li->getContext(), guest_mem_alias_scope_));
 		return li;
 	}
@@ -1335,8 +1357,28 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 			address_ptr_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, guest_mem_alias_scope_));
 		}
 
-		builder.CreateFence(AtomicOrdering::Release);
 		auto store = builder.CreateStore(value, address_ptr);
+		store->setOrdering(AtomicOrdering::Release);
+		if (wmn->address().owner()->kind() == node_kinds::binary_arith) {
+			auto ban = (binary_arith_node *)wmn->address().owner();
+			if (ban->lhs().owner()->kind() == node_kinds::read_reg) {
+				auto rrn = (read_reg_node *)ban->lhs().owner();
+				if (rrn->regoff() == (unsigned long)reg_offsets::RSP) {
+					store->setOrdering(AtomicOrdering::Unordered);
+				}
+			} else if (ban->rhs().owner()->kind() == node_kinds::read_reg) {
+				auto rrn = (read_reg_node *)ban->rhs().owner();
+				if (rrn->regoff() == (unsigned long)reg_offsets::RSP) {
+					store->setOrdering(AtomicOrdering::Unordered);
+				}
+			}
+		}
+		else if (wmn->address().owner()->kind() == node_kinds::read_reg) {
+			auto rrn = (read_reg_node *)wmn->address().owner();
+			if (rrn->regoff() == (unsigned long)reg_offsets::RSP) {
+				store->setOrdering(AtomicOrdering::Unordered);
+			}
+		}
 		store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), guest_mem_alias_scope_));
 		return store;
 	}
@@ -1435,7 +1477,6 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 			return existing->second;
 
 		lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
-		builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
 		AtomicRMWInst *out;
 		Value *val;
 		switch (ban->op()) {
@@ -1503,11 +1544,9 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		switch(tan->op()) {
 			case ternary_atomic_op::cmpxchg: {
 				lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
-				builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
 				auto instr = builder.CreateAtomicCmpXchg(lhs, rhs, top, Align(1), AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
 				auto new_rax_val = builder.CreateSelect(builder.CreateExtractValue(instr, 1), rhs, builder.CreateExtractValue(instr, 0));
 				builder.CreateStore(builder.CreateZExt(new_rax_val, types.i64), rax_reg);
-				builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
 
 				return instr;
 			}
