@@ -499,7 +499,32 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 	case node_kinds::read_mem: {
 		auto rmn = (read_mem_node *)n;
-		auto address = lower_port(builder, state_arg, pkt, rmn->address());
+		Value *address_ptr = nullptr;
+		if (rmn->address().owner()->kind() == node_kinds::binary_arith) {
+			auto ban = (binary_arith_node *)rmn->address().owner();
+			if (ban->op() == binary_arith_op::add) {
+				auto lhs = lower_port(builder, state_arg, pkt, ban->lhs());
+				auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
+
+				if (ban->lhs().owner()->kind() == node_kinds::read_reg) {
+					auto li = dyn_cast<LoadInst>(lhs);
+					auto addr = li->getPointerOperand();
+					auto name = li->getName();
+					auto align = li->getAlign();
+
+					auto ip = builder.GetInsertBlock();
+					builder.SetInsertPoint(li->getParent());
+					auto new_lhs = builder.CreateAlignedLoad(PointerType::get(types.i8, 128), addr, align, name);
+					address_ptr = builder.CreateGEP(types.i8, new_lhs, rhs);
+					li->replaceAllUsesWith(new_lhs);
+					li->removeFromParent();
+					li->deleteValue();
+					builder.SetInsertPoint(ip);
+
+					node_ports_to_llvm_values_[&ban->lhs()] = new_lhs;
+				}
+			}
+		}
 
 		::llvm::Type *ty;
 		switch (rmn->val().type().width()) {
@@ -531,8 +556,11 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		auto gs_reg = reg_to_alloca_.at(reg_offsets::GS);
 		//address = builder.CreateAdd(address, builder.CreateLoad(types.i64, gs_reg));
 #endif
-		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(ty, 256));
 
+		if (!address_ptr) {
+			auto address = lower_port(builder, state_arg, pkt, rmn->address());
+			address_ptr = builder.CreateIntToPtr(address, PointerType::get(ty, 256));
+		}
 		if (auto address_ptr_i = ::llvm::dyn_cast<Instruction>(address_ptr)) {
 			address_ptr_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, guest_mem_alias_scope_));
 		}
@@ -1345,15 +1373,37 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 	case node_kinds::write_mem: {
 		auto wmn = (write_mem_node *)a;
 
-		auto address = lower_port(builder, state_arg, pkt, wmn->address());
 		auto value = lower_port(builder, state_arg, pkt, wmn->value());
 
-#ifndef ARCH_X86_64
-		//auto gs_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, 26) }); //TODO: move offset_2_idx into a common header
-		auto gs_reg = reg_to_alloca_.at(reg_offsets::GS);
-		//address = builder.CreateAdd(address, builder.CreateLoad(types.i64, gs_reg));
-#endif
-		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(value->getType(), 256));
+		Value *address_ptr = nullptr;
+		if (wmn->address().owner()->kind() == node_kinds::binary_arith) {
+			auto ban = (binary_arith_node *)wmn->address().owner();
+			if (ban->op() == binary_arith_op::add) {
+				auto lhs = lower_port(builder, state_arg, pkt, ban->lhs());
+				auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
+
+				if (ban->lhs().owner()->kind() == node_kinds::read_reg) {
+					auto li = dyn_cast<LoadInst>(lhs);
+					auto addr = li->getPointerOperand();
+					auto name = li->getName();
+					auto align = li->getAlign();
+
+					auto ip = builder.GetInsertBlock();
+					builder.SetInsertPoint(li->getParent());
+					auto new_lhs = builder.CreateAlignedLoad(PointerType::get(types.i8, 128), addr, align, name);
+					address_ptr = builder.CreateGEP(types.i8, new_lhs, rhs);
+					li->replaceAllUsesWith(new_lhs);
+					li->removeFromParent();
+					li->deleteValue();
+					builder.SetInsertPoint(ip);
+					node_ports_to_llvm_values_[&ban->lhs()] = new_lhs;
+				}
+			}
+		}
+		if (!address_ptr) {
+			auto address = lower_port(builder, state_arg, pkt, wmn->address());
+			address_ptr = builder.CreateIntToPtr(address, PointerType::get(value->getType(), 256));
+		}
 
 		if (auto address_ptr_i = ::llvm::dyn_cast<Instruction>(address_ptr)) {
 			address_ptr_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, guest_mem_alias_scope_));
