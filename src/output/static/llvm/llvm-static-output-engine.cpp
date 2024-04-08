@@ -513,12 +513,11 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 					auto align = li->getAlign();
 
 					auto ip = builder.GetInsertBlock();
-					builder.SetInsertPoint(li->getParent());
+					builder.SetInsertPoint(li);
 					auto new_lhs = builder.CreateAlignedLoad(PointerType::get(types.i8, 128), addr, align, name);
 					address_ptr = builder.CreateGEP(types.i8, new_lhs, rhs);
 					li->replaceAllUsesWith(new_lhs);
-					li->removeFromParent();
-					li->deleteValue();
+					li->eraseFromParent();
 					builder.SetInsertPoint(ip);
 
 					node_ports_to_llvm_values_[&ban->lhs()] = new_lhs;
@@ -1389,12 +1388,11 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 					auto align = li->getAlign();
 
 					auto ip = builder.GetInsertBlock();
-					builder.SetInsertPoint(li->getParent());
+					builder.SetInsertPoint(li);
 					auto new_lhs = builder.CreateAlignedLoad(PointerType::get(types.i8, 128), addr, align, name);
 					address_ptr = builder.CreateGEP(types.i8, new_lhs, rhs);
 					li->replaceAllUsesWith(new_lhs);
-					li->removeFromParent();
-					li->deleteValue();
+					li->eraseFromParent();
 					builder.SetInsertPoint(ip);
 					node_ports_to_llvm_values_[&ban->lhs()] = new_lhs;
 				}
