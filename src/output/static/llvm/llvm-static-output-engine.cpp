@@ -1911,7 +1911,7 @@ void llvm_static_output_engine_impl::save_all_regs(IRBuilder<> &builder, Argumen
 	for (auto reg : regs) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
 		auto alloca = reg_to_alloca_.at(reg);
-		builder.CreateStore(builder.CreateLoad(alloca->getType(), alloca), ptr);
+		builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), alloca), ptr);
 	}
 }
 
@@ -1924,7 +1924,7 @@ void llvm_static_output_engine_impl::restore_all_regs(IRBuilder<> &builder, Argu
 	for (auto reg : regs) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "restore_"+std::to_string((unsigned long)reg));
 		auto alloca = reg_to_alloca_.at(reg);
-		builder.CreateStore(builder.CreateLoad(alloca->getType(), ptr), alloca);
+		builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), ptr), alloca);
 	}
 }
 
@@ -1940,13 +1940,13 @@ reg_offsets::ZMM1, reg_offsets::ZMM2, reg_offsets::ZMM3, reg_offsets::ZMM4, reg_
 	for (auto reg : regs) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
 		auto alloca = reg_to_alloca_.at(reg);
-		builder.CreateStore(builder.CreateLoad(alloca->getType(), alloca), ptr);
+		builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), alloca), ptr);
 	}
 	if (!with_args) return;
 	for (auto reg : args) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
 		auto alloca = reg_to_alloca_.at(reg);
-		builder.CreateStore(builder.CreateLoad(alloca->getType(), alloca), ptr);
+		builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), alloca), ptr);
 	}
 }
 
@@ -1958,13 +1958,13 @@ void llvm_static_output_engine_impl::restore_callee_regs(IRBuilder<> &builder, A
 	for (auto reg : regs) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "restore_"+std::to_string((unsigned long)reg));
 		auto alloca = reg_to_alloca_.at(reg);
-		builder.CreateStore(builder.CreateLoad(alloca->getType(), ptr), alloca);
+		builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), ptr), alloca);
 	}
 	if (!with_rets) return;
 	for (auto reg : rets) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "restore_"+std::to_string((unsigned long)reg));
 		auto alloca = reg_to_alloca_.at(reg);
-		builder.CreateStore(builder.CreateLoad(alloca->getType(), ptr), alloca);
+		builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), ptr), alloca);
 	}
 }
 
