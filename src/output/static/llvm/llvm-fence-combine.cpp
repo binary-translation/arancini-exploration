@@ -20,8 +20,9 @@ PreservedAnalyses FenceCombinePass::run(Function &F, FunctionAnalysisManager &AM
 					break;
 				Instruction &NextI = *It;
 				if (auto *Fence2 = dyn_cast<FenceInst>(&NextI)) {
+					It++;
 					auto ord1 = Fence1->getOrdering();
-					auto ord2 = Fence1->getOrdering();
+					auto ord2 = Fence2->getOrdering();
 					// combine orderings, ignore consume because no one implements it
 					// most common case is aquire and release to aquire-release
 					if (ord1 == AtomicOrdering::Acquire && ord2 == AtomicOrdering::Release) {
@@ -39,7 +40,6 @@ PreservedAnalyses FenceCombinePass::run(Function &F, FunctionAnalysisManager &AM
 
 					// assume the scopes are the same
 					Fence2->eraseFromParent();
-					It++;
 				}
 			}
 		}
