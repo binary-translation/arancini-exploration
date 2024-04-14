@@ -2002,7 +2002,6 @@ void llvm_static_output_engine_impl::optimise()
 	PB.registerLoopAnalyses(LAM);
 	PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
 	PB.registerOptimizerEarlyEPCallback( [&](ModulePassManager &mpm, OptimizationLevel Level) {
 		mpm.addPass(createModuleToFunctionPassAdaptor(PromotePass()));
 		mpm.addPass(createModuleToFunctionPassAdaptor(ADCEPass()));
@@ -2012,6 +2011,7 @@ void llvm_static_output_engine_impl::optimise()
 		mpm.addPass(DeadArgumentEliminationPass());
 		mpm.addPass(createModuleToFunctionPassAdaptor(FenceCombinePass()));
 	});
+	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
 	MPM.run(*module_, MAM);
 
 	// Compiled modules now exists
