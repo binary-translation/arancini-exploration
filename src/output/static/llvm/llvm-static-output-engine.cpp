@@ -3,6 +3,7 @@
 #include "arancini/ir/port.h"
 #include "arancini/ir/visitor.h"
 #include "arancini/output/static/llvm/llvm-static-visitor.h"
+#include "arancini/output/static/llvm/llvm-fence-combine.h"
 #include "arancini/runtime/exec/x86/x86-cpu-state.h"
 #include "arancini/util/logger.h"
 #include "llvm/Support/raw_ostream.h"
@@ -513,7 +514,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 					auto align = li->getAlign();
 
 					auto ip = builder.GetInsertBlock();
-					builder.SetInsertPoint(li);
+					builder.SetInsertPoint(li->getParent());
 					auto new_lhs = builder.CreateAlignedLoad(PointerType::get(types.i8, 128), addr, align, name);
 					address_ptr = builder.CreateGEP(types.i8, new_lhs, rhs);
 					li->replaceAllUsesWith(new_lhs);
@@ -1388,7 +1389,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 					auto align = li->getAlign();
 
 					auto ip = builder.GetInsertBlock();
-					builder.SetInsertPoint(li);
+					builder.SetInsertPoint(li->getParent());
 					auto new_lhs = builder.CreateAlignedLoad(PointerType::get(types.i8, 128), addr, align, name);
 					address_ptr = builder.CreateGEP(types.i8, new_lhs, rhs);
 					li->replaceAllUsesWith(new_lhs);
@@ -2002,11 +2003,14 @@ void llvm_static_output_engine_impl::optimise()
 	PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
 	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
-	PB.registerOptimizerLastEPCallback( [&](ModulePassManager &mpm, OptimizationLevel Level) {
+	PB.registerOptimizerEarlyEPCallback( [&](ModulePassManager &mpm, OptimizationLevel Level) {
 		mpm.addPass(createModuleToFunctionPassAdaptor(PromotePass()));
 		mpm.addPass(createModuleToFunctionPassAdaptor(ADCEPass()));
+	});
+	PB.registerOptimizerLastEPCallback( [&](ModulePassManager &mpm, OptimizationLevel Level) {
 		mpm.addPass(createModuleToFunctionPassAdaptor(AggressiveInstCombinePass()));
 		mpm.addPass(DeadArgumentEliminationPass());
+		mpm.addPass(createModuleToFunctionPassAdaptor(FenceCombinePass()));
 	});
 	MPM.run(*module_, MAM);
 
