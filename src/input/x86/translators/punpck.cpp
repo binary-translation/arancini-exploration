@@ -175,8 +175,9 @@ void punpck_translator::do_translate()
       dst_bytes = builder().insert_vector_insert(dst_bytes->val(), i, builder().insert_constant_u8(0xFF)->val());
 
       auto end_label = builder().insert_label("end");
+      auto end_label1 = builder().insert_label("end");
       br_end->add_br_target(end_label);
-      br_end2->add_br_target(end_label);
+      br_end2->add_br_target(end_label1);
     }
     write_operand(0, dst_bytes->val());
     break;
@@ -236,8 +237,9 @@ void punpck_translator::do_translate()
       	result = builder().insert_vector_insert(result->val(), i, ins_max->val());
 
       	auto end_label = builder().insert_label("end");
+      	auto end_label1 = builder().insert_label("end");
       	br_end->add_br_target(end_label);
-      	br_end2->add_br_target(end_label);
+      	br_end2->add_br_target(end_label1);
     }
     write_operand(0, result->val());
     break;

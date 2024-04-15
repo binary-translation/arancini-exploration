@@ -305,10 +305,11 @@ void binop_translator::do_translate()
     }
 	auto next = (br_node *)builder().insert_br(nullptr);
     //   while mask & src == 0; do idx--; mask = mask >> 1; done
-    auto while_loop = builder().insert_label("while");
-	next->add_br_target(while_loop);
+	auto while_loop1 = builder().insert_label("while");
+	next->add_br_target(while_loop1);
+	auto while_loop = builder().insert_label("while");
 
-    //       mask & src == 1  -> jump to endif
+	//       mask & src == 1  -> jump to endif
     auto mask_val = builder().insert_read_local(mask);
     auto mask_and = builder().insert_cmpne(builder().insert_and(mask_val->val(), src->val())->val(), builder().insert_constant_i(type, 0)->val());
     cond_br_node *fi_br = (cond_br_node *)builder().insert_cond_br(mask_and->val(), nullptr);
@@ -343,8 +344,9 @@ void binop_translator::do_translate()
 	next = (br_node *)builder().insert_br(nullptr);
 
 	auto end_label = builder().insert_label("end");
+	auto end_label2 = builder().insert_label("end");
     next->add_br_target(end_label);
-    end->add_br_target(end_label);
+    end->add_br_target(end_label2);
 
 
     break;
@@ -417,8 +419,9 @@ void binop_translator::do_translate()
 
 		// op1 is NaN?
 		auto op0_not_nan = builder().insert_label("op0_not_NaN");
+		auto op0_not_nan1 = builder().insert_label("op0_not_NaN");
 		op0_not_nan_br->add_br_target(op0_not_nan);
-		op0_not_nan_br2->add_br_target(op0_not_nan);
+		op0_not_nan_br2->add_br_target(op0_not_nan1);
 		auto op1_cast = builder().insert_bitcast(CastTy, op1->val());
 		and_exp = builder().insert_and(op1_cast->val(), cexp->val());
 		cmpeq_exp = builder().insert_cmpeq(and_exp->val(), z->val());
@@ -430,8 +433,9 @@ void binop_translator::do_translate()
 		br_node *end1nan_br = (br_node *)builder().insert_br(nullptr);
 
 		auto no_nan = builder().insert_label("not_NaN");
+		auto no_nan2 = builder().insert_label("not_NaN");
 		op1_not_nan_br->add_br_target(no_nan);
-		op1_not_nan_br2->add_br_target(no_nan);
+		op1_not_nan_br2->add_br_target(no_nan2);
 		auto cmpeq = builder().insert_cmpeq(op0->val(), op1->val());
 		cond_br_node *eq_br = (cond_br_node *)builder().insert_cond_br(cmpeq->val(), nullptr);
 		auto cmpgt = builder().insert_cmpgt(op0->val(), op1->val());
@@ -455,11 +459,15 @@ void binop_translator::do_translate()
 
 		// end
 		auto end = builder().insert_label("end");
+		auto end2 = builder().insert_label("end");
+		auto end3 = builder().insert_label("end");
+		auto end4 = builder().insert_label("end");
+		auto end5 = builder().insert_label("end");
 		endeq_br->add_br_target(end);
-		endgt_br->add_br_target(end);
-		endlt_br->add_br_target(end);
-		end0nan_br->add_br_target(end);
-		end1nan_br->add_br_target(end);
+		endgt_br->add_br_target(end2);
+		endlt_br->add_br_target(end3);
+		end0nan_br->add_br_target(end4);
+		end1nan_br->add_br_target(end5);
 
 		break;
 	}
@@ -565,6 +573,7 @@ void binop_translator::do_translate()
 	}
 
 
+		// FIXME Seems very weird (endless loop?)
 	builder().insert_br(builder().insert_label("do_checks"));
 	auto cnd = builder().insert_cmpne(z->val(), src0->val());
 	auto cmp0 = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
@@ -573,8 +582,9 @@ void binop_translator::do_translate()
 	auto next = (br_node *)builder().insert_br(nullptr);
 
 	auto check_for_nan = builder().insert_label("check_for_nan");
+	auto check_for_nan1 = builder().insert_label("check_for_nan");
 	next->add_br_target(check_for_nan);
-	cmp0->add_br_target(check_for_nan);
+	cmp0->add_br_target(check_for_nan1);
 
 	auto and_exp = builder().insert_bitcast(VecTy.element_type(), builder().insert_and(src0->val(), cexp->val())->val());
 	auto cmpeq_exp = builder().insert_cmpeq(and_exp->val(), cexp->val());
@@ -585,8 +595,9 @@ void binop_translator::do_translate()
 	next = (br_node *)builder().insert_br(nullptr);
 
 	auto src0_nn = builder().insert_label("src0_not_nan");
+	auto src0_nn1 = builder().insert_label("src0_not_nan");
 	next->add_br_target(src0_nn);
-	src0_not_nan->add_br_target(src0_nn);
+	src0_not_nan->add_br_target(src0_nn1);
 
 	and_exp = builder().insert_bitcast(VecTy.element_type(), builder().insert_and(src1->val(), cexp->val())->val());
 	cmpeq_exp = builder().insert_cmpeq(and_exp->val(), cexp->val());
@@ -597,8 +608,9 @@ void binop_translator::do_translate()
 	next = (br_node *)builder().insert_br(nullptr);
 
 	auto src1_nn = builder().insert_label("src1_not_nan");
+	auto src1_nn1 = builder().insert_label("src1_not_nan");
 	next->add_br_target(src1_nn);
-	src1_not_nan->add_br_target(src1_nn);
+	src1_not_nan->add_br_target(src1_nn1);
 	
 	value_node *src0_lt_src1;
 	if (inst_class == XED_ICLASS_MINSD | inst_class == XED_ICLASS_MINSS)
@@ -609,10 +621,13 @@ void binop_translator::do_translate()
 	next = (br_node *)builder().insert_br(nullptr);
 	
 	auto src1_out = builder().insert_label("src1_out");
+	auto src1_out1 = builder().insert_label("src1_out");
+	auto src1_out2 = builder().insert_label("src1_out");
+	auto src1_out3 = builder().insert_label("src1_out");
 	next->add_br_target(src1_out);
-	both_0->add_br_target(src1_out);
-	src0_is_nan->add_br_target(src1_out);
-	src1_is_nan->add_br_target(src1_out);
+	both_0->add_br_target(src1_out1);
+	src0_is_nan->add_br_target(src1_out2);
+	src1_is_nan->add_br_target(src1_out3);
 	write_operand(0, src1->val());
 	auto end0 = (br_node *)builder().insert_br(nullptr);
 
@@ -622,8 +637,9 @@ void binop_translator::do_translate()
 	auto end1 = (br_node *)builder().insert_br(nullptr);
 
 	auto end = builder().insert_label("end");
+	auto endl1 = builder().insert_label("end");
 	end0->add_br_target(end);
-	end1->add_br_target(end);
+	end1->add_br_target(endl1);
 
 
   } break;

@@ -221,7 +221,17 @@ public:
 		v.visit_label_node(*this);
 	}
 
+	void add_use()
+	{
+		if (used_) {
+			throw std::runtime_error("Label node used by multiple jumps");
+		}
+		used_ = true;
+	}
+
 	std::string name_;
+private:
+	bool used_{false};
 };
 
 class br_node : public action_node {
@@ -230,11 +240,19 @@ public:
 		: action_node(node_kinds::br)
 		, target_(target)
 	{
+		if (target) {
+			target->add_use();
+		}
 	}
+
 
 	label_node *target() const { return target_; }
 
-	void add_br_target(label_node *n) { target_ = n; }
+	void add_br_target(label_node *n)
+	{
+		target_ = n;
+		n->add_use();
+	}
 
 	virtual void accept(visitor &v) override
 	{
@@ -254,12 +272,20 @@ public:
 		, target_(target)
 	{
 		cond.add_target(this);
+		if (target) {
+			target->add_use();
+		}
 	}
 
 	port &cond() const { return cond_; }
 	label_node *target() const { return target_; }
 
-	void add_br_target(label_node *n) { target_ = n; }
+	void add_br_target(label_node *n)
+	{
+		target_ = n;
+		n->add_use();
+
+	}
 
 	virtual void accept(visitor &v) override
 	{
