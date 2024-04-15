@@ -73,6 +73,47 @@ inline void add(InstructionBuilder &builder, TypedRegister &out, const TypedRegi
 				builder.or_(out_reg2, out_reg2, temp2);
 			}
 			break;
+		case 16:
+			if (out.type().element_width() == 8) {
+				RegisterOperand mask1 = builder.next_register();
+				RegisterOperand mask2 = builder.next_register();
+
+				gen_constant(builder, 0x7F7F7F7F7F7F7F7Full, mask1);
+
+				builder.neg(mask2, mask1);
+
+				RegisterOperand temp1 = builder.next_register();
+				RegisterOperand temp2 = builder.next_register();
+
+				Register src_reg1 = lhs.reg1();
+				Register src_reg2 = rhs.reg1();
+				Register out_reg = out.reg1();
+
+				builder.and_(temp1, src_reg1, mask1);
+				builder.and_(temp2, src_reg2, mask1);
+				builder.add(temp1, temp1, temp2); // Add without high bits
+
+
+				builder.xor_(out_reg, src_reg1, src_reg2); // carryless addition
+				builder.and_(out_reg, out_reg, mask2); // Just high bits
+
+				builder.xor_(out_reg, out_reg, temp1);
+
+				Register src_reg12 = lhs.reg2();
+				Register src_reg22 = rhs.reg2();
+				Register out_reg2 = out.reg2();
+
+				builder.and_(temp1, src_reg12, mask1);
+				builder.and_(temp2, src_reg22, mask1);
+				builder.add(temp1, temp1, temp2); // Add without high bits
+
+
+				builder.xor_(out_reg2, src_reg12, src_reg22); // carryless addition
+				builder.and_(out_reg2, out_reg2, mask2); // Just high bits
+
+				builder.xor_(out_reg2, out_reg2, temp1);
+			}
+			break;
 		default:
 			throw std::runtime_error("not implemented");
 		}
