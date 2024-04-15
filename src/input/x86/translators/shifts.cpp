@@ -105,8 +105,9 @@ void shifts_translator::do_translate()
       }
 
       auto end_label = builder().insert_label("end");
+      auto end_label1 = builder().insert_label("end");
       zero_br->add_br_target(end_label);
-      one_br->add_br_target(end_label);
+      one_br->add_br_target(end_label1);
     }
 		break;
   }

@@ -342,9 +342,11 @@ void fpu_translator::do_translate()
 
     // end
     auto end = builder().insert_label("end");
+    auto end1 = builder().insert_label("end");
+    auto end2 = builder().insert_label("end");
     end_un->add_br_target(end);
-    end_gt->add_br_target(end);
-    end_lt->add_br_target(end);
+    end_gt->add_br_target(end1);
+    end_lt->add_br_target(end2);
 
     break;
   }
