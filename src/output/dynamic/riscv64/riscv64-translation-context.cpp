@@ -1526,6 +1526,8 @@ void riscv64_translation_context::materialise_internal_call(const internal_call_
 	} else if (function.name() == "handle_int") {
 		// TODO handle argument
 		ret_val_ = 2;
+	} else if (function.name() == "hlt") {
+		ret_val_ = 2;
 	} else {
 		throw std::runtime_error("unsupported internal call");
 	}
