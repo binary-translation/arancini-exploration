@@ -919,7 +919,10 @@ TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_
 	if (value.targets().size() == 1
 		&& ((is_int(value, 64) && n.regidx() <= static_cast<unsigned long>(reg_idx::R15)) || is_flag(value))) { // 64bit GPR or flag only used once
 		Register reg = get_or_load_mapped_register(n.regidx());
-		TypedRegister &out_reg = allocate_register(&n.val(), reg).first;
+		auto [out_reg, valid] = allocate_register(&n.val(), reg);
+		if (!valid) {
+			return out_reg;
+		}
 		if (is_flag(value)) {
 			out_reg.set_type(value_type::u64());
 		}
