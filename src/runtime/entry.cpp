@@ -207,16 +207,16 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 
     util::global_logger.info("arancini: dbt: initialise\n");
 
-	// Consume args until '--'
-	int start = 1;
+	bool optimise = true;
 
-	for (int i = 1; i < argc; ++i) {
-		if (strcmp(argv[i], "--") == 0) {
-			start = i + 1;
-		}
+	flag = getenv("ARANCINI_OPTIMIZE_FLAGS");
+
+	if (flag) {
+		if (util::case_ignore_string_equal(flag, "true"))
+			optimise = true;
+		else if (util::case_ignore_string_equal(flag, "false"))
+			optimise = false;
 	}
-
-	bool optimise = start > 1;
 
 	// Capture interesting signals, such as SIGSEGV.
 	init_signals();
@@ -240,7 +240,7 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	x86_state->PC = entry_point;
 
 	x86_state->RSP
-		= setup_guest_stack(argc, argv, reinterpret_cast<intptr_t>(stack_base) - reinterpret_cast<intptr_t>(ctx_->get_memory_ptr(0)) + stack_size, ctx_, start);
+		= setup_guest_stack(argc, argv, reinterpret_cast<intptr_t>(stack_base) - reinterpret_cast<intptr_t>(ctx_->get_memory_ptr(0)) + stack_size, ctx_, 1);
 	//x86_state->GS = (unsigned long long)ctx_->get_memory_ptr(0);
 	x86_state->X87_STACK_BASE = (intptr_t)mmap(NULL, 80, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0) - (intptr_t)ctx_->get_memory_ptr(0);
 
