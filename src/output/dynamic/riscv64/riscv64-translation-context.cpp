@@ -1682,7 +1682,121 @@ void riscv64_translation_context::chain(uint64_t chain_address, void *chain_targ
 				}
 
 				offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));
-				ass.j(offset);
+
+				if (!IsJTypeImm(offset)) {
+					// We need to "make room" for "branch" (above) + AUIPC + JR. So we still need 8 Bytes (2 full size instructions) after the branch.
+					// We already have 4 Bytes due to the AUIPC, so move everything by 4 Bytes until a terminating J/JR, possibly compressed.
+					auto instr_p_next = reinterpret_cast<uint32_t *>(reinterpret_cast<uint16_t *>(instr_p + 1) + 1);
+					auto save = *instr_p_next;
+
+					auto offLo32 = (int32_t)offset;
+					auto offLo12 = offLo32 << (32 - 12) >> (32 - 12); // sign extend lower 12 bit
+					int32_t off32Hi20 = (offLo32 - offLo12);
+					ass.auipc(A1, off32Hi20);
+					ass.jr(A1, offLo12);
+					if (!offLo12) { // JR will be compressed
+						ass.nop(); // CNOP
+					}
+					instr_p_next++;
+
+					for (bool skip_lower = false;; instr_p_next++) {
+						const uint32_t parcel = *instr_p_next;
+						*instr_p_next = save;
+
+						if (skip_lower || IsCInstruction(save)) {
+							// Handle lower half
+							if (!skip_lower) {
+								CInstruction c_instr { static_cast<uint16_t>(save) };
+								if (c_instr.opcode() == C_J) {
+									// Found termination point, decrease offset by 4 and reemit
+									intptr_t new_off = c_instr.j_imm() - 4;
+
+									chain_machine_code_writer writer1 = chain_machine_code_writer { instr_p_next, 8 };
+									Assembler ass1 { &writer1, false, RV_GC };
+									ass1.j(new_off);
+
+									break;
+								}
+								if (c_instr.opcode() == C_JR) {
+									// Found termination point
+									chain_machine_code_writer writer1 = chain_machine_code_writer { instr_p_next, 8 };
+									Assembler ass1 { &writer1, false, RV_GC };
+									ass1.jr(c_instr.rs1(), -4);
+									break;
+								}
+							} else {
+								skip_lower = false;
+							}
+							// Handle upper half
+							if (IsCInstruction(save >> 16)) {
+								// Second 16 Bit instruction in the upper half
+								CInstruction c_instr2 { static_cast<uint16_t>(save >> 16) };
+
+								if (c_instr2.opcode() == C_J) {
+									// Found termination point, decrease offset by 4 and reemit
+									intptr_t new_off = c_instr2.j_imm() - 4;
+
+									chain_machine_code_writer writer1 = chain_machine_code_writer { reinterpret_cast<uint16_t *>(instr_p_next) + 1, 8 };
+									Assembler ass1 { &writer1, false, RV_GC };
+									ass1.j(new_off);
+
+									break;
+								}
+								if (c_instr2.opcode() == C_JR) {
+									// Found termination point
+									chain_machine_code_writer writer1 = chain_machine_code_writer { reinterpret_cast<uint16_t *>(instr_p_next) + 1, 8 };
+									Assembler ass1 { &writer1, false, RV_GC };
+									ass1.jr(c_instr2.rs1(), -4);
+									break;
+								}
+							} else {
+								// Lower half of a 32bit instruction in the upper half
+								skip_lower = true;
+								Instruction split_instr { parcel << 16 | save >> 16 };
+								if (split_instr.opcode() == JAL) {
+									// Instruction should be a J
+									// Found termination point, decrease offset by 4 and reemit
+									intptr_t new_off = split_instr.jtype_imm() - 4;
+									chain_machine_code_writer writer1 = chain_machine_code_writer { reinterpret_cast<uint16_t *>(instr_p_next) + 1, 8 };
+									Assembler ass1 { &writer1, false, RV_GC };
+									ass1.j(new_off);
+									break;
+								}
+								if (split_instr.opcode() == JALR) {
+									// Instruction should be a JR
+									// Found termination point
+									chain_machine_code_writer writer1 = chain_machine_code_writer { reinterpret_cast<uint16_t *>(instr_p_next) + 1, 8 };
+									Assembler ass1 { &writer1, false, RV_GC };
+									ass1.jr(split_instr.rs1(), split_instr.itype_imm() - 4);
+									break;
+								}
+							}
+
+						} else {
+							Instruction instr { save };
+							if (instr.opcode() == JAL) {
+								// Instruction should be a J
+								// Found termination point, decrease offset by 4 and reemit
+								intptr_t new_off = instr.jtype_imm() - 4;
+								chain_machine_code_writer writer1 = chain_machine_code_writer { instr_p_next, 8 };
+								Assembler ass1 { &writer1, false, RV_GC };
+								ass1.j(new_off);
+								break;
+							}
+							if (instr.opcode() == JALR) {
+								// Instruction should be a JR
+								// Found termination point
+								chain_machine_code_writer writer1 = chain_machine_code_writer { instr_p_next, 8 };
+								Assembler ass1 { &writer1, false, RV_GC };
+								ass1.jr(instr.rs1(), instr.itype_imm() - 4);
+								break;
+							}
+						}
+						save = parcel;
+					}
+				} else {
+					ass.j(offset);
+				}
 				ass.Align(Assembler::label_align);
 				ass.Bind(&end);
 			} else {
@@ -1785,9 +1899,14 @@ void riscv64_translation_context::chain(uint64_t chain_address, void *chain_targ
 			intptr_t offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));
 
 			if (!IsJTypeImm(offset)) {
-				throw std::runtime_error("Chaining failed. Jump offset too big for single direct jump instruction.");
+				auto offLo32 = (int32_t)offset;
+				auto offLo12 = offLo32 << (32 - 12) >> (32 - 12); // sign extend lower 12 bit
+				int32_t off32Hi20 = (offLo32 - offLo12);
+				ass.auipc(A1, off32Hi20);
+				ass.jr(A1, offLo12);
+			} else {
+				ass.j(offset);
 			}
-			ass.j(offset);
 		}
 	}
 }
