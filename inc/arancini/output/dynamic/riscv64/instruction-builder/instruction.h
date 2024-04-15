@@ -26,7 +26,8 @@ enum class InstructionType {
 	RdAddrOrder,
 	RdRs2AddrOrder,
 	RdImmKeepRs1,
-	RdRs1ImmKeepRs2
+	RdRs1ImmKeepRs2,
+	Noop
 };
 
 using ImmFunc = void (Assembler::*)(intptr_t);
@@ -188,6 +189,16 @@ struct Instruction {
 	{
 		ASSERT(!(!rd && has_rd()));
 	}
+	Instruction(const InstructionType type, const RegisterOperand rd, const RegisterOperand rs1, const RegisterOperand rs2)
+		: rd(rd)
+		, rs1(rs1)
+		, rs2(rs2)
+		, imm(0)
+		, type_(type)
+		, noneFunc_(nullptr)
+	{
+		ASSERT(!(!rd && has_rd()));
+	}
 
 	void emit(Assembler &assembler) const
 	{
@@ -238,10 +249,12 @@ struct Instruction {
 			(assembler.*rdRs2AddrOrderFunc_)(rd, rs2, Address { rs1 }, order);
 			break;
 		case InstructionType::Dead:
+		case InstructionType::Noop:
 			break;
 		case InstructionType::Imm:
 			(assembler.*immFunc_)(imm);
 			break;
+
 		}
 	}
 
@@ -268,6 +281,7 @@ struct Instruction {
 		case InstructionType::RdRs2AddrOrder:
 		case InstructionType::RdImmKeepRs1:
 		case InstructionType::RdRs1ImmKeepRs2:
+		case InstructionType::Noop:
 			return true;
 		}
 		return false;
@@ -297,6 +311,7 @@ struct Instruction {
 		case InstructionType::RdRs1Rs2:
 		case InstructionType::RdRs2AddrOrder:
 		case InstructionType::RdRs1ImmKeepRs2:
+		case InstructionType::Noop:
 			return rd == rs1 || rd == rs2;
 		}
 		return false;
@@ -322,6 +337,7 @@ struct Instruction {
 #define ehandle_instr(type, opcode) else handle_instr(type, opcode)
 
 		case InstructionType::Dead:
+		case InstructionType::Noop:
 			return;
 		case InstructionType::Imm:
 			if (immFunc_ == (ImmFunc)&Assembler::Align) {
@@ -616,8 +632,10 @@ struct Instruction {
 		case InstructionType::RdImmKeepRs1:
 		case InstructionType::RdRs1ImmKeepRs2:
 		case InstructionType::Imm:
+		case InstructionType::Noop:
 			return false;
 		}
+		return false;
 	}
 
 	RegisterOperand rd, rs1, rs2;

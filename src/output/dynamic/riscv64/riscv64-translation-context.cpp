@@ -526,18 +526,27 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 			builder_.mv(ZERO, addr.base());
 			builder_.mv(ZERO, acc);
 
+			RegisterOperand liveness_zf = builder_.next_register();
+			RegisterOperand liveness_cf = builder_.next_register();
+			RegisterOperand liveness_of = builder_.next_register();
+			RegisterOperand liveness_sf = builder_.next_register();
+
 			// Flags from comparison matching (i.e. subtraction of equal values)
 			if (zf) {
 				builder_.li(zf, 1);
+				builder_.mv_liveness(liveness_zf, zf);
 			}
 			if (cf) {
 				builder_.li(cf, 0);
+				builder_.mv_liveness(liveness_cf, cf);
 			}
 			if (of) {
 				builder_.li(of, 0);
+				builder_.mv_liveness(liveness_of, of);
 			}
 			if (sf) {
 				builder_.li(sf, 0);
+				builder_.mv_liveness(liveness_sf, sf);
 			}
 
 			builder_.j(end, Assembler::kNearJump);
@@ -549,6 +558,10 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 				temp_reg.set_type(n.val().type());
 				sub(builder_, temp_reg, acc, out_reg);
 				sub_flags(builder_, temp_reg, acc, out_reg, zf, of, cf, sf);
+				builder_.mv_liveness(zf, liveness_zf);
+				builder_.mv_liveness(of, liveness_of);
+				builder_.mv_liveness(cf, liveness_cf);
+				builder_.mv_liveness(sf, liveness_sf);
 			}
 
 			// Write back updated acc value
