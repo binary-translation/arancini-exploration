@@ -631,8 +631,8 @@ TypedRegister & riscv64_translation_context::materialise_binary_atomic(const bin
 			//				throw std::runtime_error("unsupported xadd width");
 			//			}
 		}
-		return out_reg;
 	}
+		break;
 	case binary_atomic_op::sub:
 		builder_.neg(out_reg, src);
 		switch (n.val().type().element_width()) {
@@ -650,7 +650,7 @@ TypedRegister & riscv64_translation_context::materialise_binary_atomic(const bin
 			sub(builder_, val_reg, out_reg, src); // Actual difference for flag generation
 			sub_flags(builder_, val_reg, out_reg, src, zf, of, cf, sf);
 		}
-		return out_reg;
+		break;
 	case binary_atomic_op::band: {
 		switch (n.val().type().element_width()) {
 		case 64:
@@ -670,8 +670,8 @@ TypedRegister & riscv64_translation_context::materialise_binary_atomic(const bin
 			throw std::runtime_error("unsupported lock and width");
 		}
 		zero_sign_flag(builder_, val_reg, zf, sf);
-		return out_reg;
 	}
+		break;
 	case binary_atomic_op::bor: {
 		switch (n.val().type().element_width()) {
 		case 64:
@@ -692,8 +692,8 @@ TypedRegister & riscv64_translation_context::materialise_binary_atomic(const bin
 		}
 
 		zero_sign_flag(builder_, val_reg, zf, sf);
-		return out_reg;
 	}
+		break;
 	case binary_atomic_op::bxor: {
 		switch (n.val().type().element_width()) {
 		case 64:
@@ -715,9 +715,10 @@ TypedRegister & riscv64_translation_context::materialise_binary_atomic(const bin
 		}
 
 		zero_sign_flag(builder_, val_reg, zf, sf);
-		return out_reg;
 	}
+		break;
 	case binary_atomic_op::xchg:
+		builder_.mv(val_reg, src);
 		switch (n.val().type().element_width()) {
 		case 64:
 			builder_.amoswapd(out_reg, src, addr, std::memory_order_acq_rel);
@@ -729,21 +730,26 @@ TypedRegister & riscv64_translation_context::materialise_binary_atomic(const bin
 			throw std::runtime_error("unsupported xchg width");
 		}
 
-//		switch (n.val().type().element_width()) {
-//		case 32:
-//			builder_.slli(out_reg, out_reg, 32);
-//			builder_.srli(out_reg, out_reg, 32);
-//			[[fallthrough]];
-//		case 64:
-//			builder_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), out_reg);
-//			break;
-//		default:
-//			throw std::runtime_error("unsupported xchg width");
-//		}
-		return out_reg;
+		//		switch (n.val().type().element_width()) {
+		//		case 32:
+		//			builder_.slli(out_reg, out_reg, 32);
+		//			builder_.srli(out_reg, out_reg, 32);
+		//			[[fallthrough]];
+		//		case 64:
+		//			builder_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), out_reg);
+		//			break;
+		//		default:
+		//			throw std::runtime_error("unsupported xchg width");
+		//		}
+		break;
 	default:
 		throw std::runtime_error("unsupported binary atomic operation");
 	}
+
+	//Force out_reg to be used, so sideeffects are preserved
+	builder_.mv(ZERO, out_reg);
+
+	return out_reg;
 }
 
 TypedRegister &riscv64_translation_context::materialise_cast(const cast_node &n)
