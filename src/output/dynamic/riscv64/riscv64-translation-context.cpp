@@ -738,9 +738,11 @@ TypedRegister &riscv64_translation_context::materialise_cast(const cast_node &n)
 	TypedRegister &src_reg = *materialise(n.source_value().owner());
 
 	bool works = (is_scalar_int(n.val())
-					 || ((is_int_vector(n.val(), 2, 64) || is_int_vector(n.val(), 4, 32) || is_int_vector(n.val(), 4, 128)) && n.op() == cast_op::bitcast))
+					 || ((is_int_vector(n.val(), 2, 64) || is_int_vector(n.val(), 4, 32) || is_int_vector(n.val(), 16, 8) || is_int_vector(n.val(), 4, 128))
+						 && n.op() == cast_op::bitcast))
 		&& (is_gpr_or_flag(n.source_value())
-			|| ((is_i128(n.source_value()) || is_int(n.source_value(), 512) || is_int_vector(n.source_value(), 4, 32) || is_int_vector(n.source_value(), 2, 64))
+			|| ((is_i128(n.source_value()) || is_int(n.source_value(), 512) || is_int_vector(n.source_value(), 4, 32) || is_int_vector(n.source_value(), 16, 8)
+					|| is_int_vector(n.source_value(), 2, 64))
 				&& (n.op() == cast_op::trunc || n.op() == cast_op::bitcast)));
 	if (!works) {
 		throw std::runtime_error("unsupported types on cast operation");
@@ -1312,7 +1314,8 @@ TypedRegister &riscv64_translation_context::materialise_binary_arith(const binar
 	bool works = (is_gpr_or_flag(n.val()) && is_gpr_or_flag(n.lhs()) && is_gpr_or_flag(n.rhs()))
 		|| ((n.op() == binary_arith_op::mul || n.op() == binary_arith_op::div || n.op() == binary_arith_op::mod || n.op() == binary_arith_op::bxor)
 			&& is_i128(n.val()) && is_i128(n.lhs()) && is_i128(n.rhs()))
-		|| ((is_int_vector(n.val(), 4, 32)) && (n.op() == binary_arith_op::add || n.op() == binary_arith_op::sub));
+		|| ((is_int_vector(n.val(), 4, 32)) && (n.op() == binary_arith_op::add || n.op() == binary_arith_op::sub))
+		|| ((is_int_vector(n.val(), 16, 8)) && (n.op() == binary_arith_op::add));
 	if (!works) {
 		throw std::runtime_error("unsupported width on binary arith operation");
 	}
