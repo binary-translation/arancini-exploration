@@ -44,54 +44,71 @@ def setup(linkname):
 def build():
     pass
 
-def do_run(progs, argf, name):
+def do_run(progs, argf, name, env):
     print(f"Running {progs} ...")
     args = ""
     if argf != "":
-        args = "test/phoenix/"+name+"_datafiles/"+argf
+        args = "../phoenix/phoenix-2.0/"+name+"_datafiles/"+argf
     start = datetime.now()
-    out = sp.run(progs + [args], capture_output=True)
+    env["ARANCINI_ENABLE_LOG"] = "false";
+    try:
+        out = sp.run(progs + [args], capture_output=True, env=env, timeout=1800)
+    except:
+        return -1
     end = datetime.now()
     dif = end - start
     if out.returncode != 0:
         print(out.stderr)
-        dif = timedelta(0)
+        return -1
     return dif/timedelta(microseconds=1)
 
+ty = { "":"map-reduce", "-seq":"sequential", "-pthread":"pthreads" }
 def run(csvfile): 
     progs = {"histogram":"small.bmp", "kmeans":"", "pca":"", "string_match":"key_file_50MB.txt", "matrix_multiply":""}
-    fieldnames = [ "benchmark", "emulator", "time" ]
+    fieldnames = [ "benchmark", "emulator", "time", "type", "threads"]
     writer = csv.DictWriter(csvfile, fieldnames)
     for p in progs.keys():
         f = progs[p]
-        for i in range(50):
-            #native
-            prog = ["/share/simonk/static-musl-phoenix/"+p+"-seq"]
-            #prog = ["/share/sebastian/phoenix/"+p+"-seq"]
-            dif = do_run(prog, f, p)
-            writer.writerow({"benchmark":p, "emulator":"native", "time":str(dif)})
+        for suffix in ["", "-seq", "-pthread"]:
+            th = [1]
+            if suffix != "-seq":
+                th = [1, 2, 4, 8];
+            
+            for threads in th:
+                for i in range(3):
+                    #native
+                    env = os.environ
+                    prog = ["taskset", "-c", f"1-{threads}", "../phoenix/phoenix-2.0/tests/"+p+"/"+p+suffix]
+                    dif = do_run(prog, f, p, env)
+                    writer.writerow({"benchmark":p, "emulator":"native", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
 
-            #txlat
-            prog = ["./"+p+"-seq-static-musl-riscv.out"]
-            #prog = ["./"+p+"-seq-static-musl-arm.out"]
-            dif = do_run(prog, f, p)
-            writer.writerow({"benchmark":p, "emulator":"Arancini", "time":str(dif)})
-            csvfile.flush()
+                    #txlat
+                    env["LD_LIBRARY_PATH"] = "./"
+                    prog = ["taskset", "-c", f"1-{threads}", "../phoenix-arancini/"+p+suffix+"-riscv.out"]
+                    dif = do_run(prog, f, p, env)
+                    writer.writerow({"benchmark":p, "emulator":"Arancini", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
+                    csvfile.flush()
 
-            #txlat-dyn
-            if p not in [ ]:
-                prog = ["./"+p+"-seq-static-musl-riscv-dyn.out"]
-                #prog = ["./"+p+"-seq-static-musl-arm-dyn.out"]
-                dif = do_run(prog, f, p)
-                writer.writerow({"benchmark":p, "emulator":"Arancini-Dyn", "time":str(dif)})
-                csvfile.flush()
+                    #txlat-dyn
+                    if p not in [ ]:
+                        env["LD_LIBRARY_PATH"] = "./"
+                        prog = ["taskset", "-c", f"1-{threads}", "../phoenix-arancini/"+p+suffix+"-riscv-dyn.out"]
+                        dif = do_run(prog, f, p, env)
+                        writer.writerow({"benchmark":p, "emulator":"Arancini-Dyn", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
+                        csvfile.flush()
 
-            #QEMU
-            prog = ["/nix/store/i2k6sywwzf0vka7p09asf66g651kmxa8-qemu-riscv64-unknown-linux-gnu-8.0.0/bin/qemu-x86_64", "/share/simonk/static-musl-phoenix/"+p+"-seq-static-musl"] 
-            #prog = ["qemu-x86_64", "/share/simonk/static-musl-phoenix/"+p+"-seq-static-musl"] 
-            dif = do_run(prog, f, p)
-            writer.writerow({"benchmark":p, "emulator":"QEMU", "time":str(dif)})
-            csvfile.flush()
+                    #QEMU
+                    env["LD_LIBRARY_PATH"] = "../phoenix-clang-x86"
+                    prog = ["taskset", "-c", f"1-{threads}", "../nixpkgs/result/bin/qemu-x86_64", "../phoenix-clang-x86/"+p+suffix] 
+                    dif = do_run(prog, f, p, env)
+                    writer.writerow({"benchmark":p, "emulator":"QEMU", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
+                    csvfile.flush()
+                    
+                    #MCtoll
+                    prog = ["taskset", "-c", f"1-{threads}", "../phoenix-mctoll/"+p+suffix+".ll.out"] 
+                    dif = do_run(prog, f, p, env)
+                    writer.writerow({"benchmark":p, "emulator":"mctoll", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
+                    csvfile.flush()
 
 def clean(csvfile):
     print("Cleaning ...")

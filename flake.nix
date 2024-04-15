@@ -52,7 +52,7 @@
 				    patchShebangs mfile.py
 
 					# this will build, test and install
-				    ./mfile.py --prefix $out'' + lib.optionalString (system == "riscv64-linux") " --toolchain riscv64-unknown-linux-gnu- --host-cpu riscv64";
+				    ./mfile.py --prefix $out'';
 
 				dontInstall = true; # already installed during buildPhase
 			}){};
@@ -63,16 +63,8 @@
 				src = fadec-src;
 				nativeBuildInputs = [ meson ninja ];
 			}){};
-		native_pkgs =
-            if system == "riscv64-linux" then
-                import nixpkgs { system = "x86_64-linux"; }
-            else
-                import nixpkgs { inherit system; };
-		build_pkgs =
-			if system == "riscv64-linux" then
-				import nixpkgs { system = "x86_64-linux"; crossSystem.config = "riscv64-unknown-linux-gnu"; }
-			else
-				native_pkgs;
+		native_pkgs = import nixpkgs { inherit system; };
+		build_pkgs = native_pkgs;
 	in
 	{
 		defaultPackage = build_pkgs.callPackage(
@@ -111,7 +103,7 @@
 					export NDEBUG=1
 					cmakeConfigurePhase
 				'';
-				cmakeFlags = [ "-DBUILD_TESTS=1" "-DCMAKE_BUILD_TYPE=Release" ] ++ lib.optionals (system == "riscv64-linux") ["--toolchain riscv64-toolchain-nix.cmake"];
+				cmakeFlags = [ "-DBUILD_TESTS=1" ];
 			}
 		) {};
 	});
