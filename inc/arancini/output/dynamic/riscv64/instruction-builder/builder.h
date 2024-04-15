@@ -225,6 +225,10 @@ public:
 	{
 		instructions_.emplace_back(InstructionType::RdRs1ImmKeepRs2, &Assembler::addi_normal, rd, rs, rd, 0);
 	}
+	/// Does not emit any instruction, but copies the liveness of rd onto rs, i.e. if rd is alive at this point (used by later instruction), rs will also be alive.
+	/// So it is the same as a mv_keep for liveness but does not move any data.
+	void mv_liveness(RegisterOperand rd, RegisterOperand rs) { instructions_.emplace_back(InstructionType::Noop, rd, rd, rs); }
+
 	void not_(RegisterOperand rd, RegisterOperand rs) { xori(rd, rs, -1); }
 	void neg(RegisterOperand rd, RegisterOperand rs) { sub(rd, ZERO, rs); }
 
