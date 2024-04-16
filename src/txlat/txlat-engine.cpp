@@ -28,6 +28,16 @@ using namespace arancini::util;
 static std::set<std::string> allowed_symbols
 = { "cmpstr", "cmpnum", "swap", "_qsort", "_start", "test", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
 
+// Determine host architecture (with help from the build system)
+// Needed to select the appropriate linker script
+#if ARCH_AARCH64
+static const char* architecture = "aarch64";
+#elif ARCH_RICV64
+static const char* architecture = "riscv64";
+#elif ARCH_X64_64
+static const char* architecture = "x86_64";
+#endif
+
 void txlat_engine::process_options(arancini::output::o_static::static_output_engine &oe, const boost::program_options::variables_map &cmdline)
 {
 	if (auto llvmoe = dynamic_cast<llvm_static_output_engine *>(&oe)) {
@@ -258,8 +268,9 @@ next:
 
 		if (elf.type() == elf::elf_type::exec) {
 			// Generate the final output binary by compiling everything together.
-			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie -latomic " + intermediate_file->name() + libs + " " + phobjsrc->name()
-				+ " -l arancini-runtime -L " + arancini_runtime_lib_dir + " -Wl,-T,try3.lds.new,-rpath=" + arancini_runtime_lib_dir + debug_info + " " + verbose_link);
+            run_or_fail(fmt::format("{} -o {} -no-pie -latomic {} {} {} -larancini-runtime -L {} -Wl,-T,{}.lds,-rpath={} {} {}",
+                        cxx_compiler, cmdline.at("output").as<std::string>(), intermediate_file->name(), libs, phobjsrc->name(),
+                        arancini_runtime_lib_dir, architecture, arancini_runtime_lib_dir, debug_info, verbose_link));
 		} else if (elf.type() == elf::elf_type::dyn) {
 			// Generate the final output library by compiling everything together.
 			std::string tls_defines = tls.empty() ? ""
@@ -281,10 +292,9 @@ next:
 		}
 
 		// Generate the final output binary by compiling everything together.
-		run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie -latomic -static-libgcc -static-libstdc++ " + intermediate_file->name()
-			+ " " + phobjsrc->name() + " -L " + arancini_runtime_lib_dir
-			+ " -l arancini-runtime-static -l arancini-input-x86-static -l arancini-output-riscv64-static -l arancini-ir-static" + " -L "
-			+ arancini_runtime_lib_dir + "/../../obj -l xed" + debug_info + " -Wl,-T,try3.lds.new,-rpath=" + arancini_runtime_lib_dir);
+        run_or_fail(fmt::format("{} -o {} -no-pie -latomic -static-libgcc -static-libstdc++ {} {} -L {} -larancini-runtime-static -larancini-input-x86-static -larancini-output-riscv64-static -larancini-ir-static -L {}"
+                                "/../../obj -l xed {} -Wl,-T,{}.lds,-rpath={}", cxx_compiler, cmdline.at("output").as<std::string>(), intermediate_file->name(),
+                                phobjsrc->name(), arancini_runtime_lib_dir, arancini_runtime_lib_dir, debug_info, architecture, arancini_runtime_lib_dir));
 	}
 
 	// Patch relocations in result binary
