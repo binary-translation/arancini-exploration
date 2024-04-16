@@ -23,9 +23,11 @@ void atomic_translator::do_translate()
 	case XED_ICLASS_XCHG: {
 		// if an operand is memory, xchg becomes atomic
 		if (is_memory_operand(0)) {
-			builder().insert_atomic_xchg(compute_address(0)->val(), read_operand(1)->val());
+			auto xchg = builder().insert_atomic_xchg(compute_address(0)->val(), read_operand(1)->val());
+			write_operand(1, xchg->val());
 		} else if (is_memory_operand(1)) {
-			builder().insert_atomic_xchg(compute_address(1)->val(), read_operand(0)->val());
+			auto xchg = builder().insert_atomic_xchg(compute_address(1)->val(), read_operand(0)->val());
+			write_operand(0, xchg->val());
 		} else {
 			auto op0 = read_operand(0);
 

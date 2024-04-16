@@ -224,6 +224,8 @@ lib_info *lib_info_list_tail = nullptr;
 int lib_count = 0;
 }
 
+static std::unordered_map<unsigned long, void *> fn_addrs;
+
 /*
  * Initialises the dynamic runtime for the guest program that is about to be executed.
  */
@@ -292,6 +294,7 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 
 	x86_state->RSP
 		= setup_guest_stack(argc, argv, reinterpret_cast<intptr_t>(stack_base) - reinterpret_cast<intptr_t>(ctx_->get_memory_ptr(0)) + stack_size, ctx_, start);
+	//x86_state->GS = (unsigned long long)ctx_->get_memory_ptr(0);
 	x86_state->X87_STACK_BASE = (intptr_t)mmap(NULL, 80, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0) - (intptr_t)ctx_->get_memory_ptr(0);
 
 	// Report on various information for useful debugging purposes.
@@ -325,10 +328,20 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 			auto cur_dso = new dso();
 			cur_dso->dynv = lib->dynv;
 			cur_dso->base = lib->base;
+
+			for (uint64_t* func_map = lib->func_map;  *func_map ; func_map+=2) {
+				fn_addrs.emplace(func_map[0], (void*)func_map[1]);
+			}
+
 			if (lib->tls_len) {
 
 				cur_dso->tls = { nullptr, lib->tls_image, lib->tls_len, lib->tls_size, lib->tls_align, lib->tls_offset };
 				cur_dso->tls_id = tls_cnt++;
+
+				for (uint64_t** dtp_mod = lib->dtp_mod;  *dtp_mod ; dtp_mod++) {
+					*(*dtp_mod) = tls_cnt;
+				}
+
 				tls_align = MAXP2(tls_align, cur_dso->tls.align);
 #undef MAXP2
 				if (tls_tail) {
@@ -408,6 +421,24 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	return main_thread->get_cpu_state();
 }
 
+/**
+ * Register a static function so it can be called from the main loop
+ */
+extern "C" void register_static_fn_addr(unsigned long guest_addr, void *fn_addr) {
+	fn_addrs.emplace(guest_addr, fn_addr);
+}
+
+/**
+ * Look up a static function. Returns nullptr if the function was not found.
+ */
+extern "C" void* lookup_static_fn_addr(unsigned long guest_addr){
+	if (auto item = fn_addrs.find(guest_addr); item != fn_addrs.end()) {
+		return item->second;
+	}
+
+	return nullptr;
+}
+
 /*
  * Entry point from /static/ code when the CPU jumps to an address that hasn't been
  * translated.
@@ -419,5 +450,8 @@ extern "C" int invoke_code(void *cpu_state) { return ctx_->invoke(cpu_state); }
  */
 extern "C" int execute_internal_call(void *cpu_state, int call) { return ctx_->internal_call(cpu_state, call); }
 
-extern "C" void finalize() { delete ctx_; }
+extern "C" void finalize() { delete ctx_; exit(0); }
 
+extern "C" void clk(void *cpu_state, char *s) { ctx_->get_thread(cpu_state)->clk(s); }
+
+extern "C" void alert() { std::cout << "Top of MainLoop!\n"; }

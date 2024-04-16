@@ -7,7 +7,7 @@
 #include <arancini/ir/visitor.h>
 
 namespace arancini::ir {
-enum class port_kinds { value, constant, zero, negative, overflow, carry };
+enum class port_kinds { value, constant, zero, negative, overflow, carry, operation_value };
 
 class value_node;
 class port {

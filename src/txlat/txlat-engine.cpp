@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
+#include <ostream>
 #include <string>
 
 using namespace arancini::txlat;
@@ -25,12 +26,16 @@ using namespace arancini::output::o_static::llvm;
 using namespace arancini::util;
 
 static std::set<std::string> allowed_symbols
-	= { "cmpstr", "cmpnum", "swap", "_qsort", "_start", "test", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
+= { "cmpstr", "cmpnum", "swap", "_qsort", "_start", "test", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
 
 void txlat_engine::process_options(arancini::output::o_static::static_output_engine &oe, const boost::program_options::variables_map &cmdline)
 {
 	if (auto llvmoe = dynamic_cast<llvm_static_output_engine *>(&oe)) {
 		llvmoe->set_debug(cmdline.count("debug"));
+		if (cmdline.count("dump-llvm")) {
+			auto filename = cmdline.at("dump-llvm");
+			llvmoe->set_debug_dump_filename(filename.as<std::string>());
+		}
 	}
 }
 
@@ -43,11 +48,11 @@ static void run_or_fail(const std::string &cmd)
 }
 
 /*
-This function acts as the main driver for the binary translation.
-First it parses the ELF binary, lifting each section to the Arancini IR.
-Finally, the lifted IR is processed by the output engine.
-For example, the output engine can generate the target binary or a
-visualisation of the Arancini IR.
+  This function acts as the main driver for the binary translation.
+  First it parses the ELF binary, lifting each section to the Arancini IR.
+  Finally, the lifted IR is processed by the output engine.
+  For example, the output engine can generate the target binary or a
+  visualisation of the Arancini IR.
 */
 void txlat_engine::translate(const boost::program_options::variables_map &cmdline)
 {
@@ -59,26 +64,40 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	const auto &filename = cmdline.at("input").as<std::string>();
 	elf_reader elf(filename);
 	elf.parse();
+	bool is_exec = elf.type()==elf::elf_type::exec;
 
 	// TODO: Figure the input engine out from ELF architecture header
 	auto das = cmdline.at("syntax").as<std::string>() == "att" ? disassembly_syntax::att : disassembly_syntax::intel;
 	auto ia = std::make_unique<arancini::input::x86::x86_input_arch>(cmdline.count("debug") || cmdline.count("graph"), das);
 
+	std::string prefix = "";
+	if (cmdline.find("keep-objs") != cmdline.end()) {
+		prefix = cmdline.at("keep-objs").as<std::string>();
+	}
 	// Construct the output engine
-	auto intermediate_file = tf.create_file(".o");
-	auto oe = std::make_shared<arancini::output::o_static::llvm::llvm_static_output_engine>(intermediate_file->name());
+	auto intermediate_file = tf.create_file(prefix, ".o");
+	auto oe = std::make_shared<arancini::output::o_static::llvm::llvm_static_output_engine>(intermediate_file->name(), is_exec);
 	process_options(*oe, cmdline);
 
 	oe->set_entrypoint(elf.get_entrypoint());
 
 	std::shared_ptr<symbol_table> dyn_sym;
 	std::shared_ptr<symbol_table> sym_t;
+	std::shared_ptr<plt_table> plt_tab;
 	std::vector<std::shared_ptr<rela_table>> relocations;
 	std::vector<std::shared_ptr<relr_array>> relocations_r;
+	std::set<symbol> unique_translated;
+	// pairs of symbols and maximum size (aka. until the end of the section)
+	std::vector<std::pair<symbol, size_t>> zero_size;
 
 	// Loop over each symbol table, and translate the symbol.
 	for (auto &s : elf.sections()) {
-		if (s->type() == elf::section_type::dynamic_symbol_table) {
+		if (s->type() == elf::section_type::progbits) {
+			if (s->name() == ".plt") {
+				auto st = std::static_pointer_cast<plt_table>(s);
+				plt_tab = std::move(st);
+			}
+		} else if (s->type() == elf::section_type::dynamic_symbol_table) {
 			auto st = std::static_pointer_cast<symbol_table>(s);
 			dyn_sym = std::move(st);
 		} else if (s->type() == elf::section_type::relocation_addend) {
@@ -89,16 +108,65 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 			relocations_r.push_back(std::move(st));
 		} else if (s->type() == section_type::symbol_table) {
 			auto st = std::static_pointer_cast<symbol_table>(s);
-			// TODO static translation of code in libraries
-			if (!cmdline.count("no-static") && elf.type() == elf_type::exec) {
-				for (const auto &sym : st->symbols()) {
-					// if (allowed_symbols.count(sym.name())) {
-					if (sym.is_func() && sym.size()) {
-						oe->add_chunk(translate_symbol(*ia, elf, sym));
+			if (!cmdline.count("no-static")) {
+				auto syms = st->symbols();
+				for (auto sym = syms.cbegin(); sym != syms.cend(); sym++) {
+					if (!sym->is_func())
+						continue;
+					::util::global_logger.debug("PASS1: looking at symbol {} @ 0x{:#x}\n", sym->name(), sym->value());
+					if (!sym->value())
+						continue;
+					if (!sym->size()) {
+						// get the section the symbol is in
+
+						auto sec = elf.get_section(sym->section_index());
+						size_t size = sec->address()+sec->data_size() - sym->value();
+						zero_size.push_back({*sym, size});
+						unique_translated.insert(*sym);
+						continue;
 					}
+					unique_translated.insert(*sym);
+					oe->add_chunk(translate_symbol(*ia, elf, *sym));
 				}
 			}
 			sym_t = std::move(st);
+		}
+	}
+
+	// PASS2
+	for ( const auto &p : zero_size) {
+		::util::global_logger.debug("PASS2: doing (0 size), symbol {}\n", p.first.name());
+		// find the address of the symbol after sym in the text section, and assume that the size of sym is until there
+		size_t size = p.second;
+		auto next = std::next(unique_translated.find(p.first), 1);
+		if (next != unique_translated.end()) {
+			if (next->value() - p.first.value() < size)
+				size = next->value() - p.first.value();
+		}
+		auto fixed_sym = symbol(p.first.name(), p.first.value(), size, p.first.section_index(), p.first.info(), 0);
+
+		oe->add_chunk(translate_symbol(*ia, elf, fixed_sym));
+	}
+
+	// Generate decls for external functions found in the relocation table
+
+	for (const auto& rs : relocations) {
+		for (auto r : rs->relocations()) {
+			auto sym_idx = r.symbol();
+			auto dst = r.offset();
+			auto sym = dyn_sym->symbols().at(sym_idx);
+			if (!sym.is_func())
+				continue;
+
+			::util::global_logger.debug("Searching decl for {} @ {:#x}\n", sym.name(), dst);
+			for (const auto &st : plt_tab->stubs()) {
+				if (st.second == dst) {
+					::util::global_logger.debug("Adding decl for {} @ {:#x}\n", sym.name(), st.first);
+					oe->add_function_decl(st.first, "__arancini__"+sym.name());
+				}
+			}
+next:
+			;
 		}
 	}
 
@@ -107,8 +175,8 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
     generate_dot_graph(*oe, cmdline.at("graph").as<std::string>());
 	}
 
-  // Execute required optimisations from the command line
-  optimise(*oe, cmdline);
+	// Execute required optimisations from the command line
+	optimise(*oe, cmdline);
 
 	// Generate a dot graph of the optimized IR if required
 	if (cmdline.count("graph")) {
@@ -145,11 +213,11 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
 	if (cmdline.count("no-script")) {
 		if (elf.type() == elf_type::exec) {
-			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + " -l arancini-runtime -L "
-				+ arancini_runtime_lib_dir + " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info + verbose_link);
+			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + "-L "
+				+ arancini_runtime_lib_dir + " -l arancini-runtime -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info + verbose_link);
 		} else if (elf.type() == elf::elf_type::dyn) {
-			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -shared " + intermediate_file->name() + +" -l arancini-runtime -L "
-				+ arancini_runtime_lib_dir + " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info + verbose_link);
+			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -shared " + intermediate_file->name() + "-L "
+				+ arancini_runtime_lib_dir + " -l arancini-runtime -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info + verbose_link);
 		}
 		return;
 	}
@@ -168,11 +236,14 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		}
 	}
 
-	// Now, we need to create an assembly file that includes the binary data for each program header,
-	// defines all dynsyms of the input binary with `__guest__` prefix, verbatim copies all relocations of the input binary and some metadata
-	auto phobjsrc = tf.create_file(".S");
+	// Now, we need to create an assembly file that includes the binary data for
+	// each program header, along with some associated metadata too.  TODO: Maybe we
+	// should just include the original ELF file - but then the runtime would need to
+	// parse and load it.
+	auto phobjsrc = tf.create_file(prefix, ".S");
 
 	std::map<uint64_t, std::string> ifuncs = generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym, relocations, relocations_r, sym_t, tls);
+
 
 	if (!cmdline.count("static-binary")) {
 		std::string libs;
@@ -187,17 +258,18 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
 		if (elf.type() == elf::elf_type::exec) {
 			// Generate the final output binary by compiling everything together.
-			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie " + intermediate_file->name() + libs + " " + phobjsrc->name()
-				+ " -l arancini-runtime -L " + arancini_runtime_lib_dir + " -Wl,-T,exec.lds,-rpath=" + arancini_runtime_lib_dir + debug_info);
+			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie -latomic " + intermediate_file->name() + libs + " "
+				+ phobjsrc->name() + " -L " + arancini_runtime_lib_dir + " -l arancini-runtime -Wl,-T,exec.lds,-rpath=" + arancini_runtime_lib_dir
+				+ debug_info);
 		} else if (elf.type() == elf::elf_type::dyn) {
 			// Generate the final output library by compiling everything together.
 			std::string tls_defines = tls.empty() ? ""
 												  : " -DTLS_LEN=" + std::to_string(tls[0]->data_size()) + " -DTLS_SIZE=" + std::to_string(tls[0]->mem_size())
 					+ " -DTLS_ALIGN=" + std::to_string(tls[0]->align());
 
-			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -shared " + intermediate_file->name() + " " + phobjsrc->name()
-				+ tls_defines + " init_lib.c -l arancini-runtime -L " + arancini_runtime_lib_dir + libs + " -Wl,-T,lib.lds,-rpath=" + arancini_runtime_lib_dir
-				+ debug_info);
+			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -fPIC -shared " + intermediate_file->name() + " " + phobjsrc->name()
+				+ tls_defines + " init_lib.c -L " + arancini_runtime_lib_dir + " -l arancini-runtime " + libs
+				+ " -Wl,-T,lib.lds,-rpath=" + arancini_runtime_lib_dir + debug_info);
 		} else {
 			throw std::runtime_error("Input elf type must be either an executable or shared object.");
 		}
@@ -210,12 +282,11 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		}
 
 		// Generate the final output binary by compiling everything together.
-		run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie -static-libgcc -static-libstdc++ " + intermediate_file->name()
+		run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie -latomic -static-libgcc -static-libstdc++ " + intermediate_file->name()
 			+ " " + phobjsrc->name() + " -L " + arancini_runtime_lib_dir
 			+ " -l arancini-runtime-static -l arancini-input-x86-static -l arancini-output-riscv64-static -l arancini-ir-static" + " -L "
 			+ arancini_runtime_lib_dir + "/../../obj -l xed" + debug_info + " -Wl,-T,exec.lds,-rpath=" + arancini_runtime_lib_dir);
 	}
-
 
 	// Patch relocations in result binary
 	const auto &output = cmdline.at("output").as<std::string>();
@@ -361,8 +432,8 @@ void txlat_engine::add_symbol_to_output(const std::vector<std::shared_ptr<progra
 }
 
 /*
-This function uses an x86 implementation of the input_architecture class to lift
-x86 symbol sections to the Arancini IR.
+  This function uses an x86 implementation of the input_architecture class to lift
+  x86 symbol sections to the Arancini IR.
 */
 std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arch &ia, elf_reader &reader, const symbol &sym)
 {
@@ -380,7 +451,7 @@ std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arc
 	default_ir_builder irb(ia.get_internal_function_resolver(), true);
 
 	auto start = std::chrono::high_resolution_clock::now();
-	ia.translate_chunk(irb, sym.value(), symbol_data, sym.size(), false);
+	ia.translate_chunk(irb, sym.value(), symbol_data, sym.size(), false, "__arancini__"+sym.name());
 	auto dur = std::chrono::high_resolution_clock::now() - start;
 
     ::util::global_logger.info("Symbol translation time: {} us\n", std::chrono::duration_cast<std::chrono::microseconds>(dur).count());
@@ -424,7 +495,7 @@ void txlat_engine::optimise(arancini::output::o_static::static_output_engine &oe
     ::util::global_logger.info("Optimisation: dead flags elimination pass took {} us\n", std::chrono::duration_cast<std::chrono::microseconds>(dur).count());
 }
 
-std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std::shared_ptr<util::tempfile> &phobjsrc, elf::elf_reader &elf,
+std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std::shared_ptr<util::basefile> &phobjsrc, elf::elf_reader &elf,
 	const std::vector<std::shared_ptr<elf::program_header>> &load_phdrs, const std::basic_string<char> &filename, const std::shared_ptr<symbol_table> &dyn_sym,
 	const std::vector<std::shared_ptr<elf::rela_table>> &relocations, const std::vector<std::shared_ptr<elf::relr_array>> &relocations_r,
 	const std::shared_ptr<symbol_table> &sym_t, const std::vector<std::shared_ptr<elf::program_header>> &tls)
@@ -462,14 +533,6 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 		end_addresses[phdr->address() + phdr->data_size()] = 2 * i;
 
 		off_t address = phdr->address();
-		if (tls.size() == 1) {
-			// Other cases handled below
-
-			// TLS initialized data (.tdata) is part of one of the LOAD headers (typically at the start), add a symbol so we can initialize it at runtime.
-			if (phdr->offset() == tls[0]->offset()) {
-				s << "guest_tls:\n";
-			}
-		}
 
 		// Add 2 sections per PT_LOAD header (one for initialized and one for uninitialized data.
 		l << ".gph.load" << std::dec << i << ".1 " << address << ": { *("
@@ -485,6 +548,16 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 		//				s << 'x';
 		//			}
 		s << "\"\n";
+
+		if (tls.size() == 1) {
+			// Other cases handled below
+
+			// TLS initialized data (.tdata) is part of one of the LOAD headers (typically at the start), add a symbol so we can initialize it at runtime.
+			if (phdr->offset() == tls[0]->offset()) {
+				s << "guest_tls:\n";
+			}
+		}
+
 
 		s << ".ifndef guest_base\nguest_base:\n.globl guest_base\n.hidden guest_base\n";
 		if (elf.type() == elf::elf_type::exec) {
@@ -524,7 +597,7 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 				add_symbol_to_output(load_phdrs, end_addresses, sy, s, ifuncs, true, true);
 			}
 		}
-		static const std::set<std::string> symbols_to_copy_global { "main_ctor_queue", "__malloc_replaced", "__libc", "__thread_list_lock", "__sysinfo" };
+		static const std::set<std::string> symbols_to_copy_global { "main_ctor_queue", "__malloc_replaced", "__libc", "__thread_list_lock", "__sysinfo", "__environ"};
 		if (symbols_to_copy_global.count(sym.name())) {
 			add_symbol_to_output(load_phdrs, end_addresses, sym, s, ifuncs, true);
 		}
@@ -567,6 +640,21 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 				  << "0: .quad 0x" << std::hex << reloc.offset() << ", 0x" << reloc.addend() << '\n'
 				  << ".reloc 0b, R_RISCV_64, 0x" << std::hex << reloc.offset() << '\n'
 				  << ".section .grela\n";
+			} else if (reloc.is_dtpmod()) {
+
+				if (elf.type() == elf_type::exec) {
+					throw std::runtime_error("DTPMOD reloc in binary not supported.");
+				}
+
+				if (reloc.symbol() != 0 || reloc.addend() != 0) {
+					throw std::runtime_error("DTPMOD reloc with non-0 symbol/addend unsupported.");
+				}
+
+				s << ".section .data.dtpmod_reloc\n.ifndef __DTPMOD_INIT\n__DTPMOD_INIT:\n.endif\n"
+				  << "0: .quad 0x" << std::hex << reloc.offset() << '\n'
+				  << ".reloc 0b, R_RISCV_64, 0x" << std::hex << reloc.offset() << '\n'
+				  << ".section .grela\n";
+
 			} else if (reloc.is_relative()) {
 				s << ".quad 0x" << std::hex << reloc.offset() << "\n.int 0x" << reloc.type_on_host() << "\n.int 0x" << reloc.symbol() << "\n.quad 0x"
 				  << reloc.addend() << '\n';
@@ -581,6 +669,8 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 
 	s << ".section .data.tp_reloc\n.ifndef __TPREL_INIT\n__TPREL_INIT:\n.endif\n.quad 0x0, 0x0\n"
 	  << ".globl __TPREL_INIT\n.type __TPREL_INIT, STT_OBJECT\n.size __TPREL_INIT, . - __TPREL_INIT \n.hidden __TPREL_INIT\n"
+	  << ".section .data.dtpmod_reloc\n.ifndef __DTPMOD_INIT\n__DTPMOD_INIT:\n.endif\n.quad 0x0\n"
+	  << ".globl __DTPMOD_INIT\n.type __DTPMOD_INIT, STT_OBJECT\n.size __DTPMOD_INIT, . - __DTPMOD_INIT \n.hidden __DTPMOD_INIT\n"
 	  << ".ifndef guest_tls\n.set guest_tls, 0\n.endif\n.globl guest_tls\n.hidden guest_tls\n";
 	if (elf.type() == elf_type::exec) {
 		s << ".ifndef tls_offset\ntls_offset:\n.quad 0\n.globl tls_offset\n.endif\n";

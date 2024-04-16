@@ -76,40 +76,42 @@
 	in
 	{
 		defaultPackage = build_pkgs.callPackage(
-		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang_14, zlib, boost, libffi, libxml2, llvmPackages_14, lib, gcc, fmt}:
+		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2, llvmPackages, lib, gcc, fmt, pkgsCross, m4}:
 			stdenv.mkDerivation {
 				name = "arancini";
 				pname = "txlat";
 				src = self;
 				nativeBuildInputs = [
 					#graphviz
-					#gdb
+					gdb
 					python3
 					#valgrind
 					git
 					cmake
 					pkg-config
-					clang_14
-                    fmt
+					clang
+					pkgsCross.riscv64.buildPackages.gcc
+					m4
 				];
 				buildInputs = [
+                    fmt
 					zlib
 					boost
 					patched-xed
 					libffi
 					fadec
 					libxml2
-					llvmPackages_14.llvm.dev
-					llvmPackages_14.bintools
-					llvmPackages_14.lld
-                    fmt
+					llvmPackages.llvm.dev
+					llvmPackages.bintools
+					llvmPackages.lld
 				];
 				depsTargetTarget = [ gcc ];
 				configurePhase = ''
 					export FLAKE_BUILD=1
+					export NDEBUG=1
 					cmakeConfigurePhase
 				'';
-				cmakeFlags = [ "-DBUILD_TESTS=1" ] ++ lib.optionals (system == "riscv64-linux") ["--toolchain riscv64-toolchain-nix.cmake"];
+				cmakeFlags = [ "-DBUILD_TESTS=1" "-DCMAKE_BUILD_TYPE=Release" ] ++ lib.optionals (system == "riscv64-linux") ["--toolchain riscv64-toolchain-nix.cmake"];
 			}
 		) {};
 	});

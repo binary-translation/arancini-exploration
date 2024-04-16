@@ -38,15 +38,16 @@ public:
 
 	off_t address() const { return address_; }
 
-	bool updates_pc() const
+	br_type updates_pc() const
 	{
-		for (const auto& a : actions_) {
-			if (a->updates_pc()) {
-				return true;
+		br_type max = br_type::none;
+		for (auto a : actions_) {
+			if ((unsigned)a->updates_pc() > (unsigned)max) {
+				max = a->updates_pc();
 			}
 		}
 
-		return false;
+		return max;
 	}
 
 	const std::string &disassembly() const { return disasm_; }

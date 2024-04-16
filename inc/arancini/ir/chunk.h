@@ -14,6 +14,7 @@ class packet;
  */
 class chunk {
 public:
+	chunk(const std::string &name) : name_(name) {}
 	/**
 	 * @brief Adds an instruction packet to the end of this chunk.
 	 *
@@ -27,8 +28,11 @@ public:
 
 	void accept(visitor &v) { v.visit_chunk(*this); }
 
+	const std::string &name() { return name_; };
+
 private:
 	off_t address_;
+	const std::string name_;
 	std::vector<std::shared_ptr<packet>> packets_;
 };
 } // namespace arancini::ir

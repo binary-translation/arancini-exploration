@@ -1,6 +1,10 @@
 #pragma once
 
+#include <bits/types/struct_timespec.h>
+#include <ctime>
 #include <memory>
+#include <time.h>
+#include <iostream>
 
 namespace arancini::runtime::exec {
 class execution_context;
@@ -11,6 +15,12 @@ public:
 	~execution_thread();
 
 	void *get_cpu_state() const { return cpu_state_; }
+
+	void clk(char *s) {
+		struct timespec ts;
+		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
+		std::cerr << std::dec << s << ":\t" << ts.tv_sec*1000000000+ts.tv_nsec << std::endl;
+	}
 
 	uint64_t chain_address_;
 	int* clear_child_tid_;

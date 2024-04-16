@@ -23,14 +23,65 @@ void binop_translator::do_translate()
 	case XED_ICLASS_TEST:
 		rslt = builder().insert_and(op0->val(), op1->val());
 		break;
+	case XED_ICLASS_ANDPS: {
+		op0 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op0->val());
+		op1 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op1->val());
+		rslt = builder().insert_and(op0->val(), op1->val());
+		break;
+	}
+	case XED_ICLASS_ANDNPS: {
+		op0 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op0->val());
+		op0 = builder().insert_not(op0->val());
+		op1 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op1->val());
+		rslt = builder().insert_and(op0->val(), op1->val());
+		break;
+	}
+	case XED_ICLASS_ANDPD: {
+		op0 = builder().insert_bitcast(value_type::vector(value_type::f64(), 2), op0->val());
+		op1 = builder().insert_bitcast(value_type::vector(value_type::f64(), 2), op1->val());
+		rslt = builder().insert_and(op0->val(), op1->val());
+		break;
+	}
+	case XED_ICLASS_ANDNPD: {
+		op0 = builder().insert_bitcast(value_type::vector(value_type::f64(), 2), op0->val());
+		op0 = builder().insert_not(op0->val());
+		op1 = builder().insert_bitcast(value_type::vector(value_type::f64(), 2), op1->val());
+		rslt = builder().insert_and(op0->val(), op1->val());
+		break;
+	}
 	case XED_ICLASS_OR:
 	case XED_ICLASS_POR:
 		rslt = builder().insert_or(op0->val(), op1->val());
 		break;
-
+	case XED_ICLASS_ORPS: {
+		op0 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op0->val());
+		op1 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op1->val());
+		rslt = builder().insert_or(op0->val(), op1->val());
+		break;
+	}
+	case XED_ICLASS_ORPD: {
+		op0 = builder().insert_bitcast(value_type::vector(value_type::f64(), 2), op0->val());
+		op1 = builder().insert_bitcast(value_type::vector(value_type::f64(), 2), op1->val());
+		rslt = builder().insert_or(op0->val(), op1->val());
+		break;
+	}
 	case XED_ICLASS_ADD:
 		rslt = builder().insert_add(op0->val(), op1->val());
 		break;
+  case XED_ICLASS_ADDSS: {
+    auto dst = builder().insert_bitcast(value_type::vector(value_type::u32(), 4), op0->val());
+    auto src = read_operand(1);
+
+    if (src->val().type().width() == 32) { // addsd xmm1, m32
+      rslt = builder().insert_add(builder().insert_vector_extract(dst->val(), 0)->val(), src->val());
+    } else { // addsd xmm1, xmm2
+      src = builder().insert_bitcast(value_type::vector(value_type::u32(), 4), src->val());
+      rslt = builder().insert_add(builder().insert_vector_extract(dst->val(), 0)->val(), builder().insert_vector_extract(src->val(), 0)->val());
+    }
+    dst = builder().insert_vector_insert(dst->val(), 0, rslt->val());
+    write_operand(0, dst->val());
+    break;
+  }
   case XED_ICLASS_ADDSD: {
     auto dst = builder().insert_bitcast(value_type::vector(value_type::u64(), 2), op0->val());
     auto src = read_operand(1);
@@ -45,6 +96,12 @@ void binop_translator::do_translate()
     write_operand(0, dst->val());
     break;
   }
+	case XED_ICLASS_ADDPS: {
+		op0 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op0->val());
+		op1 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op1->val());
+		rslt = builder().insert_add(op0->val(), op1->val());
+		break;
+	}
 	case XED_ICLASS_ADC:
 		rslt = builder().insert_adc(op0->val(), op1->val(), auto_cast(op0->val().type(), read_reg(value_type::u1(), reg_offsets::CF))->val());
 		break;
@@ -120,17 +177,39 @@ void binop_translator::do_translate()
 		rslt = builder().insert_sub(lhs->val(), rhs->val());
 		break;
 	}
-	case XED_ICLASS_PCMPEQB: {
+	case XED_ICLASS_PCMPEQB:
+	case XED_ICLASS_PCMPEQW:
+	case XED_ICLASS_PCMPEQD: {
     auto lhs = read_operand(0);
     auto rhs = read_operand(1);
-    auto nr_bytes = lhs->val().type().width() == 64 ? 8 : 16;
-    lhs = builder().insert_bitcast(value_type::vector(value_type::u8(), nr_bytes), lhs->val());
-    rhs = builder().insert_bitcast(value_type::vector(value_type::u8(), nr_bytes), rhs->val());
+    auto nr_bits = lhs->val().type().width();
+	auto ty = value_type::v();
+	value_node *cst_0;
+	value_node *cst_1;
 
-    auto cst_0 = builder().insert_constant_u8(0x00);
-    auto cst_1 = builder().insert_constant_u8(0xFF);
+	switch (inst_class) {
+		case XED_ICLASS_PCMPEQB: {
+			ty = value_type::u8();
+			cst_0 = builder().insert_constant_u8(0x00);
+			cst_1 = builder().insert_constant_u8(0xFF);
+		} break;
+		case XED_ICLASS_PCMPEQW: {
+			ty = value_type::u16();
+			cst_0 = builder().insert_constant_u16(0x0000);
+			cst_1 = builder().insert_constant_u16(0xFFFF);
+		} break;
+		case XED_ICLASS_PCMPEQD: {
+			ty = value_type::u32();
+			cst_0 = builder().insert_constant_u32(0x00000000);
+			cst_1 = builder().insert_constant_u32(0xFFFFFFFF);
+		} break;
+		default: throw std::runtime_error("unhandled case in PCMPEQX");
+	}
 
-    for (int i = 0; i < nr_bytes; i++) {
+    lhs = builder().insert_bitcast(value_type::vector(ty, nr_bits/ty.width()), lhs->val());
+    rhs = builder().insert_bitcast(value_type::vector(ty, nr_bits/ty.width()), rhs->val());
+
+    for (int i = 0; i < nr_bits/ty.width(); i++) {
       auto equal = builder().insert_cmpeq(builder().insert_vector_extract(lhs->val(), i)->val(), builder().insert_vector_extract(rhs->val(), i)->val());
       auto res = builder().insert_csel(equal->val(), cst_1->val(), cst_0->val());
       lhs = builder().insert_vector_insert(lhs->val(), i, res->val());
@@ -207,15 +286,15 @@ void binop_translator::do_translate()
     auto src = read_operand(1);
     auto type = src->val().type();
 
+    auto idx = builder().alloc_local(value_type::u64());
+    auto mask = builder().alloc_local(type);
     // if src == 0
     auto src_zero = builder().insert_cmpeq(src->val(), builder().insert_constant_i(type, 0)->val());
-    cond_br_node *br = (cond_br_node *)builder().insert_cond_br(src_zero->val(), nullptr);
+    cond_br_node *undef = (cond_br_node *)builder().insert_cond_br(src_zero->val(), nullptr);
 
     // then [src != 0]
     write_reg(reg_offsets::ZF, builder().insert_constant_i(value_type::u1(), 0)->val());
-    auto mask = builder().alloc_local(type);
     builder().insert_write_local(mask, builder().insert_constant_i(type, 1)->val()); // mask := 0x1
-    auto idx = builder().alloc_local(value_type::u64());
     if (inst_class == XED_ICLASS_BSR) {
       auto mask_val = builder().insert_read_local(mask);
       mask_val = builder().insert_lsl(mask_val->val(), builder().insert_constant_i(type, type.width() - 1)->val());
@@ -224,12 +303,14 @@ void binop_translator::do_translate()
     } else {
       builder().insert_write_local(idx, builder().insert_constant_u64(0)->val()); // idx := 0
     }
+	auto next = (br_node *)builder().insert_br(nullptr);
     //   while mask & src == 0; do idx--; mask = mask >> 1; done
     auto while_loop = builder().insert_label("while");
+	next->add_br_target(while_loop);
 
     //       mask & src == 1  -> jump to endif
     auto mask_val = builder().insert_read_local(mask);
-    auto mask_and = builder().insert_and(mask_val->val(), src->val());
+    auto mask_and = builder().insert_cmpne(builder().insert_and(mask_val->val(), src->val())->val(), builder().insert_constant_i(type, 0)->val());
     cond_br_node *fi_br = (cond_br_node *)builder().insert_cond_br(mask_and->val(), nullptr);
     //       idx--/++; mask = mask >>/<< 1
     auto idx_val = builder().insert_read_local(idx);
@@ -247,8 +328,11 @@ void binop_translator::do_translate()
 
     // else [src == 0]
     auto else_label = builder().insert_label("else");
-    br->add_br_target(else_label);
+    undef->add_br_target(else_label);
     write_reg(reg_offsets::ZF, builder().insert_constant_i(value_type::u1(), 1)->val());
+	// undef, so write 0
+    write_operand(0, builder().insert_constant_i(type, 0)->val());
+	auto end = (br_node *)builder().insert_br(nullptr);
 
     // fi
     auto fi_label = builder().insert_label("fi");
@@ -256,10 +340,19 @@ void binop_translator::do_translate()
 
     // write result
     write_operand(0, builder().insert_read_local(idx)->val());
+	next = (br_node *)builder().insert_br(nullptr);
+
+	auto end_label = builder().insert_label("end");
+    next->add_br_target(end_label);
+    end->add_br_target(end_label);
+
 
     break;
   }
-	case XED_ICLASS_COMISS: {
+	case XED_ICLASS_COMISS:
+	case XED_ICLASS_COMISD:
+	case XED_ICLASS_UCOMISS:
+	case XED_ICLASS_UCOMISD: {
 		// comiss op0 op1: compares the lowest fp32 value of op0 and op1 and sets EFLAGS such as:
 		// op0 > op1: ZF = PF = CF = 0
 		// op0 < op1: ZF = PF = 0, CF = 1
@@ -267,25 +360,57 @@ void binop_translator::do_translate()
 		// op0 or op1 = NaN: ZF = PF = CF = 1
 
 		// Only SSE version is supported
+
+		// The flags for ucomisd are the same, execptions would be different
 		auto op0 = read_operand(0);
 		auto op1 = read_operand(1);
 
-		op0 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op0->val());
+		value_type ETy = value_type::v();
+		value_type CastTy = value_type::v();
+		int ENum;
+
+		value_node *cexp;
+		value_node *cfrac;
+		value_node *z;
+
+		switch(inst_class) {
+			case XED_ICLASS_UCOMISS:
+			case XED_ICLASS_COMISS: {
+				ETy = value_type::f32();
+				CastTy = value_type::u32();
+				ENum = 4;
+				cexp = builder().insert_constant_u32(0x7F800000);
+				cfrac = builder().insert_constant_u32(0x7FFFFF);
+				z = builder().insert_constant_u32(0);
+			} break;
+			case XED_ICLASS_COMISD:
+			case XED_ICLASS_UCOMISD: {
+				ETy = value_type::f64();
+				CastTy = value_type::u64();
+				ENum = 2;
+				cexp = builder().insert_constant_u64(0x7FF0000000000000);
+				cfrac = builder().insert_constant_u64(0x000FFFFFFFFFFFFF);
+				z = builder().insert_constant_u64(0);
+			} break;
+			default: break;
+		}
+
+		op0 = builder().insert_bitcast(value_type::vector(ETy, ENum), op0->val());
 		op0 = builder().insert_vector_extract(op0->val(), 0);
 		if (op1->val().type().width() == 128) {
-			op1 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), op1->val());
+			op1 = builder().insert_bitcast(value_type::vector(ETy, ENum), op1->val());
 			op1 = builder().insert_vector_extract(op1->val(), 0);
 		} else {
-			op1 = builder().insert_bitcast(value_type::f32(), op1->val());
+			op1 = builder().insert_bitcast(ETy, op1->val());
 		}
 
 		// op0 is NaN?
-		auto op0_cast = builder().insert_bitcast(value_type::u32(), op0->val());
-		auto and_exp = builder().insert_and(op0_cast->val(), builder().insert_constant_u32(0x7F800000)->val());
-		auto cmpeq_exp = builder().insert_cmpeq(and_exp->val(), builder().insert_constant_u32(0)->val());
+		auto op0_cast = builder().insert_bitcast(CastTy, op0->val());
+		auto and_exp = builder().insert_and(op0_cast->val(), cexp->val());
+		auto cmpeq_exp = builder().insert_cmpeq(and_exp->val(), cexp->val());
 		cond_br_node *op0_not_nan_br = (cond_br_node *)builder().insert_cond_br(cmpeq_exp->val(), nullptr);
-		auto and_frac = builder().insert_and(op0_cast->val(), builder().insert_constant_u32(0x7FFFFF)->val());
-		auto cmpeq_frac = builder().insert_cmpeq(and_frac->val(), builder().insert_constant_u32(0)->val());
+		auto and_frac = builder().insert_and(op0_cast->val(), cexp->val());
+		auto cmpeq_frac = builder().insert_cmpeq(and_frac->val(), z->val());
 		cond_br_node *op0_not_nan_br2 = (cond_br_node *)builder().insert_cond_br(cmpeq_frac->val(), nullptr);
 		write_flags(nullptr, flag_op::set1, flag_op::set1, flag_op::set0, flag_op::set0, flag_op::set1, flag_op::set0);
 		br_node *end0nan_br = (br_node *)builder().insert_br(nullptr);
@@ -294,12 +419,12 @@ void binop_translator::do_translate()
 		auto op0_not_nan = builder().insert_label("op0_not_NaN");
 		op0_not_nan_br->add_br_target(op0_not_nan);
 		op0_not_nan_br2->add_br_target(op0_not_nan);
-		auto op1_cast = builder().insert_bitcast(value_type::u32(), op1->val());
-		and_exp = builder().insert_and(op1_cast->val(), builder().insert_constant_u32(0x7F800000)->val());
-		cmpeq_exp = builder().insert_cmpeq(and_exp->val(), builder().insert_constant_u32(0)->val());
+		auto op1_cast = builder().insert_bitcast(CastTy, op1->val());
+		and_exp = builder().insert_and(op1_cast->val(), cexp->val());
+		cmpeq_exp = builder().insert_cmpeq(and_exp->val(), z->val());
 		cond_br_node *op1_not_nan_br = (cond_br_node *)builder().insert_cond_br(cmpeq_exp->val(), nullptr);
-		and_frac = builder().insert_and(op1_cast->val(), builder().insert_constant_u32(0x7FFFFF)->val());
-		cmpeq_frac = builder().insert_cmpeq(and_frac->val(), builder().insert_constant_u32(0)->val());
+		and_frac = builder().insert_and(op1_cast->val(), cfrac->val());
+		cmpeq_frac = builder().insert_cmpeq(and_frac->val(), z->val());
 		cond_br_node *op1_not_nan_br2 = (cond_br_node *)builder().insert_cond_br(cmpeq_frac->val(), nullptr);
 		write_flags(nullptr, flag_op::set1, flag_op::set1, flag_op::set0, flag_op::set0, flag_op::set1, flag_op::set0);
 		br_node *end1nan_br = (br_node *)builder().insert_br(nullptr);
@@ -338,6 +463,170 @@ void binop_translator::do_translate()
 
 		break;
 	}
+	case XED_ICLASS_CMPSD_XMM:
+	case XED_ICLASS_CMPSS: {	
+		auto dest = read_operand(0);
+		auto op0 = read_operand(0);
+		auto op1 = read_operand(1);
+		auto op2 = (constant_node *)read_operand(2);
+
+		value_node *true_val;
+		value_node *false_val;
+
+		value_type VecTy = value_type::v();
+
+		switch (inst_class) {
+			case XED_ICLASS_CMPSS: {
+				true_val = builder().insert_constant_f32((float)0xFFFFFFFF);
+				false_val = builder().insert_constant_f32((float)0x00000000);
+				VecTy = value_type::vector(value_type::f32(), 4);
+			} break;
+			case XED_ICLASS_CMPSD_XMM: {
+				true_val = builder().insert_constant_f64((float)0xFFFFFFFFFFFFFFFF);
+				false_val = builder().insert_constant_f64((float)0x000000000000000);
+				VecTy = value_type::vector(value_type::f64(), 2);
+			} break;
+		}
+
+		auto mask = builder().insert_constant_u8(3);
+
+		dest = builder().insert_bitcast(VecTy, dest->val());
+		op0 = builder().insert_bitcast(VecTy, op0->val());
+		op0 = builder().insert_vector_extract(op0->val(), 0);
+		op1 = builder().insert_bitcast(VecTy, op1->val());
+		op1 = builder().insert_vector_extract(op1->val(), 0);
+		auto op_code = op2->const_val_i();
+
+		/*
+		 * 0 - ordered eq
+		 * 1 - ordered lt
+		 * 2 - ordered le
+		 * 3 - unordered
+		 * 4 - unordered ne
+		 * 5 - unordered nlt
+		 * 6 - unordered nle
+		 * 7 - ordered
+		 */
+
+		value_node *cond;
+		switch (op_code) {
+			case 0: cond = builder().insert_binop(binary_arith_op::cmpoeq, op0->val(), op1->val()); break;
+			case 1: cond = builder().insert_binop(binary_arith_op::cmpolt, op0->val(), op1->val()); break;
+			case 2: cond = builder().insert_binop(binary_arith_op::cmpole, op0->val(), op1->val()); break;
+			case 3: cond = builder().insert_binop(binary_arith_op::cmpu, op0->val(), op1->val()); break;
+			case 4: cond = builder().insert_binop(binary_arith_op::cmpune, op0->val(), op1->val()); break;
+			case 5: cond = builder().insert_binop(binary_arith_op::cmpunlt, op0->val(), op1->val()); break;
+			case 6: cond = builder().insert_binop(binary_arith_op::cmpunle, op0->val(), op1->val()); break;
+			case 7: cond = builder().insert_binop(binary_arith_op::cmpo, op0->val(), op1->val()); break;
+		}
+		auto res = builder().insert_csel(cond->val(), true_val->val(), false_val->val());
+		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
+	} break;
+	case XED_ICLASS_MAXSS:
+	case XED_ICLASS_MAXSD:
+	case XED_ICLASS_MINSS:
+	case XED_ICLASS_MINSD: {
+	auto src0 = read_operand(0);
+	auto src1 = read_operand(1);
+
+	auto VecTy = value_type::v();
+
+	value_node *cexp;
+	value_node *cfrac;
+	value_node *z;
+
+
+
+	switch(inst_class) {
+		case XED_ICLASS_MAXSS:
+		case XED_ICLASS_MINSS: {
+			VecTy = value_type::vector(value_type::f32(), 4);
+			cexp = builder().insert_constant_f32(static_cast<float>(0x7F8000000));
+			cfrac = builder().insert_constant_f32(static_cast<float>(0x7FFFFF));
+			z = builder().insert_constant_f32(static_cast<float>(0));
+		} break;
+		case XED_ICLASS_MAXSD:
+		case XED_ICLASS_MINSD: {
+			VecTy = value_type::vector(value_type::f64(), 2);
+			cexp = builder().insert_constant_f64(static_cast<double>(0x7FF0000000000000));
+			cfrac = builder().insert_constant_f64(static_cast<double>(0x000FFFFFFFFFFFFF));
+			z = builder().insert_constant_f64(static_cast<double>(0));
+		} break;
+		default: break;
+	}
+	src0 = builder().insert_bitcast(VecTy, src0->val());
+	src0 = builder().insert_vector_extract(src0->val(), 0);
+
+	if (src1->val().type().width() == 128) {
+		src1 = builder().insert_bitcast(VecTy, src1->val());
+		src1 = builder().insert_vector_extract(src1->val(), 0);
+	} else {
+		src1 = builder().insert_bitcast(VecTy.element_type(), src1->val());
+	}
+
+
+	builder().insert_br(builder().insert_label("do_checks"));
+	auto cnd = builder().insert_cmpne(z->val(), src0->val());
+	auto cmp0 = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
+	cnd = builder().insert_cmpeq(z->val(), src1->val());
+	auto both_0 = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
+	auto next = (br_node *)builder().insert_br(nullptr);
+
+	auto check_for_nan = builder().insert_label("check_for_nan");
+	next->add_br_target(check_for_nan);
+	cmp0->add_br_target(check_for_nan);
+
+	auto and_exp = builder().insert_bitcast(VecTy.element_type(), builder().insert_and(src0->val(), cexp->val())->val());
+	auto cmpeq_exp = builder().insert_cmpeq(and_exp->val(), cexp->val());
+	auto src0_not_nan = (cond_br_node *)builder().insert_cond_br(cmpeq_exp->val(), nullptr);
+	auto and_frac = builder().insert_bitcast(VecTy.element_type(), builder().insert_and(src0->val(), cfrac->val())->val());
+	auto cmpeq_frac = builder().insert_cmpne(and_frac->val(), z->val());
+	auto src0_is_nan = (cond_br_node *)builder().insert_cond_br(cmpeq_frac->val(), nullptr);
+	next = (br_node *)builder().insert_br(nullptr);
+
+	auto src0_nn = builder().insert_label("src0_not_nan");
+	next->add_br_target(src0_nn);
+	src0_not_nan->add_br_target(src0_nn);
+
+	and_exp = builder().insert_bitcast(VecTy.element_type(), builder().insert_and(src1->val(), cexp->val())->val());
+	cmpeq_exp = builder().insert_cmpeq(and_exp->val(), cexp->val());
+	auto src1_not_nan = (cond_br_node *)builder().insert_cond_br(cmpeq_exp->val(), nullptr);
+	and_frac = builder().insert_bitcast(VecTy.element_type(), builder().insert_and(src1->val(), cfrac->val())->val());
+	cmpeq_frac = builder().insert_cmpne(and_frac->val(), z->val());
+	auto src1_is_nan = (cond_br_node *)builder().insert_cond_br(cmpeq_frac->val(), nullptr);
+	next = (br_node *)builder().insert_br(nullptr);
+
+	auto src1_nn = builder().insert_label("src1_not_nan");
+	next->add_br_target(src1_nn);
+	src1_not_nan->add_br_target(src1_nn);
+	
+	value_node *src0_lt_src1;
+	if (inst_class == XED_ICLASS_MINSD | inst_class == XED_ICLASS_MINSS)
+		src0_lt_src1 = builder().insert_cmpgt(src1->val(), src0->val());
+	else
+		src0_lt_src1 = builder().insert_cmpgt(src0->val(), src1->val());
+	auto src0_is_min = (cond_br_node *)builder().insert_cond_br(src0_lt_src1->val(), nullptr);
+	next = (br_node *)builder().insert_br(nullptr);
+	
+	auto src1_out = builder().insert_label("src1_out");
+	next->add_br_target(src1_out);
+	both_0->add_br_target(src1_out);
+	src0_is_nan->add_br_target(src1_out);
+	src1_is_nan->add_br_target(src1_out);
+	write_operand(0, src1->val());
+	auto end0 = (br_node *)builder().insert_br(nullptr);
+
+	auto src0_out = builder().insert_label("src0_out");
+	src0_is_min->add_br_target(src0_out);
+	write_operand(0, src0->val());
+	auto end1 = (br_node *)builder().insert_br(nullptr);
+
+	auto end = builder().insert_label("end");
+	end0->add_br_target(end);
+	end1->add_br_target(end);
+
+
+  } break;
 	default:
 		throw std::runtime_error("unsupported binop");
 	}
@@ -351,8 +640,18 @@ void binop_translator::do_translate()
 	case XED_ICLASS_BSR:
   case XED_ICLASS_BSF:
 	case XED_ICLASS_COMISS:
+	case XED_ICLASS_COMISD:
+	case XED_ICLASS_UCOMISS:
+	case XED_ICLASS_UCOMISD:
+	case XED_ICLASS_CMPSS:
+	case XED_ICLASS_CMPSD_XMM:
 	case XED_ICLASS_XADD:
+	case XED_ICLASS_ADDSS:
 	case XED_ICLASS_ADDSD:
+	case XED_ICLASS_MINSD:
+	case XED_ICLASS_MINSS:
+	case XED_ICLASS_MAXSD:
+	case XED_ICLASS_MAXSS:
 		break;
 
 	default:

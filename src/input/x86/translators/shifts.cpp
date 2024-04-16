@@ -1,3 +1,4 @@
+#include "arancini/ir/value-type.h"
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/ir/node.h>
 #include <arancini/ir/ir-builder.h>
@@ -207,6 +208,18 @@ void shifts_translator::do_translate()
     }
     break;
   }
+	case XED_ICLASS_PSLLD: {
+		auto value = read_operand(0);
+		auto by = read_operand(1);
+
+		value = builder().insert_bitcast(value_type::vector(value_type::u32(), 4), value->val());
+		for (unsigned i = 0; i < 4; i++) {
+			auto dword = builder().insert_vector_extract(value->val(), i);
+			auto res = builder().insert_lsl(dword->val(), by->val());
+			value = builder().insert_vector_insert(value->val(), i, res->val());
+		}
+		break;
+	}
 
 	default:
 		throw std::runtime_error("unsupported shift instruction");

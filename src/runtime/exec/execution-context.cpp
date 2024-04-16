@@ -38,6 +38,7 @@ struct loop_args {
 	void *parent_state;
 	pthread_mutex_t *lock;
 	pthread_cond_t *cond;
+	uintptr_t mem_base;
 };
 
 void *MainLoopWrapper(void *args) {
@@ -48,10 +49,11 @@ void *MainLoopWrapper(void *args) {
 	pthread_mutex_lock(largs->lock);
     util::global_logger.info("Thread: {}\nState:\n\t{}", util::lazy_eval<>(gettid), *x86_state);
 	parent_state->RAX = gettid();
+	x86_state->RSP = x86_state->RSI;
+	x86_state->FS = x86_state->R8;
 	pthread_cond_signal(largs->cond);
 	pthread_mutex_unlock(largs->lock);
 
-	x86_state->RSP = x86_state->RSI;
 	MainLoop(x86_state);
 	return NULL;
 };
@@ -65,9 +67,12 @@ execution_context::execution_context(input::input_arch &ia, output::dynamic::dyn
 {
 	allocate_guest_memory();
 	brk_ = reinterpret_cast<uintptr_t>(memory_);
+	pthread_mutex_init(&big_fat_lock, NULL);
 }
 
-execution_context::~execution_context() { }
+execution_context::~execution_context() {
+	pthread_mutex_destroy(&big_fat_lock);
+}
 
 void *execution_context::add_memory_region(off_t base_address, size_t size, bool ignore_brk)
 {
@@ -127,16 +132,18 @@ int execution_context::invoke(void *cpu_state) {
     util::global_logger.info("{}\n", util::logging_separator('=')).
                         info("INVOKE PC = {:#x}\n", util::copy(x86_state->PC)).
                         info("{}\n", util::logging_separator('='));
-    util::global_logger.info("Registers:\n{}\n", *x86_state).
-                        info("{}\n", util::logging_separator('-'));
-    util::global_logger.debug("STACK:\n").
-                        debug("{}\n", util::logging_separator('-'));
+    //util::global_logger.info("Registers:\n{}\n", *x86_state).
+    //                    info("{}\n", util::logging_separator('-'));
+    //util::global_logger.debug("STACK:\n").
+    //                    debug("{}\n", util::logging_separator('-'));
     //auto* memptr = reinterpret_cast<uint64_t*>(get_memory_ptr(0)) + x86_state->RSP;
     //x86::print_stack(std::cerr, memptr, 20);
 
+	pthread_mutex_lock(&big_fat_lock);
 	auto txln = te_.get_translation(x86_state->PC);
 	if (txln == nullptr) {
         util::global_logger.error("Unable to translate\n");
+		pthread_mutex_unlock(&big_fat_lock);
 		return 1;
 	}
 
@@ -147,6 +154,7 @@ int execution_context::invoke(void *cpu_state) {
 		te_.chain(et->chain_address_, txln->get_code_ptr());
 	}
 
+	pthread_mutex_unlock(&big_fat_lock);
 	const dbt::native_call_result result = txln->invoke(cpu_state);
 
 	et->chain_address_ = result.chain_address;
@@ -226,6 +234,18 @@ int execution_context::internal_call(void *cpu_state, int call)
 				target->st_ctime = tmp_struct.st_ctime;
 				target->st_ctime_nsec = tmp_struct.st_ctime_nsec;
 			}
+			break;
+		}
+		case 7: // poll
+		{
+			// AARCH64 doesn't have poll, use ppoll instead
+			auto ptr = (uintptr_t)get_memory_ptr(x86_state->RDI);
+			struct timespec ts;
+			auto msec = x86_state->RDX;
+			ts.tv_sec = (long)(msec/1000);
+			ts.tv_nsec = (msec%1000)*1000000;
+			auto ret = native_syscall(__NR_ppoll, ptr, x86_state->RSI, (uintptr_t)&ts, (uintptr_t)NULL, sizeof(sigset_t));
+			x86_state->RAX = ret;
 			break;
 		}
 		case 9: // mmap
@@ -368,6 +388,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 
 			auto et = create_execution_thread();
 			auto new_x86_state = (x86::x86_cpu_state *)et->get_cpu_state();
+			util::global_logger.debug("New CPU state: {:#x}\n", (uintptr_t)new_x86_state);
 			memcpy(new_x86_state, x86_state, sizeof(*x86_state));
 
 			new_x86_state->RAX = 0;
@@ -380,7 +401,7 @@ int execution_context::internal_call(void *cpu_state, int call)
 			pthread_mutex_init(&rax_lock, NULL);
 			pthread_cond_init(&rax_cond, NULL);
 
-			loop_args args = { new_x86_state, x86_state, &rax_lock, &rax_cond };
+			loop_args args = { new_x86_state, x86_state, &rax_lock, &rax_cond, (uintptr_t)get_memory_ptr(0) };
 			pthread_mutex_lock(&rax_lock);
 
 			pthread_create(&child, &attr, &MainLoopWrapper, &args);
@@ -492,16 +513,25 @@ int execution_context::internal_call(void *cpu_state, int call)
             util::global_logger.debug("System call: exit()\n");
 			native_syscall(__NR_exit, x86_state->RDI);
             break;
+		case 324: //membarrier
+			util::global_logger.debug("System call: membarrier()\n");
+			native_syscall(__NR_rseq, x86_state->RDI, x86_state->RSI);
+			break;
 		default:
             util::global_logger.error("Unsupported system call: {:#x}\n", util::copy(x86_state->RAX));
 			return 1;
 		}
-	} else {
-        util::global_logger.error("Unsupported internal call: {}\n", call);
+	} else if (call == 3) {
+		auto x86_state = (x86::x86_cpu_state *)cpu_state;
+		auto pc = x86_state->PC;
+        util::global_logger.error("Poison Instr @ GuestPC: {}", pc);
+	}else {
+        util::global_logger.error("Unsupported internal call: {}", call);
 		return 1;
 	}
 	return 0;
 }
+std::shared_ptr<execution_thread> execution_context::get_thread(void *cpu_state) { return threads_.at(cpu_state); }
 
 std::pair<decltype(execution_context::threads_)::const_iterator, decltype(execution_context::threads_)::const_iterator> execution_context::get_thread_range() {
 	return std::make_pair(threads_.cbegin(), threads_.cend());

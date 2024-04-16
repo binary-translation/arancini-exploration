@@ -565,7 +565,7 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 	}
 }
 
-std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context::materialise_binary_atomic(const binary_atomic_node &n)
+TypedRegister & riscv64_translation_context::materialise_binary_atomic(const binary_atomic_node &n)
 {
 
 	if (!(is_gpr(n.val()) && is_gpr(n.rhs()) && is_gpr(n.address()))) {
@@ -578,12 +578,11 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 	if (!valid) {
 		return out_reg;
 	}
+	auto [val_reg, _] = allocate_register(&n.operation_value());
 	auto [zf, of, cf, sf] = allocate_in_order<reg_idx::ZF, reg_idx::OF, reg_idx::CF, reg_idx::SF>(&n.zero(), &n.overflow(), &n.carry(), &n.negative());
 	bool flags_needed = zf || of || cf || sf;
 
 	auto addr = AddressOperand { dstAddr };
-
-	auto &temp_result_reg = allocate_register().first;
 
 	// FIXME Correct memory ordering?
 	switch (n.op()) {
@@ -601,10 +600,8 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 		}
 
 		if (flags_needed) {
-			temp_result_reg.set_type(n.val().type());
-
-			add(builder_, temp_result_reg, out_reg, src); // Actual sum for flag generation
-			add_flags(builder_, temp_result_reg, out_reg, src, zf, of, cf, sf);
+			add(builder_, val_reg, out_reg, src); // Actual sum for flag generation
+			add_flags(builder_, val_reg, out_reg, src, zf, of, cf, sf);
 		}
 
 		if (n.op() == binary_atomic_op::xadd) {
@@ -620,9 +617,8 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 			//			default:
 			//				throw std::runtime_error("unsupported xadd width");
 			//			}
-			return out_reg;
 		}
-		return std::nullopt;
+		return out_reg;
 	}
 	case binary_atomic_op::sub:
 		builder_.neg(out_reg, src);
@@ -638,77 +634,75 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 		}
 
 		if (flags_needed) {
-			temp_result_reg.set_type(n.val().type());
-
-			sub(builder_, temp_result_reg, out_reg, src); // Actual difference for flag generation
-			sub_flags(builder_, temp_result_reg, out_reg, src, zf, of, cf, sf);
+			sub(builder_, val_reg, out_reg, src); // Actual difference for flag generation
+			sub_flags(builder_, val_reg, out_reg, src, zf, of, cf, sf);
 		}
-		return std::nullopt;
+		return out_reg;
 	case binary_atomic_op::band: {
 		switch (n.val().type().element_width()) {
 		case 64:
 			builder_.amoandd(out_reg, src, addr, std::memory_order_acq_rel);
 			if (flags_needed) {
-				builder_.and_(temp_result_reg, out_reg, src); // Actual and for flag generation
+				builder_.and_(val_reg, out_reg, src); // Actual and for flag generation
 			}
 			break;
 		case 32:
 			builder_.amoandw(out_reg, src, addr, std::memory_order_acq_rel);
 			if (flags_needed) {
-				builder_.and_(temp_result_reg, out_reg, src); // Actual and for flag generation
-				builder_.slli(temp_result_reg, temp_result_reg, 32); // Get rid of higher 32 bits
+				builder_.and_(val_reg, out_reg, src); // Actual and for flag generation
+				builder_.slli(val_reg, val_reg, 32); // Get rid of higher 32 bits
 			}
 			break;
 		default:
 			throw std::runtime_error("unsupported lock and width");
 		}
-		zero_sign_flag(builder_, temp_result_reg, zf, sf);
-		return std::nullopt;
+		zero_sign_flag(builder_, val_reg, zf, sf);
+		return out_reg;
 	}
 	case binary_atomic_op::bor: {
 		switch (n.val().type().element_width()) {
 		case 64:
 			builder_.amoord(out_reg, src, addr, std::memory_order_acq_rel);
 			if (flags_needed) {
-				builder_.or_(temp_result_reg, out_reg, src); // Actual or for flag generation
+				builder_.or_(val_reg, out_reg, src); // Actual or for flag generation
 			}
 			break;
 		case 32:
 			builder_.amoorw(out_reg, src, addr, std::memory_order_acq_rel);
 			if (flags_needed) {
-				builder_.or_(temp_result_reg, out_reg, src); // Actual or for flag generation
-				builder_.slli(temp_result_reg, temp_result_reg, 32); // Get rid of higher 32 bits
+				builder_.or_(val_reg, out_reg, src); // Actual or for flag generation
+				builder_.slli(val_reg, val_reg, 32); // Get rid of higher 32 bits
 			}
 			break;
 		default:
 			throw std::runtime_error("unsupported lock or width");
 		}
 
-		zero_sign_flag(builder_, temp_result_reg, zf, sf);
-		return std::nullopt;
+		zero_sign_flag(builder_, val_reg, zf, sf);
+		return out_reg;
 	}
 	case binary_atomic_op::bxor: {
 		switch (n.val().type().element_width()) {
 		case 64:
 			builder_.amoxord(out_reg, src, addr, std::memory_order_acq_rel);
 			if (flags_needed) {
-				builder_.xor_(temp_result_reg, out_reg, src); // Actual xor for flag generation
+				builder_.xor_(val_reg, out_reg, src); // Actual xor for flag generation
 			}
 			break;
 		case 32:
 			builder_.amoxorw(out_reg, src, addr, std::memory_order_acq_rel);
 
 			if (flags_needed) {
-				builder_.xor_(temp_result_reg, out_reg, src); // Actual xor for flag generation
-				builder_.slli(temp_result_reg, temp_result_reg, 32); // Get rid of higher 32 bits
+				builder_.xor_(val_reg, out_reg, src); // Actual xor for flag generation
+				builder_.slli(val_reg, val_reg, 32); // Get rid of higher 32 bits
 			}
 			break;
 		default:
 			throw std::runtime_error("unsupported lock xor width");
 		}
 
-		zero_sign_flag(builder_, temp_result_reg, zf, sf);
-		return std::nullopt;
+		zero_sign_flag(builder_, val_reg, zf, sf);
+		return out_reg;
 	}
 	case binary_atomic_op::xchg:
 		switch (n.val().type().element_width()) {
@@ -722,17 +716,17 @@ std::optional<std::reference_wrapper<TypedRegister>> riscv64_translation_context
 			throw std::runtime_error("unsupported xchg width");
 		}
 
-		switch (n.val().type().element_width()) {
-		case 32:
-			builder_.slli(out_reg, out_reg, 32);
-			builder_.srli(out_reg, out_reg, 32);
-			[[fallthrough]];
-		case 64:
-			builder_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), out_reg);
-			break;
-		default:
-			throw std::runtime_error("unsupported xchg width");
-		}
+//		switch (n.val().type().element_width()) {
+//		case 32:
+//			builder_.slli(out_reg, out_reg, 32);
+//			builder_.srli(out_reg, out_reg, 32);
+//			[[fallthrough]];
+//		case 64:
+//			builder_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), out_reg);
+//			break;
+//		default:
+//			throw std::runtime_error("unsupported xchg width");
+//		}
 		return out_reg;
 	default:
 		throw std::runtime_error("unsupported binary atomic operation");
@@ -1033,6 +1027,13 @@ void riscv64_translation_context::materialise_write_pc(const write_pc_node &n)
 {
 	if (!is_gpr(n.value())) {
 		throw std::runtime_error("unsupported width on write pc operation");
+	}
+
+	if (n.updates_pc() == br_type::call) {
+		ret_val_ = 3;
+	}
+	if (n.updates_pc() == br_type::ret) {
+		ret_val_ = 4;
 	}
 
 	if (ret_val_ == 0) { // Only chain on normal block end

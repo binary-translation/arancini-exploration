@@ -16,7 +16,7 @@ translation_result translator::translate(off_t address, xed_decoded_inst_t *xed_
 	switch (xed_decoded_inst_get_iclass(xed_inst)) {
 	// TODO: this is a bad way of avoiding empty packets. Should be done by checking that the translator is a nop_translator, not hardcoded switch case
 	//case XED_ICLASS_NOP:
-	case XED_ICLASS_HLT:
+//	case XED_ICLASS_HLT:
 	case XED_ICLASS_CPUID:
 	case XED_ICLASS_PREFETCHNTA:
 	case XED_ICLASS_PAUSE:
@@ -53,7 +53,7 @@ void translator::dump_xed_encoding(void)
         util::global_logger.log("\n", buf);
 }
 
-translator::reg_offsets translator::xedreg_to_offset(xed_reg_enum_t reg)
+reg_offsets translator::xedreg_to_offset(xed_reg_enum_t reg)
 {
   auto regclass = xed_reg_class(reg);
 
@@ -61,12 +61,12 @@ translator::reg_offsets translator::xedreg_to_offset(xed_reg_enum_t reg)
   case XED_REG_CLASS_GPR: {
 	  // FIXME AH, CH, DH, BH give wrong offset
     auto largest_reg = xed_get_largest_enclosing_register(reg);
-    return (translator::reg_offsets)((int)((largest_reg - XED_REG_RAX) * 8) + (int)reg_offsets::RAX);
+    return (reg_offsets)((int)((largest_reg - XED_REG_RAX) * 8) + (int)reg_offsets::RAX);
   }
   case XED_REG_CLASS_XMM:
   case XED_REG_CLASS_YMM:
   case XED_REG_CLASS_ZMM: {
-    return (translator::reg_offsets)((int)((reg - XED_REG_ZMM0) * 64) + (int)reg_offsets::ZMM0);
+    return (reg_offsets)((int)((reg - XED_REG_ZMM0) * 64) + (int)reg_offsets::ZMM0);
   }
   default:
     throw std::runtime_error("unsupported register class when computing offset from xed");
@@ -539,10 +539,6 @@ action_node *translator::fpu_stack_top_move(int val)
   x87_status = builder_.insert_bit_insert(x87_status->val(), new_top->val(), 11, 3);
   return write_reg(reg_offsets::X87_STS, x87_status->val());
 }
-
-unsigned long translator::offset_to_idx(reg_offsets reg) { return off_to_idx[(unsigned long)reg]; }
-
-const char *translator::offset_to_name(reg_offsets reg) { return off_to_name[(unsigned long)reg]; }
 
 action_node *translator::write_reg(reg_offsets reg, port &value) { return builder_.insert_write_reg((unsigned long)reg, offset_to_idx(reg), offset_to_name(reg), value); }
 

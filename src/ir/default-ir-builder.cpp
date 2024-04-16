@@ -5,15 +5,15 @@
 
 using namespace arancini::ir;
 
-void default_ir_builder::begin_chunk()
+void default_ir_builder::begin_chunk(const std::string &name)
 {
-	ir_builder::begin_chunk();
+	ir_builder::begin_chunk(name);
 
 	if (current_chunk_ != nullptr) {
 		throw std::runtime_error("chunk already in progress");
 	}
 
-	current_chunk_ = std::make_shared<chunk>();
+	current_chunk_ = std::make_shared<chunk>(name);
 }
 
 void default_ir_builder::end_chunk()
@@ -58,7 +58,7 @@ packet_type default_ir_builder::end_packet()
 		throw std::runtime_error("packet not in progress");
 	}
 
-	bool eob = current_pkt_->updates_pc();
+	bool eob = current_pkt_->updates_pc() != br_type::none;
 
 	current_chunk_->add_packet(current_pkt_);
 	current_pkt_ = nullptr;

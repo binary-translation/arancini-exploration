@@ -164,8 +164,10 @@ public:
         if constexpr (enabled) {
             std::lock_guard<lock_policy> lock(*this);
             return (enabled_ = status);
-        }
-    }
+		} else {
+			return false;
+		}
+	}
 
     bool is_enabled() const { return enabled_; }
 

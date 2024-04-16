@@ -31,8 +31,19 @@ endif ()
 message(STATUS "Detected local architecture ${ARCH}")
 message(STATUS "Building DBT for architecture ${DBT_ARCH}")
 
+if (NOT DBT_ARCH STREQUAL ARCH)
+    get_arch_target(ARCH_TARGET)
+    if (NOT DBT_ARCH STREQUAL ARCH_TARGET)
+        message(STATUS "Detected compilation target architecture ${ARCH_TARGET}")
+        message(WARNING "Building cross translator running on ${ARCH_TARGET}, producing code for ${DBT_ARCH}. You will also need to compile the arancini-runtime library for ${DBT_ARCH}.")
+        add_compile_definitions(CROSS_TRANSLATE)
+        set(CROSS_TRANSLATE true)
+    endif ()
+endif ()
+
 # Define architecture flag
 add_compile_definitions(ARCH_${DBT_ARCH})
+add_compile_definitions(DBT_ARCH_STR="${DBT_ARCH}")
 
 # Specify binary output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/out/${CMAKE_BUILD_TYPE})
@@ -52,12 +63,12 @@ if(NOT DEFINED ENV{FLAKE_BUILD})
 	    get_xed()
 	endif ()
 	include(cmake/fadec.cmake)
-endif () #NIX
 
 find_package(fmt QUIET)
 if (NOT fmt_FOUND)
     include(cmake/fmt.cmake)
 endif ()
+endif () #NIX
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_compile_definitions(ENABLE_VERBOSE_CODE_GEN=true)
@@ -70,32 +81,36 @@ add_subdirectory(src/ir)
 add_subdirectory(src/input/x86)
 add_subdirectory(src/output/static/llvm)
 
-# Build X86_64 DBT
-if (DBT_ARCH STREQUAL "X86_64")
-    add_subdirectory(src/output/dynamic/x86)
-elseif (DBT_ARCH STREQUAL "AARCH64")
-    add_subdirectory(src/output/dynamic/arm64)
-elseif (DBT_ARCH STREQUAL "RISCV64")
-    add_subdirectory(src/output/dynamic/riscv64)
-else ()
-    message(FATAL_ERROR "Invalid ARCH specified: valid values are X86_64, AARCH64, RISCV64")
-endif ()
+# Cross translating not supported for runtime (obviously)
+if(NOT DEFINED CROSS_TRANSLATE)
+    # Build X86_64 DBT
+    if (DBT_ARCH STREQUAL "X86_64")
+        add_subdirectory(src/output/dynamic/x86)
+    elseif (DBT_ARCH STREQUAL "AARCH64")
+        add_subdirectory(src/output/dynamic/arm64)
+    elseif (DBT_ARCH STREQUAL "RISCV64")
+        add_subdirectory(src/output/dynamic/riscv64)
+    else ()
+        message(FATAL_ERROR "Invalid ARCH specified: valid values are X86_64, AARCH64, RISCV64")
+    endif ()
 
-# Note: build after architecture-specific DBT build
-add_subdirectory(src/runtime)
+
+    # Note: build after architecture-specific DBT build
+    add_subdirectory(src/runtime)
+endif()
 
 # Specify absolute path of generated libarancini-runtime for txlat
 #
 # NOTE: txlat requires the path because it invokes the compiler internally and must
 # specify for linkage.
-if(DEFINED ENV{FLAKE_BUILD})
-	add_compile_definitions(ARANCINI_LIBPATH="${CMAKE_INSTALL_PREFIX}/lib/$<TARGET_FILE_NAME:arancini-runtime>")
-	add_compile_definitions(ARANCINI_LIBPATH_STATIC="${CMAKE_INSTALL_PREFIX}/lib/$<TARGET_FILE_NAME:arancini-runtime-static>")
-	add_compile_definitions(ARANCINI_LIBDIR="${CMAKE_INSTALL_PREFIX}/lib")
-else ()
-	add_compile_definitions(ARANCINI_LIBPATH="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:arancini-runtime>")
-	add_compile_definitions(ARANCINI_LIBPATH_STATIC="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:arancini-runtime-static>")
-	add_compile_definitions(ARANCINI_LIBDIR="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
+if (DEFINED ENV{FLAKE_BUILD})
+    add_compile_definitions(ARANCINI_LIBPATH="${CMAKE_INSTALL_PREFIX}/lib/$<TARGET_FILE_NAME:arancini-runtime>")
+    add_compile_definitions(ARANCINI_LIBPATH_STATIC="${CMAKE_INSTALL_PREFIX}/lib/$<TARGET_FILE_NAME:arancini-runtime-static>")
+    add_compile_definitions(ARANCINI_LIBDIR="${CMAKE_INSTALL_PREFIX}/lib")
+elseif (NOT DEFINED CROSS_TRANSLATE)
+    add_compile_definitions(ARANCINI_LIBPATH="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:arancini-runtime>")
+    add_compile_definitions(ARANCINI_LIBPATH_STATIC="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:arancini-runtime-static>")
+    add_compile_definitions(ARANCINI_LIBDIR="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
 endif ()
 
 add_subdirectory(src/txlat)

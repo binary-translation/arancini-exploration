@@ -1,5 +1,6 @@
 #pragma once
 
+#include <arancini/input/registers.h>
 #include <arancini/ir/chunk.h>
 #include <arancini/ir/default-visitor.h>
 #include <arancini/ir/node.h>
@@ -12,12 +13,7 @@
 #include <set>
 #include <unordered_map>
 
-#define X86_OFFSET_OF(reg) __builtin_offsetof(struct arancini::runtime::exec::x86::x86_cpu_state, reg)
-enum class reg_offsets : unsigned long {
-#define DEFREG(ctype, ltype, name) name = X86_OFFSET_OF(name),
-#include <arancini/input/x86/reg.def>
-#undef DEFREG
-};
+using arancini::input::x86::reg_offsets;
 
 namespace arancini::ir {
 class deadflags_opt_visitor : public default_visitor {

@@ -5,6 +5,7 @@
 #include <arancini/output/dynamic/riscv64/instruction-builder/builder.h>
 #include <arancini/output/dynamic/riscv64/register.h>
 #include <arancini/output/dynamic/translation-context.h>
+#include <arancini/input/registers.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
 #include <arancini/util/ordering.h>
 
@@ -21,20 +22,8 @@ namespace arancini::output::dynamic::riscv64 {
 
 using builder::AddressOperand;
 using builder::InstructionBuilder;
-
-static constexpr unsigned long counter_base_ = __COUNTER__;
-enum class reg_idx : unsigned long {
-#define DEFREG(ctype, ltype, name) name = __COUNTER__ - counter_base_ - 1,
-#include <arancini/input/x86/reg.def>
-#undef DEFREG
-};
-
-#define X86_OFFSET_OF(reg) __builtin_offsetof(struct arancini::runtime::exec::x86::x86_cpu_state, reg)
-enum class reg_offsets : unsigned long {
-#define DEFREG(ctype, ltype, name) name = X86_OFFSET_OF(name),
-#include <arancini/input/x86/reg.def>
-#undef DEFREG
-};
+using arancini::input::x86::reg_idx;
+using arancini::input::x86::reg_offsets;
 
 class riscv64_translation_context : public translation_context {
 public:
@@ -100,7 +89,7 @@ private:
 	TypedRegister &materialise_bit_extract(const ir::bit_extract_node &n);
 	TypedRegister &materialise_bit_insert(const ir::bit_insert_node &n);
 	TypedRegister &materialise_cast(const ir::cast_node &n);
-	std::optional<std::reference_wrapper<TypedRegister>> materialise_binary_atomic(const ir::binary_atomic_node &n);
+	TypedRegister & materialise_binary_atomic(const ir::binary_atomic_node &n);
 	TypedRegister &materialise_ternary_atomic(const ir::ternary_atomic_node &n);
 	TypedRegister &materialise_csel(const ir::csel_node &n);
 	void materialise_internal_call(const ir::internal_call_node &n);

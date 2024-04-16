@@ -39,6 +39,8 @@ enum class node_kinds {
 	internal_call
 };
 
+enum br_type { none,sys , br, csel, call, ret };
+
 class node {
 public:
 	node(node_kinds kind)
@@ -129,7 +131,7 @@ public:
 
 	virtual bool is_action() const override { return true; }
 
-	virtual bool updates_pc() const { return false; }
+	virtual br_type updates_pc() const { return br_type::none; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -228,16 +230,18 @@ public:
 
 class write_pc_node : public action_node {
 public:
-	write_pc_node(port &value)
+	write_pc_node(port &value, br_type br_type, unsigned long target)
 		: action_node(node_kinds::write_pc)
 		, value_(value)
+		, br_type_(br_type)
+		, target_(target)
 	{
 		value.add_target(this);
 	}
 
 	port &value() const { return value_; }
 
-	virtual bool updates_pc() const override { return true; }
+	virtual br_type updates_pc() const override { return br_type_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -245,8 +249,11 @@ public:
 		v.visit_write_pc_node(*this);
 	}
 
+	unsigned long const_target() { return target_; };
 private:
 	port &value_;
+	br_type br_type_;
+	unsigned long target_;
 };
 
 class constant_node : public value_node {
@@ -595,7 +602,15 @@ private:
 	port &lhs_;
 };
 
-enum class binary_arith_op { add, sub, mul, div, mod, band, bor, bxor, cmpeq, cmpne, cmpgt };
+enum class binary_arith_op {
+	add, sub, mul, div, mod,
+	band, bor, bxor,
+	cmpeq, cmpne, cmpgt,
+	// floating point stuff
+	cmpoeq, cmpolt, cmpole,
+	cmpune, cmpunlt, cmpunle,
+	cmpo, cmpu
+};
 
 class binary_arith_node : public arith_node {
 public:
@@ -677,6 +692,7 @@ public:
 		, negative_(port_kinds::negative, value_type::u1(), this)
 		, overflow_(port_kinds::overflow, value_type::u1(), this)
 		, carry_(port_kinds::carry, value_type::u1(), this)
+		, operation_value_(port_kinds::operation_value, vt, this)
 	{
 	}
 
@@ -685,11 +701,13 @@ public:
 	port &negative() { return negative_; }
 	port &overflow() { return overflow_; }
 	port &carry() { return carry_; }
+	port &operation_value() { return operation_value_; }
 
 	const port &zero() const { return zero_; }
 	const port &negative() const { return negative_; }
 	const port &overflow() const { return overflow_; }
 	const port &carry() const { return carry_; }
+	const port &operation_value() const { return operation_value_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -700,7 +718,7 @@ public:
 	}
 
 private:
-	port zero_, negative_, overflow_, carry_;
+	port zero_, negative_, overflow_, carry_, operation_value_;
 };
 
 enum class unary_atomic_op { neg, bnot };
@@ -1036,7 +1054,7 @@ public:
 	const internal_function &fn() const { return fn_; }
 	const std::vector<port *> &args() const { return args_; }
 
-	virtual bool updates_pc() const override { return true; }
+	virtual br_type updates_pc() const override { return br_type::sys; }
 
 	virtual void accept(visitor &v) override
 	{

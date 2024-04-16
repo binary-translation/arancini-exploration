@@ -10,6 +10,10 @@ internal_function *x86_internal_functions::create(const std::string &name) const
 		return new internal_function("handle_int", function_type(value_type::v(), { value_type::u32() }));
   } else if (name == "handle_syscall") {
     return new internal_function("handle_syscall", function_type(value_type::v(), { }));
-  }
+  } else if (name == "handle_poison") {
+    return new internal_function("handle_poison", function_type(value_type::v(), { }));
+  } else if (name == "hlt") {
+		return new internal_function("hlt", function_type(value_type::v(), {}));
+	}
   return nullptr;
 }

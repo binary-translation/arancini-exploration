@@ -15,7 +15,7 @@ public:
 	}
 
 	virtual ~x86_input_arch() { }
-	virtual void translate_chunk(ir::ir_builder &builder, off_t base_address, const void *code, size_t code_size, bool basic_block) override;
+	virtual void translate_chunk(ir::ir_builder &builder, off_t base_address, const void *code, size_t code_size, bool basic_block, const std::string &name) override;
 
 	virtual ir::internal_function_resolver &get_internal_function_resolver() override { return ifr_; }
 
