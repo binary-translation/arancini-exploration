@@ -15,6 +15,7 @@
 #include <iostream>
 #include <ostream>
 #include <string>
+#include <filesystem>
 
 using namespace arancini::txlat;
 using namespace arancini::elf;
@@ -24,9 +25,6 @@ using namespace arancini::input::x86;
 using namespace arancini::output;
 using namespace arancini::output::o_static::llvm;
 using namespace arancini::util;
-
-static std::set<std::string> allowed_symbols
-= { "cmpstr", "cmpnum", "swap", "_qsort", "_start", "test", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
 
 // Determine host architecture (with help from the build system)
 // Needed to select the appropriate linker script
@@ -38,8 +36,8 @@ static const char* architecture = "riscv64";
 static const char* architecture = "x86_64";
 #endif
 
-void txlat_engine::process_options(arancini::output::o_static::static_output_engine &oe, const boost::program_options::variables_map &cmdline)
-{
+void txlat_engine::process_options(arancini::output::o_static::static_output_engine &oe, 
+                                   const boost::program_options::variables_map &cmdline) {
 	if (auto llvmoe = dynamic_cast<llvm_static_output_engine *>(&oe)) {
 		llvmoe->set_debug(cmdline.count("debug"));
 		if (cmdline.count("dump-llvm")) {
@@ -49,11 +47,10 @@ void txlat_engine::process_options(arancini::output::o_static::static_output_eng
 	}
 }
 
-static void run_or_fail(const std::string &cmd)
-{
+static void run_or_fail(std::string_view cmd) {
     util::global_logger.info("Running: {}...\n", cmd);
-	if (std::system(cmd.c_str()) != 0) {
-		throw std::runtime_error("error whilst running subcommand");
+	if (std::system(cmd.data()) != 0) {
+		throw std::runtime_error(fmt::format("error whilst running subcommand {}", cmd));
 	}
 }
 
@@ -64,29 +61,32 @@ static void run_or_fail(const std::string &cmd)
   For example, the output engine can generate the target binary or a
   visualisation of the Arancini IR.
 */
-void txlat_engine::translate(const boost::program_options::variables_map &cmdline)
-{
+void txlat_engine::translate(const boost::program_options::variables_map &cmdline) {
 	// Create a manager for temporary files, as we'll be creating a series of them.  When
 	// this object is destroyed, all temporary files are automatically unlinked.
 	tempfile_manager tf;
 
 	// Parse the input ELF file
-	const auto &filename = cmdline.at("input").as<std::string>();
+	const auto &filename = cmdline.at("input").as<std::filesystem::path>();
 	elf_reader elf(filename);
 	elf.parse();
-	bool is_exec = elf.type()==elf::elf_type::exec;
 
 	// TODO: Figure the input engine out from ELF architecture header
 	auto das = cmdline.at("syntax").as<std::string>() == "att" ? disassembly_syntax::att : disassembly_syntax::intel;
 	auto ia = std::make_unique<arancini::input::x86::x86_input_arch>(cmdline.count("debug") || cmdline.count("graph"), das);
 
 	std::string prefix = "";
-	if (cmdline.find("keep-objs") != cmdline.end()) {
+	if (cmdline.count("keep-objs")) {
 		prefix = cmdline.at("keep-objs").as<std::string>();
 	}
+
 	// Construct the output engine
 	auto intermediate_file = tf.create_file(prefix, ".o");
-	auto oe = std::make_shared<arancini::output::o_static::llvm::llvm_static_output_engine>(intermediate_file->name(), is_exec);
+
+    using output_engine = typename arancini::output::o_static::llvm::llvm_static_output_engine;
+	auto oe = std::make_shared<output_engine>(intermediate_file->name(), 
+                                              elf.type() == elf::elf_type::exec);
+
 	process_options(*oe, cmdline);
 
 	oe->set_entrypoint(elf.get_entrypoint());
@@ -97,6 +97,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	std::vector<std::shared_ptr<rela_table>> relocations;
 	std::vector<std::shared_ptr<relr_array>> relocations_r;
 	std::set<symbol> unique_translated;
+
 	// pairs of symbols and maximum size (aka. until the end of the section)
 	std::vector<std::pair<symbol, size_t>> zero_size;
 
@@ -146,6 +147,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	// PASS2
 	for ( const auto &p : zero_size) {
 		::util::global_logger.debug("PASS2: doing (0 size), symbol {}\n", p.first.name());
+
 		// find the address of the symbol after sym in the text section, and assume that the size of sym is until there
 		size_t size = p.second;
 		auto next = std::next(unique_translated.find(p.first), 1);
@@ -159,7 +161,6 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	}
 
 	// Generate decls for external functions found in the relocation table
-
 	for (const auto& rs : relocations) {
 		for (auto r : rs->relocations()) {
 			auto sym_idx = r.symbol();
@@ -172,17 +173,17 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 			for (const auto &st : plt_tab->stubs()) {
 				if (st.second == dst) {
 					::util::global_logger.debug("Adding decl for {} @ {:#x}\n", sym.name(), st.first);
-					oe->add_function_decl(st.first, "__arancini__"+sym.name());
+					oe->add_function_decl(st.first, fmt::format("__arancini__{}", sym.name()));
 				}
 			}
-next:
-			;
 		}
 	}
 
 	// Generate a dot graph of the IR if required
+    std::filesystem::path graph_path;
 	if (cmdline.count("graph")) {
-    generate_dot_graph(*oe, cmdline.at("graph").as<std::string>());
+         graph_path = cmdline.at("graph").as<std::filesystem::path>();
+        generate_dot_graph(*oe, graph_path);
 	}
 
 	// Execute required optimisations from the command line
@@ -190,16 +191,18 @@ next:
 
 	// Generate a dot graph of the optimized IR if required
 	if (cmdline.count("graph")) {
-    std::string opt_filename = cmdline.at("graph").as<std::string>();
-    opt_filename = opt_filename.substr(0, opt_filename.find_last_of('.'));
-    opt_filename += ".opt.dot";
-    generate_dot_graph(*oe, opt_filename);
+        auto graph_path_opt = graph_path.append(".opt.dot");
+        generate_dot_graph(*oe, graph_path_opt);
 	}
 
 	// If the main output command-line option was not specified, then don't go any further.
+    std::filesystem::path output;
 	if (!cmdline.count("output")) {
+        ::util::global_logger.info("No output filename specified; stopping here\n");
 		return;
-	}
+	} else {
+        output = cmdline.at("output").as<std::filesystem::path>();
+    }
 
 	// Invoke the output engine, and tell it to write to a temporary file.
 	oe->generate();
@@ -207,27 +210,25 @@ next:
 	// --------------- //
 
 	// An output file was specified, so continue to build the translated binary.
-	std::string cxx_compiler = cmdline.at("cxx-compiler-path").as<std::string>();
-
+	auto cxx_compiler = cmdline.at("cxx-compiler-path").as<std::string>();
 	if (cmdline.count("wrapper")) {
-		cxx_compiler = cmdline.at("wrapper").as<std::string>() + " " + cxx_compiler;
+		cxx_compiler = fmt::format("{} {}", cmdline.at("wrapper").as<std::string>(), cxx_compiler);
 	}
 
-	std::string arancini_runtime_lib_path = cmdline.at("runtime-lib-path").as<std::string>();
-	auto dir_start = arancini_runtime_lib_path.rfind("/");
-	std::string arancini_runtime_lib_dir = arancini_runtime_lib_path.substr(0, dir_start);
+	auto arancini_runtime_lib_dir = cmdline.at("runtime-lib-path").as<std::filesystem::path>().parent_path();
 
-	std::string debug_info = cmdline.count("debug-gen") ? " -g" : " -O3";
-
-	std::string verbose_link = cmdline.count("verbose-link") ? " -Wl,--verbose" : "";
+    std::string_view debug_info = cmdline.count("debug-gen") ? " -g" : " -O3";
+	std::string_view verbose_link = cmdline.count("verbose-link") ? " -Wl,--verbose" : "";
 
 	if (cmdline.count("no-script")) {
 		if (elf.type() == elf_type::exec) {
-			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie -latomic " + intermediate_file->name() + " -l arancini-runtime -L "
-				+ arancini_runtime_lib_dir + " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info + verbose_link);
+			run_or_fail(fmt::format("{} -o {} -no-pie -latomic {} -larancini-runtime -L{} -Wl,-rpath={} {} {}", cxx_compiler,
+                        output.string(), intermediate_file->name(), arancini_runtime_lib_dir.string(), 
+                        arancini_runtime_lib_dir.string(), debug_info, verbose_link));
 		} else if (elf.type() == elf::elf_type::dyn) {
-			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -shared " + intermediate_file->name() + "-L "
-				+ arancini_runtime_lib_dir + " -l arancini-runtime -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info + verbose_link);
+			run_or_fail(fmt::format("{} -o {} -shared {} -L {} -l arancini-runtime -Wl,-rpath={} {} {}", cxx_compiler, 
+                        output.string(), intermediate_file->name(), arancini_runtime_lib_dir.string(), 
+                        arancini_runtime_lib_dir.string(), debug_info, verbose_link));
 		}
 		return;
 	}
@@ -252,15 +253,16 @@ next:
 	// parse and load it.
 	auto phobjsrc = tf.create_file(prefix, ".S");
 
-	std::map<uint64_t, std::string> ifuncs = generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym, relocations, relocations_r, sym_t, tls);
-
+	auto ifuncs = generate_guest_sections(phobjsrc, elf, load_phdrs, filename,
+                                          dyn_sym, relocations, relocations_r, 
+                                          sym_t, tls);
 
 	if (!cmdline.count("static-binary")) {
 		std::string libs;
 
 		if (cmdline.count("library")) {
 			std::stringstream stringstream;
-			for (const auto &item : cmdline.at("library").as<std::vector<std::string>>()) {
+			for (const auto &item : cmdline.at("library").as<std::vector<std::filesystem::path>>()) {
 				stringstream << " " << item;
 			}
 			libs = stringstream.str();
@@ -269,37 +271,38 @@ next:
 		if (elf.type() == elf::elf_type::exec) {
 			// Generate the final output binary by compiling everything together.
             run_or_fail(fmt::format("{} -o {} -no-pie -latomic {} {} {} -larancini-runtime -L {} -Wl,-T,{}.lds,-rpath={} {} {}",
-                        cxx_compiler, cmdline.at("output").as<std::string>(), intermediate_file->name(), libs, phobjsrc->name(),
-                        arancini_runtime_lib_dir, architecture, arancini_runtime_lib_dir, debug_info, verbose_link));
+                        cxx_compiler, output.string(), intermediate_file->name(), libs, phobjsrc->name(),
+                        arancini_runtime_lib_dir.string(), architecture, arancini_runtime_lib_dir.string(), debug_info, verbose_link));
 		} else if (elf.type() == elf::elf_type::dyn) {
 			// Generate the final output library by compiling everything together.
-			std::string tls_defines = tls.empty() ? ""
-												  : " -DTLS_LEN=" + std::to_string(tls[0]->data_size()) + " -DTLS_SIZE=" + std::to_string(tls[0]->mem_size())
-					+ " -DTLS_ALIGN=" + std::to_string(tls[0]->align());
+			std::string tls_defines = tls.empty() ? "" 
+                                                  : fmt::format(" -DTLS_LEN={} -DTLS_SIZE={} -DTLS_ALIGN={}",
+                                                                tls[0]->data_size(), tls[0]->mem_size(), tls[0]->align());
 
-			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -fPIC -shared " + intermediate_file->name() + " " + phobjsrc->name()
-				+ tls_defines + " init_lib.c -L " + arancini_runtime_lib_dir + " -l arancini-runtime " + libs
-				+ " -Wl,-T,lib.lds,-rpath=" + arancini_runtime_lib_dir + debug_info);
+			run_or_fail(fmt::format("{} -o {} -fPIC -shared {} {} {} init_lib.c -L {} -larancini-runtime {} -Wl,-T,lib.lds,-rpath={} {}", 
+                        cxx_compiler, output.string(), intermediate_file->name(), phobjsrc->name(), tls_defines,
+                        arancini_runtime_lib_dir.string(), libs, arancini_runtime_lib_dir.string(), debug_info));
 		} else {
 			throw std::runtime_error("Input elf type must be either an executable or shared object.");
 		}
 
 	} else {
-		std::string arancini_runtime_lib_dir = cmdline.at("static-binary").as<std::string>();
+		auto arancini_runtime_lib_dir = cmdline.at("static-binary").as<std::filesystem::path>();
 
 		if (elf.type() != elf::elf_type::exec) {
 			throw std::runtime_error("Can't generate a static binary from a shared object.");
 		}
 
 		// Generate the final output binary by compiling everything together.
-        run_or_fail(fmt::format("{} -o {} -no-pie -latomic -static-libgcc -static-libstdc++ {} {} -L {} -larancini-runtime-static -larancini-input-x86-static -larancini-output-riscv64-static -larancini-ir-static -L {}"
-                                "/../../obj -l xed {} -Wl,-T,{}.lds,-rpath={}", cxx_compiler, cmdline.at("output").as<std::string>(), intermediate_file->name(),
-                                phobjsrc->name(), arancini_runtime_lib_dir, arancini_runtime_lib_dir, debug_info, architecture, arancini_runtime_lib_dir));
+        run_or_fail(fmt::format("{} -o {} -no-pie -latomic -static-libgcc -static-libstdc++ {} {} -L {} "
+                                "-larancini-runtime-static -larancini-input-x86-static -larancini-output-riscv64-static -larancini-ir-static -L {}"
+                                "/../../obj -l xed {} -Wl,-T,{}.lds,-rpath={}", cxx_compiler, output.string(), intermediate_file->name(),
+                                phobjsrc->name(), arancini_runtime_lib_dir.string(), arancini_runtime_lib_dir.string(), debug_info, architecture, arancini_runtime_lib_dir.string()));
 	}
 
 	// Patch relocations in result binary
-	const auto &output = cmdline.at("output").as<std::string>();
-	elf_reader elf1 = { output };
+    // TODO: move to std::string_view
+	elf_reader elf1{output};
 
 	elf1.parse();
 
@@ -318,7 +321,7 @@ next:
 
 	std::map<std::string, int> guest_symbol_to_index;
 
-	const std::vector<symbol> &guest_symbols = generated_dynsym->symbols();
+	const auto &guest_symbols = generated_dynsym->symbols();
 	for (size_t i = 0; i < guest_symbols.size(); ++i) {
 		const std::string &string = guest_symbols[i].name();
 		if (string.size() >= 9) {
@@ -327,7 +330,7 @@ next:
 	}
 
 	{
-		std::ofstream file(cmdline.at("output").as<std::string>(), std::ios::out | std::ios::binary | std::ios::in);
+		std::ofstream file(output.string(), std::ios::out | std::ios::binary | std::ios::in);
 
 		for (const auto &relocs : generated_rela) {
 			const std::vector<rela> &relocations1 = relocs->relocations();
@@ -351,7 +354,7 @@ next:
 					file.write(reinterpret_cast<const char *>(&new_symbol), sizeof(new_symbol));
 					// Write new_symbol to (relocs.file_offset() + 24 * i + 12) and reloc.type() & ~0xf0000000 to (relocs.file_offset() + 24 * i + 8)
 				} else if (transform) {
-					throw std::runtime_error("Invalid relocation transform type " + std::to_string(transform));
+					throw std::runtime_error(fmt::format("Invalid relocation transform type {}\n", transform));
 				}
 			}
 		}
@@ -450,7 +453,7 @@ std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arc
 
 	auto section = reader.get_section(sym.section_index());
 	if (!section) {
-		throw std::runtime_error("unable to resolve symbol section");
+		throw std::runtime_error(fmt::format("unable to resolve symbol section {}\n", sym.name()));
 	}
 
 	off_t symbol_offset_in_section = sym.value() - section->address();
@@ -460,19 +463,17 @@ std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arc
 	default_ir_builder irb(ia.get_internal_function_resolver(), true);
 
 	auto start = std::chrono::high_resolution_clock::now();
-	ia.translate_chunk(irb, sym.value(), symbol_data, sym.size(), false, "__arancini__"+sym.name());
+	ia.translate_chunk(irb, sym.value(), symbol_data, sym.size(), false, fmt::format("__arancini__{}", sym.name()));
 	auto dur = std::chrono::high_resolution_clock::now() - start;
 
     ::util::global_logger.info("Symbol translation time: {} us\n", std::chrono::duration_cast<std::chrono::microseconds>(dur).count());
 	return irb.get_chunk();
 }
 
-
-void txlat_engine::generate_dot_graph(arancini::output::o_static::static_output_engine &oe, std::string filename)
-{
+void txlat_engine::generate_dot_graph(arancini::output::o_static::static_output_engine &oe, const std::filesystem::path &filename) {
 	std::ostream *o;
 
-    std::cout << "Generating dot graph to: " << filename << std::endl;
+    ::util::global_logger.info("Generating dot graph to {}\n", filename.string());
 
 	if (filename == "-") {
 		o = &std::cout;
@@ -493,8 +494,8 @@ void txlat_engine::generate_dot_graph(arancini::output::o_static::static_output_
 	}
 }
 
-void txlat_engine::optimise(arancini::output::o_static::static_output_engine &oe, const boost::program_options::variables_map &cmdline)
-{
+void txlat_engine::optimise(arancini::output::o_static::static_output_engine &oe, 
+                            [[maybe_unused]] const boost::program_options::variables_map &cmdline) {
     auto start = std::chrono::high_resolution_clock::now();
     deadflags_opt_visitor deadflags;
     for (auto c : oe.chunks()) {

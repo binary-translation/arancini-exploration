@@ -3,6 +3,7 @@
 #include <boost/program_options.hpp>
 #include <memory>
 #include <string>
+#include <filesystem>
 
 namespace arancini::elf {
 class elf_reader;
@@ -36,9 +37,13 @@ public:
 
 private:
 	void process_options(arancini::output::o_static::static_output_engine &oe, const boost::program_options::variables_map &cmdline);
+
 	std::shared_ptr<ir::chunk> translate_symbol(arancini::input::input_arch &ia, elf::elf_reader &reader, const elf::symbol &sym);
-  void generate_dot_graph(arancini::output::o_static::static_output_engine &oe, std::string filename);
-  void optimise(arancini::output::o_static::static_output_engine &oe, const boost::program_options::variables_map &cmdline);
+
+    void generate_dot_graph(arancini::output::o_static::static_output_engine &oe, const std::filesystem::path &filename);
+
+    void optimise(arancini::output::o_static::static_output_engine &oe, const boost::program_options::variables_map &cmdline);
+
 	static void add_symbol_to_output(const std::vector<std::shared_ptr<elf::program_header>> &phbins, const std::map<off_t, unsigned int> &end_addresses,
 		const elf::symbol &sym, std::ofstream &s, std::map<uint64_t, std::string> &ifuncs, bool force_global = false, bool omit_prefix = false);
 
@@ -48,4 +53,6 @@ private:
 		const std::vector<std::shared_ptr<elf::relr_array>> &relocations_r, const std::shared_ptr<elf::symbol_table> &sym_t,
 		const std::vector<std::shared_ptr<elf::program_header>> &tls);
 };
+
 } // namespace arancini::txlat
+
