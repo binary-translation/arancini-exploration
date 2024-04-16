@@ -3,6 +3,7 @@
 #include <boost/program_options.hpp>
 #include <iostream>
 #include <optional>
+#include <filesystem>
 
 using namespace arancini::txlat;
 namespace po = boost::program_options;
@@ -40,17 +41,19 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 
 	desc.add_options() //
 		("help,h", "Displays usage information") //
-		("input,I", po::value<std::string>()->required(), "The ELF file that is being translated") //
-		("output,O", po::value<std::string>(), "The output file that is generated (omit if you don't want to produce a translated binary)") //
-		("library,l", po::value<std::vector<std::string>>(),
+		("input,I", po::value<std::filesystem::path>()->required(), "The ELF file that is being translated") //
+		("output,O", po::value<std::filesystem::path>(), "The output file that is generated (omit if you don't want to produce a translated binary)") //
+		("library,l", po::value<std::vector<std::filesystem::path>>(),
 			"Translated versions of the libraries this binary depends on (relative or absolute path including filename)") //
+        // FIXME: enforce particular values
 		("syntax", po::value<std::string>()->default_value("intel"),
 			"Specify the syntax to use when disassembling host instructions (x86 input only: att or intel)") //
-		("graph", po::value<std::string>(), "Creates a DOT graph file representing the input ELF translation") //
+        // FIXME: should be boolean (and mention this in the message)
+		("graph", po::value<std::filesystem::path>(), "File for generating DOT graph file representing the input ELF translation") //
 		("no-static", "Do not do any static translation") //
 #ifndef CROSS_TRANSLATE
-		("runtime-lib-path", po::value<std::string>()->default_value(ARANCINI_LIBPATH), "Path to arancini libraries (defaults specified by build system)") //
-		("static-binary", po::value<std::string>()->implicit_value(ARANCINI_LIBDIR)->zero_tokens(),
+		("runtime-lib-path", po::value<std::filesystem::path>()->default_value(ARANCINI_LIBPATH), "Path to arancini libraries (defaults specified by build system)") //
+		("static-binary", po::value<std::filesystem::path>()->implicit_value(ARANCINI_LIBDIR)->zero_tokens(),
 			"Link the generated binary statically to the arancini libraries inside this path. Requires to have built the arancini-runtime-static target. "
 			"Default specified by build system.") //
 		("cxx-compiler-path", po::value<std::string>()->default_value("g++"), "Path to C++ compiler to use for translated binary") //
@@ -101,12 +104,12 @@ int main(int argc, const char *argv[]) {
 
 	txlat_engine e;
 
-	try {
+	// try {
 		e.translate(cmdline.value());
-	} catch (const std::exception &e) {
-        ::util::global_logger.error("translation error: {}\n", e.what());
-		return 1;
-	}
+	// } catch (const std::exception &e) {
+ //        ::util::global_logger.error("translation error: {}\n", e.what());
+	// 	return 1;
+	// }
 
 	return 0;
 }

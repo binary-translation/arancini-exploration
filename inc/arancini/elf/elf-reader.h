@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <set>
+#include <filesystem>
 
 #include <elf.h>
 
@@ -295,7 +296,7 @@ enum class elf_type { none, rel, exec, dyn, core };
 
 class elf_reader {
 public:
-	elf_reader(const std::string &filename);
+	elf_reader(const std::filesystem::path &filename);
 	~elf_reader();
 
 	void parse();

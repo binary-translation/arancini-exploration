@@ -66,7 +66,7 @@ private:
 	mutable bool has_size_;
 };
 
-elf_reader::elf_reader(const std::string &filename)
+elf_reader::elf_reader(const std::filesystem::path &filename)
 	: elf_data_(nullptr)
 	, elf_data_size_(0)
 	, entrypoint_(0)
