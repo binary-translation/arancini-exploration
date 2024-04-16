@@ -221,12 +221,12 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	if (cmdline.count("no-script")) {
 		if (elf.type() == elf_type::exec) {
 			run_or_fail(fmt::format("{} -o {} -no-pie -latomic {} -larancini-runtime -L{} -Wl,-rpath={} {} {}", cxx_compiler,
-                        output.string(), intermediate_file->name(), arancini_runtime_lib_dir.string(),
-                        arancini_runtime_lib_dir.string(), debug_info, verbose_link));
+                        output, intermediate_file->name(), arancini_runtime_lib_dir,
+                        arancini_runtime_lib_dir, debug_info, verbose_link));
 		} else if (elf.type() == elf::elf_type::dyn) {
 			run_or_fail(fmt::format("{} -o {} -shared {} -L {} -l arancini-runtime -Wl,-rpath={} {} {}", cxx_compiler,
-                        output.string(), intermediate_file->name(), arancini_runtime_lib_dir.string(),
-                        arancini_runtime_lib_dir.string(), debug_info, verbose_link));
+                        output, intermediate_file->name(), arancini_runtime_lib_dir,
+                        arancini_runtime_lib_dir, debug_info, verbose_link));
 		}
 		return;
 	}
@@ -256,21 +256,16 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
                                           sym_t, tls);
 
 	if (!cmdline.count("static-binary")) {
-		std::string libs;
-
+        std::vector<std::filesystem::path> libs;
 		if (cmdline.count("library")) {
-			std::stringstream stringstream;
-			for (const auto &item : cmdline.at("library").as<std::vector<std::filesystem::path>>()) {
-				stringstream << " " << item;
-			}
-			libs = stringstream.str();
+			libs = cmdline.at("library").as<decltype(libs)>();
 		}
 
 		if (elf.type() == elf::elf_type::exec) {
 			// Generate the final output binary by compiling everything together.
             run_or_fail(fmt::format("{} -o {} -no-pie -latomic {} {} {} -larancini-runtime -L {} -Wl,-T,{}.lds,-rpath={} {} {}",
-                        cxx_compiler, output.string(), intermediate_file->name(), libs, phobjsrc->name(),
-                        arancini_runtime_lib_dir.string(), architecture, arancini_runtime_lib_dir.string(), debug_info, verbose_link));
+                        cxx_compiler, output, intermediate_file->name(), fmt::join(libs, " "), phobjsrc->name(),
+                        arancini_runtime_lib_dir, architecture, arancini_runtime_lib_dir, debug_info, verbose_link));
 		} else if (elf.type() == elf::elf_type::dyn) {
 			// Generate the final output library by compiling everything together.
 			std::string tls_defines = tls.empty() ? ""
@@ -278,12 +273,11 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
                                                                 tls[0]->data_size(), tls[0]->mem_size(), tls[0]->align());
 
 			run_or_fail(fmt::format("{} -o {} -fPIC -shared {} {} {} init_lib.c -L {} -larancini-runtime {} -Wl,-T,lib.lds,-rpath={} {}",
-                        cxx_compiler, output.string(), intermediate_file->name(), phobjsrc->name(), tls_defines,
-                        arancini_runtime_lib_dir.string(), libs, arancini_runtime_lib_dir.string(), debug_info));
+                        cxx_compiler, output, intermediate_file->name(), phobjsrc->name(), tls_defines,
+                        arancini_runtime_lib_dir, fmt::join(libs, " "), arancini_runtime_lib_dir, debug_info));
 		} else {
 			throw std::runtime_error("Input elf type must be either an executable or shared object.");
 		}
-
 	} else {
 		auto arancini_runtime_lib_dir = cmdline.at("static-binary").as<std::filesystem::path>();
 
@@ -294,8 +288,8 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		// Generate the final output binary by compiling everything together.
         run_or_fail(fmt::format("{} -o {} -no-pie -latomic -static-libgcc -static-libstdc++ {} {} -L {} "
                                 "-larancini-runtime-static -larancini-input-x86-static -larancini-output-riscv64-static -larancini-ir-static -L {}"
-                                "/../../obj -l xed {} -Wl,-T,{}.lds,-rpath={}", cxx_compiler, output.string(), intermediate_file->name(),
-                                phobjsrc->name(), arancini_runtime_lib_dir.string(), arancini_runtime_lib_dir.string(), debug_info, architecture, arancini_runtime_lib_dir.string()));
+                                "/../../obj -l xed {} -Wl,-T,{}.lds,-rpath={}", cxx_compiler, output, intermediate_file->name(),
+                                phobjsrc->name(), arancini_runtime_lib_dir, arancini_runtime_lib_dir, debug_info, architecture, arancini_runtime_lib_dir));
 	}
 
 	// Patch relocations in result binary
@@ -471,7 +465,7 @@ std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arc
 void txlat_engine::generate_dot_graph(arancini::output::o_static::static_output_engine &oe, const std::filesystem::path &filename) {
 	std::ostream *o;
 
-    ::util::global_logger.info("Generating dot graph to {}\n", filename.string());
+    ::util::global_logger.info("Generating dot graph to {}\n", filename);
 
 	if (filename == "-") {
 		o = &std::cout;

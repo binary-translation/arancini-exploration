@@ -9,6 +9,7 @@
 #include <mutex>
 #include <tuple>
 #include <functional>
+#include <filesystem>
 
 namespace util {
 
@@ -314,4 +315,19 @@ struct fmt::formatter<std::function<R()>> : fmt::formatter<R> {
         return format_to(format_ctx.out(), "{}", binding());
     }
 };
+
+// Extensions to fmt
+
+// Handle printing filesystem paths
+// Printer introduced in FMT_VERSION 10.2.1
+#if FMT_VERSION <= 100202
+template <>
+struct fmt::formatter<std::filesystem::path> : fmt::formatter<std::string_view>
+{
+    template <typename FormatContext>
+    auto format(const std::filesystem::path& path, FormatContext& ctx) const {
+        return formatter<std::string_view>::format(path.string(), ctx);
+    }
+};
+#endif
 
