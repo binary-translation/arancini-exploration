@@ -209,6 +209,14 @@ void arm64_translation_context::end_block() {
         std::cerr << "Terminating exception raised; aborting\n";
         std::abort();
     }
+
+    // FIXME: should handle resources separately
+	instruction_builder builder_;
+    nodes_.clear();
+    materialised_nodes_.clear();
+    port_to_vreg_.clear();
+    instruction_index_to_guest_.clear();
+    locals_.clear();
 }
 
 void arm64_translation_context::lower(const std::shared_ptr<ir::action_node> &n) {
