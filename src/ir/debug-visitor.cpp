@@ -315,7 +315,7 @@ void debug_visitor::visit_cast_node(cast_node &n)
 		break;
 	}
 
-	os_ << get_port_name(n.source_value()) << " -> " << n.val().type().to_string() << std::endl;
+    os_ << fmt::format("{} -> {}\n", get_port_name(n.source_value()), n.val().type());
 }
 
 void debug_visitor::visit_csel_node(csel_node &n)

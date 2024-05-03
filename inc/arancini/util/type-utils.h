@@ -3,6 +3,7 @@
 #include <tuple>
 #include <string>
 #include <cctype>
+#include <variant>
 #include <algorithm>
 #include <type_traits>
 
@@ -34,6 +35,23 @@ inline bool case_ignore_char_equal(char a, char b) {
 
 inline bool case_ignore_string_equal(const std::string &a, const std::string &b) {
     return std::equal(a.begin(), a.end(), b.begin(), b.end(), case_ignore_char_equal);
+}
+
+// Variant converter
+template <class... Args>
+struct variant_cast_proxy {
+    std::variant<Args...> v;
+
+    template <class... SuperSetArgs>
+    operator std::variant<SuperSetArgs...>() const {
+        return std::visit([](auto&& arg) -> std::variant<SuperSetArgs...> { return arg ; },
+                          v);
+    }
+};
+
+template <class... Args>
+auto variant_cast(const std::variant<Args...>& v) -> variant_cast_proxy<Args...> {
+    return {v};
 }
 
 } // namespace util
