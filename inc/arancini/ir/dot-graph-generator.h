@@ -57,34 +57,32 @@ private:
 
 	std::string compute_port_label(const port *p) const
 	{
-		std::stringstream s;
-
+        std::string_view port_kind;
 		switch (p->kind()) {
 		case port_kinds::value:
-			s << "value";
+			port_kind = "value";
 			break;
 		case port_kinds::constant:
-			s << "#";
+			port_kind = "#";
 			break;
 		case port_kinds::negative:
-			s << "N";
+			port_kind = "N";
 			break;
 		case port_kinds::overflow:
-			s << "V";
+			port_kind = "V";
 			break;
 		case port_kinds::carry:
-			s << "C";
+			port_kind = "C";
 			break;
 		case port_kinds::zero:
-			s << "Z";
+			port_kind = "Z";
 			break;
 		default:
-			s << "?";
+			port_kind = "?";
 			break;
 		}
 
-		s << ":" << p->type().to_string();
-		return s.str();
+        return fmt::format("{}:{}", port_kind, p->type());
 	}
 
 	void add_port_edge(const port *from, const node *to, const std::string &link = "") { add_edge(from->owner(), to, "black", compute_port_label(from), link); }

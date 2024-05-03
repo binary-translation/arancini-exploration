@@ -1,7 +1,8 @@
-#include "arancini/ir/node.h"
-#include "arancini/ir/port.h"
-#include "arancini/ir/value-type.h"
-#include "arancini/output/dynamic/arm64/arm64-instruction.h"
+#include <arancini/ir/node.h>
+#include <arancini/ir/port.h>
+#include <arancini/ir/value-type.h>
+#include <arancini/output/dynamic/arm64/arm64-common.h>
+#include <arancini/output/dynamic/arm64/arm64-instruction.h>
 #include <arancini/output/dynamic/arm64/arm64-translation-context.h>
 
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
@@ -17,8 +18,8 @@
 using namespace arancini::output::dynamic::arm64;
 using namespace arancini::ir;
 
-preg_operand memory_base_reg(preg_operand::x18);
-preg_operand context_block_reg(preg_operand::x29);
+register_operand memory_base_reg(register_operand::x18);
+register_operand context_block_reg(register_operand::x29);
 
 static constexpr bool supports_lse = false;
 
@@ -29,17 +30,10 @@ enum class reg_offsets {
 #undef DEFREG
 };
 
-const preg_operand ZF(preg_operand::x10);
-const preg_operand CF(preg_operand::x11);
-const preg_operand OF(preg_operand::x12);
-const preg_operand SF(preg_operand::x13);
-
-static std::unordered_map<unsigned long, vreg_operand> flag_map {
-	{ (unsigned long)reg_offsets::ZF, {} },
-	{ (unsigned long)reg_offsets::CF, {} },
-	{ (unsigned long)reg_offsets::OF, {} },
-	{ (unsigned long)reg_offsets::SF, {} },
-};
+const register_operand ZF(register_operand::x10);
+const register_operand CF(register_operand::x11);
+const register_operand OF(register_operand::x12);
+const register_operand SF(register_operand::x13);
 
 static value_type addr_type() {
     return value_type::u64();
@@ -54,7 +48,19 @@ static immediate_operand clamped_immediate(T v, value_type t) {
     return immediate_operand(v & ~(1 << t.element_width()), t);
 }
 
-std::vector<vreg_operand> &arm64_translation_context::alloc_vregs(const ir::port &p) {
+
+arm64_translation_context::arm64_translation_context(machine_code_writer &writer)
+		: translation_context(writer),
+          flag_map {
+                std::make_pair((unsigned long)reg_offsets::ZF, alloc_vreg(value_type::u1())),
+                std::make_pair((unsigned long)reg_offsets::CF, alloc_vreg(value_type::u1())),
+                std::make_pair((unsigned long)reg_offsets::OF, alloc_vreg(value_type::u1())),
+                std::make_pair((unsigned long)reg_offsets::SF, alloc_vreg(value_type::u1())),
+          }
+{
+}
+
+std::vector<register_operand> &arm64_translation_context::alloc_vregs(const ir::port &p) {
     auto reg_count = p.type().nr_elements();
     auto element_width = p.type().width();
     if (element_width > base_type().element_width()) {
@@ -70,14 +76,14 @@ std::vector<vreg_operand> &arm64_translation_context::alloc_vregs(const ir::port
     return vregs_for_port(p);
 }
 
-vreg_operand arm64_translation_context::cast(const vreg_operand &op, value_type type) {
+register_operand arm64_translation_context::cast(const register_operand &op, value_type type) {
     auto dest_vreg = alloc_vreg(type);
     builder_.mov(dest_vreg, op);
     return dest_vreg;
 }
 
 template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int>>
-vreg_operand arm64_translation_context::mov_immediate(T imm, ir::value_type type) {
+register_operand arm64_translation_context::mov_immediate(T imm, ir::value_type type) {
     auto actual_size = base_type().element_width() - __builtin_clzll(reinterpret_cast<unsigned long long&>(imm)|1);
     actual_size = std::min(actual_size, type.element_width());
 
@@ -107,35 +113,33 @@ vreg_operand arm64_translation_context::mov_immediate(T imm, ir::value_type type
         return reg;
     }
 
-    throw std::runtime_error("Too large immediate: " + std::to_string(imm));
+    throw arm64_exception("Too large immediate: " + std::to_string(imm));
 }
 
 memory_operand
-arm64_translation_context::guestreg_memory_operand(int regoff, bool pre, bool post)
+arm64_translation_context::guestreg_memory_operand(int regoff, 
+                                                   memory_operand::addressing_modes mode)
 {
-    memory_operand mem;
     if (regoff > 255 || regoff < -256) {
         auto preg = context_block_reg;
         auto base_vreg = alloc_vreg(addr_type());
         builder_.mov(base_vreg, immediate_operand(regoff, value_type::u32()));
         builder_.add(base_vreg, preg, base_vreg);
-        mem = memory_operand(base_vreg, immediate_operand(0, u12()), pre, post);
-    } else {
-        auto preg = context_block_reg;
-        mem = memory_operand(preg, immediate_operand(regoff, u12()), pre, post);
+        return memory_operand(base_vreg, immediate_operand(0, u12()), mode);
     }
 
-	return mem;
+    auto preg = context_block_reg;
+    return memory_operand(preg, immediate_operand(regoff, u12()), mode);
 }
 
-std::vector<vreg_operand> &arm64_translation_context::materialise_port(port &p) {
+std::vector<register_operand> &arm64_translation_context::materialise_port(port &p) {
 	materialise(p.owner());
 	return vregs_for_port(p);
 }
 
-vreg_operand arm64_translation_context::add_membase(const vreg_operand &addr, const value_type &type) {
+register_operand arm64_translation_context::add_membase(const register_operand &addr, const value_type &type) {
     auto mem_addr_vreg = alloc_vreg(type);
-    builder_.add(mem_addr_vreg, preg_operand(memory_base_reg.register_index()-1, type), addr, "add memory base register");
+    builder_.add(mem_addr_vreg, memory_base_reg, addr, "add memory base register");
 
     return mem_addr_vreg;
 }
@@ -194,7 +198,7 @@ void arm64_translation_context::end_instruction() {
 
 void arm64_translation_context::end_block() {
     // Return value in x0 = 0;
-	builder_.mov(preg_operand(preg_operand::x0),
+	builder_.mov(register_operand(register_operand::x0),
                  mov_immediate(ret_, value_type::u64()));
 
     try {
@@ -226,7 +230,7 @@ void arm64_translation_context::lower(const std::shared_ptr<ir::action_node> &n)
 void arm64_translation_context::materialise(const ir::node* n) {
     // Invalid node
     if (!n)
-        throw std::runtime_error("ARM64 DBT received NULL pointer to node");
+        throw arm64_exception("ARM64 DBT received NULL pointer to node");
 
     // Avoid materialising again
     if (materialised_nodes_.count(n))
@@ -310,7 +314,7 @@ void arm64_translation_context::materialise(const ir::node* n) {
         materialise_write_local(*reinterpret_cast<const write_local_node*>(n));
         break;
     default:
-        throw std::runtime_error("unknown node encountered: " +
+        throw arm64_exception("unknown node encountered: " +
                                  std::string(n->to_string()));
     }
 
@@ -327,7 +331,7 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
     // Sanity check
     auto type = n.val().type();
     if (type.is_vector() && type.element_width() > base_type().element_width()) {
-        throw std::runtime_error("[ARM64-DBT] Cannot load vectors with individual elements larger than 64-bits");
+        throw arm64_exception("[ARM64-DBT] Cannot load vectors with individual elements larger than 64-bits");
     }
 
     std::string comment("read register: ");
@@ -350,7 +354,7 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
                 builder_.ldr(dest_vregs[i], addr, comment);
                 break;
             default:
-                throw std::runtime_error("[ARM64-DBT] cannot load individual register values larger than 64-bits");
+                throw arm64_exception("[ARM64-DBT] cannot load individual register values larger than 64-bits");
         }
     }
 }
@@ -359,7 +363,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     // Sanity check
     auto type = n.val().type();
     if (type.is_vector() && type.element_width() > base_type().element_width()) {
-        throw std::runtime_error("[ARM64-DBT] Cannot store vectors with individual elements larger than 64-bits");
+        throw arm64_exception("[ARM64-DBT] Cannot store vectors with individual elements larger than 64-bits");
     }
 
     auto &src_vregs = materialise_port(n.value());
@@ -402,7 +406,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
-                throw std::runtime_error("[ARM64-DBT] cannot write individual register values larger than 64-bits");
+                throw arm64_exception("[ARM64-DBT] cannot write individual register values larger than 64-bits");
         }
     }
 }
@@ -413,9 +417,9 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
     // Sanity checks
     auto type = n.val().type();
     if (type.is_vector() && type.element_width() > base_type().element_width())
-        throw std::runtime_error("[ARM64-DBT] Cannot load vectors from memory with individual elements larger than 64-bits");
+        throw arm64_exception("[ARM64-DBT] Cannot load vectors from memory with individual elements larger than 64-bits");
     if (addr_vregs.size() != 1)
-        throw std::runtime_error("[ARM64-DBT] Only a single address can be specified in a read memory node");
+        throw arm64_exception("[ARM64-DBT] Only a single address can be specified in a read memory node");
 
     const auto &dest_vregs = alloc_vregs(n.val());
 
@@ -440,7 +444,7 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
-                throw std::runtime_error("[ARM64-DBT] cannot load individual memory values larger than 64-bits");
+                throw arm64_exception("[ARM64-DBT] cannot load individual memory values larger than 64-bits");
         }
     }
 }
@@ -453,9 +457,9 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
     // Sanity check; cannot by definition load a register larger than 64-bit
     // without it being a vector
     if (type.is_vector() && type.element_width() > base_type().element_width())
-        throw std::runtime_error("Larger than 64-bit integers in vectors not supported by backend");
+        throw arm64_exception("Larger than 64-bit integers in vectors not supported by backend");
     if (addr_vregs.size() != 1)
-        throw std::runtime_error("[ARM64-DBT] Only a single address can be specified in a write memory node");
+        throw arm64_exception("[ARM64-DBT] Only a single address can be specified in a write memory node");
 
     const auto &addr_vreg = add_membase(addr_vregs[0]);
     const auto &src_vregs = materialise_port(n.value());
@@ -479,7 +483,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
-                throw std::runtime_error("[ARM64-DBT] cannot write individual memory values larger than 64-bits");
+                throw arm64_exception("[ARM64-DBT] cannot write individual memory values larger than 64-bits");
         }
     }
 }
@@ -492,7 +496,7 @@ void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
 void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
     const auto &new_pc_vregs = materialise_port(n.value());
     if (new_pc_vregs.size() != 1) {
-        throw std::runtime_error("[ARM64-DBT] Program counter cannot be > 64-bits");
+        throw arm64_exception("[ARM64-DBT] Program counter cannot be > 64-bits");
     }
 
     builder_.str(new_pc_vregs[0],
@@ -506,16 +510,16 @@ void arm64_translation_context::materialise_label(const label_node &n) {
 }
 
 void arm64_translation_context::materialise_br(const br_node &n) {
-    builder_.b(n.target()->name());
+    builder_.b(std::string_view{n.target()->name()});
 }
 
 void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
     const auto &cond_vregs = materialise_port(n.cond());
     if (cond_vregs.size() != 1)
-        throw std::runtime_error("[ARM64-DBT] Condition vregs for branches cannot be > 64-bits");
+        throw arm64_exception("[ARM64-DBT] Condition vregs for branches cannot be > 64-bits");
 
     builder_.cmp(cond_vregs[0], immediate_operand(1, value_type::u8()));
-    builder_.beq(n.target()->name());
+    builder_.beq(std::string_view{n.target()->name()});
 }
 
 void arm64_translation_context::materialise_constant(const constant_node &n) {
@@ -534,8 +538,9 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
     const auto &lhs_vregs = materialise_port(n.lhs());
     const auto &rhs_vregs = materialise_port(n.rhs());
 
-    if (lhs_vregs.size() != rhs_vregs.size())
-        throw std::runtime_error("[ARM64-DBT] Binary operations not supported with different sized operands");
+    if (lhs_vregs.size() != rhs_vregs.size()) {
+        throw arm64_exception("[ARM64-DBT] Binary operations not supported with different sized operands");
+    }
 
 	const auto &dest_vregs = alloc_vregs(n.val());
     size_t dest_width = n.val().type().element_width();
@@ -544,10 +549,11 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
     const auto &rhs_vreg = rhs_vregs[0];
     const auto &dest_vreg = dest_vregs[0];
 
-    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg(n.carry(), value_type::u1());
+    // Associate port with flag mapping
+    alloc_vreg(n.zero(),     flag_map.at((unsigned long)reg_offsets::ZF));
+    alloc_vreg(n.negative(), flag_map.at((unsigned long)reg_offsets::SF));
+    alloc_vreg(n.overflow(), flag_map.at((unsigned long)reg_offsets::OF));
+    alloc_vreg(n.carry(),    flag_map.at((unsigned long)reg_offsets::CF));
 
     // TODO: check
     const char* mod = nullptr;
@@ -605,7 +611,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             builder_.subs(dest_vreg, lhs_vreg, rhs_vreg, shift_operand(mod, immediate_operand(0, value_type::u16())));
         for (size_t i = 1; i < dest_vregs.size(); ++i)
             builder_.sbcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
-        builder_.setcc(flag_map[(unsigned long)reg_offsets::CF], "compute flag: CF");
+        builder_.setcc(flag_map.at((unsigned long)reg_offsets::CF), "compute flag: CF");
         break;
 	case binary_arith_op::mul:
         switch (dest_width) {
@@ -625,7 +631,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 break;
             case ir::value_type_class::none:
             default:
-                throw std::runtime_error("[ARM64-DBT] encounted unknown type class for multiplication");
+                throw arm64_exception("[ARM64-DBT] encounted unknown type class for multiplication");
             }
             break;
         case 64:
@@ -645,13 +651,13 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 break;
             case ir::value_type_class::none:
             default:
-                throw std::runtime_error("[ARM64-DBT] encounted unknown type class for multiplication");
+                throw arm64_exception("[ARM64-DBT] encounted unknown type class for multiplication");
             }
             break;
         case 256:
         case 512:
         default:
-            throw std::runtime_error("[ARM64-DBT] does not support subtraction with sizes larger than 128-bits");
+            throw arm64_exception("[ARM64-DBT] does not support subtraction with sizes larger than 128-bits");
         }
 
         // *MUL* do not set flags, they must be set here manually
@@ -673,12 +679,12 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 	case binary_arith_op::div:
         //FIXME: implement
         builder_.sdiv(dest_vreg, lhs_vreg, rhs_vreg);
-        /* throw std::runtime_error("Not implemented: binary_arith_op::div"); */
+        /* throw arm64_exception("Not implemented: binary_arith_op::div"); */
 		break;
 	case binary_arith_op::mod:
         //FIXME: implement
         builder_.and_(dest_vreg, lhs_vreg, rhs_vreg);
-        /* throw std::runtime_error("Not implemented: binary_arith_op::mov"); */
+        /* throw arm64_exception("Not implemented: binary_arith_op::mov"); */
 		break;
 	case binary_arith_op::bor:
         builder_.orr_(dest_vreg, lhs_vreg, rhs_vreg);
@@ -700,29 +706,30 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 	case binary_arith_op::cmpne:
 	case binary_arith_op::cmpgt:
         builder_.cmp(lhs_vreg, rhs_vreg, "compare LHS and RHS to generate condition for conditional set");
-        builder_.cset(dest_vreg, cond_operand(cset_type), "set to 1 if condition is true (based flags from the previous compare)");
+        builder_.cset(dest_vreg, conditional_operand(cset_type), "set to 1 if condition is true (based flags from the previous compare)");
         for (size_t i = 1; i < dest_vregs.size(); ++i) {
-            builder_.cset(dest_vregs[i], cond_operand(cset_type));
+            builder_.cset(dest_vregs[i], conditional_operand(cset_type));
         }
 		break;
 	default:
-		throw std::runtime_error("unsupported binary arithmetic operation " + std::to_string((int)n.op()));
+		throw arm64_exception("unsupported binary arithmetic operation " + std::to_string((int)n.op()));
 	}
 
     // FIXME Another write-reg node generated?
-	builder_.setz(flag_map[(unsigned long)reg_offsets::ZF], "compute flag: ZF");
-	builder_.sets(flag_map[(unsigned long)reg_offsets::SF], "compute flag: SF");
-	builder_.seto(flag_map[(unsigned long)reg_offsets::OF], "compute flag: OF");
+	builder_.setz(flag_map.at((unsigned long)reg_offsets::ZF), "compute flag: ZF");
+	builder_.sets(flag_map.at((unsigned long)reg_offsets::SF), "compute flag: SF");
+	builder_.seto(flag_map.at((unsigned long)reg_offsets::OF), "compute flag: OF");
 
     if (n.op() != binary_arith_op::sub)
-        builder_.setc(flag_map[(unsigned long)reg_offsets::CF], "compute flag: CF");
+        builder_.setc(flag_map.at((unsigned long)reg_offsets::CF), "compute flag: CF");
 }
 
 void arm64_translation_context::materialise_ternary_arith(const ternary_arith_node &n) {
-    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg(n.carry(), value_type::u1());
+    // Associate port with flag mapping
+    alloc_vreg(n.zero(),     flag_map.at((unsigned long)reg_offsets::ZF));
+    alloc_vreg(n.negative(), flag_map.at((unsigned long)reg_offsets::SF));
+    alloc_vreg(n.overflow(), flag_map.at((unsigned long)reg_offsets::OF));
+    alloc_vreg(n.carry(),    flag_map.at((unsigned long)reg_offsets::CF));
 
 	const auto &dest_vregs = alloc_vregs(n.val());
     const auto &lhs_vregs = materialise_port(n.lhs());
@@ -732,7 +739,7 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
     if (dest_vregs.size() != lhs_vregs.size() ||
         dest_vregs.size() != rhs_vregs.size() ||
         dest_vregs.size() != top_vregs.size()) {
-        throw std::runtime_error("[ARM64-DBT] Ternary arithmetic node mismatch between types");
+        throw arm64_exception("[ARM64-DBT] Ternary arithmetic node mismatch between types");
     }
 
     const char* mod = nullptr;
@@ -751,16 +758,16 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
         break;
     }
 
-    auto pstate = alloc_vreg(preg_operand(preg_operand::nzcv).type());
+    auto pstate = alloc_vreg(register_operand(register_operand::nzcv).type());
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
         // Set carry flag
-        builder_.mrs(pstate, preg_operand(preg_operand::nzcv));
+        builder_.mrs(pstate, register_operand(register_operand::nzcv));
         builder_.lsl(top_vregs[i], top_vregs[i], immediate_operand(0x3, value_type::u8()));
 
         cast(top_vregs[i], pstate.type());
 
         builder_.orr_(pstate, pstate, top_vregs[i]);
-        builder_.msr(preg_operand(preg_operand::nzcv), pstate);
+        builder_.msr(register_operand(register_operand::nzcv), pstate);
 
         switch (n.op()) {
         case ternary_arith_op::adc:
@@ -776,14 +783,14 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
                 builder_.sbcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
             break;
         default:
-            throw std::runtime_error("unsupported ternary arithmetic operation " + std::to_string((int)n.op()));
+            throw arm64_exception("unsupported ternary arithmetic operation " + std::to_string((int)n.op()));
         }
     }
 
-	builder_.setz(flag_map[(unsigned long)reg_offsets::ZF], "compute flag: ZF");
-	builder_.sets(flag_map[(unsigned long)reg_offsets::SF], "compute flag: SF");
-	builder_.seto(flag_map[(unsigned long)reg_offsets::OF], "compute flag: OF");
-    builder_.setc(flag_map[(unsigned long)reg_offsets::CF], "compute flag: CF");
+	builder_.setz(flag_map.at((unsigned long)reg_offsets::ZF), "compute flag: ZF");
+	builder_.sets(flag_map.at((unsigned long)reg_offsets::SF), "compute flag: SF");
+	builder_.seto(flag_map.at((unsigned long)reg_offsets::OF), "compute flag: OF");
+    builder_.setc(flag_map.at((unsigned long)reg_offsets::CF), "compute flag: CF");
 }
 
 void arm64_translation_context::materialise_binary_atomic(const binary_atomic_node &n) {
@@ -792,18 +799,18 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
     const auto &addr_regs = vregs_for_port(n.address());
 
     if (addr_regs.size() != 1)
-        throw std::runtime_error("[ARM64-DBT] Binary atomic operation address cannot be > 64-bits");
+        throw arm64_exception("[ARM64-DBT] Binary atomic operation address cannot be > 64-bits");
     if (dest_vregs.size() != 1 || src_vregs.size() != 1)
-        throw std::runtime_error("[ARM64-DBT] Binary atomic operations not supported for vectors");
+        throw arm64_exception("[ARM64-DBT] Binary atomic operations not supported for vectors");
 
     const auto &src_vreg = src_vregs[0];
     const auto &dest_vreg = dest_vregs[0];
 
     // No need to handle flags: they are not visible to other PEs
-    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg(n.carry(), value_type::u1());
+    alloc_vreg(n.zero(),      flag_map.at((unsigned long)reg_offsets::ZF));
+    alloc_vreg(n.negative(),  flag_map.at((unsigned long)reg_offsets::SF));
+    alloc_vreg(n.overflow(),  flag_map.at((unsigned long)reg_offsets::OF));
+    alloc_vreg(n.carry(),     flag_map.at((unsigned long)reg_offsets::CF));
 
     memory_operand mem_addr(add_membase(addr_regs[0]));
 
@@ -830,10 +837,10 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             builder_.ldadd(src_vreg, dest_vreg, mem_addr);
             break;
         default:
-            throw std::runtime_error("Atomic LDADD cannot handle sizes > 64-bit");
+            throw arm64_exception("Atomic LDADD cannot handle sizes > 64-bit");
         }
         if (n.op() == binary_atomic_op::sub)
-            builder_.setcc(flag_map[(unsigned long)reg_offsets::CF]);
+            builder_.setcc(flag_map.at((unsigned long)reg_offsets::CF));
         break;
 	case binary_atomic_op::bor:
         switch (n.val().type().element_width()) {
@@ -851,7 +858,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             builder_.ldset(src_vreg, dest_vreg, mem_addr);
             break;
         default:
-            throw std::runtime_error("Atomic LDSET cannot handle sizes > 64-bit");
+            throw arm64_exception("Atomic LDSET cannot handle sizes > 64-bit");
         }
 		break;
 	case binary_atomic_op::band:
@@ -872,7 +879,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             builder_.ldclr(src_vreg, dest_vreg, mem_addr);
             break;
         default:
-            throw std::runtime_error("Atomic LDCLR cannot handle sizes > 64-bit");
+            throw arm64_exception("Atomic LDCLR cannot handle sizes > 64-bit");
         }
 		break;
 	case binary_atomic_op::bxor:
@@ -891,7 +898,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             builder_.ldeor(src_vreg, dest_vreg, mem_addr);
             break;
         default:
-            throw std::runtime_error("Atomic LDEOR cannot handle sizes > 64-bit");
+            throw arm64_exception("Atomic LDEOR cannot handle sizes > 64-bit");
         }
 		break;
     case binary_atomic_op::btc:
@@ -910,7 +917,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             builder_.ldclr(src_vreg, dest_vreg, mem_addr);
             break;
         default:
-            throw std::runtime_error("Atomic LDCLR cannot handle sizes > 64-bit");
+            throw arm64_exception("Atomic LDCLR cannot handle sizes > 64-bit");
         }
 		break;
     case binary_atomic_op::bts:
@@ -929,7 +936,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             builder_.ldset(src_vreg, dest_vreg, mem_addr);
             break;
         default:
-            throw std::runtime_error("Atomic LDSET cannot handle sizes > 64-bit");
+            throw arm64_exception("Atomic LDSET cannot handle sizes > 64-bit");
         }
 		break;
     case binary_atomic_op::xadd:
@@ -942,7 +949,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             // TODO: must find a way to make this unique
             builder_.insert_comment("Atomic addition (load atomically, add and retry if failed)");
 
-            std::string restart_label = "restart";
+            std::string_view restart_label = "restart";
             builder_.label(restart_label, "set label for jump (needed in case of restarting operation)");
             switch(n.val().type().element_width()) {
             case 1:
@@ -959,7 +966,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
                 builder_.ldaxr(dest_vreg, mem_addr);
                 break;
             default:
-                throw std::runtime_error("Atomic XADD not supported for sizes > 64-bit");
+                throw arm64_exception("Atomic XADD not supported for sizes > 64-bit");
             }
             builder_.adds(dest_vreg, dest_vreg, src_vreg, "perform addition with loaded source");
 
@@ -979,7 +986,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
                 builder_.stlxr(status, dest_vreg, mem_addr);
                 break;
             default:
-                throw std::runtime_error("Atomic XADD not supported for sizes > 64-bit");
+                throw arm64_exception("Atomic XADD not supported for sizes > 64-bit");
             }
 
             builder_.cbnz(status, restart_label, "write back source or restart operation (by jumping to label)");
@@ -1002,19 +1009,19 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             builder_.swp(dest_vreg, src_vreg, mem_addr);
             break;
         default:
-            throw std::runtime_error("Atomic XCHG not supported for sizes > 64-bit");
+            throw arm64_exception("Atomic XCHG not supported for sizes > 64-bit");
         }
         break;
 	default:
-		throw std::runtime_error("unsupported binary atomic operation " + std::to_string((int)n.op()));
+		throw arm64_exception("unsupported binary atomic operation " + std::to_string((int)n.op()));
 	}
 
-	builder_.setz(flag_map[(unsigned long)reg_offsets::ZF], "write flag: ZF");
-	builder_.sets(flag_map[(unsigned long)reg_offsets::SF], "write flag: SF");
-	builder_.seto(flag_map[(unsigned long)reg_offsets::OF], "write flag: OF");
+	builder_.setz(flag_map.at((unsigned long)reg_offsets::ZF), "write flag: ZF");
+	builder_.sets(flag_map.at((unsigned long)reg_offsets::SF), "write flag: SF");
+	builder_.seto(flag_map.at((unsigned long)reg_offsets::OF), "write flag: OF");
 
     if (n.op() != binary_atomic_op::sub)
-        builder_.setc(flag_map[(unsigned long)reg_offsets::CF], "write flag: CF");
+        builder_.setc(flag_map.at((unsigned long)reg_offsets::CF), "write flag: CF");
 }
 
 void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_node &n) {
@@ -1026,9 +1033,9 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
     const auto &addr_vregs = materialise_port(n.address());
 
     if (addr_vregs.size() != 1)
-        throw std::runtime_error("[ARM64-DBT] Ternary atomic operation address cannot be > 64-bits");
+        throw arm64_exception("[ARM64-DBT] Ternary atomic operation address cannot be > 64-bits");
     if (dest_vregs.size() != 1 || src_vregs.size() != 1 || acc_vregs.size() != 1 || addr_vregs.size() != 1) {
-        throw std::runtime_error("[ARM64-DBT] Ternary atomic operations not supported for vectors - dest: " +
+        throw arm64_exception("[ARM64-DBT] Ternary atomic operations not supported for vectors - dest: " +
                                  std::to_string(n.val().type().nr_elements()) + " x " + std::to_string(n.val().type().element_width())
                                  + ", top: " +
                                  std::to_string(n.top().type().nr_elements()) + " x " + std::to_string(n.top().type().element_width())
@@ -1038,10 +1045,10 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
                                  std::to_string(n.rhs().type().nr_elements()) + " x " + std::to_string(n.rhs().type().element_width()));
     }
 
-    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg(n.carry(), value_type::u1());
+    alloc_vreg(n.zero(),     flag_map.at((unsigned long)reg_offsets::ZF));
+    alloc_vreg(n.negative(), flag_map.at((unsigned long)reg_offsets::SF));
+    alloc_vreg(n.overflow(), flag_map.at((unsigned long)reg_offsets::OF));
+    alloc_vreg(n.carry(),    flag_map.at((unsigned long)reg_offsets::CF));
 
     auto mem_addr = memory_operand(add_membase(addr_vregs[0]));
 
@@ -1079,7 +1086,7 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
     case ternary_atomic_op::adc:
     case ternary_atomic_op::sbb:
     default:
-		throw std::runtime_error("unsupported binary atomic operation " + std::to_string((int)n.op()));
+		throw arm64_exception("unsupported binary atomic operation " + std::to_string((int)n.op()));
     }
 }
 
@@ -1088,7 +1095,7 @@ void arm64_translation_context::materialise_unary_arith(const unary_arith_node &
     const auto &lhs_vregs = materialise_port(n.lhs());
 
     if (dest_vregs.size() != 1 || lhs_vregs.size() != 1)
-        throw std::runtime_error("[ARM64-DBT] Unary arithmetic node does not support operations > 64-bit");
+        throw arm64_exception("[ARM64-DBT] Unary arithmetic node does not support operations > 64-bit");
 
     const auto &dest_vreg = dest_vregs[0];
     const auto &lhs_vreg = lhs_vregs[0];
@@ -1107,7 +1114,7 @@ void arm64_translation_context::materialise_unary_arith(const unary_arith_node &
         builder_.add(dest_vreg, dest_vreg, immediate_operand(1, value_type::u8()));
         break;
     default:
-        throw std::runtime_error("Unknown unary operation");
+        throw arm64_exception("Unknown unary operation");
     }
 }
 
@@ -1133,7 +1140,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 	case cast_op::sx:
         // Sanity check
         if (n.val().type().element_width() <= n.source_value().type().element_width()) {
-            throw std::runtime_error("[ARM64-DBT] cannot sign-extend " +
+            throw arm64_exception("[ARM64-DBT] cannot sign-extend " +
                     std::to_string(n.val().type().element_width()) + " to smaller size " +
                     std::to_string(n.source_value().type().element_width()));
         }
@@ -1179,9 +1186,8 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
                 builder_.mov(dest_vregs[i], src_vregs[i]);
             break;
         default:
-            throw std::runtime_error("[ARM64-DBT] cannot sign-extend from size " +
-                    std::to_string(src_vreg.width()) + " to size " +
-                    std::to_string(dest_vreg.width()));
+            throw arm64_exception("[ARM64-DBT] cannot sign-extend from {} to {}",
+                                  src_vreg.type(), dest_vreg.type());
         }
 
         // Determine sign and write to upper registers
@@ -1215,7 +1221,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
                 builder_.lsl(src_vreg, src_vreg, mov_immediate(dest_pos % n.val().type().element_width(), src_vreg.type()));
                 builder_.orr_(dest_vregs[dest_idx], dest_vregs[dest_idx], src_vreg);
 
-                dest_pos += src_vregs[i].width();
+                dest_pos += src_vregs[i].type().width();
                 dest_idx = (dest_pos / dest_vregs[dest_idx].type().width());
             }
         } else if (n.val().type().element_width() < n.source_value().type().element_width()) {
@@ -1228,7 +1234,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
                 builder_.lsl(src_vreg, src_vreg, mov_immediate(src_pos % n.source_value().type().element_width(), src_vreg.type()));
                 builder_.mov(dest_vregs[i], src_vreg);
 
-                src_pos += src_vregs[i].width();
+                src_pos += src_vregs[i].type().width();
                 src_idx = (src_pos / src_vregs[src_idx].type().width());
             }
         } else {
@@ -1239,7 +1245,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 	case cast_op::zx:
         // Sanity check
         if (n.val().type().element_width() <= n.source_value().type().element_width()) {
-            throw std::runtime_error("[ARM64-DBT] Cannot zero-extend " +
+            throw arm64_exception("[ARM64-DBT] Cannot zero-extend " +
                     std::to_string(n.val().type().element_width()) + " to smaller size " +
                     std::to_string(n.source_value().type().element_width()));
         }
@@ -1280,9 +1286,8 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             }
             break;
         default:
-            throw std::runtime_error("[ARM64-DBT] cannot sign-extend from size " +
-                    std::to_string(src_vreg.width()) + " to size " +
-                    std::to_string(dest_vreg.width()));
+            throw arm64_exception("[ARM64-DBT] cannot sign-extend from size {} to size {}",
+                                  src_vreg.type(), dest_vreg.type());
         }
 
         // Set upper registers to zero
@@ -1293,10 +1298,9 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         }
         break;
     case cast_op::trunc:
-        if (dest_vreg.width() > src_vreg.width()) {
-            throw std::runtime_error("[ARM64-DBT] cannot truncate from " +
-                    std::to_string(dest_vreg.width()) + " to larger size " +
-                    std::to_string(src_vreg.width()));
+        if (dest_vreg.type().width() > src_vreg.type().width()) {
+            throw arm64_exception("[ARM64-DBT] cannot truncate from {} to {}", 
+                                     dest_vreg.type(), src_vreg.type());
         }
 
         for (size_t i = 0; i < dest_vregs.size(); ++i) {
@@ -1315,7 +1319,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         } else if (src_vregs.size() == 1) {
             // TODO: again register reallocation problems, this should be clearly
             // specified as a smaller size
-            auto immediate = mov_immediate(64 - dest_vreg.width(), value_type::u64());
+            auto immediate = mov_immediate(64 - dest_vreg.type().width(), value_type::u64());
             builder_.lsl(dest_vreg, src_vreg, immediate);
             builder_.asr(dest_vreg, dest_vreg, immediate);
         }
@@ -1323,8 +1327,8 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
     case cast_op::convert:
         // convert between integer and float representations
         if (dest_vregs.size() != 1) {
-            throw std::runtime_error("[ARM64-DBT] cannot convert " +
-                    std::to_string(n.val().type().element_width()) + " because it larger than 64-bit");
+            throw arm64_exception("[ARM64-DBT] cannot convert {} because it is larger than 64 bits",
+                                  n.val().type());
         }
 
         // convert integer to float
@@ -1362,8 +1366,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
                 break;
             case fp_convert_type::none:
             default:
-                throw std::runtime_error("Cannot convert type: " +
-                                         std::to_string(int(n.convert_type())));
+                throw arm64_exception("Cannot convert type: {}", n.convert_type());
             }
         } else {
             // converting between different represenations of integers/floating
@@ -1375,14 +1378,13 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         }
         break;
 	default:
-		throw std::runtime_error("unsupported cast operation: "
-                                 + to_string(n.op()));
+		throw arm64_exception("unsupported cast operation: {}", n.op());
 	}
 }
 
 void arm64_translation_context::materialise_csel(const csel_node &n) {
     if (n.val().type().is_vector() || n.val().type().element_width() > base_type().element_width()) {
-        throw std::runtime_error("[ARM64-DBT] cannot implement conditional selection for \
+        throw arm64_exception("[ARM64-DBT] cannot implement conditional selection for \
                                   vectors and elements widths exceeding 64-bits");
     }
 
@@ -1394,17 +1396,17 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
     if (cond_vregs.size() != true_vregs.size() ||
         true_vregs.size() != false_vregs.size() ||
         false_vregs.size() != 1) {
-        throw std::runtime_error("[ARM64-DBT] CSEL does not support conditions and values > 64-bits");
+        throw arm64_exception("[ARM64-DBT] CSEL does not support conditions and values > 64-bits");
     }
 
     /* builder_.brk(immediate_operand(100, 64)); */
     builder_.cmp(cond_vregs[0], immediate_operand(0, value_type::u8()), "compare condition for conditional select");
-    builder_.csel(dest_vreg, true_vregs[0], false_vregs[0], cond_operand("NE"));
+    builder_.csel(dest_vreg, true_vregs[0], false_vregs[0], conditional_operand("NE"));
 }
 
 void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
     if (n.val().type().is_vector() || n.val().type().element_width() > base_type().element_width()) {
-        throw std::runtime_error("[ARM64-DBT] cannot implement bit shifts for \
+        throw arm64_exception("[ARM64-DBT] cannot implement bit shifts for \
                                   vectors and elements widths exceeding 64-bits");
     }
 
@@ -1434,13 +1436,13 @@ void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
         builder_.asr(dest_vreg, input, amount);
         break;
     default:
-        throw std::runtime_error("unsupported shift operation: " +
+        throw arm64_exception("unsupported shift operation: " +
                                  std::to_string(static_cast<int>(n.op())));
     }
 }
 
-static inline std::size_t total_width(const std::vector<vreg_operand> &vec) {
-    return std::ceil(vec.size() * vec[0].width());
+static inline std::size_t total_width(const std::vector<register_operand> &vec) {
+    return std::ceil(vec.size() * vec[0].type().width());
 }
 
 void arm64_translation_context::materialise_bit_extract(const bit_extract_node &n) {
@@ -1449,15 +1451,15 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
 
     // Sanity check
     if (dest_vregs.size() > src_vregs.size())
-        throw std::runtime_error("[ARM64-DBT] Destination cannot be larger than source for bit extract node");
+        throw arm64_exception("[ARM64-DBT] Destination cannot be larger than source for bit extract node");
 
     auto dest_total_width = total_width(dest_vregs);
     auto src_total_width = total_width(src_vregs);
     auto extract_start = n.from() / src_total_width;
 
     std::size_t extracted = 0;
-    auto extract_idx = n.from() % src_vregs[0].width();
-    auto extract_len = std::min(src_vregs[0].width() - extract_idx, n.length() - extracted);
+    auto extract_idx = n.from() % src_vregs[0].type().width();
+    auto extract_len = std::min(src_vregs[0].type().width() - extract_idx, n.length() - extracted);
 
     std::size_t dest_idx = 0;
 
@@ -1470,7 +1472,7 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
                       immediate_operand(extract_len, value_type::u8()));
         extract_idx = 0;
         extracted += extract_len;
-        extract_len = std::min(n.length() - extracted, src_vregs[i].width());
+        extract_len = std::min(n.length() - extracted, src_vregs[i].type().width());
         dest_idx = extracted % dest_total_width;
     }
 }
@@ -1482,7 +1484,7 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
 
     // Sanity check
     if (dest_vregs.size() != src_vregs.size())
-        throw std::runtime_error("[ARM64-DBT] Source and destination mismatch for bit insert node");
+        throw arm64_exception("[ARM64-DBT] Source and destination mismatch for bit insert node");
 
     builder_.insert_comment("Bit insert into destination");
 
@@ -1496,15 +1498,15 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
     auto insert_start = n.to() / dest_total_width;
 
     std::size_t inserted = 0;
-    std::size_t insert_idx = n.to() % dest_vregs[0].width();
-    std::size_t insert_len = std::min(dest_vregs[0].width() - insert_idx, n.length() - inserted);
+    std::size_t insert_idx = n.to() % dest_vregs[0].type().width();
+    std::size_t insert_len = std::min(dest_vregs[0].type().width() - insert_idx, n.length() - inserted);
 
     std::size_t bits_idx = 0;
     std::size_t bits_total_width = total_width(bits_vregs);
 
     builder_.insert_comment("Insert specific bits into destination");
     for (std::size_t i = insert_start; inserted < n.length(); ++i) {
-        auto bits_vreg_width = bits_vregs[bits_idx].width();
+        auto bits_vreg_width = bits_vregs[bits_idx].type().width();
         bits_vregs[bits_idx] = cast(bits_vregs[bits_idx], dest_vregs[i].type());
         builder_.bfi(dest_vregs[i], bits_vregs[bits_idx],
                      immediate_operand(insert_idx, value_type::u8()),
@@ -1522,12 +1524,11 @@ void arm64_translation_context::materialise_vector_insert(const vector_insert_no
     const auto &value_vregs = materialise_port(n.insert_value());
 
     if (dest_vregs.size() < src_vregs.size())
-        throw std::runtime_error("[ARM64-DBT] Destination vector for vector insert is smaller than source vector");
+        throw arm64_exception("[ARM64-DBT] Destination vector for vector insert is smaller than source vector");
 
     size_t index = (n.index() * n.insert_value().type().element_width()) / base_type().element_width();
     if (index + value_vregs.size() > dest_vregs.size())
-        throw std::runtime_error("[ARM64-DBT] Cannot insert at index " +
-                                 std::to_string(index) + " in destination vector");
+        throw arm64_exception(fmt::format("[ARM64-DBT] Cannot insert at index {} in destination vector", index));
 
     builder_.insert_comment("Insert vector by first copying source to destination");
     for (size_t i = 0; i < src_vregs.size(); ++i)
@@ -1546,9 +1547,9 @@ void arm64_translation_context::materialise_vector_extract(const vector_extract_
 
     size_t index = (n.index() * n.source_vector().type().element_width()) / base_type().element_width();
     if (dest_vregs.size() >= src_vregs.size())
-        throw std::runtime_error("[ARM64-DBT] Cannot extract vector larger than src vector");
+        throw arm64_exception("[ARM64-DBT] Cannot extract vector larger than src vector");
     if (index + dest_vregs.size() > src_vregs.size())
-        throw std::runtime_error("[ARM64-DBT] Cannot extract from index " +
+        throw arm64_exception("[ARM64-DBT] Cannot extract from index " +
                                  std::to_string(index) + " in source vector");
 
     builder_.insert_comment("Extract vector by copying to destination");
@@ -1568,7 +1569,7 @@ void arm64_translation_context::materialise_internal_call(const internal_call_no
     } else if (n.fn().name() == "handle_int") {
         ret_ = 2;
     } else {
-        throw std::runtime_error("unsupported internal call");
+        throw arm64_exception("unsupported internal call");
     }
 }
 
@@ -1577,7 +1578,7 @@ void arm64_translation_context::materialise_read_local(const read_local_node &n)
     const auto &locals = locals_[n.local()];
 
     if (locals.size() != dest_vregs.size())
-        throw std::runtime_error("[ARM64-DBT] Read local received mismatched types");
+        throw arm64_exception("[ARM64-DBT] Read local received mismatched types");
 
     builder_.insert_comment("Read local variable");
     for (size_t i = 0; i < dest_vregs.size(); ++i)
@@ -1593,7 +1594,7 @@ void arm64_translation_context::materialise_write_local(const write_local_node &
 
     const auto &dest_vregs = locals_[n.local()];
     if (write_vregs.size() != dest_vregs.size())
-        throw std::runtime_error("[ARM64-DBT] Write local received mismatched types");
+        throw arm64_exception("[ARM64-DBT] Write local received mismatched types");
 
     builder_.insert_comment("Write local variable");
     for (size_t i = 0; i < dest_vregs.size(); ++i)
