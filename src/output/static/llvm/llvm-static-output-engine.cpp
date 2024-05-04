@@ -1946,7 +1946,6 @@ void llvm_static_output_engine_impl::compile()
 	auto TT = "riscv64-unknown-linux-gnu";
 #elif defined(ARCH_AARCH64)
 	auto TT = "aarch64-unknown-linux-gnu";
-#error Please check if the triple above is correct
 #elif defined(ARCH_X86_64)
 	auto TT = "x86_64-unknown-linux-gnu";
 #error Please check if the triple above is correct

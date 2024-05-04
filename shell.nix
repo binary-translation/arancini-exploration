@@ -1,10 +1,10 @@
 { pkgs ? import <nixpkgs> {} }:
   pkgs.mkShell rec {
     buildInputs = with pkgs; [
-      llvmPackages_14.llvm.dev
-      llvmPackages_14.bintools
+      llvmPackages_16.llvm.dev
+      llvmPackages_16.bintools
       zlib.out
-      llvmPackages_14.lld
+      llvmPackages_16.lld
       python3
       clang_14
       graphviz
@@ -14,7 +14,6 @@
       gdb
       cmake
       bear
-      xed
       libffi
       libxml2
     ];

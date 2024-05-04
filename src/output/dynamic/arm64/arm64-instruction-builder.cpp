@@ -2,11 +2,11 @@
 
 #include <arancini/output/dynamic/arm64/arm64-instruction.h>
 #include <arancini/output/dynamic/arm64/arm64-translation-context.h>
+
 #include <array>
 #include <bitset>
-#include <exception>
 #include <utility>
-#include <stdexcept>
+#include <type_traits>
 #include <unordered_map>
 
 using namespace arancini::output::dynamic::arm64;
@@ -26,16 +26,17 @@ void instruction_builder::emit(machine_code_writer &writer) {
         const auto &operands = insn.operands();
 
         for (const auto &op : operands) {
-            bool has_virtual = false;
-            // std::visit([&has_virtual](auto &&op) {
-            //     using T = std::decay_t<decltype(op)>;
-            //     if constexpr (std::is_same_v<T, register_operand>) {
-            //          if (op.is_virtual()) has_virtual = true; 
-            //     }
-            //     if constexpr (std::is_same_v<T, memory_operand>) {
-            //          if (op.base_register().is_virtual()) has_virtual = true; 
-            //     }
-            // }, op);
+            auto has_virtual = std::visit([](auto &&op)
+            {
+                using T = std::decay_t<decltype(op)>;
+                if constexpr (std::is_same_v<T, register_operand>) {
+                    return op.is_virtual();
+                }
+                if constexpr (std::is_same_v<T, memory_operand>) {
+                    return op.base_register().is_virtual();
+                }
+                return false;
+            }, op.get());
 
             if (has_virtual) {
                 throw arm64_exception("Register allocation failed\nCurrent instruction stream:\n{}\n"
@@ -58,7 +59,7 @@ void instruction_builder::emit(machine_code_writer &writer) {
     asm_.free(encode);
 }
 
-struct register_set {
+class register_set {
 public:
     register_set(std::uint32_t available_scalar_registers, std::uint32_t available_neon_registers):
         scalar_registers_(available_scalar_registers),
@@ -67,36 +68,118 @@ public:
 
     using base_type = std::bitset<register_operand::physical_register_count>;
 
-    // TODO: should return register operand
-    register_operand allocate(arancini::ir::value_type t) {
-        base_type *allocation_base = nullptr;
-        if (t.type_class() == arancini::ir::value_type_class::signed_integer ||
-            t.type_class() == arancini::ir::value_type_class::unsigned_integer) 
-        {
-            allocation_base = &scalar_registers_;
-        } else if (t.type_class() == arancini::ir::value_type_class::floating_point) {
-            allocation_base = &float_registers_;
-        }
+    register_operand::register_index allocate(const register_operand::register_type t) {
+        auto &base = allocation_base(t);
 
-        auto index = allocation_base->_Find_first();
-        allocation_base->flip(index);
+        auto index = base._Find_first();
+        base.flip(index);
 
-        return {index, t};
+        return index;
+    }
+
+    inline void deallocate(register_operand reg) {
+        allocation_base(reg.type()).flip(reg.index());
     }
 private:
     std::bitset<register_operand::physical_register_count> scalar_registers_;
     std::bitset<register_operand::physical_register_count> neon_registers_;
     std::bitset<register_operand::physical_register_count>& float_registers_ = neon_registers_;
+
+    std::bitset<register_operand::physical_register_count> &allocation_base(arancini::ir::value_type t) {
+        if (t.type_class() == arancini::ir::value_type_class::signed_integer ||
+            t.type_class() == arancini::ir::value_type_class::unsigned_integer)
+            return scalar_registers_;
+
+        return float_registers_;
+    }
 };
 
-static bool is_virtual_register(const operand::base_type operand) {
-    if (std::holds_alternative<register_operand>(operand)) {
-        return std::get<register_operand>(operand).is_virtual();
+class allocation_manager {
+public:
+    allocation_manager(register_set regset): regset_(regset)
+    { }
+
+    // Modifiers
+    register_operand allocate(const register_operand &vreg) {
+        auto allocation = register_operand{regset_.allocate(vreg.type()), vreg.type()};
+
+        current_allocations_.emplace(vreg, allocation);
+        current_allocations_.emplace(allocation, vreg);
+
+        return allocation;
     }
 
-    return false;
-}
+    inline void deallocate(register_operand reg) {
+        current_allocations_.erase(current_allocations_.at(reg));
+        current_allocations_.erase(reg);
 
+        regset_.deallocate(reg);
+    }
+
+    // Lookup
+    const register_operand *get_allocation(const register_operand &vreg) {
+        if (current_allocations_.count(vreg))
+            return &current_allocations_.at(vreg);
+        return nullptr;
+    }
+private:
+    register_set regset_;
+
+    struct register_type_hash {
+        using value_type = register_operand::register_type;
+        std::size_t operator()(const value_type &t) const {
+            using type_class = std::underlying_type_t<value_type::value_type_class>;
+
+            return std::hash<value_type::size_type>{}(t.nr_elements()) ^
+                   std::hash<type_class>{}(static_cast<type_class>(t.type_class()));
+        }
+    };
+
+    struct register_hash {
+        std::size_t operator()(const register_operand &reg) const {
+            return std::hash<register_operand::register_index>{}(reg.index()) ^
+                   register_type_hash{}(reg.type());
+        }
+    };
+
+    using register_map = std::unordered_map<register_operand, register_operand, register_hash>;
+    register_map current_allocations_;
+};
+
+struct eliminate_moves {
+    bool operator()(const register_operand &op1, const register_operand &op2) const {
+        return op1 == op2;
+    }
+
+    // Fallback
+    template <typename T1, typename T2>
+    bool operator()(const T1 &op1, const T2 &op2) const {
+        return false;
+    }
+};
+
+// Reverse Linear Scan Allocation
+//
+// Procedure:
+// 1. Iterate in reverse over the instruction stream with virtual registers
+//
+// -- def() allocation
+// 2. For each def() (a virtual register), find a previous allocation to corresponds to a use()
+// 3. If a previous allocation exists; allocate it to the same physical register
+// 4. If no previous allocation exists; the def() has no corresponding use() later in the
+// instruction stream and the instruction can be eliminated.
+// 5. If the instruction is set as keep(), it must be kept and allocated to a new physical register
+//
+// -- use() and usedef() allocation: only get to this stage if the instruction has not been
+// eliminated
+// 6. For each use() virtual register, find a previous allocation
+// 7. If a previous allocation exists, allocate to the same physical register
+// 8. If no previous allocation exists, allocate to new physical register
+// 9. Do the same for memory operands
+//
+// -- keep()
+// 10. If instruction is defined as keep() and not used, find def() operand and free allocation
+// 11. Optimizations: remove unused mov instructions
 void instruction_builder::allocate() {
 	// reverse linear scan allocator
     util::global_logger.debug("Performing register allocation for generated instructions\n");
@@ -108,149 +191,108 @@ void instruction_builder::allocate() {
     // Return to trampoline (x30)
     // Memory base (x18)
     // FIXME
-    register_set regset(0x1FBFFFFF, 0xFFFFFFFF);
-
-	std::unordered_map<register_operand::register_index, register_operand::register_index> vreg_to_reg;
-
-    // TODO: replace with static map
-    std::array<std::pair<std::size_t, std::size_t>, 5> current_allocations;
+    allocation_manager allocator {register_set{0x1FBFFFFF, 0xFFFFFFFF}};
 
 	for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
 		auto &insn = *RI;
 
-        util::global_logger.debug("Considering instruction {}\n", insn);
+        bool unused_keep = false;
 
-        bool has_unused_keep = false;
+        util::global_logger.debug("Allocating instruction {}\n", insn);
+		for (auto &o : insn.operands()) {
+            if (o.is_def() && !o.is_use()) {
+                // Only regs can be definitions
+                if (const auto *vreg = std::get_if<register_operand>(&o.get()); vreg && vreg->is_virtual()) {
+                    util::global_logger.debug("Defining value {}\n", o);
 
- //        auto allocate = [&allocs, &avail_physregs,
- //                         &avail_float_physregs, &vreg_to_preg]
- //                                  (operand &o, size_t idx) -> void
- //        {
- //                unsigned int vri;
- //                ir::value_type type;
- //                if (o.is_vreg()) {
- //                    vri = o.vreg().index();
- //                    type = o.vreg().type();
- //                } else if (o.is_mem()) {
- //                    auto vreg = o.memory().vreg_base();
- //                    vri = vreg.index();
- //                    type = vreg.type();
- //                } else {
- //                    throw std::runtime_error("Trying to allocate non-virtual register operand");
- //                }
-	//
- //                size_t allocation = 0;
- //                if (type.is_floating_point()) {
- //                    allocation = avail_float_physregs._Find_first();
- //                    avail_float_physregs.flip(allocation);
- //                } else {
- //                    allocation = avail_physregs._Find_first();
- //                    avail_physregs.flip(allocation);
- //                }
-	//
- //                // TODO: register spilling
- //                vreg_to_preg[vri] = allocation;
-	//
- //                if (o.is_mem())
- //                    o.allocate_base(allocation, type);
- //                else
- //                    o.allocate(allocation, type);
-	//
- //                allocs[idx] = std::make_pair(vri, allocation);
- //        };
-	//
-	// 	// kill defs first
-		for (std::size_t i = 0; i < insn.operands().size(); i++) {
-			auto &o = insn.operands()[i];
+                    if (const auto *previous_allocation = allocator.get_allocation(*vreg);
+                        previous_allocation)
+                    {
+                        // Assign operand to previously allocated register
+                        o = *previous_allocation;
 
-			// Only regs can be /real/ defs
-            if (const auto *vreg = std::get_if<register_operand>(&o.get()); 
-                vreg && vreg->is_virtual() && o.is_def() && !o.is_use()) 
-            {
-                util::global_logger.debug("Defining value {}\n", o);
+                        util::global_logger.debug("Assign definition {} to existing allocation {}\n",
+                                                  o, *previous_allocation);
 
-				auto previous_allocation = vreg_to_reg.find(vreg->index());
-                register_operand::register_index allocation_index = 0;
-				if (previous_allocation != vreg_to_reg.end() || insn.is_keep()) {
-                    auto reg = regset.allocate(vreg->type());
-                    allocation_index = reg.index();
-                    o = reg;
+                        // Allocation not needed beyond this point
+                        allocator.deallocate(*previous_allocation);
 
-                    util::global_logger.debug("Allocated to {}\n", o);
+                        util::global_logger.debug("Register {} available\n", *previous_allocation);
+                    } else if (insn.is_keep()) {
+                        // No previous allocation: no users of this definition exist
+                        // Need to allocate anyway; since instruction is marked as keep()
+                        util::global_logger.debug("No previous allocation exists for 'keep' definition {}\n", o);
 
-                    has_unused_keep = insn.is_keep();
-				} else {
-                    util::global_logger.debug("Value not allocated - killing instruction {}\n", insn);
-					insn.kill();
-					break;
-				}
+                        auto allocation = allocator.allocate(*vreg);
+                        o = allocation;
 
-                current_allocations[i] = std::make_pair(allocation_index, vreg->index());
-			}
-		}
+                        // Marked as unused
+                        // Allocation becomes available before next instruction
+                        unused_keep = true;
 
+                        util::global_logger.debug("Unused definition allocated to {}\n", allocation);
+                    } else {
+                        // Instruction fully unused; eliminated
+                        util::global_logger.debug("Value not allocated - killing instruction {}\n", insn);
+                        insn.kill();
+                        break;
+                    }
+                }
+            } else {
+                if (const auto *vreg = std::get_if<register_operand>(&o.get()); vreg && vreg->is_virtual()) {
+                    if (const auto *previous_allocation = allocator.get_allocation(*vreg);
+                        previous_allocation)
+                    {
+                        // Assign operand to previously allocated register
+                        o = *previous_allocation;
 
-		if (insn.is_dead()) {
-			continue;
-		}
+                        util::global_logger.debug("Assign reference {} to existing allocation {}\n",
+                                                  o, *previous_allocation);
+                    } else {
+                        auto allocation = allocator.allocate(*vreg);
+                        o = allocation;
 
-		// alloc uses next
-		for (std::size_t i = 0; i < insn.operands().size(); i++) {
-			auto &o = insn.operands()[i];
+                        util::global_logger.debug("Assign reference {} to existing allocation {}\n",
+                                                  o, allocation);
+                    }
+                }
 
-			// We only care about REG uses - but we also need to consider REGs used in MEM expressions
-			// if (const auto *vreg = std::get_if<register_operand>(&o.get()); o.is_use() && vreg) {
-   //              util::global_logger.debug("Using value {}\n", o);
-   //              auto type = vreg->type();
-			// 	if (!vreg_to_reg.count(vreg->index())) {
-   //                  auto allocation = regset.allocate(vreg->type());
-   //                  o = register_operand(allocation, vreg->type());
-   //                  util::global_logger.debug("Allocating virtual register to {}\n", o);
-			// 	} else {
-   //                  // TODO
-			// 		o.allocate(vreg_to_preg.at(vri), type);
-			// 	}
-			// } else if (o.is_mem()) {
-   //              util::global_logger.debug("Using value {}\n", o);
-			//
-			// 	if (auto *mem = std::get_if<memory_operand>(&o.get()); mem) {
-   //                  auto base_register_idx = mem->base_register().index();
-			//
-			// 		if (!vreg_to_reg.count(base_register_idx)) {
-   //                      auto allocation = regset.allocate(mem->base_register().type());
-   //                      mem->base_register() = register_operand(allocation, mem->base_register().type());
-   //                      // TODO: copy
-   //                      util::global_logger.debug("Allocating virtual register to {}\n", o);
-			// 		} else {
-   //                      auto type = mem->base_register().type();
-			// 			o.allocate_base(vreg_to_preg.at(vri), type);
-			// 		}
-			// 	}
-			}
-		}
-	//
- //        if (has_unused_keep) {
- //            for (size_t i = 0; i < insn.operands().size(); i++) {
- //                const auto &op = insn.operands()[i];
- //                if (op.is_keep()) {
- //                    vreg_to_preg.erase(allocs[i].first);
- //                    avail_physregs.flip(allocs[i].second);
- //                }
- //            }
- //        }
-	//
-	// 	// Kill MOVs
- //        // TODO: refactor
- //        if (insn.opcode().find("mov") != std::string::npos) {
- //            operand op1 = insn.operands()[0];
- //            operand op2 = insn.operands()[1];
-	//
- //            if (op1.is_preg() && op2.is_preg()) {
- //                if (op1.preg().register_index() == op2.preg().register_index()) {
- //                    insn.kill();
- //                }
- //            }
- //        }
-	// }
+                if (const auto *mem = std::get_if<memory_operand>(&o.get()); mem && mem->base_register().is_virtual()) {
+                    const auto &base_vreg = mem->base_register();
+                    if (const auto *previous_allocation = allocator.get_allocation(base_vreg);
+                        previous_allocation)
+                    {
+                        // Assign operand to previously allocated register
+                        o = memory_operand(*previous_allocation, mem->offset(), mem->addressing_mode());
+
+                        util::global_logger.debug("Assign reference {} to existing allocation {}\n",
+                                                  o, *previous_allocation);
+                    } else {
+                        auto allocation = allocator.allocate(base_vreg);
+                        o = memory_operand(allocation, mem->offset(), mem->addressing_mode());
+
+                        util::global_logger.debug("Assign reference {} to existing allocation {}\n",
+                                                  o, allocation);
+                    }
+                }
+            }
+        }
+
+        if (unused_keep) {
+            for (auto &o : insn.operands()) {
+                if (const auto *reg = std::get_if<register_operand>(&o.get()); o.is_def() && reg) {
+                    allocator.deallocate(*reg);
+                }
+            }
+        }
+
+		// Kill MOVs
+        if (insn.is_copy()) {
+            auto op1 = insn.operands()[0].get();
+            auto op2 = insn.operands()[1].get();
+            if (std::visit(eliminate_moves{}, op1, op2))
+                insn.kill();
+        }
+	}
 }
 

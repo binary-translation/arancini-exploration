@@ -117,7 +117,7 @@ register_operand arm64_translation_context::mov_immediate(T imm, ir::value_type 
 }
 
 memory_operand
-arm64_translation_context::guestreg_memory_operand(int regoff, 
+arm64_translation_context::guestreg_memory_operand(int regoff,
                                                    memory_operand::addressing_modes mode)
 {
     if (regoff > 255 || regoff < -256) {
@@ -164,15 +164,18 @@ std::string labelify(const std::string &str) {
     return label;
 }
 
+static std::string_view current_instr_disasm_;
+
 void arm64_translation_context::begin_instruction(off_t address, const std::string &disasm) {
 	instruction_index_to_guest_[builder_.nr_instructions()] = address;
 
 	this_pc_ = address;
-	std::cerr << "  " << std::hex << address << ": " << disasm << std::endl;
+    current_instr_disasm_ = disasm;
+    util::global_logger.info("{:#}: {}\n", address, disasm);
 
     instr_cnt_++;
 
-    builder_.insert_sep("S" + std::to_string(instr_cnt_) + labelify(disasm));
+    builder_.insert_sep(fmt::format("S{}{}", instr_cnt_, labelify(disasm)));
 
     // TODO: enable debug mode
     const auto& opcode = disasm.substr(0, 3);
@@ -190,8 +193,12 @@ void arm64_translation_context::end_instruction() {
             materialise(node);
     } catch (std::exception &e) {
         std::cerr << e.what() << '\n';
-        builder_.dump(std::cerr);
-        std::cerr << "Terminating exception raised; aborting\n";
+        util::global_logger.fatal("Exception raised when translating instruction {}: {}\n",
+                                  current_instr_disasm_, e.what());
+        // TODO: fmt::format should not be needed here, but fmt::join is lazy
+        util::global_logger.fatal(fmt::format("Current instruction stream:\n{}\n",
+                                  fmt::join(builder_.instructions(), ", ")));
+        util::global_logger.fatal("Terminating execution");
         std::abort();
     }
 }
@@ -208,9 +215,12 @@ void arm64_translation_context::end_block() {
 
         builder_.emit(writer());
     } catch (std::exception &e) {
-        std::cerr << e.what() << '\n';
-        builder_.dump(std::cerr);
-        std::cerr << "Terminating exception raised; aborting\n";
+        util::global_logger.fatal("Exception raised when translating instruction block: {}\n",
+                                  e.what());
+        // TODO: fmt::format should not be needed here, but fmt::join is lazy
+        util::global_logger.fatal(fmt::format("Current instruction stream:\n{}\n",
+                                  fmt::join(builder_.instructions(), ", ")));
+        util::global_logger.fatal("Terminating execution");
         std::abort();
     }
 
@@ -1299,7 +1309,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         break;
     case cast_op::trunc:
         if (dest_vreg.type().width() > src_vreg.type().width()) {
-            throw arm64_exception("[ARM64-DBT] cannot truncate from {} to {}", 
+            throw arm64_exception("[ARM64-DBT] cannot truncate from {} to {}",
                                      dest_vreg.type(), src_vreg.type());
         }
 

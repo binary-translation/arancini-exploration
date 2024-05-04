@@ -4,15 +4,15 @@
 
 #include <string>
 #include <vector>
-#include <sstream>
-#include <iomanip>
+#include <cstdint>
 
 namespace arancini::ir {
-enum class value_type_class { none, signed_integer, unsigned_integer, floating_point };
+enum class value_type_class : std::uint8_t { none, signed_integer, unsigned_integer, floating_point };
 
 class value_type {
 public:
     using size_type = std::size_t;
+    using value_type_class = value_type_class;
 
     [[nodiscard]]
 	static constexpr value_type v() { return value_type(value_type_class::none, 0); }
@@ -72,6 +72,7 @@ public:
 
     value_type() = default;
 
+    [[nodiscard]]
 	constexpr value_type(value_type_class tc, int element_width, int nr_elements = 1)
 		: tc_(tc)
 		, element_width_(element_width)
@@ -98,13 +99,13 @@ public:
 	constexpr bool is_floating_point() const { return tc_ == value_type_class::floating_point; }
 
     [[nodiscard]]
-	constexpr bool is_integer() const { 
-        return tc_ == value_type_class::signed_integer || tc_ == value_type_class::unsigned_integer; 
+	constexpr bool is_integer() const {
+        return tc_ == value_type_class::signed_integer || tc_ == value_type_class::unsigned_integer;
     }
 
     [[nodiscard]]
 	constexpr value_type element_type() const {
-        return value_type(tc_, element_width_, 1); 
+        return value_type(tc_, element_width_, 1);
     }
 
     [[nodiscard]]
@@ -139,15 +140,15 @@ public:
 	}
 private:
 	value_type_class tc_;
-    std::size_t element_width_;
-    std::size_t nr_elements_;
+    size_type element_width_;
+    size_type nr_elements_;
 };
 
 [[nodiscard]]
 inline bool operator==(const value_type &v1, const value_type &v2) {
-    return v1.element_width() == v2.element_width() && 
+    return v1.element_width() == v2.element_width() &&
            v1.type_class()    == v2.type_class() &&
-           v1.nr_elements()   == v2.nr_elements(); 
+           v1.nr_elements()   == v2.nr_elements();
 }
 
 [[nodiscard]]
