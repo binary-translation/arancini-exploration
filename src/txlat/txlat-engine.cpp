@@ -30,12 +30,10 @@ static std::set<std::string> allowed_symbols
 
 // Determine host architecture (with help from the build system)
 // Needed to select the appropriate linker script
-#if ARCH_AARCH64
-static const char* architecture = "aarch64";
-#elif ARCH_RICV64
-static const char* architecture = "riscv64";
-#elif ARCH_X64_64
-static const char* architecture = "x86_64";
+#ifdef DBT_ARCH_STR_LOWER
+static std::string_view architecture { DBT_ARCH_STR_LOWER };
+#else
+#error "Cannot determine architecture"
 #endif
 
 void txlat_engine::process_options(arancini::output::o_static::static_output_engine &oe, const boost::program_options::variables_map &cmdline)
@@ -268,7 +266,7 @@ next:
 
 		if (elf.type() == elf::elf_type::exec) {
 			// Generate the final output binary by compiling everything together.
-            run_or_fail(fmt::format("{} -o {} -no-pie -latomic {} {} {} -larancini-runtime -L {} -Wl,-T,{}.lds,-rpath={} {} {}",
+            run_or_fail(fmt::format("{} -o {} -no-pie -latomic {} {} {} -larancini-runtime -L {} -Wl,-T,{}.exec.lds,-rpath={} {} {}",
                         cxx_compiler, cmdline.at("output").as<std::string>(), intermediate_file->name(), libs, phobjsrc->name(),
                         arancini_runtime_lib_dir, architecture, arancini_runtime_lib_dir, debug_info, verbose_link));
 		} else if (elf.type() == elf::elf_type::dyn) {
@@ -293,7 +291,7 @@ next:
 
 		// Generate the final output binary by compiling everything together.
         run_or_fail(fmt::format("{} -o {} -no-pie -latomic -static-libgcc -static-libstdc++ {} {} -L {} -larancini-runtime-static -larancini-input-x86-static -larancini-output-riscv64-static -larancini-ir-static -L {}"
-                                "/../../obj -l xed {} -Wl,-T,{}.lds,-rpath={}", cxx_compiler, cmdline.at("output").as<std::string>(), intermediate_file->name(),
+                                "/../../obj -l xed {} -Wl,-T,{}.exec.lds,-rpath={}", cxx_compiler, cmdline.at("output").as<std::string>(), intermediate_file->name(),
                                 phobjsrc->name(), arancini_runtime_lib_dir, arancini_runtime_lib_dir, debug_info, architecture, arancini_runtime_lib_dir));
 	}
 

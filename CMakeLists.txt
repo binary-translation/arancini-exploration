@@ -46,6 +46,9 @@ endif ()
 
 # Define architecture flag
 add_compile_definitions(ARCH_${DBT_ARCH})
+set(DBT_ARCH_STR_LOWER ${DBT_ARCH})
+string(TOLOWER ${DBT_ARCH_STR_LOWER} DBT_ARCH_STR_LOWER)
+add_compile_definitions(DBT_ARCH_STR_LOWER="${DBT_ARCH_STR_LOWER}")
 add_compile_definitions(DBT_ARCH_STR="${DBT_ARCH}")
 
 # Specify binary output directories
