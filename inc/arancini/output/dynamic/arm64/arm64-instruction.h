@@ -55,7 +55,7 @@ static constexpr ir::value_type u8() {
 }
 
 class register_operand final {
-public: 
+public:
     using register_index = std::size_t;
     using register_type = ir::value_type;
 
@@ -81,7 +81,7 @@ public:
     };
 
     enum register_names_32bit : std::size_t {
-        w0, 
+        w0,
         w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, w11, w12, w13, w14, w15,
         w16, w17, w18, w19, w20, w21, w22, w23, w24, w25, w26, w27, w28, w29, w30,
         wzr_sp
@@ -136,14 +136,23 @@ public:
 
     explicit register_operand(special_register_names reg):
         register_operand(reg, ir::value_type::u64())
-    { 
+    {
         special_ = true;
     }
 
     register_operand(register_index index, const ir::value_type &type):
         type_(type),
         index_(index)
-    { 
+    {
+        // TODO: make constexpr
+        static std::array<register_type, 6> supported_types_ = {
+            register_type::u1(),
+            register_type::u32(),
+            register_type::u64(),
+            register_type::f32(),
+            register_type::f64()
+        };
+
         if (std::find(supported_types_.begin(), supported_types_.end(), type_) == supported_types_.end()) {
             // TODO: change to custom exception type
             throw arm64_exception("Register defined with unsupported type {}\n", type_);
@@ -156,10 +165,16 @@ private:
     bool special_ = false;
 
     static constexpr register_index virtual_reg_start = physical_register_count;
-
-    // TODO: make constexpr
-    static std::array<register_type, 4> supported_types_;
 };
+
+inline bool operator==(const register_operand &op1, const register_operand &op2) {
+    return op1.type() == op2.type() &&
+           op1.index() == op2.index();
+}
+
+inline bool operator!=(const register_operand &op1, const register_operand &op2) {
+    return !(op1 == op2);
+}
 
 class immediate_operand {
 public:
@@ -199,7 +214,7 @@ struct immediate_t : private immediate_operand {
     immediate_t(T value): immediate_operand(value, ir::value_type(TypeClass, Size, 1))
     {
         constexpr std::intmax_t v = value;
-        static_assert(Size == 64 || (v & ((1llu << 64) - 1)) == v, 
+        static_assert(Size == 64 || (v & ((1llu << 64) - 1)) == v,
                       "immediate does not fit within required size");
     }
 };
@@ -236,7 +251,7 @@ private:
 
 class conditional_operand final {
 public:
-    conditional_operand(std::string_view condition): 
+    conditional_operand(std::string_view condition):
         condition_(condition)
     { }
 
@@ -263,22 +278,22 @@ public:
         : base_register_(base)
 		, offset_(offset)
         , addressing_mode_(addressing_mode)
-	{ 
+	{
         if (base_register_.type().width() != 32 && base_register_.type().width() != 64)
             throw arm64_exception("Base register for memory access must"
-                                  "be either 32-bits or 64-bits; register of type {} passed", 
+                                  "be either 32-bits or 64-bits; register of type {} passed",
                                   base_register_.type());
 
         if (base_register_.type().type_class() == ir::value_type_class::floating_point ||
             base_register_.type().type_class() == ir::value_type_class::none) {
-            throw arm64_exception("Base register type cannot be of type {}", 
+            throw arm64_exception("Base register type cannot be of type {}",
                                   base_register_.type());
         }
     }
 
     template <typename T>
     void set_base_register(const T &op) { base_register_ = op; }
-    
+
     address_base &base_register() { return base_register_; }
     const address_base &base_register() const { return base_register_; }
 
@@ -347,7 +362,7 @@ public:
                                    conditional_operand, memory_operand>;
 
     template <typename Arg>
-    operand(const Arg &arg): operand_(arg) { } 
+    operand(const Arg &arg): operand_(arg) { }
 
     template <typename... Args>
     operand(const std::variant<Args...> v): operand_(util::variant_cast(v)) { }
@@ -385,20 +400,23 @@ inline operand usedef(operand o) {
 class instruction {
 public:
     template <typename... Args>
-    instruction(const std::string &opcode, Args&&... operands): 
-        opcode_(opcode), operands_{operands...} 
+    instruction(const std::string &opcode, Args&&... operands):
+        opcode_(opcode), operands_{operands...}
     { }
 
     // TODO: replace with something better
     using operand_array = std::vector<operand>;
 
-    operand_array &operands() { return operands_; } 
-    const operand_array &operands() const { return operands_; } 
+    operand_array &operands() { return operands_; }
+    const operand_array &operands() const { return operands_; }
 
     std::string_view opcode() const { return opcode_; }
 
     instruction &set_keep() { keep_ = true; return *this; }
     bool is_keep() const { return keep_; }
+
+    instruction &set_copy() { copy_ = true; return *this; }
+    bool is_copy() const { return copy_; }
 
     instruction &set_branch() { branch_ = true; return *this; }
     bool is_branch() const { return branch_; }
@@ -414,6 +432,7 @@ public:
     virtual ~instruction() = default;
 private:
     bool keep_ = false;
+    bool copy_ = false;
     bool branch_ = false;
 
     std::string opcode_;
@@ -432,12 +451,12 @@ struct fmt::formatter<arancini::output::dynamic::arm64::register_operand> : publ
     format_context::iterator format(const arancini::output::dynamic::arm64::register_operand &reg, FCTX &format_ctx) const {
         #define MATCH(name) std::make_pair(arancini::output::dynamic::arm64::register_operand::name, #name)
 
-        using name_table = util::static_map<arancini::output::dynamic::arm64::register_operand::register_index, 
+        using name_table = util::static_map<arancini::output::dynamic::arm64::register_operand::register_index,
                                             const char *, arancini::output::dynamic::arm64::register_operand::physical_register_count+1>;
 
         static util::static_map<arancini::ir::value_type, name_table, 5> names {
             // 64-bit scalar registers
-            std::make_pair(arancini::ir::value_type::u64(), 
+            std::make_pair(arancini::ir::value_type::u64(),
                 name_table {
                     MATCH(x0),
                     MATCH(x0),
@@ -474,9 +493,9 @@ struct fmt::formatter<arancini::output::dynamic::arm64::register_operand> : publ
                     std::make_pair(arancini::output::dynamic::arm64::register_operand::xzr_sp, "sp")
                 }),
 
-            
+
             // 32-bit scalar registers
-            std::make_pair(arancini::ir::value_type::u32(), 
+            std::make_pair(arancini::ir::value_type::u32(),
                 name_table {
                 MATCH(w0),
                 MATCH(w1),
@@ -513,7 +532,7 @@ struct fmt::formatter<arancini::output::dynamic::arm64::register_operand> : publ
             }),
 
             // Double precision floating-point
-            std::make_pair(arancini::ir::value_type::f64(), 
+            std::make_pair(arancini::ir::value_type::f64(),
                 name_table {
                     MATCH(d0),
                     MATCH(d1),
@@ -547,9 +566,9 @@ struct fmt::formatter<arancini::output::dynamic::arm64::register_operand> : publ
                     MATCH(d29),
                     MATCH(d30)
             }),
-        
+
             // Single precision floating-point
-            std::make_pair(arancini::ir::value_type::f32(), 
+            std::make_pair(arancini::ir::value_type::f32(),
                 name_table {
                     MATCH(s0),
                     MATCH(s1),
@@ -586,7 +605,7 @@ struct fmt::formatter<arancini::output::dynamic::arm64::register_operand> : publ
 
             // NEON registers
             // should be added only on compile-time switch
-            std::make_pair(arancini::ir::value_type::u128(), 
+            std::make_pair(arancini::ir::value_type::u128(),
                 name_table {
                     MATCH(v0),
                     MATCH(v1),
@@ -622,7 +641,7 @@ struct fmt::formatter<arancini::output::dynamic::arm64::register_operand> : publ
                 }),
         };
 
-        if (reg.is_virtual()) 
+        if (reg.is_virtual())
             return fmt::format_to(format_ctx.out(), "%V{}_{}", reg.type().width(), reg.index());
 
         if (reg.is_special())
@@ -636,11 +655,11 @@ template <>
 struct fmt::formatter<arancini::output::dynamic::arm64::memory_operand> : public fmt::formatter<std::string_view> {
     template <typename FCTX>
     format_context::iterator format(const arancini::output::dynamic::arm64::memory_operand &mop, FCTX &format_ctx) const {
-        using addressing_modes = enum arancini::output::dynamic::arm64::memory_operand::addressing_modes; 
+        using addressing_modes = enum arancini::output::dynamic::arm64::memory_operand::addressing_modes;
 
         fmt::format_to(format_ctx.out(), "[{}", mop.base_register());
 
-        if (!mop.offset().value()) 
+        if (!mop.offset().value())
             fmt::format_to(format_ctx.out(), "]");
 
         if (mop.addressing_mode() != addressing_modes::post_index)
