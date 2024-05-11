@@ -39,6 +39,84 @@
 				src = mbuild-src;
 				patches = [ ./mbuild-riscv.patch ];
 			};
+		patched-xed = native_pkgs.callPackage(
+        {stdenv, lib}:
+			stdenv.mkDerivation {
+				pname = "xed";
+				version = "2022.08.11";
+
+				src = xed-src;
+				nativeBuildInputs = [ my-mbuild ];
+
+				buildPhase = ''
+				    patchShebangs mfile.py
+
+					# this will build, test and install
+				    ./mfile.py --prefix $out'';
+
+				dontInstall = true; # already installed during buildPhase
+			}){};
+		fadec = native_pkgs.callPackage(
+           {stdenv, meson, ninja}:
+			stdenv.mkDerivation {
+				name = "fadec";
+				src = fadec-src;
+				nativeBuildInputs = [ meson ninja ];
+			}){};
+		native_pkgs = import nixpkgs { system = system; };
+	in
+	{
+		defaultPackage = native_pkgs.callPackage(
+		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2, llvmPackages, lib, gcc, fmt, pkgsCross, m4}:
+			stdenv.mkDerivation {
+				name = "arancini";
+				pname = "txlat";
+				src = self;
+				nativeBuildInputs = [
+					#graphviz
+					gdb
+					python3
+					#valgrind
+					git
+					cmake
+					pkg-config
+					clang
+					gcc
+					m4
+				];
+				buildInputs = [
+                    fmt
+					zlib
+					boost
+					patched-xed
+					libffi
+					fadec
+					libxml2
+					llvmPackages.llvm.dev
+					llvmPackages.bintools
+					llvmPackages.lld
+				];
+				depsTargetTarget = [ gcc ];
+				configurePhase = ''
+					export FLAKE_BUILD=1
+					export NDEBUG=1
+					cmakeConfigurePhase
+				'';
+				cmakeFlags = [ "-DBUILD_TESTS=1" ];
+			}
+		) {};
+	}) //
+	{
+		crossPackage =	
+	let
+		my-mbuild = 
+			native_pkgs.python3Packages.buildPythonPackage {
+				pname = "mbuild";
+				version = "2022.07.28";
+
+				src = mbuild-src;
+				patches = [ ./mbuild-riscv.patch ];
+			};
 		patched-xed = build_pkgs.callPackage(
         {stdenv, lib}:
 			stdenv.mkDerivation {
@@ -52,7 +130,7 @@
 				    patchShebangs mfile.py
 
 					# this will build, test and install
-				    ./mfile.py --prefix $out'' + lib.optionalString (system == "riscv64-linux") " --toolchain riscv64-unknown-linux-gnu- --host-cpu riscv64";
+				    ./mfile.py --prefix $out --toolchain riscv64-unknown-linux-gnu- --host-cpu riscv64'';
 
 				dontInstall = true; # already installed during buildPhase
 			}){};
@@ -63,19 +141,10 @@
 				src = fadec-src;
 				nativeBuildInputs = [ meson ninja ];
 			}){};
-		native_pkgs =
-            if system == "riscv64-linux" then
-                import nixpkgs { system = "x86_64-linux"; }
-            else
-                import nixpkgs { inherit system; };
-		build_pkgs =
-			if system == "riscv64-linux" then
-				import nixpkgs { system = "x86_64-linux"; crossSystem.config = "riscv64-unknown-linux-gnu"; }
-			else
-				native_pkgs;
+		native_pkgs = import nixpkgs { system = "x86_64-linux"; };
+		build_pkgs = import nixpkgs { system = "x86_64-linux"; crossSystem.config = "riscv64-unknown-linux-gnu"; };
 	in
-	{
-		defaultPackage = build_pkgs.callPackage(
+		build_pkgs.callPackage(
 		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2, llvmPackages, lib, gcc, fmt, pkgsCross, m4}:
 			stdenv.mkDerivation {
 				name = "arancini";
@@ -111,8 +180,8 @@
 					export NDEBUG=1
 					cmakeConfigurePhase
 				'';
-				cmakeFlags = [ "-DBUILD_TESTS=1" "-DCMAKE_BUILD_TYPE=Release" ] ++ lib.optionals (system == "riscv64-linux") ["--toolchain riscv64-toolchain-nix.cmake"];
+				cmakeFlags = [ "-DBUILD_TESTS=1" "-DCMAKE_BUILD_TYPE=Release" "--toolchain riscv64-toolchain-nix.cmake"];
 			}
 		) {};
-	});
+	};
 }
