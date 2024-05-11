@@ -95,8 +95,7 @@
 					llvmPackages.llvm.dev
 					llvmPackages.bintools
 					llvmPackages.lld
-          keystone
-				];
+				] ++ lib.optionals ( system == "aarch64-linux" ) [ keystone ];
 				depsTargetTarget = [ gcc ];
 				configurePhase = ''
 					export FLAKE_BUILD=1
