@@ -1,4 +1,18 @@
+#include "arancini/ir/node.h"
+#include "arancini/ir/port.h"
+#include "arancini/ir/value-type.h"
+#include "arancini/output/dynamic/arm64/arm64-instruction.h"
 #include <arancini/output/dynamic/arm64/arm64-translation-context.h>
+
+#include <arancini/runtime/exec/x86/x86-cpu-state.h>
+
+#include <cmath>
+#include <cctype>
+#include <exception>
+#include <stdexcept>
+#include <string>
+#include <cstddef>
+#include <unordered_map>
 
 using namespace arancini::output::dynamic::arm64;
 using namespace arancini::ir;
@@ -195,10 +209,18 @@ void arm64_translation_context::end_block() {
         std::cerr << "Terminating exception raised; aborting\n";
         std::abort();
     }
+
+    // FIXME: should handle resources separately
+	instruction_builder builder_;
+    nodes_.clear();
+    materialised_nodes_.clear();
+    port_to_vreg_.clear();
+    instruction_index_to_guest_.clear();
+    locals_.clear();
 }
 
-void arm64_translation_context::lower(ir::node *n) {
-    nodes_.push_back(n);
+void arm64_translation_context::lower(const std::shared_ptr<ir::action_node> &n) {
+    nodes_.push_back(n.get());
 }
 
 void arm64_translation_context::materialise(const ir::node* n) {
@@ -472,12 +494,6 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
     if (new_pc_vregs.size() != 1) {
         throw std::runtime_error("[ARM64-DBT] Program counter cannot be > 64-bits");
     }
-	
-	if (n.updates_pc() == br_type::call)
-		ret_ = 3;
-
-	if (n.updates_pc() == br_type::ret)
-		ret_ = 4;
 
     builder_.str(new_pc_vregs[0],
                  guestreg_memory_operand(static_cast<int>(reg_offsets::PC)),
@@ -1584,8 +1600,3 @@ void arm64_translation_context::materialise_write_local(const write_local_node &
         builder_.mov(dest_vregs[i], dest_vregs[i]);
 }
 
-void arm64_translation_context::begin_block() { }
-void arm64_translation_context::begin_instruction(off_t address, const std::string &disasm) { }
-void arm64_translation_context::end_instruction() { }
-void arm64_translation_context::end_block() { }
-void arm64_translation_context::lower(const std::shared_ptr<ir::action_node> &n) { }

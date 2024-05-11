@@ -1,9 +1,9 @@
 #pragma once
 
-#include <iomanip>
-#include <sstream>
 #include <string>
 #include <vector>
+#include <sstream>
+#include <iomanip>
 
 namespace arancini::ir {
 enum class value_type_class { none, signed_integer, unsigned_integer, floating_point };
@@ -11,27 +11,29 @@ enum class value_type_class { none, signed_integer, unsigned_integer, floating_p
 class value_type {
 public:
 	static value_type v() { return value_type(value_type_class::none, 0); }
-	static value_type u1() { return value_type(value_type_class::unsigned_integer, 1); }
-	static value_type u8() { return value_type(value_type_class::unsigned_integer, 8); }
-	static value_type u16() { return value_type(value_type_class::unsigned_integer, 16); }
-	static value_type u32() { return value_type(value_type_class::unsigned_integer, 32); }
-	static value_type u64() { return value_type(value_type_class::unsigned_integer, 64); }
-	static value_type u128() { return value_type(value_type_class::unsigned_integer, 128); }
-	static value_type u256() { return value_type(value_type_class::unsigned_integer, 256); }
-	static value_type u512() { return value_type(value_type_class::unsigned_integer, 512); }
-	static value_type s8() { return value_type(value_type_class::signed_integer, 8); }
-	static value_type s16() { return value_type(value_type_class::signed_integer, 16); }
-	static value_type s32() { return value_type(value_type_class::signed_integer, 32); }
-	static value_type s64() { return value_type(value_type_class::signed_integer, 64); }
-	static value_type s128() { return value_type(value_type_class::signed_integer, 128); }
-	static value_type f32() { return value_type(value_type_class::floating_point, 32); }
-	static value_type f64() { return value_type(value_type_class::floating_point, 64); }
-	static value_type f80() { return value_type(value_type_class::floating_point, 80); } // x87 double extended-precision
+	static value_type u1() { return value_type(value_type_class::unsigned_integer, 1, 1); }
+	static value_type u8() { return value_type(value_type_class::unsigned_integer, 8, 1); }
+	static value_type u16() { return value_type(value_type_class::unsigned_integer, 16, 1); }
+	static value_type u32() { return value_type(value_type_class::unsigned_integer, 32, 1); }
+	static value_type u64() { return value_type(value_type_class::unsigned_integer, 64, 1); }
+	static value_type u128() { return value_type(value_type_class::unsigned_integer, 128, 1); }
+	static value_type u256() { return value_type(value_type_class::unsigned_integer, 256, 1); }
+	static value_type u512() { return value_type(value_type_class::unsigned_integer, 512, 1); }
+	static value_type s8() { return value_type(value_type_class::signed_integer, 8, 1); }
+	static value_type s16() { return value_type(value_type_class::signed_integer, 16, 1); }
+	static value_type s32() { return value_type(value_type_class::signed_integer, 32, 1); }
+	static value_type s64() { return value_type(value_type_class::signed_integer, 64, 1); }
+	static value_type s128() { return value_type(value_type_class::signed_integer, 128, 1); }
+	static value_type f32() { return value_type(value_type_class::floating_point, 32, 1); }
+	static value_type f64() { return value_type(value_type_class::floating_point, 64, 1); }
+    static value_type f80() { return value_type(value_type_class::floating_point, 80, 1); } // x87 double extended-precision
 
 	static value_type vector(const value_type &underlying_type, int nr_elements)
 	{
 		return value_type(underlying_type.tc_, underlying_type.element_width_, nr_elements);
 	}
+
+    value_type() = default;
 
 	value_type(value_type_class tc, int element_width, int nr_elements = 1)
 		: tc_(tc)
