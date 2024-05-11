@@ -2,13 +2,13 @@ name: Build check
 
 on:
   push:
-    branches: [ 'sr/**' ]
+    branches: [ 'sr/**', 'main' ]
   pull_request:
     branches: [ "main" ]
 
 jobs:
   x86_64:
-    runs-on: [ self-hosted, X64]
+    runs-on: [ self-hosted, X64 ]
 
     steps:
       - uses: actions/checkout@v3
@@ -17,12 +17,12 @@ jobs:
           github_access_token: ${{ secrets.ARANCINI_TOKEN }}
       - name: nix build
         run: nix build
-      
+
       - name: hello-world
         run: nix develop --command bash -c "./result/bin/txlat -I ./result/test/hello-world/hello-static-musl -O bin.out && ./bin.out 2> /dev/null"
 
   x86_64-cross-riscv64:
-    runs-on: [ self-hosted, X64]
+    runs-on: [ self-hosted, X64 ]
 
     steps:
       - uses: actions/checkout@v3
@@ -30,10 +30,10 @@ jobs:
         with:
           github_access_token: ${{ secrets.ARANCINI_TOKEN }}
       - name: nix build
-        run: nix build .#defaultPackage.riscv64-linux
+        run: nix build .#crossPackage
 
   aarch64:
-    runs-on: [ self-hosted, ARM64]
+    runs-on: [ self-hosted, ARM64 ]
 
     steps:
       - uses: actions/checkout@v3
@@ -42,6 +42,6 @@ jobs:
           github_access_token: ${{ secrets.ARANCINI_TOKEN }}
       - name: nix build
         run: nix build .#defaultPackage.aarch64-linux
-      
+
       - name: hello-world
         run: nix develop --command bash -c "./result/bin/txlat -I ./result/test/hello-world/hello-static-musl -O bin.out && ./bin.out 2> /dev/null"
