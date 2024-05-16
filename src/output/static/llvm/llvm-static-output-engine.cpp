@@ -545,7 +545,9 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		}
 
 		LoadInst *li = builder.CreateLoad(ty, address_ptr);
-		builder.CreateFence(AtomicOrdering::Acquire);
+		if (e_.fences_){
+			builder.CreateFence(AtomicOrdering::Acquire);
+		}
 		li->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(li->getContext(), guest_mem_alias_scope_));
 		return li;
 	}
@@ -1348,7 +1350,9 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 			address_ptr_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, guest_mem_alias_scope_));
 		}
 
-		builder.CreateFence(AtomicOrdering::Release);
+		if (e_.fences_) {
+			builder.CreateFence(AtomicOrdering::Release);
+		}
 		auto store = builder.CreateStore(value, address_ptr);
 		store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), guest_mem_alias_scope_));
 		return store;
@@ -1448,7 +1452,9 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 			return existing->second;
 
 		lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
-		builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
+		if (e_.fences_) {
+			builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
+		}
 		AtomicRMWInst *out;
 		Value *val;
 		switch (ban->op()) {
@@ -1516,11 +1522,15 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		switch(tan->op()) {
 			case ternary_atomic_op::cmpxchg: {
 				lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
-				builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
+				if (e_.fences_) {
+					builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
+				}
 				auto instr = builder.CreateAtomicCmpXchg(lhs, rhs, top, Align(1), AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
 				auto new_rax_val = builder.CreateSelect(builder.CreateExtractValue(instr, 1), rhs, builder.CreateExtractValue(instr, 0));
 				builder.CreateStore(builder.CreateZExt(new_rax_val, types.i64), rax_reg);
-				builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
+				if (e_.fences_) {
+					builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
+				}
 
 				return instr;
 			}

@@ -72,7 +72,8 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 		("no-script", "Do not use a linker script. Also does not include any data from the input binary. Mainly useful as a step to generate a linker script.") //
 		("dump-llvm", po::value<std::string>(), "Dump generated LLVM IR") //
 		("keep-objs", po::value<std::string>(), "Keep generated obj files in <prefix> for manual linking") //
-		("nlib", po::value<std::string>(), "Parse the file at the given path for native library method definitions to substitute when translating.");
+		("nlib", po::value<std::string>(), "Parse the file at the given path for native library method definitions to substitute when translating.") //
+		("llvm-codegen-nofence", "Do not generate fences on memory accesses. Only safe for single-threaded applications.");
 
     po::variables_map vm;
 	try {

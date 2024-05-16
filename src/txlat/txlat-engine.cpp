@@ -47,6 +47,9 @@ void txlat_engine::process_options(arancini::output::o_static::static_output_eng
 			auto filename = cmdline.at("dump-llvm");
 			llvmoe->set_debug_dump_filename(filename.as<std::string>());
 		}
+		if (cmdline.count("llvm-codegen-nofence")) {
+			llvmoe->set_codegen_fence(false);
+		}
 	}
 }
 
