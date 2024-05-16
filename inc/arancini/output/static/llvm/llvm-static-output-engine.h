@@ -19,6 +19,7 @@ public:
 	void set_debug(bool dbg) { dbg_ = dbg; }
 
 	void set_debug_dump_filename(std::string filename) { debug_dump_filename = filename; }
+	void set_codegen_fence(bool b) { fences_ = b; }
 
 	bool is_exec() const { return is_exec_; };
 private:
@@ -26,5 +27,6 @@ private:
 	bool dbg_;
 	const bool is_exec_;
 	std::optional<std::string> debug_dump_filename;
+	bool fences_{true};
 };
 } // namespace arancini::output::o_static::llvm
