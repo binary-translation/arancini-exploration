@@ -129,7 +129,7 @@
 					    patchShebangs mfile.py
 
 						# this will build, test and install
-					    ./mfile.py --prefix $out'' + lib.optionalString (system == "riscv64-linux") "--toolchain riscv64-unknown-linux-gnu- --host-cpu riscv64" + lib.optionalString (system == "aarch64-linux") "--toolchain aarch64-unknown-linux-gnu- --host-cpu aarch64";
+					    ./mfile.py --prefix $out'' + lib.optionalString (system == "riscv64-linux") " --toolchain riscv64-linux-gnu- --host-cpu riscv64" + lib.optionalString (system == "aarch64-linux") " --toolchain aarch64-linux-gnu- --host-cpu aarch64";
 
 					dontInstall = true; # already installed during buildPhase
 				}){};
@@ -141,7 +141,7 @@
 					nativeBuildInputs = [ meson ninja ];
 				}){};
 			native_pkgs = import nixpkgs { system = "x86_64-linux"; };
-			build_pkgs = import nixpkgs { system = "x86_64-linux"; crossSystem.config = system; };
+			build_pkgs = import nixpkgs { system = "x86_64-linux"; crossSystem.config = system+"-gnu"; };
 		in
 		{
 		crossPackage = build_pkgs.callPackage(
