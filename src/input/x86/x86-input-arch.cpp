@@ -400,9 +400,9 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 	size_t offset = 0;
 	std::string disasm;
-	
+
 	translation_result r;
-	
+
 	while (offset < code_size) {
 		xed_decoded_inst_t xedd;
 		xed_decoded_inst_zero(&xedd);
@@ -411,12 +411,8 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 		xed_error_enum_t xed_error = xed_decode(&xedd, &mc[offset], code_size - offset);
 		if (xed_error != XED_ERROR_NONE) {
-			std::stringstream stream;
-			stream << std::hex << base_address + offset;
-			std::string s = stream.str();
-			throw std::runtime_error("unable to decode instruction: " +
-									 std::to_string(xed_error) +
-									 " inst: " + s);
+			throw std::runtime_error(fmt::format("unable to decode: {}, instruction: {:#}",
+                                                 xed_error_enum_t2str(xed_error), base_address + offset));
 		}
 
 		xed_uint_t length = xed_decoded_inst_get_length(&xedd);
@@ -424,17 +420,12 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 		r = translate_instruction(builder, base_address, &xedd, debug(), da_, disasm);
 
 		if (r == translation_result::fail) {
-			throw std::runtime_error("instruction translation failure: " + std::to_string(xed_error));
+			throw std::runtime_error(fmt::format("instruction translation failure: {}", xed_error_enum_t2str(xed_error)));
 		} else if (r == translation_result::end_of_block && basic_block) {
-            // Print backwards branch addr (if exists)
-            // Useful for debug infrastructure
             auto pos = disasm.find("0x");
             if (pos != disasm.npos) {
                 auto addr_str = disasm.substr(pos);
                 off_t addr = std::strtol(addr_str.c_str(), nullptr, 16);
-
-                if (addr > base_address && addr < base_address + offset + length)
-                    util::global_logger.info("Backwards branch @ {}\n", addr_str);
             }
 			break;
 		}
