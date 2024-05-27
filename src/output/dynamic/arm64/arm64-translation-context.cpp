@@ -216,7 +216,7 @@ void arm64_translation_context::end_block() {
                                   e.what());
         // TODO: fmt::format should not be needed here, but fmt::join is lazy
         util::global_logger.fatal(fmt::format("Current instruction stream:\n{}\n",
-                                  fmt::join(builder_.instructions(), "")));
+                                  fmt::join(builder_.instructions(), "\n")));
         util::global_logger.fatal("Terminating execution\n");
         std::abort();
     }
@@ -338,15 +338,14 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
     // Sanity check
     auto type = n.val().type();
     if (type.is_vector() && type.element_width() > base_type().element_width()) {
-        throw arm64_exception("[ARM64-DBT] Cannot load vectors with individual elements larger than 64-bits");
+        throw arm64_exception("Cannot load vectors with individual elements larger than 64-bits");
     }
 
-    std::string comment("read register: ");
-    comment += n.regname();
+    std::string comment(fmt::format("read register: {}", n.regname()));
 
     auto &dest_vregs = alloc_vregs(n.val());
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
-        size_t width = dest_vregs[i].type().width();
+        auto width = dest_vregs[i].type().width();
         auto addr = guestreg_memory_operand(n.regoff() + i * width);
         switch (width) {
             case 1:
@@ -361,7 +360,7 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
                 builder_.ldr(dest_vregs[i], addr, comment);
                 break;
             default:
-                throw arm64_exception("[ARM64-DBT] cannot load individual register values larger than 64-bits");
+                throw arm64_exception("cannot load individual register values larger than 64-bits");
         }
     }
 }
@@ -370,7 +369,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     // Sanity check
     auto type = n.val().type();
     if (type.is_vector() && type.element_width() > base_type().element_width()) {
-        throw arm64_exception("[ARM64-DBT] Cannot store vectors with individual elements larger than 64-bits");
+        throw arm64_exception("Cannot store vectors with individual elements larger than 64-bits");
     }
 
     auto &src_vregs = materialise_port(n.value());
@@ -390,13 +389,16 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     // We now down-cast it.
     //
     // There should be clear type promotion and type coercion.
-    std::string comment(fmt::format("write register: {}", n.regname()));
+    std::string comment{fmt::format("write register: {}", n.regname())};
 
     for (std::size_t i = 0; i < src_vregs.size(); ++i) {
-        if (src_vregs[i].type().width() > n.value().type().width() && n.value().type().width() <= base_type().element_width())
+        if (src_vregs[i].type().width() > n.value().type().width() &&
+            n.value().type().width() <= base_type().element_width())
+        {
             src_vregs[i] = cast(src_vregs[i], n.value().type());
+        }
 
-        size_t width = src_vregs[i].type().width();
+        auto width = src_vregs[i].type().width();
         auto addr = guestreg_memory_operand(n.regoff() + i * width);
         switch (width) {
             case 1:
@@ -412,7 +414,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
-                throw arm64_exception("[ARM64-DBT] cannot write individual register values larger than 64-bits");
+                throw arm64_exception("cannot write individual register values larger than 64-bits");
         }
     }
 }
@@ -423,9 +425,9 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
     // Sanity checks
     auto type = n.val().type();
     if (type.is_vector() && type.element_width() > base_type().element_width())
-        throw arm64_exception("[ARM64-DBT] Cannot load vectors from memory with individual elements larger than 64-bits");
+        throw arm64_exception("Cannot load vectors from memory with individual elements larger than 64-bits");
     if (addr_vregs.size() != 1)
-        throw arm64_exception("[ARM64-DBT] Only a single address can be specified in a read memory node");
+        throw arm64_exception("Only a single address can be specified in a read memory node");
 
     const auto &dest_vregs = alloc_vregs(n.val());
 
@@ -450,7 +452,7 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
-                throw arm64_exception("[ARM64-DBT] cannot load individual memory values larger than 64-bits");
+                throw arm64_exception("cannot load individual memory values larger than 64-bits");
         }
     }
 }
@@ -465,7 +467,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
     if (type.is_vector() && type.element_width() > base_type().element_width())
         throw arm64_exception("Larger than 64-bit integers in vectors not supported by backend");
     if (addr_vregs.size() != 1)
-        throw arm64_exception("[ARM64-DBT] Only a single address can be specified in a write memory node");
+        throw arm64_exception("Only a single address can be specified in a write memory node");
 
     const auto &addr_vreg = add_membase(addr_vregs[0]);
     const auto &src_vregs = materialise_port(n.value());
@@ -489,7 +491,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
-                throw arm64_exception("[ARM64-DBT] cannot write individual memory values larger than 64-bits");
+                throw arm64_exception("cannot write individual memory values larger than 64-bits");
         }
     }
 }
@@ -502,7 +504,7 @@ void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
 void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
     const auto &new_pc_vregs = materialise_port(n.value());
     if (new_pc_vregs.size() != 1) {
-        throw arm64_exception("[ARM64-DBT] Program counter cannot be > 64-bits");
+        throw arm64_exception("Program counter cannot be > 64-bits");
     }
 
     builder_.str(new_pc_vregs[0],
@@ -522,7 +524,7 @@ void arm64_translation_context::materialise_br(const br_node &n) {
 void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
     const auto &cond_vregs = materialise_port(n.cond());
     if (cond_vregs.size() != 1)
-        throw arm64_exception("[ARM64-DBT] Condition vregs for branches cannot be > 64-bits");
+        throw arm64_exception("Condition vregs for branches cannot be > 64-bits");
 
     builder_.cmp(cond_vregs[0], immediate<1, 8>());
     builder_.beq(std::string_view{n.target()->name()});
@@ -545,7 +547,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
     const auto &rhs_vregs = materialise_port(n.rhs());
 
     if (lhs_vregs.size() != rhs_vregs.size()) {
-        throw arm64_exception("[ARM64-DBT] Binary operations not supported with different sized operands");
+        throw arm64_exception("Binary operations not supported with different sized operands");
     }
 
 	const auto &dest_vregs = alloc_vregs(n.val());
@@ -637,7 +639,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 break;
             case ir::value_type_class::none:
             default:
-                throw arm64_exception("[ARM64-DBT] encounted unknown type class for multiplication");
+                throw arm64_exception("encounted unknown type class for multiplication");
             }
             break;
         case 64:
@@ -657,13 +659,13 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 break;
             case ir::value_type_class::none:
             default:
-                throw arm64_exception("[ARM64-DBT] encounted unknown type class for multiplication");
+                throw arm64_exception("encounted unknown type class for multiplication");
             }
             break;
         case 256:
         case 512:
         default:
-            throw arm64_exception("[ARM64-DBT] does not support subtraction with sizes larger than 128-bits");
+            throw arm64_exception("does not support subtraction with sizes larger than 128-bits");
         }
 
         // *MUL* do not set flags, they must be set here manually
@@ -745,7 +747,7 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
     if (dest_vregs.size() != lhs_vregs.size() ||
         dest_vregs.size() != rhs_vregs.size() ||
         dest_vregs.size() != top_vregs.size()) {
-        throw arm64_exception("[ARM64-DBT] Ternary arithmetic node mismatch between types");
+        throw arm64_exception("Ternary arithmetic node mismatch between types");
     }
 
     const char* mod = nullptr;
@@ -805,9 +807,9 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
     const auto &addr_regs = vregs_for_port(n.address());
 
     if (addr_regs.size() != 1)
-        throw arm64_exception("[ARM64-DBT] Binary atomic operation address cannot be > 64-bits");
+        throw arm64_exception("Binary atomic operation address cannot be > 64-bits");
     if (dest_vregs.size() != 1 || src_vregs.size() != 1)
-        throw arm64_exception("[ARM64-DBT] Binary atomic operations not supported for vectors");
+        throw arm64_exception("Binary atomic operations not supported for vectors");
 
     const auto &src_vreg = src_vregs[0];
     const auto &dest_vreg = dest_vregs[0];
@@ -1039,9 +1041,9 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
     const auto &addr_vregs = materialise_port(n.address());
 
     if (addr_vregs.size() != 1)
-        throw arm64_exception("[ARM64-DBT] Ternary atomic operation address cannot be > 64-bits");
+        throw arm64_exception("Ternary atomic operation address cannot be > 64-bits");
     if (dest_vregs.size() != 1 || src_vregs.size() != 1 || acc_vregs.size() != 1 || addr_vregs.size() != 1) {
-        throw arm64_exception("[ARM64-DBT] Ternary atomic operations not supported for vectors - dest: " +
+        throw arm64_exception("Ternary atomic operations not supported for vectors - dest: " +
                                  std::to_string(n.val().type().nr_elements()) + " x " + std::to_string(n.val().type().element_width())
                                  + ", top: " +
                                  std::to_string(n.top().type().nr_elements()) + " x " + std::to_string(n.top().type().element_width())
@@ -1101,7 +1103,7 @@ void arm64_translation_context::materialise_unary_arith(const unary_arith_node &
     const auto &lhs_vregs = materialise_port(n.lhs());
 
     if (dest_vregs.size() != 1 || lhs_vregs.size() != 1)
-        throw arm64_exception("[ARM64-DBT] Unary arithmetic node does not support operations > 64-bit");
+        throw arm64_exception("Unary arithmetic node does not support operations > 64-bit");
 
     const auto &dest_vreg = dest_vregs[0];
     const auto &lhs_vreg = lhs_vregs[0];
@@ -1146,7 +1148,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 	case cast_op::sx:
         // Sanity check
         if (n.val().type().element_width() <= n.source_value().type().element_width()) {
-            throw arm64_exception("[ARM64-DBT] cannot sign-extend " +
+            throw arm64_exception("cannot sign-extend " +
                     std::to_string(n.val().type().element_width()) + " to smaller size " +
                     std::to_string(n.source_value().type().element_width()));
         }
@@ -1192,7 +1194,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
                 builder_.mov(dest_vregs[i], src_vregs[i]);
             break;
         default:
-            throw arm64_exception("[ARM64-DBT] cannot sign-extend from {} to {}",
+            throw arm64_exception("cannot sign-extend from {} to {}",
                                   src_vreg.type(), dest_vreg.type());
         }
 
@@ -1251,7 +1253,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 	case cast_op::zx:
         // Sanity check
         if (n.val().type().element_width() <= n.source_value().type().element_width()) {
-            throw arm64_exception("[ARM64-DBT] Cannot zero-extend " +
+            throw arm64_exception("Cannot zero-extend " +
                     std::to_string(n.val().type().element_width()) + " to smaller size " +
                     std::to_string(n.source_value().type().element_width()));
         }
@@ -1292,7 +1294,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             }
             break;
         default:
-            throw arm64_exception("[ARM64-DBT] cannot sign-extend from size {} to size {}",
+            throw arm64_exception("cannot sign-extend from size {} to size {}",
                                   src_vreg.type(), dest_vreg.type());
         }
 
@@ -1305,7 +1307,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         break;
     case cast_op::trunc:
         if (dest_vreg.type().width() > src_vreg.type().width()) {
-            throw arm64_exception("[ARM64-DBT] cannot truncate from {} to {}",
+            throw arm64_exception("cannot truncate from {} to {}",
                                      dest_vreg.type(), src_vreg.type());
         }
 
@@ -1333,7 +1335,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
     case cast_op::convert:
         // convert between integer and float representations
         if (dest_vregs.size() != 1) {
-            throw arm64_exception("[ARM64-DBT] cannot convert {} because it is larger than 64 bits",
+            throw arm64_exception("cannot convert {} because it is larger than 64 bits",
                                   n.val().type());
         }
 
@@ -1390,7 +1392,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 
 void arm64_translation_context::materialise_csel(const csel_node &n) {
     if (n.val().type().is_vector() || n.val().type().element_width() > base_type().element_width()) {
-        throw arm64_exception("[ARM64-DBT] cannot implement conditional selection for \
+        throw arm64_exception("cannot implement conditional selection for \
                                   vectors and elements widths exceeding 64-bits");
     }
 
@@ -1402,7 +1404,7 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
     if (cond_vregs.size() != true_vregs.size() ||
         true_vregs.size() != false_vregs.size() ||
         false_vregs.size() != 1) {
-        throw arm64_exception("[ARM64-DBT] CSEL does not support conditions and values > 64-bits");
+        throw arm64_exception("CSEL does not support conditions and values > 64-bits");
     }
 
     /* builder_.brk(immediate_operand(100, 64)); */
@@ -1412,7 +1414,7 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
 
 void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
     if (n.val().type().is_vector() || n.val().type().element_width() > base_type().element_width()) {
-        throw arm64_exception("[ARM64-DBT] cannot implement bit shifts for \
+        throw arm64_exception("cannot implement bit shifts for \
                                   vectors and elements widths exceeding 64-bits");
     }
 
@@ -1457,7 +1459,7 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
 
     // Sanity check
     if (dest_vregs.size() > src_vregs.size())
-        throw arm64_exception("[ARM64-DBT] Destination cannot be larger than source for bit extract node");
+        throw arm64_exception("Destination cannot be larger than source for bit extract node");
 
     auto dest_total_width = total_width(dest_vregs);
     auto src_total_width = total_width(src_vregs);
@@ -1490,7 +1492,7 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
 
     // Sanity check
     if (dest_vregs.size() != src_vregs.size())
-        throw arm64_exception("[ARM64-DBT] Source and destination mismatch for bit insert node");
+        throw arm64_exception("Source and destination mismatch for bit insert node");
 
     builder_.insert_comment("Bit insert into destination");
 
@@ -1530,11 +1532,11 @@ void arm64_translation_context::materialise_vector_insert(const vector_insert_no
     const auto &value_vregs = materialise_port(n.insert_value());
 
     if (dest_vregs.size() < src_vregs.size())
-        throw arm64_exception("[ARM64-DBT] Destination vector for vector insert is smaller than source vector");
+        throw arm64_exception("Destination vector for vector insert is smaller than source vector");
 
     size_t index = (n.index() * n.insert_value().type().element_width()) / base_type().element_width();
     if (index + value_vregs.size() > dest_vregs.size())
-        throw arm64_exception(fmt::format("[ARM64-DBT] Cannot insert at index {} in destination vector", index));
+        throw arm64_exception(fmt::format("Cannot insert at index {} in destination vector", index));
 
     builder_.insert_comment("Insert vector by first copying source to destination");
     for (size_t i = 0; i < src_vregs.size(); ++i)
@@ -1553,9 +1555,9 @@ void arm64_translation_context::materialise_vector_extract(const vector_extract_
 
     size_t index = (n.index() * n.source_vector().type().element_width()) / base_type().element_width();
     if (dest_vregs.size() >= src_vregs.size())
-        throw arm64_exception("[ARM64-DBT] Cannot extract vector larger than src vector");
+        throw arm64_exception("Cannot extract vector larger than src vector");
     if (index + dest_vregs.size() > src_vregs.size())
-        throw arm64_exception("[ARM64-DBT] Cannot extract from index " +
+        throw arm64_exception("Cannot extract from index " +
                                  std::to_string(index) + " in source vector");
 
     builder_.insert_comment("Extract vector by copying to destination");
@@ -1584,7 +1586,7 @@ void arm64_translation_context::materialise_read_local(const read_local_node &n)
     const auto &locals = locals_[n.local()];
 
     if (locals.size() != dest_vregs.size())
-        throw arm64_exception("[ARM64-DBT] Read local received mismatched types");
+        throw arm64_exception("Read local received mismatched types");
 
     builder_.insert_comment("Read local variable");
     for (size_t i = 0; i < dest_vregs.size(); ++i)
@@ -1600,7 +1602,7 @@ void arm64_translation_context::materialise_write_local(const write_local_node &
 
     const auto &dest_vregs = locals_[n.local()];
     if (write_vregs.size() != dest_vregs.size())
-        throw arm64_exception("[ARM64-DBT] Write local received mismatched types");
+        throw arm64_exception("Write local received mismatched types");
 
     builder_.insert_comment("Write local variable");
     for (size_t i = 0; i < dest_vregs.size(); ++i)
