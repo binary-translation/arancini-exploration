@@ -198,7 +198,8 @@ void instruction_builder::allocate() {
 
         bool unused_keep = false;
 
-        util::global_logger.debug("Allocating instruction {}\n", insn);
+        // TODO: fails
+        // util::global_logger.debug("Allocating instruction {}\n", insn);
 		for (auto &o : insn.operands()) {
             if (o.is_def() && !o.is_use()) {
                 // Only regs can be definitions
@@ -255,9 +256,7 @@ void instruction_builder::allocate() {
                         util::global_logger.debug("Assign reference {} to existing allocation {}\n",
                                                   o, allocation);
                     }
-                }
-
-                if (const auto *mem = std::get_if<memory_operand>(&o.get()); mem && mem->base_register().is_virtual()) {
+                } else if (const auto *mem = std::get_if<memory_operand>(&o.get()); mem && mem->base_register().is_virtual()) {
                     const auto &base_vreg = mem->base_register();
                     if (const auto *previous_allocation = allocator.get_allocation(base_vreg);
                         previous_allocation)

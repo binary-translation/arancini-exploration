@@ -61,7 +61,7 @@ private:
     std::vector<register_operand> &materialise_port(ir::port &p);
 
 
-    memory_operand guestreg_memory_operand(int regoff, 
+    memory_operand guestreg_memory_operand(int regoff,
                                            memory_operand::addressing_modes mode = memory_operand::addressing_modes::direct);
 
     void materialise(const ir::node *n);
@@ -98,7 +98,8 @@ private:
 
     register_operand cast(const register_operand &op, ir::value_type type);
 
-    util::static_map<unsigned long, register_operand, 4> flag_map; 
+    enum class reg_offsets : std::uint16_t;
+    util::static_map<reg_offsets, register_operand, 4> flag_map;
 };
 
 } // namespace arancini::output::dynamic::arm64
