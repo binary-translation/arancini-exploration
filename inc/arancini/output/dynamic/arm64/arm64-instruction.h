@@ -97,7 +97,7 @@ public:
         w0,
         w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, w11, w12, w13, w14, w15,
         w16, w17, w18, w19, w20, w21, w22, w23, w24, w25, w26, w27, w28, w29, w30,
-        wzr_sp
+        wzr_wsp
     };
 
     enum special_register_names : std::size_t {
@@ -507,7 +507,6 @@ struct fmt::formatter<arancini::output::dynamic::arm64::register_operand> final 
     }
 private:
     // Assumes register operands have contiguous values
-    // FIXME: make these all static
     using name_table = std::array<std::string_view, arancini::output::dynamic::arm64::register_operand::physical_register_count+1>;
     static constexpr name_table r64_bit {
         "x0",
@@ -576,7 +575,7 @@ private:
         "w28",
         "w29",
         "w30",
-        "sp"
+        "wsp"
     };
 
    static constexpr name_table f32_bit {
