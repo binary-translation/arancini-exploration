@@ -224,7 +224,7 @@ public:
         // Ensure we can represent the specified value
         convert_to_type_class<T>();
 
-        if (type_.is_vector() || type_.element_width() > 64 || !fits(v, type))
+        if (type_.is_vector() || !type_.element_width() || type_.element_width() > 64 || !fits(v, type))
             throw arm64_exception("Cannot construct immediate_operand from value {} for value type {}\n",
                                   v, type);
 	}
@@ -233,7 +233,7 @@ public:
     constexpr ir::value_type type() const { return type_; }
 
     [[nodiscard]]
-    constexpr std::uintmax_t value() const { return value_; }
+    constexpr std::uintmax_t value() const { return value_ & ~(~0 << (type_.element_width()-1)); }
 
     [[nodiscard]]
     static constexpr bool fits(std::uintmax_t v, value_type type) {
@@ -481,228 +481,209 @@ private:
 // TODO: maybe should be in .cpp
 
 template <>
-struct fmt::formatter<arancini::output::dynamic::arm64::register_operand> : public fmt::formatter<std::string_view> {
+struct fmt::formatter<arancini::output::dynamic::arm64::register_operand> final : public fmt::formatter<std::string_view> {
     template <typename FCTX>
     format_context::iterator format(const arancini::output::dynamic::arm64::register_operand &reg, FCTX &format_ctx) const {
         if (reg.is_virtual())
             return fmt::format_to(format_ctx.out(), "%V{}_{}", reg.type().width(), reg.index());
 
-        // Assumes register operands have contiguous values
-        // FIXME: make these all static
-        using name_table = std::array<std::string_view, arancini::output::dynamic::arm64::register_operand::physical_register_count+1>;
-        name_table r64_bit {
-            "x0",
-            "x1",
-            "x2",
-            "x3",
-            "x4",
-            "x5",
-            "x6",
-            "x7",
-            "x8",
-            "x9",
-            "x10",
-            "x11",
-            "x12",
-            "x13",
-            "x14",
-            "x15",
-            "x16",
-            "x17",
-            "x18",
-            "x19",
-            "x20",
-            "x21",
-            "x22",
-            "x23",
-            "x24",
-            "x25",
-            "x26",
-            "x27",
-            "x28",
-            "x29",
-            "x30",
-            "sp",
-        };
-
-        name_table r32_bit {
-            "w0",
-            "w1",
-            "w2",
-            "w3",
-            "w4",
-            "w5",
-            "w6",
-            "w7",
-            "w8",
-            "w9",
-            "w10",
-            "w11",
-            "w12",
-            "w13",
-            "w14",
-            "w15",
-            "w16",
-            "w17",
-            "w18",
-            "w19",
-            "w20",
-            "w21",
-            "w22",
-            "w23",
-            "w24",
-            "w25",
-            "w26",
-            "w27",
-            "w28",
-            "w29",
-            "w30",
-            "sp"
-        };
-
-        name_table f32_bit {
-            "s0",
-            "s1",
-            "s2",
-            "s3",
-            "s4",
-            "s5",
-            "s6",
-            "s7",
-            "s8",
-            "s9",
-            "s10",
-            "s11",
-            "s12",
-            "s13",
-            "s14",
-            "s15",
-            "s16",
-            "s17",
-            "s18",
-            "s19",
-            "s20",
-            "s21",
-            "s22",
-            "s23",
-            "s24",
-            "s25",
-            "s26",
-            "s27",
-            "s28",
-            "s29",
-            "s30",
-       };
-
-       name_table f64_bit {
-           "d0",
-           "d1",
-           "d2",
-           "d3",
-           "d4",
-           "d5",
-           "d6",
-           "d7",
-           "d8",
-           "d9",
-           "d10",
-           "d11",
-           "d12",
-           "d13",
-           "d14",
-           "d15",
-           "d16",
-           "d17",
-           "d18",
-           "d19",
-           "d20",
-           "d21",
-           "d22",
-           "d23",
-           "d24",
-           "d25",
-           "d26",
-           "d27",
-           "d28",
-           "d29",
-           "d30"
-      };
-
-      name_table r128_bit {
-            "v0",
-            "v1",
-            "v2",
-            "v3",
-            "v4",
-            "v5",
-            "v6",
-            "v7",
-            "v8",
-            "v9",
-            "v10",
-            "v11",
-            "v12",
-            "v13",
-            "v14",
-            "v15",
-            "v16",
-            "v17",
-            "v18",
-            "v19",
-            "v20",
-            "v21",
-            "v22",
-            "v23",
-            "v24",
-            "v25",
-            "v26",
-            "v27",
-            "v28",
-            "v29",
-            "v30"
-        };
-
-        static util::static_map<arancini::ir::value_type, const name_table&, 12> names {
-            // 64-bit scalar registers (mapped to both signed and unsigned versions)
-            std::make_pair(arancini::ir::value_type::u64(), r64_bit),
-            std::make_pair(arancini::ir::value_type::s64(), r64_bit),
-
-            // 32-bit scalar registers
-            // All registers < 32-bits are mapped to 32-bit registers
-            //
-            // 1-bit flags are explicitly not mapped, there are no instructions operating on 1-bit
-            // registers: they msut be explicitly converted to u8 (or some larger size)
-            std::make_pair(arancini::ir::value_type::u1(), r32_bit),
-            std::make_pair(arancini::ir::value_type::u8(), r32_bit),
-            std::make_pair(arancini::ir::value_type::s8(), r32_bit),
-            std::make_pair(arancini::ir::value_type::u16(), r32_bit),
-            std::make_pair(arancini::ir::value_type::s16(), r32_bit),
-            std::make_pair(arancini::ir::value_type::u32(), r32_bit),
-            std::make_pair(arancini::ir::value_type::s32(), r32_bit),
-
-            // Double precision floating-point
-            std::make_pair(arancini::ir::value_type::f64(), f64_bit),
-
-            // Single precision floating-point
-            std::make_pair(arancini::ir::value_type::f32(), f32_bit),
-
-            // NEON registers
-            // should be added only on compile-time switch
-            std::make_pair(arancini::ir::value_type::u128(), r128_bit)
-        };
-
         if (reg.is_special())
             return fmt::format_to(format_ctx.out(), "nzcv");
 
-        // FIXME: clean this up
-        auto reg_type_names = names.at(reg.type());
-        auto reg_name = reg_type_names.at(reg.index());
-        return fmt::format_to(format_ctx.out(), "{}", names.at(reg.type()).at(reg.index()));
+        std::string_view regname;
+        if (reg.type().type_class() != arancini::ir::value_type_class::floating_point) {
+            if (reg.type().width() <= 32)
+                regname = r32_bit.at(reg.index());
+            else
+                regname = r64_bit.at(reg.index());
+        } else {
+            if (reg.type().width() <= 32)
+                regname = f32_bit.at(reg.index());
+            else
+                regname = f64_bit.at(reg.index());
+        }
+
+        return fmt::format_to(format_ctx.out(), "{}", regname);
     }
+private:
+    // Assumes register operands have contiguous values
+    // FIXME: make these all static
+    using name_table = std::array<std::string_view, arancini::output::dynamic::arm64::register_operand::physical_register_count+1>;
+    static constexpr name_table r64_bit {
+        "x0",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "x5",
+        "x6",
+        "x7",
+        "x8",
+        "x9",
+        "x10",
+        "x11",
+        "x12",
+        "x13",
+        "x14",
+        "x15",
+        "x16",
+        "x17",
+        "x18",
+        "x19",
+        "x20",
+        "x21",
+        "x22",
+        "x23",
+        "x24",
+        "x25",
+        "x26",
+        "x27",
+        "x28",
+        "x29",
+        "x30",
+        "sp",
+    };
+
+    static constexpr name_table r32_bit {
+        "w0",
+        "w1",
+        "w2",
+        "w3",
+        "w4",
+        "w5",
+        "w6",
+        "w7",
+        "w8",
+        "w9",
+        "w10",
+        "w11",
+        "w12",
+        "w13",
+        "w14",
+        "w15",
+        "w16",
+        "w17",
+        "w18",
+        "w19",
+        "w20",
+        "w21",
+        "w22",
+        "w23",
+        "w24",
+        "w25",
+        "w26",
+        "w27",
+        "w28",
+        "w29",
+        "w30",
+        "sp"
+    };
+
+   static constexpr name_table f32_bit {
+        "s0",
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7",
+        "s8",
+        "s9",
+        "s10",
+        "s11",
+        "s12",
+        "s13",
+        "s14",
+        "s15",
+        "s16",
+        "s17",
+        "s18",
+        "s19",
+        "s20",
+        "s21",
+        "s22",
+        "s23",
+        "s24",
+        "s25",
+        "s26",
+        "s27",
+        "s28",
+        "s29",
+        "s30",
+   };
+
+   static constexpr name_table f64_bit {
+       "d0",
+       "d1",
+       "d2",
+       "d3",
+       "d4",
+       "d5",
+       "d6",
+       "d7",
+       "d8",
+       "d9",
+       "d10",
+       "d11",
+       "d12",
+       "d13",
+       "d14",
+       "d15",
+       "d16",
+       "d17",
+       "d18",
+       "d19",
+       "d20",
+       "d21",
+       "d22",
+       "d23",
+       "d24",
+       "d25",
+       "d26",
+       "d27",
+       "d28",
+       "d29",
+       "d30"
+  };
+
+  static constexpr name_table r128_bit {
+        "v0",
+        "v1",
+        "v2",
+        "v3",
+        "v4",
+        "v5",
+        "v6",
+        "v7",
+        "v8",
+        "v9",
+        "v10",
+        "v11",
+        "v12",
+        "v13",
+        "v14",
+        "v15",
+        "v16",
+        "v17",
+        "v18",
+        "v19",
+        "v20",
+        "v21",
+        "v22",
+        "v23",
+        "v24",
+        "v25",
+        "v26",
+        "v27",
+        "v28",
+        "v29",
+        "v30"
+    };
 };
 
 template <>
-struct fmt::formatter<arancini::output::dynamic::arm64::memory_operand> : public fmt::formatter<std::string_view> {
+struct fmt::formatter<arancini::output::dynamic::arm64::memory_operand> final : public fmt::formatter<std::string_view> {
     template <typename FCTX>
     format_context::iterator format(const arancini::output::dynamic::arm64::memory_operand &mop, FCTX &format_ctx) const {
         using addressing_modes = enum arancini::output::dynamic::arm64::memory_operand::addressing_modes;
@@ -710,22 +691,22 @@ struct fmt::formatter<arancini::output::dynamic::arm64::memory_operand> : public
         fmt::format_to(format_ctx.out(), "[{}", mop.base_register());
 
         if (!mop.offset().value())
-            fmt::format_to(format_ctx.out(), "]");
+            return fmt::format_to(format_ctx.out(), "]");
 
-        // if (mop.addressing_mode() != addressing_modes::post_index)
-        //     fmt::format_to(format_ctx.out(), ", #{:#}]", mop.offset().value());
-        // else if (mop.addressing_mode() == addressing_modes::pre_index)
-        //     fmt::format_to(format_ctx.out(), "!");
+        if (mop.addressing_mode() != addressing_modes::post_index)
+            fmt::format_to(format_ctx.out(), ", #{:#x}]", mop.offset().value());
+        else if (mop.addressing_mode() == addressing_modes::pre_index)
+            fmt::format_to(format_ctx.out(), "!");
 
-        // if (mop.addressing_mode() == addressing_modes::post_index)
-        //     fmt::format_to(format_ctx.out(), "], #{:#}", mop.offset().value());
+        if (mop.addressing_mode() == addressing_modes::post_index)
+            fmt::format_to(format_ctx.out(), "], #{:#x}", mop.offset().value());
 
         return format_ctx.out();
     }
 };
 
 template <>
-struct fmt::formatter<arancini::output::dynamic::arm64::label_operand> : public fmt::formatter<std::string_view> {
+struct fmt::formatter<arancini::output::dynamic::arm64::label_operand> final : public fmt::formatter<std::string_view> {
     template <typename PCTX> constexpr format_parse_context::iterator parse(const PCTX &parse_ctx) {
         return parse_ctx.begin();
     }
@@ -737,7 +718,7 @@ struct fmt::formatter<arancini::output::dynamic::arm64::label_operand> : public 
 };
 
 template <>
-struct fmt::formatter<arancini::output::dynamic::arm64::shift_operand> : public fmt::formatter<std::string_view> {
+struct fmt::formatter<arancini::output::dynamic::arm64::shift_operand> final : public fmt::formatter<std::string_view> {
     template <typename FCTX>
     format_context::iterator format(const arancini::output::dynamic::arm64::shift_operand &shift, FCTX &format_ctx) const {
         if (!shift.modifier().empty())
@@ -747,7 +728,7 @@ struct fmt::formatter<arancini::output::dynamic::arm64::shift_operand> : public 
 };
 
 template <>
-struct fmt::formatter<arancini::output::dynamic::arm64::conditional_operand> : public fmt::formatter<std::string_view> {
+struct fmt::formatter<arancini::output::dynamic::arm64::conditional_operand> final : public fmt::formatter<std::string_view> {
     template <typename FCTX>
     format_context::iterator format(const arancini::output::dynamic::arm64::conditional_operand &conditional, FCTX &format_ctx) const {
         return fmt::format_to(format_ctx.out(), "{}", conditional.condition());
@@ -757,15 +738,15 @@ struct fmt::formatter<arancini::output::dynamic::arm64::conditional_operand> : p
 // FIXME: this works; but it's not well implemented
 // immediate_operand is just a wrapper over a value, it should format like the value that it wraps
 template <>
-struct fmt::formatter<arancini::output::dynamic::arm64::immediate_operand> : public fmt::formatter<std::string_view> {
+struct fmt::formatter<arancini::output::dynamic::arm64::immediate_operand> final : public fmt::formatter<std::string_view> {
     template <typename FCTX>
     format_context::iterator format(const arancini::output::dynamic::arm64::immediate_operand &immediate, FCTX &format_ctx) const {
-        return fmt::format_to(format_ctx.out(), "{:#}", immediate.value());
+        return fmt::format_to(format_ctx.out(), "#{:#x}", immediate.value());
     }
 };
 
 template <>
-struct fmt::formatter<arancini::output::dynamic::arm64::operand> : public fmt::formatter<std::string_view> {
+struct fmt::formatter<arancini::output::dynamic::arm64::operand> final : public fmt::formatter<std::string_view> {
     template <typename FCTX>
     format_context::iterator format(const arancini::output::dynamic::arm64::operand &operand, FCTX &format_ctx) const {
         return std::visit(
@@ -776,9 +757,13 @@ struct fmt::formatter<arancini::output::dynamic::arm64::operand> : public fmt::f
 };
 
 template <>
-struct fmt::formatter<arancini::output::dynamic::arm64::instruction> : public fmt::formatter<std::string_view> {
+struct fmt::formatter<arancini::output::dynamic::arm64::instruction> final : public fmt::formatter<std::string_view> {
     template <typename FCTX>
     format_context::iterator format(const arancini::output::dynamic::arm64::instruction &insn, FCTX &format_ctx) const {
+        // This causes a gap in the instruction stream to appear; might cause a small slowdown
+        // TODO: investigate
+        if (insn.is_dead()) return format_ctx.out();
+
         if (insn.comment().empty())
             return fmt::format_to(format_ctx.out(), "{} {}", insn.opcode(), fmt::join(insn.operands(), ", "));
         return fmt::format_to(format_ctx.out(), "{} {} // {}", insn.opcode(), fmt::join(insn.operands(), ", "), insn.comment());
