@@ -659,8 +659,9 @@ public:
 
     void insert_sep(const std::string &sep) { label(sep); }
 
-    void insert_comment(std::string_view comment) {
-        append(instruction(fmt::format("// {}", comment)));
+    template <typename... Args>
+    void insert_comment(std::string_view format, Args&&... args) {
+        append(instruction(fmt::format("// {}", fmt::format(format, std::forward<Args>(args)...))));
     }
 
     bool has_label(const std::string &label) {

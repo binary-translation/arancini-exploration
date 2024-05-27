@@ -190,7 +190,7 @@ void arm64_translation_context::end_instruction() {
         for (const auto* node : nodes_)
             materialise(node);
     } catch (std::exception &e) {
-        util::global_logger.fatal("Exception raised when translating instruction {}: {}\n",
+        util::global_logger.fatal("Exception raised when translating instruction {}:\n{}\n",
                                   current_instr_disasm_, e.what());
         // TODO: fmt::format should not be needed here, but fmt::join is lazy
         util::global_logger.fatal(fmt::format("Current instruction stream:\n{}\n",
@@ -212,7 +212,7 @@ void arm64_translation_context::end_block() {
 
         builder_.emit(writer());
     } catch (std::exception &e) {
-        util::global_logger.fatal("Exception raised when translating instruction block: {}\n",
+        util::global_logger.fatal("Exception raised when translating instruction block:\n{}\n",
                                   e.what());
         // TODO: fmt::format should not be needed here, but fmt::join is lazy
         util::global_logger.fatal(fmt::format("Current instruction stream:\n{}\n",
@@ -341,7 +341,7 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
         throw arm64_exception("Cannot load vectors with individual elements larger than 64-bits");
     }
 
-    std::string comment(fmt::format("read register: {}", n.regname()));
+    auto comment = fmt::format("read register: {}", n.regname());
 
     auto &dest_vregs = alloc_vregs(n.val());
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
@@ -389,7 +389,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     // We now down-cast it.
     //
     // There should be clear type promotion and type coercion.
-    std::string comment{fmt::format("write register: {}", n.regname())};
+    auto comment = fmt::format("write register: {}", n.regname());
 
     for (std::size_t i = 0; i < src_vregs.size(); ++i) {
         if (src_vregs[i].type().width() > n.value().type().width() &&
@@ -433,7 +433,7 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
 
     const auto &addr_vreg = add_membase(addr_vregs[0]);
 
-    auto comment = "read memory";
+    std::string_view comment = "read memory";
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
         size_t width = dest_vregs[i].type().width();
 
@@ -472,7 +472,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
     const auto &addr_vreg = add_membase(addr_vregs[0]);
     const auto &src_vregs = materialise_port(n.value());
 
-    auto comment = "write memory";
+    std::string_view comment = "write memory";
     for (std::size_t i = 0; i < src_vregs.size(); ++i) {
         size_t width = src_vregs[i].type().width();
 
@@ -564,7 +564,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
     alloc_vreg(n.carry(),    flag_map.at(reg_offsets::CF));
 
     // TODO: check
-    const char* mod = nullptr;
+    std::string_view mod {};
     if (n.op() == binary_arith_op::add || n.op() == binary_arith_op::sub) {
         switch (n.val().type().element_width()) {
         case 8:
@@ -582,7 +582,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         }
     }
 
-    const char *cset_type = nullptr;
+    std::string_view cset_type {};
     switch(n.op()) {
     case binary_arith_op::cmpeq:
         cset_type = "eq";
@@ -605,7 +605,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             break;
         }
 
-        if (mod == nullptr)
+        if (mod.empty())
             builder_.adds(dest_vreg, lhs_vreg, rhs_vreg);
         else
             builder_.adds(dest_vreg, lhs_vreg, rhs_vreg, shift_operand(mod, immediate<0, 16>()));
@@ -613,7 +613,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             builder_.adcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
         break;
 	case binary_arith_op::sub:
-        if (mod == nullptr)
+        if (mod.empty())
             builder_.subs(dest_vreg, lhs_vreg, rhs_vreg);
         else
             builder_.subs(dest_vreg, lhs_vreg, rhs_vreg, shift_operand(mod, immediate<0, 16>()));
@@ -1153,10 +1153,11 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
                     std::to_string(n.source_value().type().element_width()));
         }
 
-        builder_.insert_comment("Sign-extend from " +
-                                std::to_string(n.source_value().type().nr_elements()) + "x" + std::to_string(n.source_value().type().element_width())
-                                + " to " +
-                                std::to_string(n.val().type().nr_elements()) + "x" + std::to_string(n.val().type().element_width()));
+        builder_.insert_comment("Sign-extend from {}x{} to {}x{}",
+                                n.source_value().type().nr_elements(),
+                                n.source_value().type().element_width(),
+                                n.val().type().nr_elements(),
+                                n.val().type().element_width());
 
         // IDEA:
         // 1. Sign-extend reasonably
@@ -1214,10 +1215,10 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         // value of src_vreg
         // A simple mov is sufficient (eliminated anyway by the register
         // allocator)
-        builder_.insert_comment("Bitcast from " +
-                                 std::to_string(n.source_value().type().nr_elements()) + "x" + std::to_string(n.source_value().type().element_width())
-                                + " to " +
-                                std::to_string(n.val().type().nr_elements()) + "x" + std::to_string(n.val().type().element_width()));
+        builder_.insert_comment("Bitcast from {}x{} to {}x{}",
+                                n.source_value().type().nr_elements(),
+                                n.source_value().type().element_width(),
+                                n.val().type().nr_elements(), n.val().type().element_width());
 
         if (n.val().type().element_width() > n.source_value().type().element_width()) {
             // Destination consists of fewer elements but of larger widths
@@ -1258,10 +1259,11 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
                     std::to_string(n.source_value().type().element_width()));
         }
 
-        builder_.insert_comment("Zero-extend from " +
-                                 std::to_string(n.val().type().nr_elements()) + "x" + std::to_string(n.val().type().element_width())
-                                + " to " +
-                                std::to_string(n.source_value().type().nr_elements()) + "x" + std::to_string(n.source_value().type().element_width()));
+        builder_.insert_comment("Zero-extend from {}x{} to {}x{}",
+                                n.val().type().nr_elements(),
+                                n.val().type().element_width(),
+                                n.source_value().type().nr_elements(),
+                                n.source_value().type().element_width());
 
         // IDEA:
         // 1. Zero-extend reasonably
