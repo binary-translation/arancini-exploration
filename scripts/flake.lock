@@ -37,11 +37,11 @@
     "phoenix-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1716741532,
-        "narHash": "sha256-7RLOXtJEU9BD76JhEc+Y8iHtpaY6BCIjTEOsXKdGcMA=",
+        "lastModified": 1716888159,
+        "narHash": "sha256-K/aAlYvKU5+UjvfX2N/v9S4+oxiycNtxGgol4JfL5XI=",
         "owner": "ReimersS",
         "repo": "phoenix",
-        "rev": "b5bfd54395bdec85ce42af3b0725984beff0d41a",
+        "rev": "f91305e539e489b089270b5af2b5f7427c6a3fad",
         "type": "github"
       },
       "original": {
