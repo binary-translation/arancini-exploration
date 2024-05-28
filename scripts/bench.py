@@ -6,16 +6,20 @@ import subprocess as sp
 from datetime import datetime, timedelta
 import os
 import argparse
+import configparser
 
 def main():
     parser = argparse.ArgumentParser(description='Run benchmarks')
-    parser.add_argument('name', metavar='n', action="store",
+    parser.add_argument('name', metavar='n', action="store", nargs='?',
                         help='special name for the symlink', default="latest")
     args = parser.parse_args()
     linkname = args.name
     csvfile = setup(linkname)
+
+    config = configparser.ConfigParser()
+    config.read("scripts/conf.ini")
     build()
-    run(csvfile)
+    run(csvfile, config)
     clean(csvfile)
 
 def setup(linkname):
@@ -35,7 +39,7 @@ def setup(linkname):
         c.write(r.stdout.decode("utf-8"))
 
     csvfile = open(f"bench/{time_str}/times.csv", "w+")
-    fieldnames = [ "benchmark", "emulator", "time" ]
+    fieldnames = [ "benchmark", "emulator", "time", "type", "threads" ]
     writer = csv.DictWriter(csvfile, fieldnames)
     writer.writeheader()
     return csvfile
@@ -44,54 +48,77 @@ def setup(linkname):
 def build():
     pass
 
-def do_run(progs, argf, name):
+def do_run(progs, argf, name, env, config):
     print(f"Running {progs} ...")
     args = ""
     if argf != "":
-        args = "test/phoenix/"+name+"_datafiles/"+argf
+        args = config['x86']['PHOENIX_X86_PATH']+"/"+name+"_datafiles/"+argf
     start = datetime.now()
-    out = sp.run(progs + [args], capture_output=True)
+    env["ARANCINI_ENABLE_LOG"] = "false";
+    try:
+        out = sp.run(progs + [args], capture_output=True, env=env, timeout=1800)
+    except:
+        return -1
     end = datetime.now()
     dif = end - start
     if out.returncode != 0:
         print(out.stderr)
-        dif = timedelta(0)
+        return -1
     return dif/timedelta(microseconds=1)
 
-def run(csvfile): 
+ty = { "":"map-reduce", "-seq":"sequential", "-pthread":"pthreads" }
+def run(csvfile, config): 
     progs = {"histogram":"small.bmp", "kmeans":"", "pca":"", "string_match":"key_file_50MB.txt", "matrix_multiply":""}
-    fieldnames = [ "benchmark", "emulator", "time" ]
+    fieldnames = [ "benchmark", "emulator", "time", "type", "threads"]
     writer = csv.DictWriter(csvfile, fieldnames)
+
+    PHOENIX_DIR_PATH = config['x86']['PHOENIX_X86_PATH']
+    ARANCINI_RESULT_PATH = config['arancini']['ARANCINI_RESULT_PATH'];
+    ARANCINI_OUT_PATH = config['translations']['ARANCINI_OUT_PATH'];
+    MCTOLL_OUT_PATH = config['translations']['MCTOLL_OUT_PATH'];
+    QEMU_PATH = config['translations']['QEMU_PATH'];
+
     for p in progs.keys():
         f = progs[p]
-        for i in range(50):
-            #native
-            prog = ["/share/simonk/static-musl-phoenix/"+p+"-seq"]
-            #prog = ["/share/sebastian/phoenix/"+p+"-seq"]
-            dif = do_run(prog, f, p)
-            writer.writerow({"benchmark":p, "emulator":"native", "time":str(dif)})
+        for suffix in ["", "-seq", "-pthread"]:
+            th = [1]
+            if suffix != "-seq":
+                th = [1, 2, 4, 8];
+            
+            for threads in th:
+                for i in range(3):
+                    #native
+                    env = os.environ
+                    prog = ["taskset", "-c", f"1-{threads}", config["native"]["PHOENIX_DIR_PATH"]+p+suffix]
+                    dif = do_run(prog, f, p, env, config)
+                    writer.writerow({"benchmark":p, "emulator":"native", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
 
-            #txlat
-            prog = ["./"+p+"-seq-static-musl-riscv.out"]
-            #prog = ["./"+p+"-seq-static-musl-arm.out"]
-            dif = do_run(prog, f, p)
-            writer.writerow({"benchmark":p, "emulator":"Arancini", "time":str(dif)})
-            csvfile.flush()
+                    #txlat
+                    env["LD_LIBRARY_PATH"] = ARANCINI_RESULT_PATH+"lib"
+                    prog = ["taskset", "-c", f"1-{threads}", ARANCINI_OUT_PATH+p+suffix+".out"]
+                    dif = do_run(prog, f, p, env, config)
+                    writer.writerow({"benchmark":p, "emulator":"Arancini", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
+                    csvfile.flush()
 
-            #txlat-dyn
-            if p not in [ ]:
-                prog = ["./"+p+"-seq-static-musl-riscv-dyn.out"]
-                #prog = ["./"+p+"-seq-static-musl-arm-dyn.out"]
-                dif = do_run(prog, f, p)
-                writer.writerow({"benchmark":p, "emulator":"Arancini-Dyn", "time":str(dif)})
-                csvfile.flush()
+                    #txlat-dyn
+                    env["LD_LIBRARY_PATH"] = ARANCINI_RESULT_PATH+"/lib"
+                    prog = ["taskset", "-c", f"1-{threads}", ARANCINI_OUT_PATH+p+suffix+"-dyn.out"]
+                    dif = do_run(prog, f, p, env, config)
+                    writer.writerow({"benchmark":p, "emulator":"Arancini-Dyn", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
+                    csvfile.flush()
 
-            #QEMU
-            prog = ["/nix/store/i2k6sywwzf0vka7p09asf66g651kmxa8-qemu-riscv64-unknown-linux-gnu-8.0.0/bin/qemu-x86_64", "/share/simonk/static-musl-phoenix/"+p+"-seq-static-musl"] 
-            #prog = ["qemu-x86_64", "/share/simonk/static-musl-phoenix/"+p+"-seq-static-musl"] 
-            dif = do_run(prog, f, p)
-            writer.writerow({"benchmark":p, "emulator":"QEMU", "time":str(dif)})
-            csvfile.flush()
+                    #QEMU
+                    env["LD_LIBRARY_PATH"] = PHOENIX_DIR_PATH
+                    prog = ["taskset", "-c", f"1-{threads}", QEMU_PATH, PHOENIX_DIR_PATH+p+suffix] 
+                    dif = do_run(prog, f, p, env, config)
+                    writer.writerow({"benchmark":p, "emulator":"QEMU", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
+                    csvfile.flush()
+                    
+                    #MCtoll
+                    #prog = ["taskset", "-c", f"1-{threads}", MCTOLL_OUT_PATH+p+suffix+".ll.out"] 
+                    #dif = do_run(prog, f, p, env)
+                    #writer.writerow({"benchmark":p, "emulator":"mctoll", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
+                    #csvfile.flush()
 
 def clean(csvfile):
     print("Cleaning ...")

@@ -18,6 +18,9 @@
 	flake-utils.lib.eachSystem [ "x86_64-linux" "riscv64-linux" "aarch64-linux" ] (system:
 	let
 		pkgs = import nixpkgs { system = system; crossSystem = { config = system+"-musl"; }; };
+		native_pkgs = import nixpkgs { inherit system; };
+
+		qemu = native_pkgs.qemu.override { pipewireSupport=false; hostCpuTargets=["x86_64-linux-user"]; jackSupport=false; alsaSupport=false; gtkSupport=false; vncSupport=false; pulseSupport=false; smartcardSupport=false; spiceSupport=false; glusterfsSupport=false; openGLSupport=false; sdlSupport=false; usbredirSupport=false; xenSupport=false; cephSupport=false; virglSupport=false;};
 
 		histogram_datafiles = builtins.fetchurl {
 			url = "http://csl.stanford.edu/~christos/data/histogram.tar.gz";
@@ -43,12 +46,15 @@
 	{
 	devShell =
 		pkgs.mkShell.override { stdenv = pkgs.llvmPackages_15.stdenv; } {
-			packages = [];
+			packages = [
+				qemu
+			];
 		};
 	
 	phoenix =
 		pkgs.llvmPackages_15.stdenv.mkDerivation {
 			name = "phoenix";
+			hardeningDisable = [ "all" ];
 
 			src = phoenix-src;
 			nativeBuildInputs = [
