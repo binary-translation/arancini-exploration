@@ -48,6 +48,12 @@
 		pkgs.mkShell.override { stdenv = pkgs.llvmPackages_15.stdenv; } {
 			packages = [
 				qemu
+				(native_pkgs.python3.withPackages (python-pkgs: [
+											python-pkgs.pandas
+											python-pkgs.seaborn
+											python-pkgs.matplotlib
+											python-pkgs.notebook
+				]))
 			];
 		};
 	
