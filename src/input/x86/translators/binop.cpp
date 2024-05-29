@@ -573,13 +573,15 @@ void binop_translator::do_translate()
 	}
 
 
-		// FIXME Seems very weird (endless loop?)
-	builder().insert_br(builder().insert_label("do_checks"));
+	auto next = (br_node *)builder().insert_br(nullptr);
+	auto do_checks = builder().insert_label("do_checks");
+	next->add_br_target(do_checks);
+
 	auto cnd = builder().insert_cmpne(z->val(), src0->val());
 	auto cmp0 = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
 	cnd = builder().insert_cmpeq(z->val(), src1->val());
 	auto both_0 = (cond_br_node *)builder().insert_cond_br(cnd->val(), nullptr);
-	auto next = (br_node *)builder().insert_br(nullptr);
+	next = (br_node *)builder().insert_br(nullptr);
 
 	auto check_for_nan = builder().insert_label("check_for_nan");
 	auto check_for_nan1 = builder().insert_label("check_for_nan");
