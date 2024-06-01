@@ -45,7 +45,9 @@ void txlat_engine::process_options(arancini::output::o_static::static_output_eng
 	}
 }
 
-static void run_or_fail(std::string_view cmd) {
+template <typename... Args>
+static void run_or_fail(Args&&... args) {
+    auto cmd = fmt::format(std::forward<Args>(args)...);
     util::global_logger.info("Running: {}...\n", cmd);
 	if (std::system(cmd.data()) != 0) {
 		throw std::runtime_error(fmt::format("error whilst running subcommand {}", cmd));
@@ -220,13 +222,16 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
 	if (cmdline.count("no-script")) {
 		if (elf.type() == elf_type::exec) {
-			run_or_fail(fmt::format("{} -o {} -no-pie -latomic {} -larancini-runtime -L{} -Wl,-rpath={} {} {}", cxx_compiler,
-                        output, intermediate_file->name(), arancini_runtime_lib_dir,
-                        arancini_runtime_lib_dir, debug_info, verbose_link));
+			run_or_fail("{} -o {} -no-pie -latomic {} -larancini-runtime -L{} -Wl,-rpath={} {} {}",
+                        cxx_compiler, output, intermediate_file->name(),
+                        arancini_runtime_lib_dir, arancini_runtime_lib_dir,
+                        debug_info, verbose_link);
 		} else if (elf.type() == elf::elf_type::dyn) {
-			run_or_fail(fmt::format("{} -o {} -shared {} -L {} -l arancini-runtime -Wl,-rpath={} {} {}", cxx_compiler,
-                        output, intermediate_file->name(), arancini_runtime_lib_dir,
-                        arancini_runtime_lib_dir, debug_info, verbose_link));
+			run_or_fail("{} -o {} -shared {} -L {} -l arancini-runtime -Wl,-rpath={} {} {}",
+                        cxx_compiler, output, intermediate_file->name(),
+                        arancini_runtime_lib_dir,
+                        arancini_runtime_lib_dir,
+                        debug_info, verbose_link);
 		}
 		return;
 	}
@@ -263,18 +268,18 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
 		if (elf.type() == elf::elf_type::exec) {
 			// Generate the final output binary by compiling everything together.
-            run_or_fail(fmt::format("{} -o {} -no-pie -latomic {} {} {} -larancini-runtime -L {} -Wl,-T,{}.lds,-rpath={} {} {}",
+            run_or_fail("{} -o {} -no-pie -latomic {} {} {} -larancini-runtime -L {} -Wl,-T,{}.exec.lds,-rpath={} {} {}",
                         cxx_compiler, output, intermediate_file->name(), fmt::join(libs, " "), phobjsrc->name(),
-                        arancini_runtime_lib_dir, architecture, arancini_runtime_lib_dir, debug_info, verbose_link));
+                        arancini_runtime_lib_dir, architecture, arancini_runtime_lib_dir, debug_info, verbose_link);
 		} else if (elf.type() == elf::elf_type::dyn) {
 			// Generate the final output library by compiling everything together.
-			std::string tls_defines = tls.empty() ? ""
-                                                  : fmt::format(" -DTLS_LEN={} -DTLS_SIZE={} -DTLS_ALIGN={}",
-                                                                tls[0]->data_size(), tls[0]->mem_size(), tls[0]->align());
+			auto tls_defines = tls.empty() ? ""
+                                            : fmt::format(" -DTLS_LEN={} -DTLS_SIZE={} -DTLS_ALIGN={}",
+                                                          tls[0]->data_size(), tls[0]->mem_size(), tls[0]->align());
 
-			run_or_fail(fmt::format("{} -o {} -fPIC -shared {} {} {} init_lib.c -L {} -larancini-runtime {} -Wl,-T,lib.lds,-rpath={} {}",
+			run_or_fail("{} -o {} -fPIC -shared {} {} {} init_lib.c -L {} -larancini-runtime {} -Wl,-T,lib.lds,-rpath={} {}",
                         cxx_compiler, output, intermediate_file->name(), phobjsrc->name(), tls_defines,
-                        arancini_runtime_lib_dir, fmt::join(libs, " "), arancini_runtime_lib_dir, debug_info));
+                        arancini_runtime_lib_dir, fmt::join(libs, " "), arancini_runtime_lib_dir, debug_info);
 		} else {
 			throw std::runtime_error("Input elf type must be either an executable or shared object.");
 		}
@@ -286,10 +291,10 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		}
 
 		// Generate the final output binary by compiling everything together.
-        run_or_fail(fmt::format("{} -o {} -no-pie -latomic -static-libgcc -static-libstdc++ {} {} -L {} "
-                                "-larancini-runtime-static -larancini-input-x86-static -larancini-output-riscv64-static -larancini-ir-static -L {}"
-                                "/../../obj -l xed {} -Wl,-T,{}.lds,-rpath={}", cxx_compiler, output, intermediate_file->name(),
-                                phobjsrc->name(), arancini_runtime_lib_dir, arancini_runtime_lib_dir, debug_info, architecture, arancini_runtime_lib_dir));
+        run_or_fail("{} -o {} -no-pie -latomic -static-libgcc -static-libstdc++ {} {} -L {} "
+                    "-larancini-runtime-static -larancini-input-x86-static -larancini-output-riscv64-static -larancini-ir-static -L {}"
+                    "/../../obj -l xed {} -Wl,-T,{}.exec.lds,-rpath={}", cxx_compiler, output, intermediate_file->name(),
+                    phobjsrc->name(), arancini_runtime_lib_dir, arancini_runtime_lib_dir, debug_info, architecture, arancini_runtime_lib_dir);
 	}
 
 	// Patch relocations in result binary

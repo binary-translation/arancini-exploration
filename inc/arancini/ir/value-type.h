@@ -12,7 +12,7 @@ enum class value_type_class : std::uint8_t { none, signed_integer, unsigned_inte
 class value_type {
 public:
     using size_type = std::size_t;
-    using value_type_class = value_type_class;
+    using value_type_class = arancini::ir::value_type_class;
 
     [[nodiscard]]
 	static constexpr value_type v() { return value_type(value_type_class::none, 0); }

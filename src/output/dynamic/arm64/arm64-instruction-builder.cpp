@@ -100,6 +100,16 @@ private:
     }
 };
 
+// Formatter specializations
+template <>
+struct fmt::formatter<register_set> final : public fmt::formatter<std::string_view> {
+    template <typename FCTX>
+    format_context::iterator format(register_set regset, FCTX &format_ctx) const {
+        fmt::format_to(format_ctx.out(), "General Purpose Registers state: {}\n", regset.gpr_state());
+        return fmt::format_to(format_ctx.out(), "Floating Point Registers state: {}", regset.fp_state());
+    }
+};
+
 class allocation_manager {
 public:
     allocation_manager(register_set regset): regset_(regset)
@@ -320,14 +330,4 @@ void instruction_builder::allocate() {
         }
 	}
 }
-
-// Formatter specializations
-template <>
-struct fmt::formatter<register_set> final : public fmt::formatter<register_set::base_type> {
-    template <typename FCTX>
-    format_context::iterator format(register_set regset, FCTX &format_ctx) const {
-        fmt::format_to(format_ctx.out(), "General Purpose Registers state: {}\n", regset.gpr_state());
-        return fmt::format_to(format_ctx.out(), "Floating Point Registers state: {}", regset.fp_state());
-    }
-};
 
