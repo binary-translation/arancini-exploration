@@ -14,6 +14,44 @@
 
 namespace util {
 
+namespace {
+
+template <typename Original, typename... Types>
+struct equivalent_integer_helper;
+
+template <typename Original, typename Current, typename... Rest>
+struct equivalent_integer_helper<Original, Current, Rest...> {
+private:
+    using next = equivalent_integer_helper<Original, Rest...>;
+public:
+	using type = std::conditional_t<sizeof(Original) == sizeof(Current), Current, typename next::type>;
+
+	static_assert(!std::is_same_v<type, void>,
+    "No equivalent integer type exists for supplied type");
+};
+
+template <typename Original, typename T>
+struct equivalent_integer_helper<Original, T> {
+    using type = std::conditional_t<(sizeof(T) == sizeof(Original)), T, void>;
+
+    static_assert(!std::is_same_v<type, void>,
+    "No equivalent integer type exists for supplied type");
+};
+
+// TODO: check this for performance
+template <class... Args>
+struct variant_cast_proxy {
+    std::variant<Args...> v;
+
+    template <class... SuperSetArgs>
+    operator std::variant<SuperSetArgs...>() const {
+        return std::visit([](auto&& arg) -> std::variant<SuperSetArgs...> { return arg ; },
+                          v);
+    }
+};
+
+} // empty namespace
+
 // Custom type trait to check if a type is a std::tuple
 template<typename T>
 struct is_tuple : std::false_type {};
@@ -43,17 +81,8 @@ inline bool case_ignore_string_equal(const std::string &a, const std::string &b)
 }
 
 // Variant converter
-template <class... Args>
-struct variant_cast_proxy {
-    std::variant<Args...> v;
-
-    template <class... SuperSetArgs>
-    operator std::variant<SuperSetArgs...>() const {
-        return std::visit([](auto&& arg) -> std::variant<SuperSetArgs...> { return arg ; },
-                          v);
-    }
-};
-
+//
+// Useful for casting between variants containing different types
 template <class... Args>
 auto variant_cast(const std::variant<Args...>& v) -> variant_cast_proxy<Args...> {
     return {v};
@@ -95,12 +124,21 @@ constexpr To bitcast(const From &from) noexcept {
         return __builtin_bit_cast(To, from);
     } else {
         // Source: https://github.com/Cons-Cat/libCat/blob/686da771a1d2cfbdc144ded75e824c538248fbf1/src/libraries/utility/implementations/bit_cast.tpp#L30C7-L33C22
+        // TODO: the builtin_memcpy here needs to know that sizeof(To) == sizeof(From)
         To* p_to = static_cast<To*>(static_cast<void*>(const_cast<std::remove_const_t<From>*>(__builtin_addressof(from))));
         __builtin_memcpy(p_to, __builtin_addressof(from), sizeof(To));
         return *p_to;
     }
 #endif
 }
+
+template <typename T, std::enable_if_t<std::is_arithmetic_v<T>, int> = 0>
+struct equivalent_integer {
+    using type = typename equivalent_integer_helper<T, int, long, long long>::type;
+};
+
+template <typename T>
+using equivalent_integer_t = typename equivalent_integer<T>::type;
 
 } // namespace util
 
