@@ -24,6 +24,8 @@ function (get_keystone)
     FetchContent_MakeAvailable(keystone)
 
     set(BUILD_LIBS_ONLY ON CACHE BOOL "Disable test build" FORCE)
+    # TODO: specify LLVM_TARGETS_TO_BUILD to build only specific targets
+    # Source: https://github.com/keystone-engine/keystone/issues/545
     add_subdirectory(${Keystone_DIR} ${Keystone_BINARY_DIR})
 endfunction ()
 

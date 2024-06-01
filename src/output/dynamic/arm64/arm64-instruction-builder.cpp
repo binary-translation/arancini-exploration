@@ -3,9 +3,7 @@
 #include <arancini/output/dynamic/arm64/arm64-instruction.h>
 #include <arancini/output/dynamic/arm64/arm64-translation-context.h>
 
-#include <array>
 #include <bitset>
-#include <utility>
 #include <type_traits>
 #include <unordered_map>
 
@@ -68,6 +66,7 @@ public:
 
     using base_type = std::bitset<register_operand::physical_register_count>;
 
+    [[nodiscard]]
     register_operand::register_index allocate(const register_operand::register_type t) {
         auto &base = allocation_base(t);
 
@@ -80,6 +79,13 @@ public:
     inline void deallocate(register_operand reg) {
         allocation_base(reg.type()).flip(reg.index());
     }
+
+
+    [[nodiscard]]
+    base_type gpr_state() const noexcept { return scalar_registers_; }
+
+    [[nodiscard]]
+    base_type fp_state() const noexcept { return float_registers_; }
 private:
     std::bitset<register_operand::physical_register_count> scalar_registers_;
     std::bitset<register_operand::physical_register_count> neon_registers_;
@@ -100,6 +106,7 @@ public:
     { }
 
     // Modifiers
+    [[nodiscard]]
     register_operand allocate(const register_operand &vreg) {
         auto allocation = register_operand{regset_.allocate(vreg.type()), vreg.type()};
 
@@ -110,6 +117,11 @@ public:
     }
 
     inline void deallocate(register_operand reg) {
+        // Do nothing when register not tracked by register allocator
+        // TODO: check register allocator behaviour when intermixing hardcoded def() physical registers
+        // with use() virtual registers
+        if (current_allocations_.find(reg) == current_allocations_.end()) return;
+
         current_allocations_.erase(current_allocations_.at(reg));
         current_allocations_.erase(reg);
 
@@ -117,11 +129,15 @@ public:
     }
 
     // Lookup
+    [[nodiscard]]
     const register_operand *get_allocation(const register_operand &vreg) {
         if (current_allocations_.count(vreg))
             return &current_allocations_.at(vreg);
         return nullptr;
     }
+
+    [[nodiscard]]
+    register_set state() const noexcept { return regset_; }
 private:
     register_set regset_;
 
@@ -164,7 +180,7 @@ struct eliminate_moves {
 // 1. Iterate in reverse over the instruction stream with virtual registers
 //
 // -- def() allocation
-// 2. For each def() (a virtual register), find a previous allocation to corresponds to a use()
+// 2. For each def() (a virtual register), find a previous allocation that corresponds to a use()
 // 3. If a previous allocation exists; allocate it to the same physical register
 // 4. If no previous allocation exists; the def() has no corresponding use() later in the
 // instruction stream and the instruction can be eliminated.
@@ -184,14 +200,14 @@ void instruction_builder::allocate() {
 	// reverse linear scan allocator
     util::global_logger.debug("Performing register allocation for generated instructions\n");
 
-    // All registers can be used except:
-    // SP (x31),
-    // FP (x29),
-    // zero (x31)
-    // Return to trampoline (x30)
-    // Memory base (x18)
-    // FIXME
-    allocation_manager allocator {register_set{0x1FBFFFFF, 0xFFFFFFFF}};
+    // Integer registers cannot be allocated (special purpose):
+    // Platform register (x18)
+    // Guest memory base (x28)
+    // Context register base (x29)
+    // Link register - return address to trampoline (x30)
+    // SP/Zero (x31)
+    // All floating-point registers may be allocated
+    allocation_manager allocator {register_set{0xFFBFFFF, 0xFFFFFFFF}};
 
 	for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
 		auto &insn = *RI;
@@ -199,21 +215,22 @@ void instruction_builder::allocate() {
         bool unused_keep = false;
 
         // TODO: fails
-        // util::global_logger.debug("Allocating instruction {}\n", insn);
-		for (auto &o : insn.operands()) {
-            if (o.is_def() && !o.is_use()) {
+        util::global_logger.debug("Allocating instruction {}\n", insn);
+        util::global_logger.debug("Current allocator state:\n{}\n", allocator.state());
+		for (auto &operand : insn.operands()) {
+            if (operand.is_def() && !operand.is_use()) {
                 // Only regs can be definitions
-                if (const auto *vreg = std::get_if<register_operand>(&o.get()); vreg && vreg->is_virtual()) {
-                    util::global_logger.debug("Defining value {}\n", o);
+                if (const auto *vreg = std::get_if<register_operand>(&operand.get()); vreg && vreg->is_virtual()) {
+                    util::global_logger.debug("Defining value {}\n", operand);
 
                     if (const auto *previous_allocation = allocator.get_allocation(*vreg);
                         previous_allocation)
                     {
-                        // Assign operand to previously allocated register
-                        o = *previous_allocation;
-
                         util::global_logger.debug("Assign definition {} to existing allocation {}\n",
-                                                  o, *previous_allocation);
+                                                  operand, *previous_allocation);
+
+                        // Assign operand to previously allocated register
+                        operand = *previous_allocation;
 
                         // Allocation not needed beyond this point
                         allocator.deallocate(*previous_allocation);
@@ -222,16 +239,18 @@ void instruction_builder::allocate() {
                     } else if (insn.is_keep()) {
                         // No previous allocation: no users of this definition exist
                         // Need to allocate anyway; since instruction is marked as keep()
-                        util::global_logger.debug("No previous allocation exists for 'keep' definition {}\n", o);
+                        util::global_logger.debug("No previous allocation exists for 'keep' definition {}\n",
+                                                  operand);
 
                         auto allocation = allocator.allocate(*vreg);
-                        o = allocation;
 
                         // Marked as unused
                         // Allocation becomes available before next instruction
                         unused_keep = true;
 
                         util::global_logger.debug("Unused definition allocated to {}\n", allocation);
+
+                        operand = allocation;
                     } else {
                         // Instruction fully unused; eliminated
                         util::global_logger.debug("Value not allocated - killing instruction {}\n", insn);
@@ -240,48 +259,55 @@ void instruction_builder::allocate() {
                     }
                 }
             } else {
-                if (const auto *vreg = std::get_if<register_operand>(&o.get()); vreg && vreg->is_virtual()) {
+                if (const auto *vreg = std::get_if<register_operand>(&operand.get()); vreg && vreg->is_virtual()) {
                     if (const auto *previous_allocation = allocator.get_allocation(*vreg);
                         previous_allocation)
                     {
-                        // Assign operand to previously allocated register
-                        o = *previous_allocation;
-
                         util::global_logger.debug("Assign reference {} to existing allocation {}\n",
-                                                  o, *previous_allocation);
+                                                  operand, *previous_allocation);
+
+                        operand = *previous_allocation;
                     } else {
                         auto allocation = allocator.allocate(*vreg);
-                        o = allocation;
 
-                        util::global_logger.debug("Assign reference {} to existing allocation {}\n",
-                                                  o, allocation);
+                        util::global_logger.debug("Assign reference {} to new allocation {}\n",
+                                                  operand, allocation);
+                        operand = allocation;
                     }
-                } else if (const auto *mem = std::get_if<memory_operand>(&o.get()); mem && mem->base_register().is_virtual()) {
+                } else if (const auto *mem = std::get_if<memory_operand>(&operand.get()); mem && mem->base_register().is_virtual()) {
                     const auto &base_vreg = mem->base_register();
                     if (const auto *previous_allocation = allocator.get_allocation(base_vreg);
                         previous_allocation)
                     {
-                        // Assign operand to previously allocated register
-                        o = memory_operand(*previous_allocation, mem->offset(), mem->addressing_mode());
-
                         util::global_logger.debug("Assign reference {} to existing allocation {}\n",
-                                                  o, *previous_allocation);
+                                                  operand, *previous_allocation);
+
+                        operand = memory_operand(*previous_allocation, mem->offset(), mem->addressing_mode());
                     } else {
                         auto allocation = allocator.allocate(base_vreg);
-                        o = memory_operand(allocation, mem->offset(), mem->addressing_mode());
 
                         util::global_logger.debug("Assign reference {} to existing allocation {}\n",
-                                                  o, allocation);
+                                                  operand, allocation);
+
+                        operand = memory_operand(allocation, mem->offset(), mem->addressing_mode());
                     }
                 }
             }
         }
 
         if (unused_keep) {
-            for (auto &o : insn.operands()) {
+			util::global_logger.debug("Instruction {} is marked as keep but not referenced below; deallocating operands\n", insn);
+
+			for (auto &o : insn.operands()) {
+                // TODO: what if this was already a physical registers?
+                // NOTE: only register considered; no aarch64 instruction defines memory area
+                // TODO: reconsider this (for propagation optimizations)
                 if (const auto *reg = std::get_if<register_operand>(&o.get()); o.is_def() && reg) {
+                    util::global_logger.debug("Deallocating register {}\n", *reg);
+
                     allocator.deallocate(*reg);
                 }
+
             }
         }
 
@@ -294,4 +320,14 @@ void instruction_builder::allocate() {
         }
 	}
 }
+
+// Formatter specializations
+template <>
+struct fmt::formatter<register_set> final : public fmt::formatter<register_set::base_type> {
+    template <typename FCTX>
+    format_context::iterator format(register_set regset, FCTX &format_ctx) const {
+        fmt::format_to(format_ctx.out(), "General Purpose Registers state: {}\n", regset.gpr_state());
+        return fmt::format_to(format_ctx.out(), "Floating Point Registers state: {}", regset.fp_state());
+    }
+};
 

@@ -334,8 +334,8 @@ public:
 		}
 	}
 
-	unsigned long const_val_i() const { return cvi_; }
-	double const_val_f() const { return cvf_; }
+	unsigned long const_val_i() const noexcept { return cvi_; }
+	double const_val_f() const noexcept { return cvf_; }
 
 	bool is_zero() const { return val().type().is_floating_point() ? cvf_ == 0 : cvi_ == 0; }
 
@@ -553,7 +553,7 @@ public:
 		}
 
 		if ((convert_type != fp_convert_type::none) && (op != cast_op::convert)) {
-			throw std::logic_error(fmt::format("convert type should be 'none' if the cast_op is not 'convert' target={}, source={}", 
+			throw std::logic_error(fmt::format("convert type should be 'none' if the cast_op is not 'convert' target={}, source={}",
                                    target_type, source_value.type()));
 		}
 
@@ -869,7 +869,7 @@ public:
 		, length_(length)
 	{
 		if (from + length - 1 > source_value_.type().width() - 1) {
-			throw std::logic_error(fmt::format("bit extract range [{}:{}] is out of bounds from source value [{}:0]", 
+			throw std::logic_error(fmt::format("bit extract range [{}:{}] is out of bounds from source value [{}:0]",
                                    from + length - 1, from, source_value_.type().width()));
 		}
 
@@ -909,7 +909,7 @@ public:
 			throw std::logic_error("width of type of incoming bits cannot be smaller than requested length");
 		}
 		if (to + length - 1 > source_value_.type().width() - 1) {
-			throw std::logic_error(fmt::format("bit insert range [{}:{}] is out of bounds in target value [{}:0]", 
+			throw std::logic_error(fmt::format("bit insert range [{}:{}] is out of bounds in target value [{}:0]",
                                    to + length - 1, to, source_value_.type().width()));
 		}
 

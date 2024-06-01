@@ -1,6 +1,7 @@
 #pragma once
 
 #include <arancini/ir/value-type.h>
+#include <arancini/input/registers.h>
 #include <arancini/output/dynamic/arm64/arm64-instruction.h>
 #include <arancini/output/dynamic/arm64/arm64-instruction-builder.h>
 
@@ -11,6 +12,9 @@
 #include <unordered_map>
 
 namespace arancini::output::dynamic::arm64 {
+
+static constexpr register_operand memory_base_reg{register_operand::x28};
+static constexpr register_operand context_block_reg{register_operand::x29};
 
 class arm64_translation_context : public translation_context {
 public:
@@ -94,12 +98,14 @@ private:
     register_operand add_membase(const register_operand &addr, const ir::value_type &t = ir::value_type::u64());
 
     template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
-    register_operand mov_immediate(T imm, ir::value_type type);
+    std::variant<register_operand, immediate_operand> move_immediate(T imm, ir::value_type type);
+
+    template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
+    register_operand move_as_register(T imm, ir::value_type type);
 
     register_operand cast(const register_operand &op, ir::value_type type);
 
-    enum class reg_offsets : std::uint16_t;
-    util::static_map<reg_offsets, register_operand, 4> flag_map;
+    util::static_map<input::x86::reg_idx, register_operand, 4> flag_map;
 };
 
 } // namespace arancini::output::dynamic::arm64

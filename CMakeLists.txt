@@ -67,7 +67,7 @@ if(NOT DEFINED ENV{FLAKE_BUILD})
 	endif ()
 	include(cmake/fadec.cmake)
 
-find_package(fmt QUIET)
+find_package(fmt 10.2.1 QUIET)
 if (NOT fmt_FOUND)
     include(cmake/fmt.cmake)
 endif ()

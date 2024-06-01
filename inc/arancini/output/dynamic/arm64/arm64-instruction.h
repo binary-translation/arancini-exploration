@@ -127,31 +127,36 @@ public:
         v31
     };
 
-    explicit register_operand(register_names_64bit reg):
-        register_operand(reg, ir::value_type::u64())
+    explicit constexpr register_operand(register_names_64bit reg):
+        index_{reg},
+        type_{ir::value_type::u64()}
     { }
 
-    explicit register_operand(register_names_32bit reg):
-        register_operand(reg, ir::value_type::u32())
+    explicit constexpr register_operand(register_names_32bit reg):
+        index_{reg},
+        type_{ir::value_type::u32()}
     { }
 
     explicit register_operand(register_names_float_64bit reg):
-        register_operand(reg, ir::value_type::f64())
+        index_{reg},
+        type_{ir::value_type::f64()}
     { }
 
     explicit register_operand(register_names_float_32bit reg):
-        register_operand(reg, ir::value_type::u32())
+        index_{reg},
+        type_{ir::value_type::f32()}
     { }
 
     explicit register_operand(register_names_neon reg):
-        register_operand(reg, ir::value_type::u128())
+        index_{reg},
+        type_{ir::value_type::u128()}
     { }
 
     explicit register_operand(special_register_names reg):
-        register_operand(reg, ir::value_type::u64())
-    {
-        special_ = true;
-    }
+        index_{reg},
+        type_{ir::value_type::u64()},
+        special_{true}
+    { }
 
     register_operand(register_index index, const ir::value_type &type):
         type_(type),
@@ -400,7 +405,7 @@ public:
     operand(const Arg &arg): operand_(arg) { }
 
     template <typename... Args>
-    operand(const std::variant<Args...> v): operand_(util::variant_cast(v)) { }
+    operand(const std::variant<Args...> &v): operand_(util::variant_cast(v)) { }
 
     base_type &get() { return operand_; }
     const base_type &get() const { return operand_; }

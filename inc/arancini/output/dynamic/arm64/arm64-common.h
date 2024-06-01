@@ -10,7 +10,7 @@ namespace arancini::output::dynamic::arm64 {
 struct arm64_exception : public std::runtime_error {
     template <typename... Args>
     arm64_exception(std::string_view format, Args&&... args):
-        std::runtime_error(fmt::format("[ARM64] {}", fmt::format(format,
+        std::runtime_error(fmt::format("[ARM64]   {}", fmt::format(format,
                                        std::forward<Args>(args)...)))
     {
     }
