@@ -171,10 +171,6 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_PCMPGTD:
   case XED_ICLASS_CMPSS:
   case XED_ICLASS_CMPSD_XMM:
-  case XED_ICLASS_MINSD:
-  case XED_ICLASS_MINSS:
-  case XED_ICLASS_MAXSD:
-  case XED_ICLASS_MAXSS:
 	  return std::make_unique<binop_translator>(builder);
 
   case XED_ICLASS_PUSH:

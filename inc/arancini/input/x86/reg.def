@@ -37,6 +37,13 @@ DEFREG(uint8_t, i8, unused3)
 DEFREG(uint64_t, i64, FS)
 DEFREG(uint64_t, i64, GS)
 
+// x87 FPU
+DEFREG(uint64_t, i64, X87_STACK_BASE)
+DEFREG(uint16_t, i16, X87_CTRL)
+DEFREG(uint16_t, i16, X87_STS)
+DEFREG(uint16_t, i16, X87_TAG)
+DEFREG(uint16_t, i16, unused4)
+
 // ZMMs
 DEFREG(uint512_t, i512, ZMM0)
 DEFREG(uint512_t, i512, ZMM1)
@@ -70,13 +77,6 @@ DEFREG(uint512_t, i512, ZMM28)
 DEFREG(uint512_t, i512, ZMM29)
 DEFREG(uint512_t, i512, ZMM30)
 DEFREG(uint512_t, i512, ZMM31)
-
-// x87 FPU
-DEFREG(uint64_t, i64, X87_STACK_BASE)
-DEFREG(uint16_t, i16, X87_CTRL)
-DEFREG(uint16_t, i16, X87_STS)
-DEFREG(uint16_t, i16, X87_TAG)
-DEFREG(uint16_t, i16, unused4)
 
 // Control registers
 DEFREG(uint64_t, i64, XCR0)

@@ -96,63 +96,6 @@ static void init_signals()
 	}
 }
 
-// Represents the metadata that stored in the host binary about the guest program headers.
-struct guest_program_header_metadata {
-	unsigned long load_address;
-	unsigned long file_size;
-	unsigned long memory_size;
-	char data[];
-} __attribute__((packed));
-
-// The symbol that contains the list of pointers to the guest program header metadata structures.
-// extern "C" const guest_program_header_metadata *__GPH[];
-
-/*
- * Loads a guest program header into emulated memory.
- */
-static void load_gph(execution_context *ctx, const guest_program_header_metadata *md)
-{
-	if (md->file_size > md->memory_size) {
-		throw std::runtime_error("cannot have gph file size larger than memory size");
-	}
-
-	// Create the guest memory region where the program header will be loaded into.
-	// This should be at the specified load address, and of the specified memory size.
-	void *ptr = ctx->add_memory_region(md->load_address, md->memory_size);
-
-	// Debugging information
-    util::global_logger.info("loading gph load-addr={:#x} mem-size={} end={:#x} file-size={} ", 
-                             md->load_address, md->memory_size, (md->load_address + md->memory_size),
-                             md->file_size, fmt::ptr(ptr));
-
-    // FIXME: workaround for possible bug in {fmt}
-    if (util::global_logger.get_level() <= util::global_logging::levels::info) 
-        util::global_logger.log("target={}\n", fmt::ptr(ptr));
-
-	// Copy the data from the host binary into the new allocated region of emulated
-	// guest memory.  This should be only of the specified file size, because the file size
-	// of the data can be smaller than the memory size (e.g. BSS).
-	std::memcpy(ptr, md->data, md->file_size);
-}
-
-/*
- * Loads the guest program headers from the host binary into emulated guest memory.
- */
-static void load_guest_program_headers(execution_context *ctx)
-{
-	//	// Get a pointer to the list of pointers to the metadata structures.
-	//	const guest_program_header_metadata **gphp = __GPH;
-	//
-	//	// Loop over the pointers until null.
-	//	while (*gphp) {
-	//		// Trigger loading of the GPH.
-	//		load_gph(ctx, *gphp);
-	//
-	//		// Advance the pointer.
-	//		gphp++;
-	//	}
-}
-
 static uint64_t setup_guest_stack(int argc, char **argv, intptr_t stack_top, execution_context *execution_context, int start)
 {
 	// Stack pointer always needs to be 16-Byte aligned per ABI convention
@@ -264,16 +207,16 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 
     util::global_logger.info("arancini: dbt: initialise\n");
 
-	// Consume args until '--'
-	int start = 1;
+	bool optimise = true;
 
-	for (int i = 1; i < argc; ++i) {
-		if (strcmp(argv[i], "--") == 0) {
-			start = i + 1;
-		}
+	flag = getenv("ARANCINI_OPTIMIZE_FLAGS");
+
+	if (flag) {
+		if (util::case_ignore_string_equal(flag, "true"))
+			optimise = true;
+		else if (util::case_ignore_string_equal(flag, "false"))
+			optimise = false;
 	}
-
-	bool optimise = start > 1;
 
 	// Capture interesting signals, such as SIGSEGV.
 	init_signals();
@@ -297,7 +240,7 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
 	x86_state->PC = entry_point;
 
 	x86_state->RSP
-		= setup_guest_stack(argc, argv, reinterpret_cast<intptr_t>(stack_base) - reinterpret_cast<intptr_t>(ctx_->get_memory_ptr(0)) + stack_size, ctx_, start);
+		= setup_guest_stack(argc, argv, reinterpret_cast<intptr_t>(stack_base) - reinterpret_cast<intptr_t>(ctx_->get_memory_ptr(0)) + stack_size, ctx_, 1);
 	//x86_state->GS = (unsigned long long)ctx_->get_memory_ptr(0);
 	x86_state->X87_STACK_BASE = (intptr_t)mmap(NULL, 80, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0) - (intptr_t)ctx_->get_memory_ptr(0);
 

@@ -540,13 +540,12 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 #endif
 		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(ty, 256));
 
-		if (auto address_ptr_i = ::llvm::dyn_cast<Instruction>(address_ptr)) {
-			address_ptr_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, guest_mem_alias_scope_));
-		}
-
 		LoadInst *li = builder.CreateLoad(ty, address_ptr);
-		builder.CreateFence(AtomicOrdering::Acquire);
+		if (e_.fences_){
+			builder.CreateFence(AtomicOrdering::Acquire);
+		}
 		li->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(li->getContext(), guest_mem_alias_scope_));
+		li->setMetadata(LLVMContext::MD_noalias, MDNode::get(li->getContext(), reg_file_alias_scope_));
 		return li;
 	}
 
@@ -555,10 +554,6 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		//auto src_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, rrn->regidx()) },
 		//	idx_to_reg_name(rrn->regidx()));
 		auto src_reg = reg_to_alloca_.at((reg_offsets)rrn->regoff());
-
-		if (auto src_reg_i = ::llvm::dyn_cast<Instruction>(src_reg)) {
-			src_reg_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, reg_file_alias_scope_));
-		}
 
 		::llvm::Type *ty;
 		Align align = Align(8);
@@ -1235,7 +1230,6 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 					default: throw std::runtime_error("unsupported read_local width: "+std::to_string(rln->local()->type().width()));
 	        }
 	        auto load = builder.CreateLoad(ty, address, "read_local");
-	        load->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(load->getContext(), guest_mem_alias_scope_));
 	        return load;
 	}
 	case node_kinds::internal_call: {
@@ -1295,10 +1289,6 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		//auto *reg_type = ((GetElementPtrInst*)dest_reg)->getResultElementType();
 		auto *reg_type = ((AllocaInst *)dest_reg)->getAllocatedType();
 
-		if (auto dest_reg_i = ::llvm::dyn_cast<Instruction>(dest_reg)) {
-			dest_reg_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, reg_file_alias_scope_));
-		}
-
 		auto val = lower_port(builder, state_arg, pkt, wrn->value());
 
 		//Bitcast the resulting value to the type of the register
@@ -1344,13 +1334,12 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 #endif
 		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(value->getType(), 256));
 
-		if (auto address_ptr_i = ::llvm::dyn_cast<Instruction>(address_ptr)) {
-			address_ptr_i->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(*llvm_context_, guest_mem_alias_scope_));
+		if (e_.fences_) {
+			builder.CreateFence(AtomicOrdering::Release);
 		}
-
-		builder.CreateFence(AtomicOrdering::Release);
 		auto store = builder.CreateStore(value, address_ptr);
 		store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), guest_mem_alias_scope_));
+		store->setMetadata(LLVMContext::MD_noalias, MDNode::get(store->getContext(), reg_file_alias_scope_));
 		return store;
 	}
 
@@ -1448,7 +1437,9 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 			return existing->second;
 
 		lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
-		builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
+		if (e_.fences_) {
+			builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
+		}
 		AtomicRMWInst *out;
 		Value *val;
 		switch (ban->op()) {
@@ -1516,11 +1507,15 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		switch(tan->op()) {
 			case ternary_atomic_op::cmpxchg: {
 				lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
-				builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
+				if (e_.fences_) {
+					builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
+				}
 				auto instr = builder.CreateAtomicCmpXchg(lhs, rhs, top, Align(1), AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
 				auto new_rax_val = builder.CreateSelect(builder.CreateExtractValue(instr, 1), rhs, builder.CreateExtractValue(instr, 0));
 				builder.CreateStore(builder.CreateZExt(new_rax_val, types.i64), rax_reg);
-				builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
+				if (e_.fences_) {
+					builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
+				}
 
 				return instr;
 			}
@@ -1646,7 +1641,6 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 		auto var_ptr = local_var_to_llvm_addr_.at(wln->local());
         auto store = builder.CreateStore(val, var_ptr);
-        store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), guest_mem_alias_scope_));
         return store;
 	}
 	default:
@@ -1912,7 +1906,9 @@ void llvm_static_output_engine_impl::save_all_regs(IRBuilder<> &builder, Argumen
 	for (auto reg : regs) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
 		auto alloca = reg_to_alloca_.at(reg);
-		builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), alloca), ptr);
+		StoreInst *store = builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), alloca), ptr);
+		store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), reg_file_alias_scope_));
+		store->setMetadata(LLVMContext::MD_noalias, MDNode::get(store->getContext(), guest_mem_alias_scope_));
 	}
 }
 
@@ -1925,7 +1921,10 @@ void llvm_static_output_engine_impl::restore_all_regs(IRBuilder<> &builder, Argu
 	for (auto reg : regs) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "restore_"+std::to_string((unsigned long)reg));
 		auto alloca = reg_to_alloca_.at(reg);
-		builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), ptr), alloca);
+		LoadInst *load = builder.CreateLoad(alloca->getAllocatedType(), ptr);
+		load->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(load->getContext(), reg_file_alias_scope_));
+		load->setMetadata(LLVMContext::MD_noalias, MDNode::get(load->getContext(), guest_mem_alias_scope_));
+		builder.CreateStore(load, alloca);
 	}
 }
 
@@ -1941,13 +1940,17 @@ reg_offsets::ZMM1, reg_offsets::ZMM2, reg_offsets::ZMM3, reg_offsets::ZMM4, reg_
 	for (auto reg : regs) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
 		auto alloca = reg_to_alloca_.at(reg);
-		builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), alloca), ptr);
+		StoreInst *store = builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), alloca), ptr);
+		store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), reg_file_alias_scope_));
+		store->setMetadata(LLVMContext::MD_noalias, MDNode::get(store->getContext(), guest_mem_alias_scope_));
 	}
 	if (!with_args) return;
 	for (auto reg : args) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
 		auto alloca = reg_to_alloca_.at(reg);
-		builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), alloca), ptr);
+		StoreInst *store = builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), alloca), ptr);
+		store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), reg_file_alias_scope_));
+		store->setMetadata(LLVMContext::MD_noalias, MDNode::get(store->getContext(), guest_mem_alias_scope_));
 	}
 }
 
@@ -1959,13 +1962,19 @@ void llvm_static_output_engine_impl::restore_callee_regs(IRBuilder<> &builder, A
 	for (auto reg : regs) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "restore_"+std::to_string((unsigned long)reg));
 		auto alloca = reg_to_alloca_.at(reg);
-		builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), ptr), alloca);
+		LoadInst *load = builder.CreateLoad(alloca->getAllocatedType(), ptr);
+		load->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(load->getContext(), reg_file_alias_scope_));
+		load->setMetadata(LLVMContext::MD_noalias, MDNode::get(load->getContext(), guest_mem_alias_scope_));
+		builder.CreateStore(load, alloca);
 	}
 	if (!with_rets) return;
 	for (auto reg : rets) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "restore_"+std::to_string((unsigned long)reg));
 		auto alloca = reg_to_alloca_.at(reg);
-		builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), ptr), alloca);
+		LoadInst *load = builder.CreateLoad(alloca->getAllocatedType(), ptr);
+		load->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(load->getContext(), reg_file_alias_scope_));
+		load->setMetadata(LLVMContext::MD_noalias, MDNode::get(load->getContext(), guest_mem_alias_scope_));
+		builder.CreateStore(load, alloca);
 	}
 }
 

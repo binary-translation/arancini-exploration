@@ -526,18 +526,27 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 			builder_.mv(ZERO, addr.base());
 			builder_.mv(ZERO, acc);
 
+			RegisterOperand liveness_zf = builder_.next_register();
+			RegisterOperand liveness_cf = builder_.next_register();
+			RegisterOperand liveness_of = builder_.next_register();
+			RegisterOperand liveness_sf = builder_.next_register();
+
 			// Flags from comparison matching (i.e. subtraction of equal values)
 			if (zf) {
 				builder_.li(zf, 1);
+				builder_.mv_liveness(liveness_zf, zf);
 			}
 			if (cf) {
 				builder_.li(cf, 0);
+				builder_.mv_liveness(liveness_cf, cf);
 			}
 			if (of) {
 				builder_.li(of, 0);
+				builder_.mv_liveness(liveness_of, of);
 			}
 			if (sf) {
 				builder_.li(sf, 0);
+				builder_.mv_liveness(liveness_sf, sf);
 			}
 
 			builder_.j(end, Assembler::kNearJump);
@@ -549,6 +558,10 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 				temp_reg.set_type(n.val().type());
 				sub(builder_, temp_reg, acc, out_reg);
 				sub_flags(builder_, temp_reg, acc, out_reg, zf, of, cf, sf);
+				builder_.mv_liveness(zf, liveness_zf);
+				builder_.mv_liveness(of, liveness_of);
+				builder_.mv_liveness(cf, liveness_cf);
+				builder_.mv_liveness(sf, liveness_sf);
 			}
 
 			// Write back updated acc value
@@ -618,8 +631,8 @@ TypedRegister & riscv64_translation_context::materialise_binary_atomic(const bin
 			//				throw std::runtime_error("unsupported xadd width");
 			//			}
 		}
-		return out_reg;
 	}
+		break;
 	case binary_atomic_op::sub:
 		builder_.neg(out_reg, src);
 		switch (n.val().type().element_width()) {
@@ -637,7 +650,7 @@ TypedRegister & riscv64_translation_context::materialise_binary_atomic(const bin
 			sub(builder_, val_reg, out_reg, src); // Actual difference for flag generation
 			sub_flags(builder_, val_reg, out_reg, src, zf, of, cf, sf);
 		}
-		return out_reg;
+		break;
 	case binary_atomic_op::band: {
 		switch (n.val().type().element_width()) {
 		case 64:
@@ -657,8 +670,8 @@ TypedRegister & riscv64_translation_context::materialise_binary_atomic(const bin
 			throw std::runtime_error("unsupported lock and width");
 		}
 		zero_sign_flag(builder_, val_reg, zf, sf);
-		return out_reg;
 	}
+		break;
 	case binary_atomic_op::bor: {
 		switch (n.val().type().element_width()) {
 		case 64:
@@ -679,8 +692,8 @@ TypedRegister & riscv64_translation_context::materialise_binary_atomic(const bin
 		}
 
 		zero_sign_flag(builder_, val_reg, zf, sf);
-		return out_reg;
 	}
+		break;
 	case binary_atomic_op::bxor: {
 		switch (n.val().type().element_width()) {
 		case 64:
@@ -702,9 +715,10 @@ TypedRegister & riscv64_translation_context::materialise_binary_atomic(const bin
 		}
 
 		zero_sign_flag(builder_, val_reg, zf, sf);
-		return out_reg;
 	}
+		break;
 	case binary_atomic_op::xchg:
+		builder_.mv(val_reg, src);
 		switch (n.val().type().element_width()) {
 		case 64:
 			builder_.amoswapd(out_reg, src, addr, std::memory_order_acq_rel);
@@ -716,21 +730,26 @@ TypedRegister & riscv64_translation_context::materialise_binary_atomic(const bin
 			throw std::runtime_error("unsupported xchg width");
 		}
 
-//		switch (n.val().type().element_width()) {
-//		case 32:
-//			builder_.slli(out_reg, out_reg, 32);
-//			builder_.srli(out_reg, out_reg, 32);
-//			[[fallthrough]];
-//		case 64:
-//			builder_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), out_reg);
-//			break;
-//		default:
-//			throw std::runtime_error("unsupported xchg width");
-//		}
-		return out_reg;
+		//		switch (n.val().type().element_width()) {
+		//		case 32:
+		//			builder_.slli(out_reg, out_reg, 32);
+		//			builder_.srli(out_reg, out_reg, 32);
+		//			[[fallthrough]];
+		//		case 64:
+		//			builder_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), out_reg);
+		//			break;
+		//		default:
+		//			throw std::runtime_error("unsupported xchg width");
+		//		}
+		break;
 	default:
 		throw std::runtime_error("unsupported binary atomic operation");
 	}
+
+	//Force out_reg to be used, so sideeffects are preserved
+	builder_.mv(ZERO, out_reg);
+
+	return out_reg;
 }
 
 TypedRegister &riscv64_translation_context::materialise_cast(const cast_node &n)
@@ -738,9 +757,11 @@ TypedRegister &riscv64_translation_context::materialise_cast(const cast_node &n)
 	TypedRegister &src_reg = *materialise(n.source_value().owner());
 
 	bool works = (is_scalar_int(n.val())
-					 || ((is_int_vector(n.val(), 2, 64) || is_int_vector(n.val(), 4, 32) || is_int_vector(n.val(), 4, 128)) && n.op() == cast_op::bitcast))
+					 || ((is_int_vector(n.val(), 2, 64) || is_int_vector(n.val(), 4, 32) || is_int_vector(n.val(), 16, 8) || is_int_vector(n.val(), 4, 128))
+						 && n.op() == cast_op::bitcast))
 		&& (is_gpr_or_flag(n.source_value())
-			|| ((is_i128(n.source_value()) || is_int(n.source_value(), 512) || is_int_vector(n.source_value(), 4, 32) || is_int_vector(n.source_value(), 2, 64))
+			|| ((is_i128(n.source_value()) || is_int(n.source_value(), 512) || is_int_vector(n.source_value(), 4, 32) || is_int_vector(n.source_value(), 16, 8)
+					|| is_int_vector(n.source_value(), 2, 64))
 				&& (n.op() == cast_op::trunc || n.op() == cast_op::bitcast)));
 	if (!works) {
 		throw std::runtime_error("unsupported types on cast operation");
@@ -898,7 +919,10 @@ TypedRegister &riscv64_translation_context::materialise_read_reg(const read_reg_
 	if (value.targets().size() == 1
 		&& ((is_int(value, 64) && n.regidx() <= static_cast<unsigned long>(reg_idx::R15)) || is_flag(value))) { // 64bit GPR or flag only used once
 		Register reg = get_or_load_mapped_register(n.regidx());
-		TypedRegister &out_reg = allocate_register(&n.val(), reg).first;
+		auto [out_reg, valid] = allocate_register(&n.val(), reg);
+		if (!valid) {
+			return out_reg;
+		}
 		if (is_flag(value)) {
 			out_reg.set_type(value_type::u64());
 		}
@@ -1312,7 +1336,8 @@ TypedRegister &riscv64_translation_context::materialise_binary_arith(const binar
 	bool works = (is_gpr_or_flag(n.val()) && is_gpr_or_flag(n.lhs()) && is_gpr_or_flag(n.rhs()))
 		|| ((n.op() == binary_arith_op::mul || n.op() == binary_arith_op::div || n.op() == binary_arith_op::mod || n.op() == binary_arith_op::bxor)
 			&& is_i128(n.val()) && is_i128(n.lhs()) && is_i128(n.rhs()))
-		|| ((is_int_vector(n.val(), 4, 32)) && (n.op() == binary_arith_op::add || n.op() == binary_arith_op::sub));
+		|| ((is_int_vector(n.val(), 4, 32)) && (n.op() == binary_arith_op::add || n.op() == binary_arith_op::sub))
+		|| ((is_int_vector(n.val(), 16, 8)) && (n.op() == binary_arith_op::add));
 	if (!works) {
 		throw std::runtime_error("unsupported width on binary arith operation");
 	}
@@ -1504,6 +1529,8 @@ void riscv64_translation_context::materialise_internal_call(const internal_call_
 	} else if (function.name() == "handle_int") {
 		// TODO handle argument
 		ret_val_ = 2;
+	} else if (function.name() == "hlt") {
+		ret_val_ = 2;
 	} else {
 		throw std::runtime_error("unsupported internal call");
 	}
@@ -1658,7 +1685,121 @@ void riscv64_translation_context::chain(uint64_t chain_address, void *chain_targ
 				}
 
 				offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));
-				ass.j(offset);
+
+				if (!IsJTypeImm(offset)) {
+					// We need to "make room" for "branch" (above) + AUIPC + JR. So we still need 8 Bytes (2 full size instructions) after the branch.
+					// We already have 4 Bytes due to the AUIPC, so move everything by 4 Bytes until a terminating J/JR, possibly compressed.
+					auto instr_p_next = reinterpret_cast<uint32_t *>(reinterpret_cast<uint16_t *>(instr_p + 1) + 1);
+					auto save = *instr_p_next;
+
+					auto offLo32 = (int32_t)offset;
+					auto offLo12 = offLo32 << (32 - 12) >> (32 - 12); // sign extend lower 12 bit
+					int32_t off32Hi20 = (offLo32 - offLo12);
+					ass.auipc(A1, off32Hi20);
+					ass.jr(A1, offLo12);
+					if (!offLo12) { // JR will be compressed
+						ass.nop(); // CNOP
+					}
+					instr_p_next++;
+
+					for (bool skip_lower = false;; instr_p_next++) {
+						const uint32_t parcel = *instr_p_next;
+						*instr_p_next = save;
+
+						if (skip_lower || IsCInstruction(save)) {
+							// Handle lower half
+							if (!skip_lower) {
+								CInstruction c_instr { static_cast<uint16_t>(save) };
+								if (c_instr.opcode() == C_J) {
+									// Found termination point, decrease offset by 4 and reemit
+									intptr_t new_off = c_instr.j_imm() - 4;
+
+									chain_machine_code_writer writer1 = chain_machine_code_writer { instr_p_next, 8 };
+									Assembler ass1 { &writer1, false, RV_GC };
+									ass1.j(new_off);
+
+									break;
+								}
+								if (c_instr.opcode() == C_JR) {
+									// Found termination point
+									chain_machine_code_writer writer1 = chain_machine_code_writer { instr_p_next, 8 };
+									Assembler ass1 { &writer1, false, RV_GC };
+									ass1.jr(c_instr.rs1(), -4);
+									break;
+								}
+							} else {
+								skip_lower = false;
+							}
+							// Handle upper half
+							if (IsCInstruction(save >> 16)) {
+								// Second 16 Bit instruction in the upper half
+								CInstruction c_instr2 { static_cast<uint16_t>(save >> 16) };
+
+								if (c_instr2.opcode() == C_J) {
+									// Found termination point, decrease offset by 4 and reemit
+									intptr_t new_off = c_instr2.j_imm() - 4;
+
+									chain_machine_code_writer writer1 = chain_machine_code_writer { reinterpret_cast<uint16_t *>(instr_p_next) + 1, 8 };
+									Assembler ass1 { &writer1, false, RV_GC };
+									ass1.j(new_off);
+
+									break;
+								}
+								if (c_instr2.opcode() == C_JR) {
+									// Found termination point
+									chain_machine_code_writer writer1 = chain_machine_code_writer { reinterpret_cast<uint16_t *>(instr_p_next) + 1, 8 };
+									Assembler ass1 { &writer1, false, RV_GC };
+									ass1.jr(c_instr2.rs1(), -4);
+									break;
+								}
+							} else {
+								// Lower half of a 32bit instruction in the upper half
+								skip_lower = true;
+								Instruction split_instr { parcel << 16 | save >> 16 };
+								if (split_instr.opcode() == JAL) {
+									// Instruction should be a J
+									// Found termination point, decrease offset by 4 and reemit
+									intptr_t new_off = split_instr.jtype_imm() - 4;
+									chain_machine_code_writer writer1 = chain_machine_code_writer { reinterpret_cast<uint16_t *>(instr_p_next) + 1, 8 };
+									Assembler ass1 { &writer1, false, RV_GC };
+									ass1.j(new_off);
+									break;
+								}
+								if (split_instr.opcode() == JALR) {
+									// Instruction should be a JR
+									// Found termination point
+									chain_machine_code_writer writer1 = chain_machine_code_writer { reinterpret_cast<uint16_t *>(instr_p_next) + 1, 8 };
+									Assembler ass1 { &writer1, false, RV_GC };
+									ass1.jr(split_instr.rs1(), split_instr.itype_imm() - 4);
+									break;
+								}
+							}
+
+						} else {
+							Instruction instr { save };
+							if (instr.opcode() == JAL) {
+								// Instruction should be a J
+								// Found termination point, decrease offset by 4 and reemit
+								intptr_t new_off = instr.jtype_imm() - 4;
+								chain_machine_code_writer writer1 = chain_machine_code_writer { instr_p_next, 8 };
+								Assembler ass1 { &writer1, false, RV_GC };
+								ass1.j(new_off);
+								break;
+							}
+							if (instr.opcode() == JALR) {
+								// Instruction should be a JR
+								// Found termination point
+								chain_machine_code_writer writer1 = chain_machine_code_writer { instr_p_next, 8 };
+								Assembler ass1 { &writer1, false, RV_GC };
+								ass1.jr(instr.rs1(), instr.itype_imm() - 4);
+								break;
+							}
+						}
+						save = parcel;
+					}
+				} else {
+					ass.j(offset);
+				}
 				ass.Align(Assembler::label_align);
 				ass.Bind(&end);
 			} else {
@@ -1761,9 +1902,14 @@ void riscv64_translation_context::chain(uint64_t chain_address, void *chain_targ
 			intptr_t offset = ass.offset_from_target(reinterpret_cast<intptr_t>(chain_target));
 
 			if (!IsJTypeImm(offset)) {
-				throw std::runtime_error("Chaining failed. Jump offset too big for single direct jump instruction.");
+				auto offLo32 = (int32_t)offset;
+				auto offLo12 = offLo32 << (32 - 12) >> (32 - 12); // sign extend lower 12 bit
+				int32_t off32Hi20 = (offLo32 - offLo12);
+				ass.auipc(A1, off32Hi20);
+				ass.jr(A1, offLo12);
+			} else {
+				ass.j(offset);
 			}
-			ass.j(offset);
 		}
 	}
 }

@@ -225,6 +225,10 @@ public:
 	{
 		instructions_.emplace_back(InstructionType::RdRs1ImmKeepRs2, &Assembler::addi_normal, rd, rs, rd, 0);
 	}
+	/// Does not emit any instruction, but copies the liveness of rd onto rs, i.e. if rd is alive at this point (used by later instruction), rs will also be alive.
+	/// So it is the same as a mv_keep for liveness but does not move any data.
+	void mv_liveness(RegisterOperand rd, RegisterOperand rs) { instructions_.emplace_back(InstructionType::Noop, rd, rd, rs); }
+
 	void not_(RegisterOperand rd, RegisterOperand rs) { xori(rd, rs, -1); }
 	void neg(RegisterOperand rd, RegisterOperand rs) { sub(rd, ZERO, rs); }
 
@@ -736,7 +740,7 @@ public:
 
 			o->allocate(allocation /*, type*/);
 		};
-
+		// NOLINTBEGIN(misc-no-recursion)
 		auto allocate_instruction = [&avail_physregs, &vreg_to_preg, &allocate, &linked_instruction, &link_reg](
 										Instruction &insn, auto &&allocate_instruction, bool set_linked = true) -> void {
 #ifdef DEBUG_REGALLOC
@@ -895,6 +899,7 @@ public:
 				std::cerr << "This should not happen?" << std::endl;
 			}
 		};
+		// NOLINTEND(misc-no-recursion)
 		for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
 			allocate_instruction(*RI, allocate_instruction);
 		}

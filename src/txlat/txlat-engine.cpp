@@ -47,6 +47,9 @@ void txlat_engine::process_options(arancini::output::o_static::static_output_eng
 			auto filename = cmdline.at("dump-llvm");
 			llvmoe->set_debug_dump_filename(filename.as<std::string>());
 		}
+		if (cmdline.count("llvm-codegen-nofence")) {
+			llvmoe->set_codegen_fence(false);
+		}
 	}
 }
 
@@ -191,26 +194,26 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
 	// Generate decls for external functions found in the relocation table
 
-	for (const auto& rs : relocations) {
-		for (auto r : rs->relocations()) {
-			auto sym_idx = r.symbol();
-			auto dst = r.offset();
-			auto sym = dyn_sym->symbols().at(sym_idx);
-			if (!sym.is_func())
-				continue;
+	if (!cmdline.count("no-static")) {
+		for (const auto &rs : relocations) {
+			for (auto r : rs->relocations()) {
+				auto sym_idx = r.symbol();
+				auto dst = r.offset();
+				auto sym = dyn_sym->symbols().at(sym_idx);
+				if (!sym.is_func())
+					continue;
 
-			::util::global_logger.debug("Searching decl for {} @ {:#x}\n", sym.name(), dst);
-			for (const auto &st : plt_tab->stubs()) {
-				if (st.second == dst) {
-					::util::global_logger.debug("Adding decl for {} @ {:#x}\n", sym.name(), st.first);
-					oe->add_function_decl(st.first, "__arancini__"+sym.name());
+				::util::global_logger.debug("Searching decl for {} @ {:#x}\n", sym.name(), dst);
+				for (const auto &st : plt_tab->stubs()) {
+					if (st.second == dst) {
+						::util::global_logger.debug("Adding decl for {} @ {:#x}\n", sym.name(), st.first);
+						oe->add_function_decl(st.first, "__arancini__" + sym.name());
+					}
 				}
+			next:;
 			}
-next:
-			;
 		}
 	}
-
 	// Generate a dot graph of the IR if required
 	if (cmdline.count("graph")) {
     generate_dot_graph(*oe, cmdline.at("graph").as<std::string>());
