@@ -78,6 +78,10 @@ def run(csvfile, config):
     MCTOLL_OUT_PATH = config['translations']['MCTOLL_OUT_PATH'];
     QEMU_PATH = config['translations']['QEMU_PATH'];
 
+    # because matrix_multiply wants to be special
+    prog = [config["native"]["PHOENIX_DIR_PATH"]+"matrix_multiply"]
+    sp.run(prog + ["1024 1024 1"], capture_output=True, timeout=1800) 
+
     for p in progs.keys():
         f = progs[p]
         for suffix in ["", "-seq", "-pthread"]:
@@ -105,6 +109,13 @@ def run(csvfile, config):
                     prog = ["taskset", "-c", f"1-{threads}", ARANCINI_OUT_PATH+p+suffix+"-dyn.out"]
                     dif = do_run(prog, f, p, env, config)
                     writer.writerow({"benchmark":p, "emulator":"Arancini-Dyn", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
+                    csvfile.flush()
+
+                    #txlat-nofence
+                    env["LD_LIBRARY_PATH"] = ARANCINI_RESULT_PATH+"/lib"
+                    prog = ["taskset", "-c", f"1-{threads}", ARANCINI_OUT_PATH+p+suffix+"-nofence.out"]
+                    dif = do_run(prog, f, p, env, config)
+                    writer.writerow({"benchmark":p, "emulator":"Arancini-No-Fence", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
                     csvfile.flush()
 
                     #QEMU

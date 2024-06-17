@@ -34,6 +34,7 @@ do_tx() {
 	if [[ $tx_lib == 0 ]]; then
 		./$result_dir/bin/txlat -I ${PHOENIX_DIR}/libc.so -O $txlat_dir/libmusl.out &> $txlat_dir/libmusl-dump.txt;
 		./$result_dir/bin/txlat -I ${PHOENIX_DIR}/libc.so -O $txlat_dir/libmusl-dyn.out --no-static &> $txlat_dir/libmusl-dyn-dump.txt;
+		./$result_dir/bin/txlat -I ${PHOENIX_DIR}/libc.so -O $txlat_dir/libmusl-nofence.out --llvm-codegen-nofence &> $txlat_dir/libmusl-nofence-dump.txt;
 	fi;
 	git rev-parse HEAD > $txlat_dir/commit.txt;
 
@@ -45,6 +46,7 @@ do_tx() {
 		echo $p;
 		./$result_dir/bin/txlat -I ${PHOENIX_DIR}/$p -O $txlat_dir/$p.out -l $txlat_dir/libmusl.out &> $txlat_dir/$p-dump.txt;
 		./$result_dir/bin/txlat -I ${PHOENIX_DIR}/$p -O $txlat_dir/$p-dyn.out --no-static -l $txlat_dir/libmusl-dyn.out &> $txlat_dir/$p-dyn-dump.txt;
+		./$result_dir/bin/txlat -I ${PHOENIX_DIR}/$p -O $txlat_dir/$p-nofence.out --llvm-codegen-nofence -l $txlat_dir/libmusl-nofence.out &> $txlat_dir/$p-nofence-dump.txt;
 	done
 }
 

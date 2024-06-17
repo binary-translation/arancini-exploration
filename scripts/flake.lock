@@ -51,11 +51,28 @@
         "type": "github"
       }
     },
+    "risotto-pkgs": {
+      "locked": {
+        "lastModified": 1641310271,
+        "narHash": "sha256-3xJoreqWWyQIVCnAq/3FHKKg+wX2OvL06cOvqX+t9nU=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "80b3160c21977e627ae99f0c87404cdcd85646ad",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "80b3160c21977e627ae99f0c87404cdcd85646ad",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs",
-        "phoenix-src": "phoenix-src"
+        "phoenix-src": "phoenix-src",
+        "risotto-pkgs": "risotto-pkgs"
       }
     },
     "systems": {
