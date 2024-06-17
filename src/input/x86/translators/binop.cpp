@@ -530,6 +530,7 @@ void binop_translator::do_translate()
 		auto res = builder().insert_csel(cond->val(), true_val->val(), false_val->val());
 		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
 	} break;
+	/*
 	case XED_ICLASS_MAXSS:
 	case XED_ICLASS_MAXSD:
 	case XED_ICLASS_MINSS:
@@ -645,6 +646,7 @@ void binop_translator::do_translate()
 
 
   } break;
+	*/
 	default:
 		throw std::runtime_error("unsupported binop");
 	}
