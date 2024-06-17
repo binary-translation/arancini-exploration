@@ -6,6 +6,7 @@
 #include <arancini/ir/default-ir-builder.h>
 #include <arancini/ir/dot-graph-generator.h>
 #include <arancini/ir/opt.h>
+#include <arancini/native_lib/native-lib.h>
 #include <arancini/output/static/llvm/llvm-static-output-engine.h>
 #include <arancini/txlat/txlat-engine.h>
 #include <arancini/util/tempfile-manager.h>
@@ -13,6 +14,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
+#include <optional>
 #include <ostream>
 #include <string>
 
@@ -24,6 +26,7 @@ using namespace arancini::input::x86;
 using namespace arancini::output;
 using namespace arancini::output::o_static::llvm;
 using namespace arancini::util;
+using namespace arancini::native_lib;
 
 static std::set<std::string> allowed_symbols
 = { "cmpstr", "cmpnum", "swap", "_qsort", "_start", "test", "__libc_start_main", "_dl_aux_init", "__assert_fail", "__dcgettext", "__dcigettext" };
@@ -68,6 +71,21 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	// this object is destroyed, all temporary files are automatically unlinked.
 	tempfile_manager tf;
 
+	std::optional<NativeLibs> nlibs;
+	std::set<std::string> needed_nlibs;
+#ifdef NLIB
+	if (cmdline.count("nlib") && !cmdline.count("no-static")) {
+		const auto &filename = cmdline.at("nlib").as<std::string>();
+		std::ifstream a(filename);
+		nlibs.emplace(a);
+
+		if (!nlibs->parse()) {
+			::util::global_logger.warn("Parsing nlib file {} failed.\n", filename);
+			nlibs = std::nullopt;
+		}
+	}
+#endif
+
 	// Parse the input ELF file
 	const auto &filename = cmdline.at("input").as<std::string>();
 	elf_reader elf(filename);
@@ -108,6 +126,21 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 		} else if (s->type() == elf::section_type::dynamic_symbol_table) {
 			auto st = std::static_pointer_cast<symbol_table>(s);
 			dyn_sym = std::move(st);
+#ifdef NLIB
+			for (const auto &sym : dyn_sym->symbols()) {
+				if (nlibs.has_value()) {
+					if (sym.section_index() != SHN_UNDEF) {
+						// The current binary defines this symbol so the wrapper should go here
+						if (nlibs->native_functions().count(sym.name())) {
+							// We have an external symbol of the right name
+							const nlib_function &func = nlibs->native_functions().at(sym.name());
+							needed_nlibs.insert(func.libname);
+							oe->add_chunk(generate_wrapper(*ia, func));
+						}
+					}
+				}
+			}
+#endif
 		} else if (s->type() == elf::section_type::relocation_addend) {
 			auto st = std::static_pointer_cast<rela_table>(s);
 			relocations.push_back(std::move(st));
@@ -244,10 +277,8 @@ next:
 		}
 	}
 
-	// Now, we need to create an assembly file that includes the binary data for
-	// each program header, along with some associated metadata too.  TODO: Maybe we
-	// should just include the original ELF file - but then the runtime would need to
-	// parse and load it.
+	// Now, we need to create an assembly file that includes the binary data for each program header,
+	// defines all dynsyms of the input binary with `__guest__` prefix, verbatim copies all relocations of the input binary and some metadata
 	auto phobjsrc = tf.create_file(prefix, ".S");
 
 	std::map<uint64_t, std::string> ifuncs = generate_guest_sections(phobjsrc, elf, load_phdrs, filename, dyn_sym, relocations, relocations_r, sym_t, tls);
@@ -262,6 +293,26 @@ next:
 				stringstream << " " << item;
 			}
 			libs = stringstream.str();
+		}
+
+		{
+			std::stringstream stringstream;
+			for (const auto &nlib : needed_nlibs) {
+
+				if (nlib.find('/') != std::string::npos) {
+					// Path not file name
+					stringstream << " " << nlib;
+				} else { // File name
+					if ((strncmp(nlib.c_str(), "lib", 3) == 0) && (strncmp(nlib.c_str() + (nlib.size() - 3), ".so", 3) == 0)) {
+						stringstream << " -l" << nlib.substr(3, nlib.size() - 6); //Starts with lib and ends with .so use -l
+					}
+					else {
+						stringstream << " " << nlib;
+					}
+				}
+			}
+
+			libs += stringstream.str();
 		}
 
 		if (elf.type() == elf::elf_type::exec) {
@@ -436,6 +487,17 @@ void txlat_engine::add_symbol_to_output(const std::vector<std::shared_ptr<progra
 	} else if (sym.is_protected()) {
 		s << ".protected \"" << name << "\"\n";
 	}
+}
+
+std::shared_ptr<chunk> txlat_engine::generate_wrapper(arancini::input::input_arch &ia, const nlib_function &func)
+{
+	default_ir_builder irb(ia.get_internal_function_resolver(), true);
+
+	auto start = std::chrono::high_resolution_clock::now();
+	ia.gen_wrapper(irb, func);
+	auto dur = std::chrono::high_resolution_clock::now() - start;
+
+	return irb.get_chunk();
 }
 
 /*

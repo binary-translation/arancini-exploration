@@ -1,6 +1,7 @@
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/input/x86/x86-input-arch.h>
 #include <arancini/ir/ir-builder.h>
+#include <arancini/native_lib/nlib_func.h>
 #include <arancini/util/logger.h>
 
 using namespace arancini::ir;
@@ -449,6 +450,80 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 		builder.insert_write_pc(builder.insert_constant_u64(base_address)->val(), br_type::br);
 		builder.end_packet();
 	}
+
+	builder.end_chunk();
+}
+
+void x86_input_arch::gen_wrapper(ir_builder &builder, const native_lib::nlib_function &func)
+{
+
+	builder.begin_chunk("__arancini__" + func.fname + "_wrapper");
+	builder.begin_packet(0);
+
+	std::vector<value_type> params = func.sig.parameter_types();
+
+	const std::array<reg_offsets, 6> gpr_arg_regoff { reg_offsets::RDI, reg_offsets::RSI, reg_offsets::RDX, reg_offsets::RCX, reg_offsets::R8,
+		reg_offsets::R9 };
+	const std::array<reg_idx, 6> gpr_arg_regidx { reg_idx::RDI, reg_idx::RSI, reg_idx::RCX, reg_idx::RDX, reg_idx::R8, reg_idx::R9 };
+	const std::array<const char *, 6> gpr_arg_regname { "RDI", "RSI", "RCX", "RDX", "R8", "R9" };
+
+	int gri = 0;
+
+	std::vector<port *> args;
+	args.reserve(params.size());
+
+	for (const auto &item : params) {
+		switch (item.type_class()) {
+		case value_type_class::none:
+			break;
+		case value_type_class::signed_integer:
+		case value_type_class::unsigned_integer:
+			if (gri >= 6) {
+				throw std::runtime_error("Stack args unsupported in native lib wrapper.");
+			} else {
+				args.push_back(
+					&builder.insert_read_reg(item, (unsigned long)gpr_arg_regoff[gri], (unsigned long)gpr_arg_regidx[gri], gpr_arg_regname[gri])->val());
+				gri++;
+			}
+			break;
+		case value_type_class::floating_point:
+			throw std::runtime_error("Float args unsupported in native lib wrapper.");
+		}
+	}
+
+	action_node *call = builder.insert_internal_call(std::make_unique<internal_function>(func.fname, func.sig), args);
+
+	const value_type &retty = func.sig.return_type();
+	switch (retty.type_class()) {
+	case value_type_class::none:
+		break;
+	case value_type_class::signed_integer:
+	case value_type_class::unsigned_integer:
+		if (retty.element_width() <= 64) {
+			builder.insert_write_reg(static_cast<unsigned long>(reg_offsets::RAX), static_cast<unsigned long>(reg_idx::RAX), "RAX", call->val());
+		} else {
+			throw std::runtime_error("Return types > 64bit unsupported in native lib wrapper.");
+		}
+		break;
+	case value_type_class::floating_point:
+		throw std::runtime_error("Float return types unsupported in native lib wrapper.");
+	}
+	builder.end_packet();
+
+	// Simulate return
+	builder.begin_packet(1);
+
+	// FIXME Copy pasted from ret translation
+
+	auto rsp = builder.insert_read_reg(value_type::u64(), static_cast<unsigned long>(reg_offsets::RSP), static_cast<unsigned long>(reg_idx::RSP), "RSP");
+	auto retaddr = builder.insert_read_mem(value_type::u64(), rsp->val());
+
+	auto new_rsp = builder.insert_add(rsp->val(), builder.insert_constant_u64(8)->val());
+	builder.insert_write_reg(static_cast<unsigned long>(reg_offsets::RSP), static_cast<unsigned long>(reg_idx::RSP), "RSP", new_rsp->val());
+
+	builder.insert_write_pc(retaddr->val(), br_type::ret);
+
+	builder.end_packet();
 
 	builder.end_chunk();
 }

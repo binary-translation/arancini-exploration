@@ -67,7 +67,8 @@
 	in
 	{
 		defaultPackage = native_pkgs.callPackage(
-		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2, llvmPackages, lib, gcc, fmt, pkgsCross, m4, keystone}:
+		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2, llvmPackages,
+		 lib, gcc, fmt, pkgsCross, m4, keystone, flex, bison}:
 			stdenv.mkDerivation {
 				name = "arancini";
 				pname = "txlat";
@@ -83,6 +84,8 @@
 					clang
 					gcc
 					m4
+                    flex
+                    bison
 				];
 				buildInputs = [
                     fmt
@@ -95,6 +98,7 @@
 					llvmPackages.llvm.dev
 					llvmPackages.bintools
 					llvmPackages.lld
+					flex
 				] ++ lib.optionals ( system == "aarch64-linux" ) [ keystone ];
 				depsTargetTarget = [ gcc ];
 				configurePhase = ''
@@ -107,11 +111,11 @@
 		) {};
 	}) //
 	flake-utils.lib.eachSystem [ "aarch64-linux" "riscv64-linux" ] (system:
-		let
-			my-mbuild = 
-				native_pkgs.python3Packages.buildPythonPackage {
-					pname = "mbuild";
-					version = "2022.07.28";
+	let
+		my-mbuild =
+			native_pkgs.python3Packages.buildPythonPackage {
+				pname = "mbuild";
+				version = "2022.07.28";
 
 					src = mbuild-src;
 					patches = [ ./mbuild-riscv.patch ];
@@ -145,7 +149,8 @@
 		in
 		{
 		crossPackage = build_pkgs.callPackage(
-		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2, llvmPackages, lib, gcc, fmt, pkgsCross, m4, keystone}:
+		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2, llvmPackages,
+			lib, gcc, fmt, pkgsCross, m4, keystone, flex, bison}:
 			stdenv.mkDerivation {
 				name = "arancini";
 				pname = "txlat";
@@ -161,6 +166,8 @@
 					clang
 					pkgsCross.riscv64.buildPackages.gcc
 					m4
+                    flex
+                    bison
 				];
 				buildInputs = [
                     fmt
@@ -173,6 +180,7 @@
 					llvmPackages.llvm.dev
 					llvmPackages.bintools
 					llvmPackages.lld
+                    flex
 				] ++ lib.optionals ( system == "aarch64-linux" ) [ keystone ];
 				depsTargetTarget = [ gcc ];
 				configurePhase = ''

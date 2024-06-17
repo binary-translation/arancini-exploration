@@ -1103,26 +1103,28 @@ private:
 
 class internal_call_node : public action_node {
 public:
-	internal_call_node(const internal_function &fn, const std::vector<port *> &args)
-		: action_node(node_kinds::internal_call)
+	internal_call_node(const std::shared_ptr<internal_function> &fn, const std::vector<port *> &args)
+		: action_node(node_kinds::internal_call, fn->signature().return_type())
 		, fn_(fn)
 		, args_(args)
 	{
 	}
 
-	const internal_function &fn() const { return fn_; }
+	const internal_function &fn() const { return *fn_; }
 	const std::vector<port *> &args() const { return args_; }
 
 	virtual br_type updates_pc() const override { return br_type::sys; }
 
 	virtual void accept(visitor &v) override
 	{
+		if (v.seen_node(this))
+			return;
 		action_node::accept(v);
 		v.visit_internal_call_node(*this);
 	}
 
 private:
-	const internal_function &fn_;
+	const std::shared_ptr<internal_function> fn_;
 	std::vector<port *> args_;
 };
 } // namespace arancini::ir

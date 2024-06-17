@@ -17,5 +17,7 @@
       xed
       libffi
       libxml2
+      flex
+      bison
     ];
   }

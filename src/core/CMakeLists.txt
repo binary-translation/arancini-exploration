@@ -14,3 +14,7 @@ add_library(arancini-core
 set(INCLUDE_PATH ../../inc)
 target_include_directories(arancini-core PUBLIC ${INCLUDE_PATH})
 
+if (BISON_FOUND AND FLEX_FOUND)
+    target_link_libraries(arancini-core arancini-native_lib)
+endif ()
+

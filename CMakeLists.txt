@@ -76,6 +76,19 @@ if (NOT fmt_FOUND)
 endif ()
 endif () #NIX
 
+find_package(BISON)
+# Ignore environment path (aka CMAKE_PREFIX_PATH etc) on first try to just find the host flex binary, 2nd call for includes and library
+set(CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH FALSE)
+find_package(FLEX)
+set(CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH TRUE)
+find_package(FLEX)
+
+if (NOT BISON_FOUND OR NOT FLEX_FOUND)
+    message("BISON or FLEX were not found. Disabling native library support")
+else ()
+    add_subdirectory(src/native_lib)
+endif ()
+
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     add_compile_definitions(ENABLE_VERBOSE_CODE_GEN=true)
 endif ()

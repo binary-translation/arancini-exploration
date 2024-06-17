@@ -374,7 +374,10 @@ public:
 
 	virtual const local_var *alloc_local(const value_type &type) = 0;
 
-	action_node *insert_internal_call(const internal_function &fn, const std::vector<port *> &args) { return create_and_insert<internal_call_node>(fn, args); }
+	action_node *insert_internal_call(const std::shared_ptr<internal_function> &fn, const std::vector<port *> &args)
+	{
+		return create_and_insert<internal_call_node>(fn, args);
+	}
 
 protected:
 	virtual void insert_action(std::shared_ptr<action_node> a) = 0;
