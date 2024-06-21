@@ -76,7 +76,8 @@ def run(csvfile, config):
     ARANCINI_RESULT_PATH = config['arancini']['ARANCINI_RESULT_PATH'];
     ARANCINI_OUT_PATH = config['translations']['ARANCINI_OUT_PATH'];
     MCTOLL_OUT_PATH = config['translations']['MCTOLL_OUT_PATH'];
-    QEMU_PATH = config['translations']['QEMU_PATH'];
+    QEMU_PATH = "qemu-x86_64";
+    RISOTTO_PATH = "risotto";
 
     # because matrix_multiply wants to be special
     prog = [config["native"]["PHOENIX_DIR_PATH"]+"matrix_multiply"]
@@ -84,10 +85,10 @@ def run(csvfile, config):
 
     for p in progs.keys():
         f = progs[p]
-        for suffix in ["", "-seq", "-pthread"]:
+        for suffix in [""]: #, "-seq", "-pthread"]:
             th = [1]
             if suffix != "-seq":
-                th = [1, 2, 4, 8];
+                th = [2, 4, 8];
             
             for threads in th:
                 for i in range(3):
@@ -105,17 +106,17 @@ def run(csvfile, config):
                     csvfile.flush()
 
                     #txlat-dyn
-                    env["LD_LIBRARY_PATH"] = ARANCINI_RESULT_PATH+"/lib"
+                    env["LD_LIBRARY_PATH"] = ARANCINI_RESULT_PATH+"lib"
                     prog = ["taskset", "-c", f"1-{threads}", ARANCINI_OUT_PATH+p+suffix+"-dyn.out"]
                     dif = do_run(prog, f, p, env, config)
                     writer.writerow({"benchmark":p, "emulator":"Arancini-Dyn", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
                     csvfile.flush()
 
-                    #txlat-nofence
-                    env["LD_LIBRARY_PATH"] = ARANCINI_RESULT_PATH+"/lib"
-                    prog = ["taskset", "-c", f"1-{threads}", ARANCINI_OUT_PATH+p+suffix+"-nofence.out"]
+                    #txlat-nlib
+                    env["LD_LIBRARY_PATH"] = ARANCINI_RESULT_PATH+"lib"
+                    prog = ["taskset", "-c", f"1-{threads}", ARANCINI_OUT_PATH+p+suffix+"-nmem.out"]
                     dif = do_run(prog, f, p, env, config)
-                    writer.writerow({"benchmark":p, "emulator":"Arancini-No-Fence", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
+                    writer.writerow({"benchmark":p, "emulator":"Arancini-Native-Mem", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
                     csvfile.flush()
 
                     #QEMU
@@ -125,6 +126,26 @@ def run(csvfile, config):
                     writer.writerow({"benchmark":p, "emulator":"QEMU", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
                     csvfile.flush()
                     
+                    prog = ["taskset", "-c", f"1-{threads}", RISOTTO_PATH, PHOENIX_DIR_PATH+p+suffix] 
+                    dif = do_run(prog, f, p, env, config)
+                    writer.writerow({"benchmark":p, "emulator":"Risotto", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
+                    csvfile.flush()
+                    prog = ["taskset", "-c", f"1-{threads}", RISOTTO_PATH+"-qemu", PHOENIX_DIR_PATH+p+suffix] 
+                    dif = do_run(prog, f, p, env, config)
+                    writer.writerow({"benchmark":p, "emulator":"Risotto-qemu", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
+                    csvfile.flush()
+                    prog = ["taskset", "-c", f"1-{threads}", RISOTTO_PATH+"-nofence", PHOENIX_DIR_PATH+p+suffix] 
+                    dif = do_run(prog, f, p, env, config)
+                    writer.writerow({"benchmark":p, "emulator":"Risotto-nofence", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
+                    csvfile.flush()
+                    prog = ["taskset", "-c", f"1-{threads}", RISOTTO_PATH+"-tso", PHOENIX_DIR_PATH+p+suffix] 
+                    dif = do_run(prog, f, p, env, config)
+                    writer.writerow({"benchmark":p, "emulator":"Risotto-tso", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
+                    csvfile.flush()
+                    prog = ["taskset", "-c", f"1-{threads}", RISOTTO_PATH, "-nlib", "general.mni", PHOENIX_DIR_PATH+p+suffix] 
+                    dif = do_run(prog, f, p, env, config)
+                    writer.writerow({"benchmark":p, "emulator":"Risotto-Native-Mem", "time":str(dif), "type":ty[suffix], "threads":f"{threads}"})
+                    csvfile.flush()
                     #MCtoll
                     #prog = ["taskset", "-c", f"1-{threads}", MCTOLL_OUT_PATH+p+suffix+".ll.out"] 
                     #dif = do_run(prog, f, p, env)

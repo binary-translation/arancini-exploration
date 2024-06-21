@@ -25,11 +25,13 @@
 	let
 		pkgs = import nixpkgs { system = system; crossSystem = { config = system+"-musl"; }; config.allowUnsupportedSystem=true; };
 		native_pkgs = import nixpkgs { inherit system; config.allowUnsupportedSystem=true; };
-		risotto_pkgs = import risotto-pkgs { inherit system; config.allowUnsupportedSystem=true; };
 
+		rv_patch = builtins.fetchurl {
+			url = "https://gist.githubusercontent.com/ReimersS/81e6d9b7ba90b42800be1f8d7443689c/raw/06e2ce53033b5eb568638de1171c88ad677f1777/riscv-fpargs.patch";
+			sha256 = "1bywsiml8gd22yjqcngr0sdk9xixy6axx97yars19xyja2sz4dj5";
+		};
 		qemu = native_pkgs.qemu.override { pipewireSupport=false; hostCpuTargets=["x86_64-linux-user"]; jackSupport=false; alsaSupport=false; gtkSupport=false; vncSupport=false; pulseSupport=false; smartcardSupport=false; spiceSupport=false; glusterfsSupport=false; openGLSupport=false; sdlSupport=false; usbredirSupport=false; xenSupport=false; cephSupport=false; virglSupport=false;};
-		risotto_base = risotto_pkgs.qemu.override { hostCpuTargets=["x86_64-linux-user"]; jackSupport=false; alsaSupport=false; gtkSupport=false; vncSupport=false; pulseSupport=false; smartcardSupport=false; spiceSupport=false; glusterfsSupport=false; openGLSupport=false; sdlSupport=false; usbredirSupport=false; xenSupport=false; cephSupport=false; virglSupport=false;};
-		risotto-qemu = risotto_base.overrideAttrs (oldAttrs: {
+		risotto-qemu = native_pkgs.stdenv.mkDerivation {
 			name = "risotto-qemu";
 			src = builtins.fetchGit {
 				url = "https://github.com/rgouicem/qemu.git";
@@ -37,8 +39,24 @@
 				ref = "master-6.1.0";
 				submodules = true;
 			};
-		});
-		risotto = risotto_base.overrideAttrs (oldAttrs: {
+			buildInputs = with native_pkgs; [ perl ninja meson flex bison zlib gnumake python3 pkg-config glib ];
+			useNinjaBuildPhase = false;
+			useNinjaInstallPhase = false;
+			useMesonConfigurePhase = false;
+			configurePhase = ''
+				chmod +x ./scripts/shaderinclude.pl
+				patchShebangs .
+				./configure --target-list=x86_64-linux-user
+			'';
+			buildPhase = ''
+				make -j$(nproc)
+			'';
+			installPhase = ''
+				mkdir -p $out/bin
+				cp build/qemu-x86_64 $out/bin/risotto-qemu
+			'';
+		};
+		risotto = native_pkgs.stdenv.mkDerivation {
 			name = "risotto";
 			src = builtins.fetchGit {
 				url = "https://github.com/rgouicem/qemu.git";
@@ -46,8 +64,26 @@
 				ref = "risotto";
 				submodules = true;
 			};
-		});
-		risotto-nofence = risotto_base.overrideAttrs (oldAttrs: {
+			buildInputs = with native_pkgs; [ perl ninja meson flex bison zlib gnumake python3 pkg-config glib ];
+			useNinjaBuildPhase = false;
+			useNinjaInstallPhase = false;
+			useMesonConfigurePhase = false;
+			configurePhase = ''
+				chmod +x ./scripts/shaderinclude.pl
+				patchShebangs .
+				./configure --target-list=x86_64-linux-user
+			'';
+			buildPhase = ''
+				make -j$(nproc)
+			'';
+			installPhase = ''
+				mkdir -p $out/bin
+				cp build/qemu-x86_64 $out/bin/risotto
+			'';
+
+			patches = [ rv_patch ];
+		};
+		risotto-nofence = native_pkgs.stdenv.mkDerivation {
 			name = "risotto-nofence";
 			src = builtins.fetchGit {
 				url = "https://github.com/rgouicem/qemu.git";
@@ -55,8 +91,26 @@
 				ref = "no-fences";
 				submodules = true;
 			};
-		});
-		risotto-tso = risotto_base.overrideAttrs (oldAttrs: {
+			buildInputs = with native_pkgs; [ perl ninja meson flex bison zlib gnumake python3 pkg-config glib ];
+			useNinjaBuildPhase = false;
+			useNinjaInstallPhase = false;
+			useMesonConfigurePhase = false;
+			configurePhase = ''
+				chmod +x ./scripts/shaderinclude.pl
+				patchShebangs .
+				./configure --target-list=x86_64-linux-user
+				'';
+			buildPhase = ''
+				make -j$(nproc)
+				'';
+			installPhase = ''
+				mkdir -p $out/bin
+				cp build/qemu-x86_64 $out/bin/risotto-nofence
+			'';
+
+			patches = [ rv_patch ];
+		};
+		risotto-tso = native_pkgs.stdenv.mkDerivation {
 			name = "risotto-tso";
 			src = builtins.fetchGit {
 				url = "https://github.com/rgouicem/qemu.git";
@@ -64,7 +118,25 @@
 				ref = "tcg-tso";
 				submodules = true;
 			};
-		});
+			buildInputs = with native_pkgs; [ perl ninja meson flex bison zlib gnumake python3 pkg-config glib ];
+			useNinjaBuildPhase = false;
+			useNinjaInstallPhase = false;
+			useMesonConfigurePhase = false;
+			configurePhase = ''
+				chmod +x ./scripts/shaderinclude.pl
+				patchShebangs .
+				./configure --target-list=x86_64-linux-user
+			'';
+			buildPhase = ''
+				make -j$(nproc)
+			'';
+			installPhase = ''
+				mkdir -p $out/bin
+				cp build/qemu-x86_64 $out/bin/risotto-tso
+			'';
+
+			patches = [ rv_patch ];
+		};
 
 		histogram_datafiles = builtins.fetchurl {
 			url = "http://csl.stanford.edu/~christos/data/histogram.tar.gz";
@@ -89,11 +161,12 @@
 	in
 	{
 	devShell =
-		native_pkgs.mkShell.override { stdenv = native_pkgs.llvmPackages_15.stdenv; } {
+		native_pkgs.mkShell {
+			src = self;
 			packages = [
 				qemu
-				risotto
 				risotto-qemu
+				risotto
 				risotto-nofence
 				risotto-tso
 			] ++ native_pkgs.lib.optionals (system == "x86_64-linux") [
@@ -103,20 +176,6 @@
 											python-pkgs.matplotlib
 											python-pkgs.notebook
 				]))];
-			shellHook = ''
-				export QEMU_INI=${
-				(native_pkgs.writeTextFile {
-					name = "qemu.ini";
-					text = ''
-[qemu]
-LATEST_QEMU=${qemu}/bin/qemu-x86_64
-RISOTTO_QEMU=${risotto-qemu}/bin/qemu-x86_64
-RISOTTO=${risotto}/bin/qemu-x86_64
-RISOTTO_NF=${risotto-nofence}/bin/qemu-x86_64
-RISOTTO_TSO=${risotto-tso}/bin/qemu-x86_64
-					'';
-				})}
-				'';
 		};
 	
 	phoenix =

@@ -1,0 +1,19 @@
+diff --git a/tcg/riscv/tcg-target.c.inc b/tcg/riscv/tcg-target.c.inc
+index c16f96b401..2e7ed4b1ac 100644
+--- a/tcg/riscv/tcg-target.c.inc
++++ b/tcg/riscv/tcg-target.c.inc
+@@ -111,11 +111,14 @@ static const int tcg_target_call_iarg_regs[] = {
+     TCG_REG_A6,
+     TCG_REG_A7,
+ };
++/* Don't use nlib functions with floating point arguments on riscv */
++static const int tcg_target_call_iarg_regs_fp[] = {};
+ 
+ static const int tcg_target_call_oarg_regs[] = {
+     TCG_REG_A0,
+     TCG_REG_A1,
+ };
++static const int tcg_target_call_oarg_regs_fp[] = {};
+ 
+ #define TCG_CT_CONST_ZERO  0x100
+ #define TCG_CT_CONST_S12   0x200

@@ -1,0 +1,6 @@
+bench;dataset;arch;threads;cmdline;unit;retval;value;runtime;tag
+phoenix.histogram;small;aarch64;1;/home/sebastian/arancini-exploration/test/downloads/phoenix-aarch64/phoenix-2.0/tests/histogram/histogram /run/user/1022/phoenix.histogram.aqlngy69/small.bmp;seconds;0;0.6044437885284424;native;native
+phoenix.histogram;small;aarch64;1;/home/sebastian/arancini-exploration/test/downloads/phoenix-aarch64/phoenix-2.0/tests/histogram/histogram /run/user/1022/phoenix.histogram.8gkufz1i/small.bmp;seconds;0;0.2630119323730469;native;native
+phoenix.kmeans;large;aarch64;1;/home/sebastian/arancini-exploration/test/downloads/phoenix-aarch64/phoenix-2.0/tests/kmeans/kmeans;seconds;0;6.812914133071899;native;native
+phoenix.linearregression;small;aarch64;1;/home/sebastian/arancini-exploration/test/downloads/phoenix-aarch64/phoenix-2.0/tests/linear_regression/linear_regression /run/user/1022/phoenix.linearregression.if7v1g2b/key_file_50MB.txt;seconds;0;0.0703303813934326;native;native
+phoenix.histogram;small;aarch64;1;/home/sebastian/arancini-exploration/test/downloads/phoenix-aarch64/phoenix-2.0/tests/histogram/histogram /run/user/1022/phoenix.histogram.mgs2ods9/small.bmp;seconds;0;0.29067373275756836;native;native
