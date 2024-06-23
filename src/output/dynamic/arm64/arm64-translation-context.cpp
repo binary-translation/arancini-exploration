@@ -22,55 +22,51 @@ static value_type addr_type() {
     return value_type::u64();
 }
 
-static value_type base_type() {
-    return value_type::u64();
+using reg_idx = arancini::input::x86::reg_idx;
+
+register_operand single_register_allocation(const virtual_register_allocator &alloc, const arancini::ir::port &p) {
+    const auto &allocation = alloc.at(p);
+    if (allocation.size() != 1)
+        throw arm64_exception("Attempting to handle vector register as single register");
+    return allocation[0];
 }
 
-using reg_idx = arancini::input::x86::reg_idx;
+void validate_vector_type(const arancini::ir::port &p) {
+    auto type = p.type();
+    if (type.is_vector()) {
+        [[unlikely]]
+        if (type.element_width() > 64) throw arm64_exception("Vector with element width > 64-bit");
+    }
+}
 
 // TODO: consider moving flags to their own dedicated register
 // Achievable when we move a single register for flags
 arm64_translation_context::arm64_translation_context(machine_code_writer &writer)
 		: translation_context(writer),
           flag_map {
-                std::make_pair(reg_idx::ZF, alloc_vreg(value_type::u8())),
-                std::make_pair(reg_idx::CF, alloc_vreg(value_type::u8())),
-                std::make_pair(reg_idx::OF, alloc_vreg(value_type::u8())),
-                std::make_pair(reg_idx::SF, alloc_vreg(value_type::u8())),
+                std::make_pair(reg_idx::ZF, vreg_allocator_.allocate(value_type::u8())),
+                std::make_pair(reg_idx::CF, vreg_allocator_.allocate(value_type::u8())),
+                std::make_pair(reg_idx::OF, vreg_allocator_.allocate(value_type::u8())),
+                std::make_pair(reg_idx::SF, vreg_allocator_.allocate(value_type::u8())),
           }
 {
 }
 
-std::vector<register_operand> &arm64_translation_context::alloc_vregs(const ir::port &p) {
-    auto reg_count = p.type().nr_elements();
-    auto element_width = p.type().width();
-    if (element_width > base_type().element_width()) {
-        element_width = base_type().element_width();
-        reg_count = p.type().width() / element_width;
-    }
-
-    auto type = ir::value_type(p.type().type_class(), element_width, 1);
-
-    for (std::size_t i = 0; i < reg_count; ++i)
-        alloc_vreg(p, type);
-
-    return vregs_for_port(p);
-}
-
 register_operand arm64_translation_context::cast(const register_operand &op, value_type type) {
-    auto dest_vreg = alloc_vreg(type);
+    auto dest_vreg = vreg_allocator_.allocate(type);
     builder_.mov(dest_vreg, op);
     return dest_vreg;
 }
 
+// TODO: should be moved to type-utils.h
 template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
 static std::size_t minimum_bitwidth(T imm) {
     if constexpr (sizeof(T) == sizeof(unsigned int))
-        return base_type().element_width() - __builtin_clz(util::bitcast<unsigned int>(imm)|1);
+        return base_type.element_width() - __builtin_clz(util::bitcast<unsigned int>(imm)|1);
     if constexpr (sizeof(T) == sizeof(unsigned long))
-        return base_type().element_width() - __builtin_clzl(util::bitcast<unsigned long>(imm)|1);
+        return base_type.element_width() - __builtin_clzl(util::bitcast<unsigned long>(imm)|1);
     if constexpr (sizeof(T) == sizeof(unsigned long long))
-        return base_type().element_width() - __builtin_clzl(util::bitcast<unsigned long long>(imm)|1);
+        return base_type.element_width() - __builtin_clzl(util::bitcast<unsigned long long>(imm)|1);
 
     static_assert("Cannot determine minimum bitwidth");
 }
@@ -98,17 +94,16 @@ register_operand arm64_translation_context::move_as_register(T imm, ir::value_ty
     auto move_count = static_cast<std::size_t>(std::ceil(actual_size / 16.0));
 
     auto immediate = util::bitcast<util::equivalent_integer_t<T>>(imm);
+    auto reg = vreg_allocator_.allocate(type);
     if (actual_size < 16) {
         builder_.insert_comment("Move immediate directly as < 16-bits");
-        auto reg = alloc_vreg(type);
 
         // FIXME: 0xFFFF is not correct in all cases
         builder_.mov(reg, immediate_operand(immediate & 0xFFFF, value_type::u16()));
         return reg;
     }
 
-    auto reg = alloc_vreg(type);
-    if (actual_size <= base_type().element_width()) {
+    if (actual_size <= base_type.element_width()) {
         builder_.insert_comment("Move immediate as > 16-bits");
         builder_.movz(reg,
                       immediate_operand(immediate & 0xFFFF, value_type::u16()),
@@ -125,20 +120,19 @@ register_operand arm64_translation_context::move_as_register(T imm, ir::value_ty
     throw arm64_exception(fmt::format("Too large immediate: {}", imm));
 }
 
+template <typename T, std::enable_if_t<std::is_arithmetic_v<T>>>
 memory_operand
-arm64_translation_context::guestreg_memory_operand(int regoff,
+arm64_translation_context::guest_register_accessor(T regoff,
                                                    memory_operand::addressing_modes mode)
 {
     if (regoff > 255 || regoff < -256) {
-        auto preg = context_block_reg;
-        auto base_vreg = alloc_vreg(addr_type());
-        builder_.mov(base_vreg, immediate_operand(regoff, value_type::u32()));
-        builder_.add(base_vreg, preg, base_vreg);
-        return memory_operand(base_vreg, immediate_operand(0, u12()), mode);
+        auto base_vreg = vreg_allocator_.allocate(addr_type());
+        builder_.mov(base_vreg, immediate_operand(regoff, u12()));
+        builder_.add(base_vreg, context_block_reg, base_vreg);
+        return memory_operand(base_vreg, immediate<0, 12>(), mode);
     }
 
-    auto preg = context_block_reg;
-    return memory_operand(preg, immediate_operand(regoff, u12()), mode);
+    return memory_operand(context_block_reg, immediate_operand(regoff, u12()), mode);
 }
 
 std::vector<register_operand> &arm64_translation_context::materialise_port(port &p) {
@@ -147,7 +141,7 @@ std::vector<register_operand> &arm64_translation_context::materialise_port(port 
 }
 
 register_operand arm64_translation_context::add_membase(const register_operand &addr, const value_type &type) {
-    auto mem_addr_vreg = alloc_vreg(type);
+    auto mem_addr_vreg = vreg_allocator_.allocate(type);
     builder_.add(mem_addr_vreg, memory_base_reg, addr, "add memory base register");
 
     return mem_addr_vreg;
@@ -242,7 +236,7 @@ void arm64_translation_context::end_block() {
 	instruction_builder builder_;
     nodes_.clear();
     materialised_nodes_.clear();
-    port_to_vreg_.clear();
+    vreg_allocator_.clear();
     instruction_index_to_guest_.clear();
     locals_.clear();
 }
@@ -352,29 +346,25 @@ static inline bool is_flag_port(const port &value) {
 }
 
 void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
-    // Sanity check
-    auto type = n.val().type();
-    if (type.is_vector() && type.element_width() > base_type().element_width()) {
-        throw arm64_exception("Cannot load vectors with individual elements larger than 64-bits");
-    }
+    // Sanity check (if it's a vector)
+    validate_vector_type(n.val());
 
     auto comment = fmt::format("read register: {}", n.regname());
-
-    auto &dest_vregs = alloc_vregs(n.val());
+    const auto &dest_vregs = vreg_allocator_.allocate(n.val());
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
         auto width = dest_vregs[i].type().width();
-        auto addr = guestreg_memory_operand(n.regoff() + i * width);
+        auto address = guest_register_accessor(n.regoff() + i * width);
         switch (width) {
             case 1:
             case 8:
-                builder_.ldrb(dest_vregs[i], addr, comment);
+                builder_.ldrb(dest_vregs[i], address, comment);
                 break;
             case 16:
-                builder_.ldrh(dest_vregs[i], addr, comment);
+                builder_.ldrh(dest_vregs[i], address, comment);
                 break;
             case 32:
             case 64:
-                builder_.ldr(dest_vregs[i], addr, comment);
+                builder_.ldr(dest_vregs[i], address, comment);
                 break;
             default:
                 throw arm64_exception("cannot load individual register values larger than 64-bits");
@@ -383,17 +373,14 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
 }
 
 void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
-    // Sanity check
-    auto type = n.val().type();
-    if (type.is_vector() && type.element_width() > base_type().element_width()) {
-        throw arm64_exception("Cannot store vectors with individual elements larger than 64-bits");
-    }
+    // Sanity check (if it's a vector)
+    validate_vector_type(n.val());
 
     auto &src_vregs = materialise_port(n.value());
     if (is_flag_port(n.value())) {
         // FIXME: causes static_map search to fail
         const auto &src_vreg = flag_map.at(static_cast<reg_idx>(n.regidx()));
-        auto addr = guestreg_memory_operand(n.regoff());
+        auto addr = guest_register_accessor(n.regoff());
         builder_.strb(src_vreg, addr, fmt::format("write flag: {}", n.regname()));
         return;
     }
@@ -408,27 +395,26 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     //
     // There should be clear type promotion and type coercion.
     auto comment = fmt::format("write register: {}", n.regname());
-
     for (std::size_t i = 0; i < src_vregs.size(); ++i) {
         if (src_vregs[i].type().width() > n.value().type().width() &&
-            n.value().type().width() <= base_type().element_width())
+            n.value().type().width() <= base_type.element_width())
         {
             src_vregs[i] = cast(src_vregs[i], n.value().type());
         }
 
         auto width = src_vregs[i].type().width();
-        auto addr = guestreg_memory_operand(n.regoff() + i * width);
+        auto address = guest_register_accessor(n.regoff() + i * width);
         switch (width) {
             case 1:
             case 8:
-                builder_.strb(src_vregs[i], addr, comment);
+                builder_.strb(src_vregs[i], address, comment);
                 break;
             case 16:
-                builder_.strh(src_vregs[i], addr, comment);
+                builder_.strh(src_vregs[i], address, comment);
                 break;
             case 32:
             case 64:
-                builder_.str(src_vregs[i], addr, comment);
+                builder_.str(src_vregs[i], address, comment);
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
@@ -442,12 +428,12 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
 
     // Sanity checks
     auto type = n.val().type();
-    if (type.is_vector() && type.element_width() > base_type().element_width())
+    if (type.is_vector() && type.element_width() > base_type.element_width())
         throw arm64_exception("Cannot load vectors from memory with individual elements larger than 64-bits");
     if (addr_vregs.size() != 1)
         throw arm64_exception("Only a single address can be specified in a read memory node");
 
-    const auto &dest_vregs = alloc_vregs(n.val());
+    const auto &dest_vregs = vreg_allocator_.allocate(n.val());
 
     const auto &addr_vreg = add_membase(addr_vregs[0]);
 
@@ -482,7 +468,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
 
     // Sanity check; cannot by definition load a register larger than 64-bit
     // without it being a vector
-    if (type.is_vector() && type.element_width() > base_type().element_width())
+    if (type.is_vector() && type.element_width() > base_type.element_width())
         throw arm64_exception("Larger than 64-bit integers in vectors not supported by backend");
     if (addr_vregs.size() != 1)
         throw arm64_exception("Only a single address can be specified in a write memory node");
@@ -515,7 +501,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
 }
 
 void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
-	auto dest_vreg = alloc_vreg(n.val());
+	auto dest_vreg = vreg_allocator_.allocate(n.val());
     if (is_representable(this_pc_, value_type::u16()))
         builder_.mov(dest_vreg, immediate_operand(this_pc_, value_type::u16()), "read program counter");
     else
@@ -543,7 +529,7 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
     }
 
     builder_.str(new_pc_vregs[0],
-                 guestreg_memory_operand(static_cast<int>(reg_idx::PC)),
+                 guest_register_accessor(static_cast<int>(reg_idx::PC)),
                  "write program counter");
 }
 
@@ -566,7 +552,7 @@ void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
 }
 
 void arm64_translation_context::materialise_constant(const constant_node &n) {
-	const auto &dest_vreg = alloc_vreg(n.val());
+	const auto &dest_vreg = vreg_allocator_.allocate(n.val());
 
     auto clamp = [&dest_vreg](auto &&val) {
         return std::clamp(val, val,
@@ -1443,7 +1429,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 }
 
 void arm64_translation_context::materialise_csel(const csel_node &n) {
-    if (n.val().type().is_vector() || n.val().type().element_width() > base_type().element_width()) {
+    if (n.val().type().is_vector() || n.val().type().element_width() > base_type.element_width()) {
         throw arm64_exception("cannot implement conditional selection for \
                                   vectors and elements widths exceeding 64-bits");
     }
@@ -1465,7 +1451,7 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
 }
 
 void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
-    if (n.val().type().is_vector() || n.val().type().element_width() > base_type().element_width()) {
+    if (n.val().type().is_vector() || n.val().type().element_width() > base_type.element_width()) {
         throw arm64_exception("cannot implement bit shifts for \
                                   vectors and elements widths exceeding 64-bits");
     }
@@ -1586,7 +1572,7 @@ void arm64_translation_context::materialise_vector_insert(const vector_insert_no
     if (dest_vregs.size() < src_vregs.size())
         throw arm64_exception("Destination vector for vector insert is smaller than source vector");
 
-    size_t index = (n.index() * n.insert_value().type().element_width()) / base_type().element_width();
+    size_t index = (n.index() * n.insert_value().type().element_width()) / base_type.element_width();
     if (index + value_vregs.size() > dest_vregs.size())
         throw arm64_exception(fmt::format("Cannot insert at index {} in destination vector", index));
 
@@ -1605,7 +1591,7 @@ void arm64_translation_context::materialise_vector_extract(const vector_extract_
     const auto &dest_vregs = alloc_vregs(n.val()) ;
     const auto &src_vregs = materialise_port(n.source_vector());
 
-    size_t index = (n.index() * n.source_vector().type().element_width()) / base_type().element_width();
+    size_t index = (n.index() * n.source_vector().type().element_width()) / base_type.element_width();
     if (dest_vregs.size() >= src_vregs.size())
         throw arm64_exception("Cannot extract vector larger than src vector");
     if (index + dest_vregs.size() > src_vregs.size())
@@ -1623,7 +1609,7 @@ void arm64_translation_context::materialise_internal_call(const internal_call_no
     if (n.fn().name() == "handle_syscall") {
         auto pc_vreg = move_as_register(this_pc_ + 2, value_type::u64());
         builder_.str(pc_vreg,
-                     guestreg_memory_operand(static_cast<int>(reg_idx::PC)),
+                     guest_register_accessor(static_cast<int>(reg_idx::PC)),
                      "update program counter to handle system call");
         ret_ = 1;
     } else if (n.fn().name() == "handle_int") {

@@ -9,14 +9,88 @@
 #include <arancini/ir/port.h>
 #include <arancini/output/dynamic/translation-context.h>
 
+#include <type_traits>
 #include <unordered_map>
 
 namespace arancini::output::dynamic::arm64 {
 
+static constexpr ir::value_type base_type{ir::value_type_class::unsigned_integer, 64};
+static constexpr ir::value_type host_address_type = base_type;
+
 static constexpr register_operand memory_base_reg{register_operand::x28};
 static constexpr register_operand context_block_reg{register_operand::x29};
 
-class arm64_translation_context : public translation_context {
+class virtual_register_allocator final {
+public:
+    using size_type = std::size_t;
+    using register_sequence = std::vector<register_operand>;
+
+    // Allocates a new virtual register of specified type
+    [[nodiscard]]
+    register_operand allocate(ir::value_type type) {
+        return register_operand{next_vreg_++, type};
+    }
+
+    // Allocates a set of new virtual register for particular port
+    [[nodiscard]]
+    register_sequence allocate(const ir::port &p) {
+        auto reg_count = p.type().nr_elements();
+        auto element_width = p.type().width();
+        if (element_width > base_type.element_width()) {
+            element_width = base_type.element_width();
+
+            // TODO: revise this; division slow
+            reg_count = p.type().width() / element_width;
+        }
+
+        auto type = ir::value_type(p.type().type_class(), element_width, 1);
+        return allocate_all_to_port(p, reg_count, type);
+    }
+
+    // Allocates a new virtual register and associates with given port
+    register_operand allocate_to_port(const ir::port &p) {
+        return allocate_to_port(p, p.type());
+    }
+
+    // Allocates a new virtual register of particular type and associates with given port
+    register_operand allocate_to_port(const ir::port &p, ir::value_type type) {
+        return match_to_port(p, allocate(type));
+    }
+
+    // Associates existing virtual register to port
+    register_operand match_to_port(const ir::port &p, register_operand reg_op) {
+        if (!reg_op.is_virtual())
+            throw arm64_exception("Cannot match physical register {} to port through virtual register allocator",
+                                  reg_op);
+        port_to_vreg_[&p].emplace_back(reg_op);
+		return reg_op;
+    }
+
+    // Retrieves allocations for port (if the port has allocations)
+    [[nodiscard]]
+    const register_sequence &at(const ir::port &p) const {
+        return port_to_vreg_.at(&p);
+    }
+
+    // Retrieves current virtual registers allocated
+    [[nodiscard]]
+    size_type current_allocations() const { return next_vreg_; }
+
+    // Eliminates all allocations
+    void clear() { port_to_vreg_.clear(); }
+private:
+    size_type next_vreg_ = 0;
+    std::unordered_map<const ir::port *, register_sequence> port_to_vreg_;
+
+    const register_sequence &allocate_all_to_port(const ir::port &p, size_type count, ir::value_type type) {
+        port_to_vreg_[&p].reserve(count);
+        for (size_type i = 0; i < count; ++i)
+            port_to_vreg_[&p].push_back(allocate(type));
+        return port_to_vreg_[&p];
+    }
+};
+
+class arm64_translation_context final : public translation_context {
 public:
 	arm64_translation_context(machine_code_writer &writer);
 
@@ -29,44 +103,34 @@ public:
     virtual ~arm64_translation_context() { }
 private:
 	instruction_builder builder_;
+    virtual_register_allocator vreg_allocator_;
+
     std::vector<ir::node *> nodes_;
 	std::set<const ir::node *> materialised_nodes_;
-	std::unordered_map<const ir::port *, std::vector<register_operand>> port_to_vreg_;
 	std::unordered_map<unsigned long, off_t> instruction_index_to_guest_;
     std::unordered_map<const ir::local_var *, std::vector<register_operand>> locals_;
     int ret_;
-	int next_vreg_;
 	off_t this_pc_;
     size_t instr_cnt_ = 0;
 
-	register_operand alloc_vreg(ir::value_type type) {
-        return register_operand(next_vreg_++, type);
-    }
-
-	register_operand &alloc_vreg(const ir::port &p, ir::value_type type) {
-		auto v = alloc_vreg(type);
-        port_to_vreg_[&p].push_back(v);
-		return port_to_vreg_[&p].back();
-	}
-
-	register_operand &alloc_vreg(const ir::port &p, register_operand &vreg) {
-        port_to_vreg_[&p].push_back(vreg);
-		return port_to_vreg_[&p].back();
-	}
-
-    register_operand &alloc_vreg(const ir::port &p) { return alloc_vreg(p, p.type()); }
-
-    std::vector<register_operand> &alloc_vregs(const ir::port &p);
-
-	register_operand &vreg_for_port(const ir::port &p, size_t index = 0) { return vregs_for_port(p)[index]; }
-
-    std::vector<register_operand> &vregs_for_port(const ir::port &p) { return port_to_vreg_[&p]; }
-
     std::vector<register_operand> &materialise_port(ir::port &p);
 
+    template <typename T, std::enable_if_t<std::is_arithmetic_v<T>>>
+    [[nodiscard]]
+    memory_operand guest_register_accessor(T guest_register_byte_offset,
+                                           memory_operand::addressing_modes mode = memory_operand::addressing_modes::indirect)
+    {
+        // If immediate offset fits in 12-bits; access using
+        [[likely]]
+        if (immediate_operand::fits(guest_register_byte_offset, u12())) {
+            return {context_block_reg, immediate_operand(guest_register_byte_offset, u12()), mode};
+        }
 
-    memory_operand guestreg_memory_operand(int regoff,
-                                           memory_operand::addressing_modes mode = memory_operand::addressing_modes::direct);
+        auto base_vreg = vreg_allocator_.allocate(host_address_type);
+        builder_.mov(base_vreg, immediate_operand(guest_register_byte_offset, u12()));
+        builder_.add(base_vreg, context_block_reg, base_vreg);
+        return {base_vreg, immediate<0, 12>(), mode};
+    }
 
     void materialise(const ir::node *n);
     void materialise_read_reg(const ir::read_reg_node &n);

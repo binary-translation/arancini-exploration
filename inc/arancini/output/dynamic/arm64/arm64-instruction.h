@@ -47,10 +47,12 @@ private:
 
 static assembler asm_;
 
+[[nodiscard]]
 static constexpr ir::value_type u12() {
     return ir::value_type(ir::value_type_class::unsigned_integer, 12, 1);
 }
 
+[[nodiscard]]
 static constexpr ir::value_type u8() {
     return ir::value_type(ir::value_type_class::unsigned_integer, 8, 1);
 }
@@ -187,12 +189,14 @@ private:
     static constexpr register_index virtual_reg_start = physical_register_count;
 };
 
+[[nodiscard]]
 inline bool operator==(const register_operand &op1, const register_operand &op2) {
     return op1.type() == op2.type() &&
            op1.index() == op2.index() &&
            op1.is_special() == op2.is_special();
 }
 
+[[nodiscard]]
 inline bool operator!=(const register_operand &op1, const register_operand &op2) {
     return !(op1 == op2);
 }
@@ -216,7 +220,7 @@ constexpr ir::value_type_class convert_to_type_class() {
     return ir::value_type_class::floating_point;
 }
 
-class immediate_operand {
+class immediate_operand final {
 public:
     using value_type = ir::value_type;
     using base_type  = std::uintmax_t;
@@ -305,7 +309,7 @@ class memory_operand final {
 public:
     // TODO: implement all addressing_modes
     enum class addressing_modes {
-        direct,
+        indirect,
         pre_index,
         post_index
     };
@@ -314,7 +318,7 @@ public:
 
 	memory_operand(const register_operand &base,
                    immediate_operand offset = immediate_operand(0, u12()),
-                   addressing_modes addressing_mode = addressing_modes::direct)
+                   addressing_modes addressing_mode = addressing_modes::indirect)
         : base_register_(base)
 		, offset_(offset)
         , addressing_mode_(addressing_mode)
@@ -334,65 +338,25 @@ public:
     template <typename T>
     void set_base_register(const T &op) { base_register_ = op; }
 
+    [[nodiscard]]
     address_base &base_register() { return base_register_; }
+
+    [[nodiscard]]
     const address_base &base_register() const { return base_register_; }
 
+    [[nodiscard]]
     immediate_operand &offset() { return offset_; }
+
+    [[nodiscard]]
     const immediate_operand &offset() const { return offset_; }
 
+    [[nodiscard]]
     addressing_modes addressing_mode() const { return addressing_mode_; }
 private:
     address_base base_register_;
 
 	immediate_operand offset_;
     enum addressing_modes addressing_mode_;
-};
-
-template <typename T, ir::value_type_class V>
-struct check_type_class {
-    check_type_class(T &o) {
-        if constexpr (std::is_same_v<T, register_operand>) {
-            if (o.type().type_class() != V) std::abort();
-        }
-
-        if constexpr (std::is_same_v<T, memory_operand>) {
-            if (o.base_register().type().type_class() != V) std::abort();
-        }
-
-        if constexpr (std::is_same_v<T, immediate_operand>) {
-            if (o.type().type_class() != V) std::abort();
-        }
-    }
-
-    using type = T;
-};
-
-template <typename T, std::size_t Size, typename Compare = std::equal_to<std::size_t>>
-struct check_size {
-    check_size(T &o) {
-        if constexpr (std::is_same_v<T, register_operand>) {
-            if (Compare(o.type().width(), Size)) std::abort();
-        }
-
-        if constexpr (std::is_same_v<T, memory_operand>) {
-            if (Compare(o.base_register().type().width(), Size)) std::abort();
-        }
-
-        if constexpr (std::is_same_v<T, immediate_operand>) {
-            if (Compare(o.type().width(), Size)) std::abort();
-        }
-    }
-
-    using type = T;
-};
-
-template <typename T>
-struct check_special {
-    check_special(T &o) {
-        if constexpr (std::is_same_v<T, register_operand>) {
-            if (!o.is_special()) std::abort();
-        }
-    }
 };
 
 class operand final {
@@ -413,7 +377,10 @@ public:
     void set_use() { use_ = true; }
     void set_def() { def_ = true; }
 
+    [[nodiscard]]
     bool is_use() const { return use_; }
+
+    [[nodiscard]]
     bool is_def() const { return def_; }
 private:
     bool use_ = false;
@@ -427,7 +394,7 @@ inline operand use(operand o) {
 }
 
 inline operand def(operand o) {
-    o.set_use();
+    o.set_def();
     return o;
 }
 
@@ -437,7 +404,7 @@ inline operand usedef(operand o) {
     return o;
 }
 
-class instruction {
+class instruction final {
 public:
     template <typename... Args>
     instruction(const std::string &opcode, Args&&... operands):
@@ -447,33 +414,46 @@ public:
     // TODO: replace with something better
     using operand_array = std::vector<operand>;
 
+    [[nodiscard]]
     operand_array &operands() { return operands_; }
+
+    [[nodiscard]]
     const operand_array &operands() const { return operands_; }
 
+    [[nodiscard]]
     std::string_view opcode() const { return opcode_; }
 
-    instruction &set_keep() { keep_ = true; return *this; }
-    bool is_keep() const { return keep_; }
+    instruction &set_keep() { is_keep_ = true; return *this; }
 
-    instruction &set_copy() { copy_ = true; return *this; }
-    bool is_copy() const { return copy_; }
+    [[nodiscard]]
+    bool is_keep() const { return is_keep_; }
 
-    instruction &set_branch() { branch_ = true; return *this; }
-    bool is_branch() const { return branch_; }
+    instruction &set_copy() { is_copy_ = true; return *this; }
 
-	bool is_dead() const { return opcode_.empty(); }
+    [[nodiscard]]
+    bool is_copy() const { return is_copy_; }
+
+    instruction &set_branch() { is_branch_ = true; return *this; }
+
+    [[nodiscard]]
+    bool is_branch() const { return is_branch_; }
+
+    [[nodiscard]]
+	bool is_dead() const { return is_dead_; }
 
     instruction &comment(std::string_view comment) { comment_ = comment; return *this; }
 
-	void kill() { opcode_.clear(); }
+	void kill() { is_dead_ = true; }
 
+    [[nodiscard]]
     std::string_view comment() const { return comment_; }
 
     virtual ~instruction() = default;
 private:
-    bool keep_ = false;
-    bool copy_ = false;
-    bool branch_ = false;
+    bool is_keep_ = false;
+    bool is_copy_ = false;
+    bool is_branch_ = false;
+    bool is_dead_ = false;
 
     std::string opcode_;
     operand_array operands_;
@@ -765,8 +745,10 @@ struct fmt::formatter<arancini::output::dynamic::arm64::instruction> final : pub
     template <typename FCTX>
     format_context::iterator format(const arancini::output::dynamic::arm64::instruction &insn, FCTX &format_ctx) const {
         // This causes a gap in the instruction stream to appear; might cause a small slowdown
-        // TODO: investigate
-        if (insn.is_dead()) return format_ctx.out();
+        // TODO: ideally should be triggered only in debug mode
+        if (insn.is_dead()) {
+            return fmt::format_to(format_ctx.out(), "// Dead instruction: {} {}", insn.opcode(), fmt::join(insn.operands(), ", "));
+        }
 
         if (insn.comment().empty())
             return fmt::format_to(format_ctx.out(), "{} {}", insn.opcode(), fmt::join(insn.operands(), ", "));

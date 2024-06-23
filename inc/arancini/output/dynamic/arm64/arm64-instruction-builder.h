@@ -23,7 +23,7 @@ using is_reg_or_immediate = std::enable_if_t<std::disjunction_v<std::is_same<T, 
                                                               std::is_same<T, immediate_operand>>,
                                                               int>;
 
-class instruction_builder {
+class instruction_builder final {
 public:
     using instruction_stream = typename std::vector<instruction>;
 

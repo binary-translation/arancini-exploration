@@ -60,8 +60,8 @@ void instruction_builder::emit(machine_code_writer &writer) {
 class register_set {
 public:
     register_set(std::uint32_t available_scalar_registers, std::uint32_t available_neon_registers):
-        scalar_registers_(available_scalar_registers),
-        neon_registers_(available_neon_registers)
+        scalar_registers_{available_scalar_registers},
+        neon_registers_{available_neon_registers}
     { }
 
     using base_type = std::bitset<register_operand::physical_register_count>;
@@ -76,7 +76,7 @@ public:
         return index;
     }
 
-    inline void deallocate(register_operand reg) {
+    inline void free(const register_operand &reg) {
         allocation_base(reg.type()).flip(reg.index());
     }
 
@@ -85,18 +85,17 @@ public:
     base_type gpr_state() const noexcept { return scalar_registers_; }
 
     [[nodiscard]]
-    base_type fp_state() const noexcept { return float_registers_; }
+    base_type fp_state() const noexcept { return neon_registers_; }
 private:
     std::bitset<register_operand::physical_register_count> scalar_registers_;
     std::bitset<register_operand::physical_register_count> neon_registers_;
-    std::bitset<register_operand::physical_register_count>& float_registers_ = neon_registers_;
 
     std::bitset<register_operand::physical_register_count> &allocation_base(arancini::ir::value_type t) {
         if (t.type_class() == arancini::ir::value_type_class::signed_integer ||
             t.type_class() == arancini::ir::value_type_class::unsigned_integer)
             return scalar_registers_;
 
-        return float_registers_;
+        return neon_registers_;
     }
 };
 
@@ -106,7 +105,7 @@ struct fmt::formatter<register_set> final : public fmt::formatter<std::string_vi
     template <typename FCTX>
     format_context::iterator format(register_set regset, FCTX &format_ctx) const {
         fmt::format_to(format_ctx.out(), "General Purpose Registers state: {}\n", regset.gpr_state());
-        return fmt::format_to(format_ctx.out(), "Floating Point Registers state: {}", regset.fp_state());
+        return fmt::format_to(format_ctx.out(), "Floating Point Registers state:  {}", regset.fp_state());
     }
 };
 
@@ -126,7 +125,7 @@ public:
         return allocation;
     }
 
-    inline void deallocate(register_operand reg) {
+    inline void free(register_operand reg) {
         // Do nothing when register not tracked by register allocator
         // TODO: check register allocator behaviour when intermixing hardcoded def() physical registers
         // with use() virtual registers
@@ -135,7 +134,7 @@ public:
         current_allocations_.erase(current_allocations_.at(reg));
         current_allocations_.erase(reg);
 
-        regset_.deallocate(reg);
+        regset_.free(reg);
     }
 
     // Lookup
@@ -222,9 +221,6 @@ void instruction_builder::allocate() {
 	for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
 		auto &insn = *RI;
 
-        bool unused_keep = false;
-
-        // TODO: fails
         util::global_logger.debug("Allocating instruction {}\n", insn);
         util::global_logger.debug("Current allocator state:\n{}\n", allocator.state());
 		for (auto &operand : insn.operands()) {
@@ -243,7 +239,7 @@ void instruction_builder::allocate() {
                         operand = *previous_allocation;
 
                         // Allocation not needed beyond this point
-                        allocator.deallocate(*previous_allocation);
+                        allocator.free(*previous_allocation);
 
                         util::global_logger.debug("Register {} available\n", *previous_allocation);
                     } else if (insn.is_keep()) {
@@ -254,13 +250,12 @@ void instruction_builder::allocate() {
 
                         auto allocation = allocator.allocate(*vreg);
 
-                        // Marked as unused
-                        // Allocation becomes available before next instruction
-                        unused_keep = true;
-
                         util::global_logger.debug("Unused definition allocated to {}\n", allocation);
 
                         operand = allocation;
+
+                        // Allocation not needed beyond this point
+                        allocator.free(allocation);
                     } else {
                         // Instruction fully unused; eliminated
                         util::global_logger.debug("Value not allocated - killing instruction {}\n", insn);
@@ -302,22 +297,6 @@ void instruction_builder::allocate() {
                         operand = memory_operand(allocation, mem->offset(), mem->addressing_mode());
                     }
                 }
-            }
-        }
-
-        if (unused_keep) {
-			util::global_logger.debug("Instruction {} is marked as keep but not referenced below; deallocating operands\n", insn);
-
-			for (auto &o : insn.operands()) {
-                // TODO: what if this was already a physical registers?
-                // NOTE: only register considered; no aarch64 instruction defines memory area
-                // TODO: reconsider this (for propagation optimizations)
-                if (const auto *reg = std::get_if<register_operand>(&o.get()); o.is_def() && reg) {
-                    util::global_logger.debug("Deallocating register {}\n", *reg);
-
-                    allocator.deallocate(*reg);
-                }
-
             }
         }
 
