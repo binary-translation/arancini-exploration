@@ -64,10 +64,11 @@
 				nativeBuildInputs = [ meson ninja ];
 			}){};
 		native_pkgs = import nixpkgs { system = system; };
+        aranciniLlvmPackages = import ./llvm.nix { pkgs = native_pkgs; };
 	in
 	{
 		defaultPackage = native_pkgs.callPackage(
-		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2, llvmPackages,
+		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2,
 		 lib, gcc, fmt, pkgsCross, m4, keystone, flex, bison}:
 			stdenv.mkDerivation {
 				name = "arancini";
@@ -95,9 +96,9 @@
 					libffi
 					fadec
 					libxml2
-					llvmPackages.llvm.dev
-					llvmPackages.bintools
-					llvmPackages.lld
+					aranciniLlvmPackages.llvm.dev
+					aranciniLlvmPackages.bintools
+					aranciniLlvmPackages.lld
 					flex
 				] ++ lib.optionals ( system == "aarch64-linux" ) [ keystone ];
 				depsTargetTarget = [ gcc ];
@@ -146,10 +147,11 @@
 				}){};
 			native_pkgs = import nixpkgs { system = "x86_64-linux"; };
 			build_pkgs = import nixpkgs { system = "x86_64-linux"; crossSystem.config = system+"-gnu"; };
-		in
+			aranciniLlvmPackages = import ./llvm.nix { pkgs = build_pkgs; };
+    	in
 		{
 		crossPackage = build_pkgs.callPackage(
-		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2, llvmPackages,
+		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2,
 			lib, gcc, fmt, pkgsCross, m4, keystone, flex, bison}:
 			stdenv.mkDerivation {
 				name = "arancini";
@@ -164,7 +166,6 @@
 					cmake
 					pkg-config
 					clang
-					pkgsCross.riscv64.buildPackages.gcc
 					m4
                     flex
                     bison
@@ -177,9 +178,9 @@
 					libffi
 					fadec
 					libxml2
-					llvmPackages.llvm.dev
-					llvmPackages.bintools
-					llvmPackages.lld
+					aranciniLlvmPackages.llvm.dev
+					aranciniLlvmPackages.bintools
+					aranciniLlvmPackages.lld
                     flex
 				] ++ lib.optionals ( system == "aarch64-linux" ) [ keystone ];
 				depsTargetTarget = [ gcc ];
