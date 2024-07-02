@@ -7,6 +7,11 @@ get_phoenix() {
 	nix build ./scripts\#phoenix.x86_64-linux --out-link phoenix-x86_64;
 	PHOENIX_DIR=phoenix-x86_64;
 }
+get_parsec() {
+	local arch=$1;
+	nix build ./scripts\#parsec.x86_64-linux --out-link parsec-x86_64;
+	PARSEC_DIR=parsec-x86_64;
+}
 
 check() {
 	if [[ ! -x $1/bin/txlat ]]; then
@@ -33,8 +38,7 @@ do_tx() {
 
 	if [[ $tx_lib == 0 ]]; then
 		./$result_dir/bin/txlat -I ${PHOENIX_DIR}/libc.so -O $txlat_dir/libmusl.out &> $txlat_dir/libmusl-dump.txt;
-		./$result_dir/bin/txlat -I ${PHOENIX_DIR}/libc.so -O $txlat_dir/libmusl-dyn.out --no-static &> $txlat_dir/libmusl-dyn-dump.txt;
-		./$result_dir/bin/txlat -I ${PHOENIX_DIR}/libc.so -O $txlat_dir/libmusl-nlocks.out --nlib lock.mni &> $txlat_dir/libmusl-nlocks-dump.txt;
+		#./$result_dir/bin/txlat -I ${PHOENIX_DIR}/libc.so -O $txlat_dir/libmusl-dyn.out --no-static &> $txlat_dir/libmusl-dyn-dump.txt;
 		./$result_dir/bin/txlat -I ${PHOENIX_DIR}/libc.so -O $txlat_dir/libmusl-nmem.out --nlib general.mni &> $txlat_dir/libmusl-nmem-dump.txt;
 	fi;
 	git rev-parse HEAD > $txlat_dir/commit.txt;
@@ -46,9 +50,18 @@ do_tx() {
 		#TODO: no datafiles
 		echo $p;
 		./$result_dir/bin/txlat -I ${PHOENIX_DIR}/$p -O $txlat_dir/$p.out -l $txlat_dir/libmusl.out &> $txlat_dir/$p-dump.txt;
-		./$result_dir/bin/txlat -I ${PHOENIX_DIR}/$p -O $txlat_dir/$p-dyn.out --no-static -l $txlat_dir/libmusl-dyn.out &> $txlat_dir/$p-dyn-dump.txt;
-		./$result_dir/bin/txlat -I ${PHOENIX_DIR}/$p -O $txlat_dir/$p-nlocks.out -l $txlat_dir/libmusl-nlocks.out &> $txlat_dir/$p-nlocks-dump.txt;
+		#./$result_dir/bin/txlat -I ${PHOENIX_DIR}/$p -O $txlat_dir/$p-dyn.out --no-static -l $txlat_dir/libmusl-dyn.out &> $txlat_dir/$p-dyn-dump.txt;
 		./$result_dir/bin/txlat -I ${PHOENIX_DIR}/$p -O $txlat_dir/$p-nmem.out -l $txlat_dir/libmusl-nmem.out &> $txlat_dir/$p-nmem-dump.txt;
+	done
+	for p in $(ls ${PARSEC_DIR});
+	do
+		if [[ ! -x ${PARSEC_DIR}/$p ]]; then continue; fi;
+		if [[ $p == "libc.so" ]]; then continue; fi;
+		#TODO: no datafiles
+		echo $p;
+		./$result_dir/bin/txlat -I ${PARSEC_DIR}/$p -O $txlat_dir/$p.out -l $txlat_dir/libmusl.out &> $txlat_dir/$p-dump.txt;
+		#./$result_dir/bin/txlat -I ${PARSEC_DIR}/$p -O $txlat_dir/$p-dyn.out --no-static -l $txlat_dir/libmusl-dyn.out &> $txlat_dir/$p-dyn-dump.txt;
+		./$result_dir/bin/txlat -I ${PARSEC_DIR}/$p -O $txlat_dir/$p-nmem.out -l $txlat_dir/libmusl-nmem.out &> $txlat_dir/$p-nmem-dump.txt;
 	done
 }
 
@@ -59,6 +72,7 @@ translate_all() {
 	if [[ $arch == "" ]]; then arch=$system; fi;
 
 	get_phoenix $arch;
+	get_parsec $arch;
 
 	if [[ $system != $arch ]]; then
 		do_cross $arch;

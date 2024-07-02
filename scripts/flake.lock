@@ -34,6 +34,23 @@
         "type": "github"
       }
     },
+    "parsec-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1719502412,
+        "narHash": "sha256-cT1ivIIRadhWV9gqSBA+m1UN5mOgFi035vZeHTXOtx0=",
+        "owner": "ReimersS",
+        "repo": "parsec-benchmark",
+        "rev": "37ca894d8e09a79b49106d9768ae4d207073c5bd",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ReimersS",
+        "ref": "master",
+        "repo": "parsec-benchmark",
+        "type": "github"
+      }
+    },
     "phoenix-src": {
       "flake": false,
       "locked": {
@@ -71,6 +88,7 @@
       "inputs": {
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs",
+        "parsec-src": "parsec-src",
         "phoenix-src": "phoenix-src",
         "risotto-pkgs": "risotto-pkgs"
       }

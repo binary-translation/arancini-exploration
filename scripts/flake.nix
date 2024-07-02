@@ -9,6 +9,13 @@
 			ref = "musl";
 			flake = false;
 		};
+		parsec-src = {
+			type = "github";
+			owner = "ReimersS";
+			repo = "parsec-benchmark";
+			ref = "master";
+			flake = false;
+		};
 		risotto-pkgs = {
 			type = "github";
 			owner = "NixOS";
@@ -20,11 +27,11 @@
 	nixConfig.extra-substituters = [ "https://musl-toolchains.cachix.org" ];
 	nixConfig.extra-trusted-public-keys = [ "musl-toolchains.cachix.org-1:g9L50mmWHHMzAVIfgLVQjhoBsjT66n3LDa0f8xeigpI=" ];
 
-	outputs = { self, nixpkgs, flake-utils, phoenix-src, risotto-pkgs, ... }:
+	outputs = { self, nixpkgs, flake-utils, phoenix-src, parsec-src, risotto-pkgs, ... }:
 	flake-utils.lib.eachSystem [ "x86_64-linux" "riscv64-linux" "aarch64-linux" ] (system:
 	let
 		pkgs = import nixpkgs { system = system; crossSystem = { config = system+"-musl"; }; config.allowUnsupportedSystem=true; };
-		native_pkgs = import nixpkgs { inherit system; config.allowUnsupportedSystem=true; };
+		native_pkgs = import nixpkgs { inherit system; };
 
 		rv_patch = builtins.fetchurl {
 			url = "https://gist.githubusercontent.com/ReimersS/81e6d9b7ba90b42800be1f8d7443689c/raw/06e2ce53033b5eb568638de1171c88ad677f1777/riscv-fpargs.patch";
@@ -158,12 +165,19 @@
 			url = "http://csl.stanford.edu/~christos/data/word_count.tar.gz";
 			sha256 = "0yr45csbkzd33xa4g5csf2y4rw8xww58j41amp8wza1q8z6g0iv4";
 		};
+
+		parsec_datafiles = builtins.fetchurl {
+			url = "https://github.com/cirosantilli/parsec-benchmark/releases/download/3.0/parsec-3.0-input-sim.tar.gz";
+			sha256 = "1lpyk446dzv2w92g18v90blvh9fv1d9gy83b8wlssz2rv19kd2rp";
+		};
 	in
 	{
+	# on x86 we plot, everywhere else we run benchmarks
 	devShell =
 		native_pkgs.mkShell {
 			src = self;
 			packages = [
+			] ++ native_pkgs.lib.optionals (system != "x86_64-linux") [
 				qemu
 				risotto-qemu
 				risotto
@@ -204,6 +218,54 @@
 				tar -xzf ${string_match_datafiles};
 				tar -xzf ${reverse_index_datafiles};
 				tar -xzf ${word_count_datafiles};
+			'';
+		};
+	# TODO: use libcxxStdenv and fix the bintools issue
+	parsec =
+		pkgs.llvmPackages_15.stdenv.mkDerivation {
+			name = "parsec";
+			hardeningDisable = [ "all" ];
+
+			src = parsec-src;
+			nativeBuildInputs = [
+				native_pkgs.gnumake
+				pkgs.binutils
+				native_pkgs.pkg-config
+				native_pkgs.m4
+				native_pkgs.gettext
+				native_pkgs.wget
+			];
+			buildInputs = [
+				pkgs.llvmPackages_15.openmp.dev
+			];
+
+			configurePhase = "patchShebangs ./bin; patchShebangs .;";
+			buildPhase = "./bin/parsecmgmt -a build -p blackscholes bodytrack ferret fluidanimate freqmine swaptions vips streamcluster";
+			installPhase = ''
+				mkdir $out;
+				ln -s ${pkgs.llvmPackages_15.stdenv.cc.libc}/lib/libc.so $out/libc.so;
+
+				tar -xzf ${parsec_datafiles};
+
+				for p in blackscholes bodytrack ferret fluidanimate freqmine swaptions vips; do
+					echo $p;
+					cp pkgs/apps/$p/inst/*/bin/$p $out;
+
+					if [[ -d parsec-3.0/pkgs/apps/$p/inputs ]]; then
+						mkdir -p $out/$p\_datafiles;
+						ls $out
+						tar -xf parsec-3.0/pkgs/apps/$p/inputs/input_simlarge.tar -C $out/$p\_datafiles;
+					fi;
+				done;
+				for p in streamcluster; do
+					echo $p;
+					cp pkgs/kernels/$p/inst/*/bin/$p $out;
+
+					if [[ -d parsec-3.0/pkgs/kernels/$p/inputs ]]; then
+						mkdir -p $out/$p\_datafiles;
+						tar -xf parsec-3.0/pkgs/kernels/$p/inputs/input_simlarge.tar -C $out/$p\_datafiles;
+					fi;
+				done;
 			'';
 		};
 	checks = {

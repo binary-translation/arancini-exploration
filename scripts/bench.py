@@ -54,7 +54,7 @@ def do_run(progs, env):
     start = datetime.now()
     env["ARANCINI_ENABLE_LOG"] = "false";
     try:
-        out = sp.run(["sudo", "nice", "-n", "-25"] + progs, capture_output=True, env=env, timeout=1800)
+        out = sp.run(progs, capture_output=True, env=env, timeout=1800)
     except:
         return -1
     end = datetime.now()
@@ -105,12 +105,10 @@ def run(csvfile, config):
             "native":native,
             "Arancini":arancini,
             "Arancini-nmem":arancini_nmem,
-            "Arancini-nlock":arancini_nlock,
             "Risotto":risotto,
             "Risotto-QEMU":risotto_qemu,
             "Risotto-nofence":risotto_nofence,
             "Risotto-nmem":risotto_nmem,
-            "Risotto-nlock":risotto_nlock
         }
 
     # because matrix_multiply wants to be special
@@ -120,13 +118,14 @@ def run(csvfile, config):
     for t in threads:
         for r in runs.keys():
             for b, run in runs[r]:
-                env = os.environ
-                env["LD_LIBRARY_PATH"] = ARANCINI_RESULT_PATH+"lib"
-                print(f'### {run}')
-                prog = ["taskset", "-c", f"1-{t}"] + run
-                dif = do_run(prog, env)
-                writer.writerow({"benchmark":b, "emulator":r, "time":str(dif), "type":"map-reduce", "threads":f"{t}"})
-                csvfile.flush()
+                for _ in range(5):
+                    env = os.environ
+                    env["LD_LIBRARY_PATH"] = ARANCINI_RESULT_PATH+"lib"
+                    print(f'### {run}')
+                    prog = ["taskset", "-c", f"1-{t}"] + run
+                    dif = do_run(prog, env)
+                    writer.writerow({"benchmark":b, "emulator":r, "time":str(dif), "type":"map-reduce", "threads":f"{t}"})
+                    csvfile.flush()
 
 def clean(csvfile):
     pass
