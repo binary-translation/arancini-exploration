@@ -24,3 +24,7 @@ result
 **/*.dot.*
 
 *.ll
+
+result-*
+phoenix-*
+parsec-*

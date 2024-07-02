@@ -169,6 +169,15 @@ int execution_context::internal_call(void *cpu_state, int call)
 		auto x86_state = (x86::x86_cpu_state *)cpu_state;
         util::global_logger.debug("System call number: {}\n", util::copy(x86_state->RAX));
 		switch (x86_state->RAX) {
+		case 1: // write
+		{
+            util::global_logger.debug("System call: write()\n");
+			uint64_t fd = x86_state->RDI;
+			auto buf = (uintptr_t)get_memory_ptr((off64_t)x86_state->RSI);
+			uint64_t count = x86_state->RDX;
+			x86_state->RAX = native_syscall(__NR_write, fd, buf, count);
+			break;
+		}
 		case 2: // open
 		{
             util::global_logger.debug("System call: open()\n");
