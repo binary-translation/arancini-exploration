@@ -3,6 +3,7 @@
 #include "arancini/ir/port.h"
 #include "arancini/ir/visitor.h"
 #include "arancini/output/static/llvm/llvm-static-visitor.h"
+#include "arancini/output/static/llvm/llvm-fence-combine.h"
 #include "arancini/runtime/exec/x86/x86-cpu-state.h"
 #include "arancini/util/logger.h"
 #include "llvm/Support/raw_ostream.h"
@@ -2378,11 +2379,9 @@ void llvm_static_output_engine_impl::optimise()
 	PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
 	PB.registerOptimizerLastEPCallback( [&](ModulePassManager &mpm, OptimizationLevel Level) {
-		mpm.addPass(createModuleToFunctionPassAdaptor(PromotePass()));
-		mpm.addPass(createModuleToFunctionPassAdaptor(ADCEPass()));
-		mpm.addPass(createModuleToFunctionPassAdaptor(AggressiveInstCombinePass()));
-		mpm.addPass(DeadArgumentEliminationPass());
+		mpm.addPass(createModuleToFunctionPassAdaptor(FenceCombinePass()));
 	});
+
 	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
 	MPM.run(*module_, MAM);
 

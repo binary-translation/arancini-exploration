@@ -6,16 +6,21 @@ import subprocess as sp
 from datetime import datetime, timedelta
 import os
 import argparse
+import configparser
+import itertools as it
 
 def main():
     parser = argparse.ArgumentParser(description='Run benchmarks')
-    parser.add_argument('name', metavar='n', action="store",
+    parser.add_argument('name', metavar='n', action="store", nargs='?',
                         help='special name for the symlink', default="latest")
     args = parser.parse_args()
     linkname = args.name
     csvfile = setup(linkname)
+
+    config = configparser.ConfigParser()
+    config.read("scripts/conf.ini")
     build()
-    run(csvfile)
+    run(csvfile, config)
     clean(csvfile)
 
 def setup(linkname):
@@ -35,7 +40,7 @@ def setup(linkname):
         c.write(r.stdout.decode("utf-8"))
 
     csvfile = open(f"bench/{time_str}/times.csv", "w+")
-    fieldnames = [ "benchmark", "emulator", "time" ]
+    fieldnames = [ "benchmark", "emulator", "time", "type", "threads" ]
     writer = csv.DictWriter(csvfile, fieldnames)
     writer.writeheader()
     return csvfile
@@ -44,58 +49,86 @@ def setup(linkname):
 def build():
     pass
 
-def do_run(progs, argf, name):
+def do_run(progs, env):
     print(f"Running {progs} ...")
-    args = ""
-    if argf != "":
-        args = "test/phoenix/"+name+"_datafiles/"+argf
     start = datetime.now()
-    out = sp.run(progs + [args], capture_output=True)
+    env["ARANCINI_ENABLE_LOG"] = "false";
+    try:
+        out = sp.run(progs, capture_output=True, env=env, timeout=1800)
+    except:
+        return -1
     end = datetime.now()
     dif = end - start
     if out.returncode != 0:
         print(out.stderr)
-        dif = timedelta(0)
+        return -1
     return dif/timedelta(microseconds=1)
 
-def run(csvfile): 
-    progs = {"histogram":"small.bmp", "kmeans":"", "pca":"", "string_match":"key_file_50MB.txt", "matrix_multiply":""}
-    fieldnames = [ "benchmark", "emulator", "time" ]
+def to_datafile(pre, name, ver):
+    return f"{pre}/{name}_datafiles/{ver}"
+
+def run(csvfile, config): 
+    fieldnames = [ "benchmark", "emulator", "time", "type", "threads"]
     writer = csv.DictWriter(csvfile, fieldnames)
-    for p in progs.keys():
-        f = progs[p]
-        for i in range(50):
-            #native
-            prog = ["/share/simonk/static-musl-phoenix/"+p+"-seq"]
-            #prog = ["/share/sebastian/phoenix/"+p+"-seq"]
-            dif = do_run(prog, f, p)
-            writer.writerow({"benchmark":p, "emulator":"native", "time":str(dif)})
 
-            #txlat
-            prog = ["./"+p+"-seq-static-musl-riscv.out"]
-            #prog = ["./"+p+"-seq-static-musl-arm.out"]
-            dif = do_run(prog, f, p)
-            writer.writerow({"benchmark":p, "emulator":"Arancini", "time":str(dif)})
-            csvfile.flush()
+    PHOENIX_DIR_PATH = config['x86']['PHOENIX_X86_PATH']
+    ARANCINI_RESULT_PATH = config['arancini']['ARANCINI_RESULT_PATH'];
+    
+    # literaly too lazy to type
+    p = PHOENIX_DIR_PATH
+    progs = {
+        "histogram":to_datafile(p, "histogram", "small.bmp"),
+        "kmeans":"",
+        "pca":"",
+        "string_match":to_datafile(p, "string_match", "key_file_50MB.txt"),
+        "matrix_multiply":"1024 1024",
+        "word_count":to_datafile(p, "word_count", "word_10MB.txt"),
+        "linear_regression":to_datafile(p, "linear_regression", "key_file_50MB.txt")
+    }
 
-            #txlat-dyn
-            if p not in [ ]:
-                prog = ["./"+p+"-seq-static-musl-riscv-dyn.out"]
-                #prog = ["./"+p+"-seq-static-musl-arm-dyn.out"]
-                dif = do_run(prog, f, p)
-                writer.writerow({"benchmark":p, "emulator":"Arancini-Dyn", "time":str(dif)})
-                csvfile.flush()
+    native = list(map(lambda l: (l,[ f'{config["native"]["PHOENIX_DIR_PATH"]}{l}', progs[l] ]), progs.keys()))
 
-            #QEMU
-            prog = ["/nix/store/i2k6sywwzf0vka7p09asf66g651kmxa8-qemu-riscv64-unknown-linux-gnu-8.0.0/bin/qemu-x86_64", "/share/simonk/static-musl-phoenix/"+p+"-seq-static-musl"] 
-            #prog = ["qemu-x86_64", "/share/simonk/static-musl-phoenix/"+p+"-seq-static-musl"] 
-            dif = do_run(prog, f, p)
-            writer.writerow({"benchmark":p, "emulator":"QEMU", "time":str(dif)})
-            csvfile.flush()
+    arancini = list(map(lambda l: (l,[ f'{config["translations"]["ARANCINI_OUT_PATH"]}{l}.out', progs[l] ]), progs.keys()))
+    arancini_dyn = list(map(lambda l: (l,[ f'{config["translations"]["ARANCINI_OUT_PATH"]}{l}-dyn.out', progs[l] ]), progs.keys()))
+    arancini_nmem = list(map(lambda l: (l,[ f'{config["translations"]["ARANCINI_OUT_PATH"]}{l}-nmem.out', progs[l] ]), progs.keys()))
+    arancini_nlock = list(map(lambda l: (l,[ f'{config["translations"]["ARANCINI_OUT_PATH"]}{l}-nlock.out', progs[l] ]), progs.keys()))
+
+    risotto = list(map(lambda l: (l,[ 'risotto', f'{PHOENIX_DIR_PATH}{l}', progs[l] ]), progs.keys()))
+    risotto_qemu = list(map(lambda l: (l,[ 'risotto-qemu', f'{PHOENIX_DIR_PATH}{l}', progs[l] ]), progs.keys()))
+    risotto_nofence = list(map(lambda l: (l,[ 'risotto-nofence', f'{PHOENIX_DIR_PATH}{l}', progs[l] ]), progs.keys()))
+    risotto_nmem = list(map(lambda l: (l,[ 'risotto', '-nlib', 'general.mni', f'{PHOENIX_DIR_PATH}{l}', progs[l] ]), progs.keys()))
+    risotto_nlock = list(map(lambda l: (l,[ 'risotto', '-nlib', 'lock.mni', f'{PHOENIX_DIR_PATH}{l}', progs[l] ]), progs.keys()))
+
+    threads = [ 2, 4, 8 ]
+
+    runs = {
+            "native":native,
+            "Arancini":arancini,
+            "Arancini-nmem":arancini_nmem,
+            "Risotto":risotto,
+            "Risotto-QEMU":risotto_qemu,
+            "Risotto-nofence":risotto_nofence,
+            "Risotto-nmem":risotto_nmem,
+        }
+
+    # because matrix_multiply wants to be special
+    prog = [config["native"]["PHOENIX_DIR_PATH"]+"matrix_multiply"]
+    sp.run(prog + ["1024 1024 1"], capture_output=True, timeout=1800) 
+
+    for t in threads:
+        for r in runs.keys():
+            for b, run in runs[r]:
+                for _ in range(5):
+                    env = os.environ
+                    env["LD_LIBRARY_PATH"] = ARANCINI_RESULT_PATH+"lib"
+                    print(f'### {run}')
+                    prog = ["taskset", "-c", f"1-{t}"] + run
+                    dif = do_run(prog, env)
+                    writer.writerow({"benchmark":b, "emulator":r, "time":str(dif), "type":"map-reduce", "threads":f"{t}"})
+                    csvfile.flush()
 
 def clean(csvfile):
-    print("Cleaning ...")
-    close(csvfile)
+    pass
 
 if __name__ == "__main__":
     main()
