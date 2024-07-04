@@ -373,8 +373,7 @@ Function *llvm_static_output_engine_impl::create_main_loop() {
 	assert(call->getType()->isStructTy() && "Expected return type to be struct type");
 
 	for (unsigned i = 0; i < regIndices.size(); ++i) {
-		// we are skipping the state_arg return type
-		createStoreToCPU(builder, state_arg, i + 1, call, regIndices[i]);
+		createStoreToCPU(builder, state_arg, i, call, regIndices[i]);
 	}
 
 #if defined(DEBUG)
@@ -532,7 +531,11 @@ Function *llvm_static_output_engine_impl::create_main_internal_loop() {
 #if defined(DEBUG)
 	builder.CreateCall(clk_, {builder.CreateLoad(types.cpu_state, state_alloca_), builder.CreateGlobalStringPtr("done-loop")});
 #endif
-	builder.CreateRet(call);
+	unwrap_ret(&builder, call, state_arg);
+	{
+		auto return_values = wrap_ret(&builder, state_arg);
+		builder.CreateAggregateRet(return_values.data(), return_values.size());
+	}
 
 	builder.SetInsertPoint(switch_to_dbt);
 
@@ -1950,14 +1953,12 @@ void llvm_static_output_engine_impl::unwrap_ret(IRBuilder<> *builder, Value *val
 	};
 
 	for (unsigned i = 0; i < allocas.size(); ++i) {
-		// we don't extract the state arg, so we increment i by one
-		builder->CreateStore(builder->CreateExtractValue(value, { i + 1 }), allocas[i]);
+		builder->CreateStore(builder->CreateExtractValue(value, { i }), allocas[i]);
 	}
-};
+}
 
 std::vector<Value*> llvm_static_output_engine_impl::wrap_ret(IRBuilder<> *builder, Argument *state_arg) {
 	std::vector<Value*> ret = {
-		state_arg,
 		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::PC)),
 		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RAX)),
 		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RCX)),
@@ -2166,6 +2167,9 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 #endif
 	unwrap_ret(builder, ret, state_arg);
 	auto ret_values = wrap_ret(builder, state_arg);
+	// FIXME: If this call is tail-optimized, the whole thing crashes, regardless whether we use the Arancini or C calling convention. Check why this is the
+	//  case and re-enable tail-optimization here.
+	ret->setTailCallKind(CallInst::TCK_NoTail);
 	builder->CreateAggregateRet(ret_values.data(), ret_values.size());
 
 	if (verifyFunction(*fn, &errs())) {
@@ -2176,6 +2180,7 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 
 FunctionType *llvm_static_output_engine_impl::get_fn_type() {
 	std::vector<Type *> argValues{};
+	std::vector<Type *> retValues{};
 
 	// cpu state
 	argValues.emplace_back(types.cpu_state_ptr);
@@ -2183,9 +2188,10 @@ FunctionType *llvm_static_output_engine_impl::get_fn_type() {
 	// 17 registers
 	for (int i = 0; i < 17; ++i) {
 		argValues.emplace_back(types.i64);
+		retValues.emplace_back(types.i64);
 	}
 
-	Type *retValue = StructType::get(*llvm_context_, argValues, false);
+	Type *retValue = StructType::get(*llvm_context_, retValues, false);
 
 	return FunctionType::get(retValue, argValues, false);
 }

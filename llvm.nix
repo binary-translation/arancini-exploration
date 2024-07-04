@@ -4,12 +4,12 @@ pkgs.llvmPackages_16.override ({
   monorepoSrc = pkgs.fetchFromGitHub {
     owner = "martin-fink";
     repo = "llvm-project";
-    rev = "3c74260185c893bfb3a9b66de6d6845606a5ef0e";
-    sha256 = "sha256-5FnRm+2E59wHM/fnfyEy22J5eVpPK+2USzAmVSKgoNo";
+    rev = "73b889f65c62e94f78def38bd2dac07a9b819a70";
+    sha256 = "sha256-hdVMRrdgnz03ooGGU3pnUQjp1wJ4LNa1sjlDeRaTnb8=";
   };
   gitRelease = {
     version = "16.0.6";
-    rev = "3c74260185c893bfb3a9b66de6d6845606a5ef0e";
+    rev = "73b889f65c62e94f78def38bd2dac07a9b819a70";
     rev-version = "16.0.6-arancini";
   };
   officialRelease = null;
