@@ -199,7 +199,7 @@ void llvm_static_output_engine_impl::create_main_function(Function *loop_fn)
 	builder.SetInsertPoint(call_block);
 	return fn_addr;
 //	auto *call = builder.CreateCall(get_fn_type(), fn_addr, args);
-//	call->setCallingConv(CallingConv::Arancini);
+//	call->setCallingConv(internal_calling_conv);
 //	return call;
 }
 
@@ -232,7 +232,7 @@ void llvm_static_output_engine_impl::create_static_functions()
 			fn->addParamAttr(0, Attribute::getWithDereferenceableBytes(*llvm_context_, sizeof(runtime::exec::x86::x86_cpu_state)));
 			fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
 			fn->addParamAttr(0, Attribute::getWithAlignment(*llvm_context_, Align(16)));
-			fn->setCallingConv(CallingConv::Arancini);
+			fn->setCallingConv(internal_calling_conv);
 			(*fns_)[addr] = fn;
 		} else {
 			// Wrapper
@@ -243,7 +243,7 @@ void llvm_static_output_engine_impl::create_static_functions()
 			fn->addParamAttr(0, Attribute::getWithDereferenceableBytes(*llvm_context_, sizeof(runtime::exec::x86::x86_cpu_state)));
 			fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
 			fn->addParamAttr(0, Attribute::getWithAlignment(*llvm_context_, Align(16)));
-			fn->setCallingConv(CallingConv::Arancini);
+			fn->setCallingConv(internal_calling_conv);
 			(*wrapper_fns_)[c->name()] = fn;
 		}
 	}
@@ -269,23 +269,20 @@ void llvm_static_output_engine_impl::build()
 
 	// Only the executable needs a MainLoop and main
 	Function *loop_fn;
+	Function *internal_loop_fn;
 	if (e_.is_exec()) {
-		loop_fn = Function::Create(types.loop_fn, GlobalValue::LinkageTypes::ExternalLinkage, "MainLoop", *module_);
-		loop_fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
-		loop_fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
-		loop_fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
-		loop_fn->addParamAttr(0, Attribute::getWithAlignment(*llvm_context_, Align(16)));
+		loop_fn = create_main_loop();
+		internal_loop_fn = create_main_internal_loop();
 
 		create_main_function(loop_fn);
 	} else {
 		loop_fn = static_cast<Function *>(module_->getOrInsertFunction("MainLoop", types.loop_fn).getCallee());
+		internal_loop_fn = static_cast<Function *>(module_->getOrInsertFunction("internal_loop_fn", get_fn_type()).getCallee());
 	}
 
-	// TODO: Input Arch Specific (maybe need some kind of descriptor?)
+	lower_chunks(internal_loop_fn);
 
 	if (!e_.is_exec()) {
-		lower_chunks(loop_fn);
-
 		{
 			func_map_.push_back(ConstantInt::get(types.i64, 0));
 			func_map_.push_back(ConstantInt::get(types.i64, 0));
@@ -300,6 +297,15 @@ void llvm_static_output_engine_impl::build()
 		debug_dump();
 		return;
 	}
+}
+
+Function *llvm_static_output_engine_impl::create_main_loop() {
+	auto *loop_fn = Function::Create(types.loop_fn, GlobalValue::LinkageTypes::ExternalLinkage, "MainLoop", *module_);
+	loop_fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
+	loop_fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
+	loop_fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
+	loop_fn->addParamAttr(0, Attribute::getWithAlignment(*llvm_context_, Align(16)));
+
 	auto state_arg = loop_fn->getArg(0);
 
 	auto entry_block = BasicBlock::Create(*llvm_context_, "entry", loop_fn);
@@ -332,9 +338,49 @@ void llvm_static_output_engine_impl::build()
 	//auto alert = module_->getOrInsertFunction("alert", types.finalize);
 	//builder.CreateCall(alert, { });
 	auto program_counter_val = builder.CreateLoad(types.i64, program_counter, "top_pc");
-	lower_static_fn_lookup(builder, switch_to_dbt, program_counter_val);
+	auto *static_fn_addr = lower_static_fn_lookup(builder, switch_to_dbt, program_counter_val);
 
-	lower_chunks(loop_fn);
+	// calling the static function
+	const std::vector<unsigned long> regIndices = {
+		static_cast<unsigned long>(reg_idx::PC),
+		static_cast<unsigned long>(reg_idx::RAX),
+		static_cast<unsigned long>(reg_idx::RCX),
+		static_cast<unsigned long>(reg_idx::RDX),
+		static_cast<unsigned long>(reg_idx::RBX),
+		static_cast<unsigned long>(reg_idx::RSP),
+		static_cast<unsigned long>(reg_idx::RBP),
+		static_cast<unsigned long>(reg_idx::RSI),
+		static_cast<unsigned long>(reg_idx::RDI),
+		static_cast<unsigned long>(reg_idx::R8),
+		static_cast<unsigned long>(reg_idx::R9),
+		static_cast<unsigned long>(reg_idx::R10),
+		static_cast<unsigned long>(reg_idx::R11),
+		static_cast<unsigned long>(reg_idx::R12),
+		static_cast<unsigned long>(reg_idx::R13),
+		static_cast<unsigned long>(reg_idx::R14),
+		static_cast<unsigned long>(reg_idx::R15),
+	};
+
+	std::vector<Value *> args = { state_arg };
+	for (const auto regIdx : regIndices) {
+		args.emplace_back(createLoadFromCPU(builder, state_arg, regIdx));
+	}
+	assert(args.size() == 18 && "Expected 18 arguments");
+
+	auto call = builder.CreateCall(get_fn_type(), static_fn_addr, args);
+	call->setCallingConv(internal_calling_conv);
+
+	assert(call->getType()->isStructTy() && "Expected return type to be struct type");
+
+	for (unsigned i = 0; i < regIndices.size(); ++i) {
+		// we are skipping the state_arg return type
+		createStoreToCPU(builder, state_arg, i + 1, call, regIndices[i]);
+	}
+
+#if defined(DEBUG)
+	builder.CreateCall(clk_, {state_arg, builder.CreateGlobalStringPtr("done-loop")});
+#endif
+	builder.CreateRetVoid();
 
 	builder.SetInsertPoint(switch_to_dbt);
 
@@ -399,7 +445,208 @@ void llvm_static_output_engine_impl::build()
 	if (verifyFunction(*loop_fn, &errs())) {
 		throw std::runtime_error("function verification failed");
 	}
+
+	return loop_fn;
 }
+
+
+Function *llvm_static_output_engine_impl::create_main_internal_loop() {
+	auto *loop_fn = Function::Create(get_fn_type(), GlobalValue::LinkageTypes::ExternalLinkage, "internal_main_loop", *module_);
+	loop_fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
+	loop_fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
+	loop_fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
+	loop_fn->addParamAttr(0, Attribute::getWithAlignment(*llvm_context_, Align(16)));
+	loop_fn->setCallingConv(internal_calling_conv);
+
+	auto *state_arg = loop_fn->getArg(0);
+
+	auto entry_block = BasicBlock::Create(*llvm_context_, "entry", loop_fn);
+	auto loop_block = BasicBlock::Create(*llvm_context_, "loop", loop_fn);
+	auto switch_to_dbt = BasicBlock::Create(*llvm_context_, "switch_to_dbt", loop_fn);
+	auto check_for_call_block = BasicBlock::Create(*llvm_context_, "check_for_call", loop_fn);
+	auto check_for_ret_block = BasicBlock::Create(*llvm_context_, "check_for_ret", loop_fn);
+	auto check_for_int_call_block = BasicBlock::Create(*llvm_context_, "check_for_internal_call", loop_fn);
+	auto internal_call_block = BasicBlock::Create(*llvm_context_, "internal_call", loop_fn);
+	auto call_block = BasicBlock::Create(*llvm_context_, "call", loop_fn);
+	auto ret_block = BasicBlock::Create(*llvm_context_, "return", loop_fn);
+	auto exit_block = BasicBlock::Create(*llvm_context_, "exit", loop_fn);
+
+	auto clk_ = module_->getOrInsertFunction("clk", types.clk_fn);
+	IRBuilder<> builder(*llvm_context_);
+
+	builder.SetInsertPoint(entry_block);
+
+	const std::vector<reg_offsets> regs = {
+		reg_offsets::PC,
+		reg_offsets::RAX,
+		reg_offsets::RCX,
+		reg_offsets::RDX,
+		reg_offsets::RBX,
+		reg_offsets::RSP,
+		reg_offsets::RBP,
+		reg_offsets::RSI,
+		reg_offsets::RDI,
+		reg_offsets::R8,
+		reg_offsets::R9,
+		reg_offsets::R10,
+		reg_offsets::R11,
+		reg_offsets::R12,
+		reg_offsets::R13,
+		reg_offsets::R14,
+		reg_offsets::R15,
+	};
+
+	init_regs(builder);
+	for (unsigned i = 0; i < regs.size(); ++i) {
+		builder.CreateStore(loop_fn->getArg(i + 1), reg_to_alloca_.at(regs[i]));
+	}
+
+
+#if defined(DEBUG)
+	builder.CreateCall(clk_, {builder.CreateLoad(types.cpu_state, state_alloca_), builder.CreateGlobalStringPtr("do-loop")});
+#endif
+
+	auto program_counter = reg_to_alloca_.at(reg_offsets::PC);
+	builder.CreateBr(loop_block);
+
+	builder.SetInsertPoint(loop_block);
+
+	//DEBUG
+	//auto alert = module_->getOrInsertFunction("alert", types.finalize);
+	//builder.CreateCall(alert, { });
+	auto program_counter_val = builder.CreateLoad(types.i64, program_counter, "top_pc");
+	auto *static_fn_addr = lower_static_fn_lookup(builder, switch_to_dbt, program_counter_val);
+
+	// calling the static function
+	std::vector<Value *> args = { state_arg };
+	for (const auto reg : regs) {
+		args.emplace_back(builder.CreateLoad(types.i64, reg_to_alloca_.at(reg)));
+	}
+	assert(args.size() == 18 && "Expected 18 arguments");
+
+	auto call = builder.CreateCall(get_fn_type(), static_fn_addr, args);
+	call->setCallingConv(internal_calling_conv);
+
+	assert(call->getType()->isStructTy() && "Expected return type to be struct type");
+
+#if defined(DEBUG)
+	builder.CreateCall(clk_, {builder.CreateLoad(types.cpu_state, state_alloca_), builder.CreateGlobalStringPtr("done-loop")});
+#endif
+	builder.CreateRet(call);
+
+	builder.SetInsertPoint(switch_to_dbt);
+
+	auto switch_callee = module_->getOrInsertFunction("invoke_code", types.dbt_invoke);
+#if defined(DEBUG)
+	builder.CreateCall(clk_, {builder.CreateLoad(types.cpu_state, state_alloca_), builder.CreateGlobalStringPtr("do-dyn")});
+#endif
+	for (auto reg : regs) {
+		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
+		auto alloca = reg_to_alloca_.at(reg);
+		StoreInst *store = builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), alloca), ptr);
+		store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), reg_file_alias_scope_));
+		store->setMetadata(LLVMContext::MD_noalias, MDNode::get(store->getContext(), guest_mem_alias_scope_));
+	}
+	auto invoke_result = builder.CreateCall(switch_callee, { state_arg });
+	for (auto reg : regs) {
+		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "restore_"+std::to_string((unsigned long)reg));
+		auto alloca = reg_to_alloca_.at(reg);
+		LoadInst *load = builder.CreateLoad(alloca->getAllocatedType(), ptr);
+		load->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(load->getContext(), reg_file_alias_scope_));
+		load->setMetadata(LLVMContext::MD_noalias, MDNode::get(load->getContext(), guest_mem_alias_scope_));
+		builder.CreateStore(load, alloca);
+	}
+#if defined(DEBUG)
+	builder.CreateCall(clk_, {state_arg, builder.CreateGlobalStringPtr("done-dyn")});
+#endif
+	/*
+	 * RETURN CODES:
+	 * 4: last instr was a ret  -> emit a return
+	 * 3: last instr was a call -> call MainLoop to figure out the next Fn
+	 * 2: do internal call
+	 * 1: do syscall
+	 * 0: all other instr		-> we did not leave the current unknown function
+	 */
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 0)), loop_block, check_for_call_block);
+
+	builder.SetInsertPoint(check_for_call_block);
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 3)), call_block, check_for_ret_block);
+
+	builder.SetInsertPoint(check_for_ret_block);
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 4)), ret_block, check_for_int_call_block);
+
+	builder.SetInsertPoint(check_for_int_call_block);
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_SGT, invoke_result, ConstantInt::get(types.i32, 0)), internal_call_block, exit_block);
+
+	builder.SetInsertPoint(internal_call_block);
+#if defined(DEBUG)
+	builder.CreateCall(clk_, {state_arg, builder.CreateGlobalStringPtr("do-internal")});
+#endif
+	auto internal_call_callee = module_->getOrInsertFunction("execute_internal_call", types.internal_call_handler);
+#if defined(DEBUG)
+	builder.CreateCall(clk_, {state_arg, builder.CreateGlobalStringPtr("done-internal")});
+#endif
+	for (auto reg : regs) {
+		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
+		auto alloca = reg_to_alloca_.at(reg);
+		StoreInst *store = builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), alloca), ptr);
+		store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), reg_file_alias_scope_));
+		store->setMetadata(LLVMContext::MD_noalias, MDNode::get(store->getContext(), guest_mem_alias_scope_));
+	}
+	auto internal_call_result = builder.CreateCall(internal_call_callee, { state_arg, invoke_result });
+	for (auto reg : regs) {
+		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "restore_"+std::to_string((unsigned long)reg));
+		auto alloca = reg_to_alloca_.at(reg);
+		LoadInst *load = builder.CreateLoad(alloca->getAllocatedType(), ptr);
+		load->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(load->getContext(), reg_file_alias_scope_));
+		load->setMetadata(LLVMContext::MD_noalias, MDNode::get(load->getContext(), guest_mem_alias_scope_));
+		builder.CreateStore(load, alloca);
+	}
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, internal_call_result, ConstantInt::get(types.i32, 0)), loop_block, exit_block);
+
+
+	builder.SetInsertPoint(exit_block);
+
+	for (auto reg : regs) {
+		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
+		auto alloca = reg_to_alloca_.at(reg);
+		StoreInst *store = builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), alloca), ptr);
+		store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), reg_file_alias_scope_));
+		store->setMetadata(LLVMContext::MD_noalias, MDNode::get(store->getContext(), guest_mem_alias_scope_));
+	}
+	auto finalize_call_callee = module_->getOrInsertFunction("finalize", types.finalize);
+	builder.CreateCall(finalize_call_callee, {});
+
+	{
+		auto return_values = wrap_ret(&builder, state_arg);
+		builder.CreateAggregateRet(return_values.data(), return_values.size());
+	}
+
+	builder.SetInsertPoint(call_block);
+	auto ret = builder.CreateCall(loop_fn, load_args(&builder, state_arg));
+	ret->setCallingConv(internal_calling_conv);
+	unwrap_ret(&builder, ret, state_arg);
+	builder.CreateBr(loop_block);
+
+	builder.SetInsertPoint(ret_block);
+#if defined(DEBUG)
+	builder.CreateCall(clk_, {state_arg, builder.CreateGlobalStringPtr("done-loop")});
+#endif
+	{
+		auto return_values = wrap_ret(&builder, state_arg);
+		builder.CreateAggregateRet(return_values.data(), return_values.size());
+	}
+
+	debug_dump();
+
+	if (verifyFunction(*loop_fn, &errs())) {
+		loop_fn->dump();
+		throw std::runtime_error("function verification failed");
+	}
+
+	return loop_fn;
+}
+
 
 void llvm_static_output_engine_impl::debug_dump() {
 	if (e_.debug_dump_filename.has_value()) {
@@ -446,7 +693,7 @@ void llvm_static_output_engine_impl::lower_chunks(Function *main_loop)
 	}
 }
 
-void llvm_static_output_engine_impl::lower_static_fn_lookup(IRBuilder<> &builder, BasicBlock *contblock, Value *guestAddr) {
+Value *llvm_static_output_engine_impl::lower_static_fn_lookup(IRBuilder<> &builder, BasicBlock *contblock, Value *guestAddr) {
 	auto lookup_block = BasicBlock::Create(*llvm_context_, "lookup", contblock->getParent());
 	auto LookupFn = module_->getOrInsertFunction("lookup_static_fn_addr", types.lookup_static_fn);
 
@@ -466,46 +713,8 @@ void llvm_static_output_engine_impl::lower_static_fn_lookup(IRBuilder<> &builder
 	auto cpu_state = contblock->getParent()->getArg(0);
 
 	builder.SetInsertPoint(b);
-	const std::vector<unsigned long> regIndices = {
-		static_cast<unsigned long>(reg_idx::PC),
-		static_cast<unsigned long>(reg_idx::RAX),
-		static_cast<unsigned long>(reg_idx::RCX),
-		static_cast<unsigned long>(reg_idx::RDX),
-		static_cast<unsigned long>(reg_idx::RBX),
-		static_cast<unsigned long>(reg_idx::RSP),
-		static_cast<unsigned long>(reg_idx::RBP),
-		static_cast<unsigned long>(reg_idx::RSI),
-		static_cast<unsigned long>(reg_idx::RDI),
-		static_cast<unsigned long>(reg_idx::R8),
-		static_cast<unsigned long>(reg_idx::R9),
-		static_cast<unsigned long>(reg_idx::R10),
-		static_cast<unsigned long>(reg_idx::R11),
-		static_cast<unsigned long>(reg_idx::R12),
-		static_cast<unsigned long>(reg_idx::R13),
-		static_cast<unsigned long>(reg_idx::R14),
-		static_cast<unsigned long>(reg_idx::R15),
-	};
 
-	std::vector<Value *> args = { cpu_state };
-	for (const auto regIdx : regIndices) {
-		args.emplace_back(createLoadFromCPU(builder, cpu_state, regIdx));
-	}
-	assert(args.size() == 18 && "Expected 18 arguments");
-
-	auto call = builder.CreateCall(get_fn_type(), fn_addr_phi, args);
-	call->setCallingConv(CallingConv::Arancini);
-
-	assert(call->getType()->isStructTy() && "Expected return type to be struct type");
-
-	for (unsigned i = 0; i < regIndices.size(); ++i) {
-		// we are skipping the cpu_state return type
-		createStoreToCPU(builder, cpu_state, i + 1, call, regIndices[i]);
-	}
-
-#if defined(DEBUG)
-	builder.CreateCall(clk_, {cpu_state, builder.CreateGlobalStringPtr("done-loop")});
-#endif
-	builder.CreateRetVoid();
+	return fn_addr_phi;
 }
 
 Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, port &p)
@@ -1882,17 +2091,14 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 				break;
 			case br_type::call: {
 				auto f = get_static_fn(p);
-				if (f) {
-					save_callee_regs(*builder, state_arg, false);
-					auto ret = builder->CreateCall(f, load_args(builder, state_arg));
-					ret->setCallingConv(CallingConv::Arancini);
-					restore_callee_regs(*builder, state_arg, false);
-					unwrap_ret(builder, ret, state_arg);
-				} else {
-					save_callee_regs(*builder, state_arg);
-					builder->CreateCall(main_loop, { state_arg });
-					restore_callee_regs(*builder, state_arg);
+				if (!f) {
+					f = main_loop;
 				}
+				save_callee_regs(*builder, state_arg, false);
+				auto ret = builder->CreateCall(f, load_args(builder, state_arg));
+				ret->setCallingConv(internal_calling_conv);
+				restore_callee_regs(*builder, state_arg, false);
+				unwrap_ret(builder, ret, state_arg);
 				break;
 			}
 			case br_type::br: {
@@ -1914,7 +2120,7 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 			case br_type::ret: {
 				save_callee_regs(*builder, state_arg, false);
 #if defined(DEBUG)
-				builder->CreateCall(clk_, {state_arg, builder->CreateGlobalStringPtr(exit.str())});
+				builder->CreateCall(clk_, {get_state(*builder), builder->CreateGlobalStringPtr(exit.str())});
 #endif
 				const auto return_values = wrap_ret(builder, state_arg);
 				builder->CreateAggregateRet(return_values.data(), return_values.size());
@@ -1927,7 +2133,7 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 	if (packet_block != nullptr) {
 		save_callee_regs(*builder, state_arg, false);
 #if defined(DEBUG)
-		builder->CreateCall(clk_, {state_arg, builder->CreateGlobalStringPtr(exit.str())});
+		builder->CreateCall(clk_, {get_state(*builder), builder->CreateGlobalStringPtr(exit.str())});
 #endif
 		const auto return_values = wrap_ret(builder, state_arg);
 		builder->CreateAggregateRet(return_values.data(), return_values.size());
@@ -1951,14 +2157,16 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 	}
 
 	builder->SetInsertPoint(dyn);
-	save_callee_regs(*builder, state_arg);
-	builder->CreateCall(main_loop, { state_arg });
-	restore_callee_regs(*builder, state_arg);
+	save_callee_regs(*builder, state_arg, false);
+	auto ret = builder->CreateCall(main_loop, load_args(builder, state_arg));
+	ret->setCallingConv(internal_calling_conv);
+
 #if defined(DEBUG)
 	builder->CreateCall(clk_, {state_arg, builder->CreateGlobalStringPtr(exit.str())});
 #endif
-	const auto return_values = wrap_ret(builder, state_arg);
-	builder->CreateAggregateRet(return_values.data(), return_values.size());
+	unwrap_ret(builder, ret, state_arg);
+	auto ret_values = wrap_ret(builder, state_arg);
+	builder->CreateAggregateRet(ret_values.data(), ret_values.size());
 
 	if (verifyFunction(*fn, &errs())) {
 		module_->print(errs(), nullptr);
@@ -2163,13 +2371,13 @@ void llvm_static_output_engine_impl::optimise()
 	PB.registerLoopAnalyses(LAM);
 	PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
 	PB.registerOptimizerLastEPCallback( [&](ModulePassManager &mpm, OptimizationLevel Level) {
 		mpm.addPass(createModuleToFunctionPassAdaptor(PromotePass()));
 		mpm.addPass(createModuleToFunctionPassAdaptor(ADCEPass()));
 		mpm.addPass(createModuleToFunctionPassAdaptor(AggressiveInstCombinePass()));
 		mpm.addPass(DeadArgumentEliminationPass());
 	});
+	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
 	MPM.run(*module_, MAM);
 
 	// Compiled modules now exists
