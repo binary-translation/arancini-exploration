@@ -532,11 +532,7 @@ Function *llvm_static_output_engine_impl::create_main_internal_loop() {
 #if defined(DEBUG)
 	builder.CreateCall(clk_, {builder.CreateLoad(types.cpu_state, state_alloca_), builder.CreateGlobalStringPtr("done-loop")});
 #endif
-	unwrap_ret(&builder, call, state_arg);
-	{
-		auto return_values = wrap_ret(&builder, state_arg);
-		builder.CreateAggregateRet(return_values.data(), return_values.size());
-	}
+	builder.CreateRet(call);
 
 	builder.SetInsertPoint(switch_to_dbt);
 
@@ -2166,12 +2162,7 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 #if defined(DEBUG)
 	builder->CreateCall(clk_, {state_arg, builder->CreateGlobalStringPtr(exit.str())});
 #endif
-	unwrap_ret(builder, ret, state_arg);
-	auto ret_values = wrap_ret(builder, state_arg);
-	// FIXME: If this call is tail-optimized, the whole thing crashes, regardless whether we use the Arancini or C calling convention. Check why this is the
-	//  case and re-enable tail-optimization here.
-	ret->setTailCallKind(CallInst::TCK_NoTail);
-	builder->CreateAggregateRet(ret_values.data(), ret_values.size());
+	builder->CreateRet(ret);
 
 	if (verifyFunction(*fn, &errs())) {
 		module_->print(errs(), nullptr);
