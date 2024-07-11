@@ -14,6 +14,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Needed to get stdlibs in compile_commands.json on NixOS
 set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
 
+# Reconfigure if llvm.nix changes
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS llvm.nix)
+
 # Get host architecture
 include(cmake/utils.cmake)
 get_arch(ARCH)
