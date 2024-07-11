@@ -4,8 +4,8 @@ pkgs.llvmPackages_16.override ({
   monorepoSrc = pkgs.fetchFromGitHub {
     owner = "martin-fink";
     repo = "llvm-project";
-    rev = "f719dba79a56626874c04c7e9d3d77b66d83de5f";
-    sha256 = "sha256-CjUN6nyjYW3v7rfDF1uo5gcmPqQIkOhdgD6WTzQ4X5g=";
+    rev = "bd1ab15fe43718c5a8388887e140b9b6340db578";
+    sha256 = "sha256-HfENJS+h0VkMVGIwt4fQ4YKaq4vbxJgjcI6Soxkl52c=";
   };
   gitRelease = {
     version = "16.0.6";
@@ -13,5 +13,4 @@ pkgs.llvmPackages_16.override ({
   };
   officialRelease = null;
 })
-
 
