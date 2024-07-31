@@ -139,14 +139,14 @@ void llvm_static_output_engine_impl::initialise_types()
 	types.cpu_state_ptr = PointerType::get(types.cpu_state, 0);
 
 	// Functions
-	types.main_fn = FunctionType::get(types.i32, { types.i32, PointerType::get(Type::getInt8PtrTy(*llvm_context_), 0) }, false);
+	types.main_fn = FunctionType::get(types.i32, { types.i32, PointerType::get(PointerType::get(Type::getInt8Ty(*llvm_context_), 0), 0)}, false);
 	types.loop_fn = FunctionType::get(types.vd, { types.cpu_state_ptr }, false);
 	types.chunk_fn = FunctionType::get(VectorType::get(types.i64, 3, false), { types.cpu_state_ptr, types.i64, types.i64, types.i64, types.i64, types.i64 }, false);	// (state, pc, eax, ecx, edx, rsp) -> { pc, eax, rsp } // fastcall|thiscall|cdecl
-	types.init_dbt = FunctionType::get(types.cpu_state_ptr, { types.i64, types.i32, PointerType::get(Type::getInt8PtrTy(*llvm_context_),0) }, false);
+	types.init_dbt = FunctionType::get(types.cpu_state_ptr, { types.i64, types.i32, PointerType::get(PointerType::get(Type::getInt8Ty(*llvm_context_), 0),0) }, false);
 	types.dbt_invoke = FunctionType::get(types.i32, { types.cpu_state_ptr }, false);
 	types.internal_call_handler = FunctionType::get(types.i32, { types.cpu_state_ptr, types.i32 }, false);
 	types.finalize = FunctionType::get(types.vd, {}, false);
-	types.clk_fn = FunctionType::get(types.vd, { types.cpu_state_ptr, PointerType::get(Type::getInt8PtrTy(*llvm_context_), 0) }, false);
+	types.clk_fn = FunctionType::get(types.vd, { types.cpu_state_ptr, PointerType::get(PointerType::get(Type::getInt8Ty(*llvm_context_), 0), 0) }, false);
 	types.register_static_fn = FunctionType::get(Type::getVoidTy(*llvm_context_), {types.i64, types.i8->getPointerTo()}, false);
 	types.lookup_static_fn = FunctionType::get(types.i8->getPointerTo(), { types.i64 }, false);
 	types.poison_fn = FunctionType::get(Type::getVoidTy(*llvm_context_), PointerType::getInt8Ty(*llvm_context_));
@@ -429,7 +429,7 @@ void llvm_static_output_engine_impl::lower_static_fn_lookup(IRBuilder<> &builder
 	auto clk_ = module_->getOrInsertFunction("clk", types.clk_fn);
 
 	auto result = builder.CreateCall(LookupFn, { guestAddr });
-	auto cmp = builder.CreateCmp(CmpInst::Predicate::ICMP_NE, result, ConstantPointerNull::get(Type::getInt8PtrTy(*llvm_context_)));
+	auto cmp = builder.CreateCmp(CmpInst::Predicate::ICMP_NE, result, ConstantPointerNull::get(PointerType::get(types.i8, 0)));
 
 	auto b = BasicBlock::Create(*llvm_context_, "call_static_fn", contblock->getParent());
 
@@ -2075,7 +2075,7 @@ void llvm_static_output_engine_impl::compile()
 	auto RM = optional<Reloc::Model>(Reloc::Model::PIC_);
 #if defined(ARCH_RISCV64)
 	//Add multiply(M), atomics(A), single(F) and double(D) precision float and compressed(C) extensions
-	const char *features = "+m,+a,+f,+d,+c,+unaligned-scalar-mem";
+	const char *features = "+m,+a,+f,+d,+c,-v,+fast-unaligned-access,+xtheadba,+xtheadbb,+xtheadbs,+xtheadcmo,+xtheadcondmov,+xtheadfmemidx,+xtheadmac,+xtheadmemidx,+xtheadmempair,+xtheadsync";
 	const char *cpu = "generic-rv64";
 	//Specify abi as 64 bits using double float registers
 	TO.MCOptions.ABIName="lp64d";
@@ -2100,7 +2100,7 @@ void llvm_static_output_engine_impl::compile()
 	}
 
 	legacy::PassManager OPM;
-	if (TM->addPassesToEmitFile(OPM, output_file, nullptr, CGFT_ObjectFile)) {
+	if (TM->addPassesToEmitFile(OPM, output_file, nullptr, ::llvm::CodeGenFileType::ObjectFile)) {
 		throw std::runtime_error("unable to emit file");
 	}
 

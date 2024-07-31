@@ -67,7 +67,7 @@
 	in
 	{
 		defaultPackage = native_pkgs.callPackage(
-		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2, llvmPackages,
+		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2, llvmPackages_18,
 		 lib, gcc, fmt, pkgsCross, m4, keystone, flex, bison}:
 			stdenv.mkDerivation {
 				name = "arancini";
@@ -95,9 +95,9 @@
 					libffi
 					fadec
 					libxml2
-					llvmPackages.llvm.dev
-					llvmPackages.bintools
-					llvmPackages.lld
+					llvmPackages_18.llvm.dev
+					llvmPackages_18.bintools
+					llvmPackages_18.lld
 					flex
 				] ++ lib.optionals ( system == "aarch64-linux" ) [ keystone ];
 				depsTargetTarget = [ gcc ];
@@ -120,7 +120,7 @@
 					src = mbuild-src;
 					patches = [ ./mbuild-riscv.patch ];
 				};
-			patched-xed = build_pkgs.callPackage(
+			patched-xed = native_pkgs.callPackage(
     	    {stdenv, lib}:
 				stdenv.mkDerivation {
 					pname = "xed";
@@ -133,11 +133,11 @@
 					    patchShebangs mfile.py
 
 						# this will build, test and install
-					    ./mfile.py --prefix $out'' + lib.optionalString (system == "riscv64-linux") " --toolchain riscv64-linux-gnu- --host-cpu riscv64" + lib.optionalString (system == "aarch64-linux") " --toolchain aarch64-linux-gnu- --host-cpu aarch64";
+					    ./mfile.py --prefix $out'';
 
 					dontInstall = true; # already installed during buildPhase
 				}){};
-			fadec = build_pkgs.callPackage(
+			fadec = native_pkgs.callPackage(
     	       {stdenv, meson, ninja}:
 				stdenv.mkDerivation {
 					name = "fadec";
@@ -145,11 +145,11 @@
 					nativeBuildInputs = [ meson ninja ];
 				}){};
 			native_pkgs = import nixpkgs { system = "x86_64-linux"; };
-			build_pkgs = import nixpkgs { system = "x86_64-linux"; crossSystem.config = system+"-gnu"; };
+			remote_pkgs = import nixpkgs { system = system; };
 		in
 		{
-		crossPackage = build_pkgs.callPackage(
-		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2, llvmPackages,
+		crossPackage = native_pkgs.callPackage(
+		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2, llvmPackages_18,
 			lib, gcc, fmt, pkgsCross, m4, keystone, flex, bison}:
 			stdenv.mkDerivation {
 				name = "arancini";
@@ -177,9 +177,9 @@
 					libffi
 					fadec
 					libxml2
-					llvmPackages.llvm.dev
-					llvmPackages.bintools
-					llvmPackages.lld
+					llvmPackages_18.llvm.dev
+					llvmPackages_18.bintools
+					llvmPackages_18.lld
                     flex
 				] ++ lib.optionals ( system == "aarch64-linux" ) [ keystone ];
 				depsTargetTarget = [ gcc ];
@@ -188,7 +188,17 @@
 					export NDEBUG=1
 					cmakeConfigurePhase
 				'';
-				cmakeFlags = [ "-DBUILD_TESTS=1" "-DCMAKE_BUILD_TYPE=Release" ] ++ lib.optionals (system == "riscv64-linux") ["--toolchain riscv64-toolchain-nix.cmake"] ++ lib.optionals (system == "aarch64-linux") ["--toolchain aarch64-toolchain-nix.cmake"];
+				cmakeFlags = [
+					"-DBUILD_TESTS=1"
+					"-DCMAKE_BUILD_TYPE=Release"
+				] ++ lib.optionals (system == "riscv64-linux") [
+					"-DDBT_ARCH=RISCV64"
+				] ++ lib.optionals (system == "aarch64-linux") [
+					"-DDBT_ARCH=AARCH64"
+				];
+				fixupPhase = ''
+					ln -s ${remote_pkgs.gcc.outPath}/bin/g++ $out/cross-g++;
+				'';
 			}
 		) {};
 	});
