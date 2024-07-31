@@ -59,6 +59,20 @@ void fpu_translator::do_translate()
     // TODO FPU flags
     break;
   }
+  case XED_ICLASS_FIMUL: {
+    auto dst = fpu_stack_get(0);
+    auto src = read_operand(1);
+
+    if (src->val().type().width() != 80) {
+      src = builder().insert_convert(dst->val().type(), src->val());
+    }
+
+    auto res = builder().insert_mul(src->val(), dst->val());
+
+	fpu_stack_set(0, res->val());
+    // TODO FPU flags
+    break;
+  }
 
   case XED_ICLASS_FST:
   case XED_ICLASS_FSTP: {
@@ -283,23 +297,6 @@ void fpu_translator::do_translate()
     // TODO set C1 flag to 0
     break;
   }
-  case XED_ICLASS_F2XM1:
-  case XED_ICLASS_FYL2XP1:
-  case XED_ICLASS_FYL2X:
-  case XED_ICLASS_FLDL2E:
-  case XED_ICLASS_FLDL2T:
-  case XED_ICLASS_FLDPI:
-  case XED_ICLASS_FLDLG2:
-  case XED_ICLASS_FLDLN2:
-  case XED_ICLASS_FPATAN:
-  case XED_ICLASS_FIMUL:
-  case XED_ICLASS_FPREM1:
-  case XED_ICLASS_FSQRT:
-  case XED_ICLASS_SQRTSD:
-  case XED_ICLASS_SQRTSS:
-  case XED_ICLASS_FXAM: {
-		builder().insert_internal_call(builder().ifr().resolve("handle_poison"), {});
-  } break;
   case XED_ICLASS_FCOMI:
   case XED_ICLASS_FCOMIP:
   case XED_ICLASS_FUCOMI:

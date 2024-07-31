@@ -11,5 +11,7 @@ using namespace arancini::input::x86::translators;
 
 void unimplemented_translator::do_translate()
 {
-	builder().insert_internal_call(builder().ifr().resolve("handle_poison"), {});
+
+	auto inst_class = xed_decoded_inst_get_iclass(xed_inst());
+	builder().insert_internal_call(builder().ifr().resolve("handle_poison"), { &builder().insert_label(xed_iclass_enum_t2str(inst_class))->val() });
 }

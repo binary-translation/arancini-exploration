@@ -31,6 +31,7 @@ void fpvec_translator::do_translate()
     src2 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), src2->val());
 		break;
 	}
+	case XED_ICLASS_XORPD:
 	case XED_ICLASS_VADDSD:
 	case XED_ICLASS_VSUBSD:
 	case XED_ICLASS_VDIVSD:
@@ -82,6 +83,7 @@ void fpvec_translator::do_translate()
 	}
 
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
+	case XED_ICLASS_XORPD:
 	case XED_ICLASS_XORPS: {
 		auto res = builder().insert_xor(src1->val(), src2->val());
 		write_operand(0, res->val());

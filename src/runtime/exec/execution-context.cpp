@@ -169,6 +169,15 @@ int execution_context::internal_call(void *cpu_state, int call)
 		auto x86_state = (x86::x86_cpu_state *)cpu_state;
         util::global_logger.debug("System call number: {}\n", util::copy(x86_state->RAX));
 		switch (x86_state->RAX) {
+		case 0: // read
+		{
+			util::global_logger.debug("System call: read()\n");
+			uint64_t fd = x86_state->RDI;
+			auto buf = (uintptr_t)get_memory_ptr((off64_t)x86_state->RSI);
+			uint64_t count = x86_state->RDX;
+			x86_state->RAX = native_syscall(__NR_read, fd, buf, count);
+			break;
+		}
 		case 1: // write
 		{
             util::global_logger.debug("System call: write()\n");
@@ -191,14 +200,31 @@ int execution_context::internal_call(void *cpu_state, int call)
             util::global_logger.debug("System call: close()\n");
 			x86_state->RAX = native_syscall(__NR_close, x86_state->RDI);
 			break;
+		case 4: // stat
 		case 5: // fstat
+		case 6: // lstat
 		{
-            util::global_logger.debug("System call: fstat()\n");
+			if (x86_state->RAX == 4) {
+				util::global_logger.debug("System call: stat()\n");
+			} else if (x86_state->RAX == 5) {
+				util::global_logger.debug("System call: fstat()\n");
+			} else {
+				util::global_logger.debug("System call: lstat()\n");
+			}
 			uint64_t fd = x86_state->RDI;
+			auto name = (uintptr_t)get_memory_ptr((off_t)x86_state->RDI);
+
 			uint64_t statp = x86_state->RSI;
 			struct stat tmp_struct { };
 
-			uint64_t result = native_syscall(__NR_fstat, fd, (uintptr_t)&tmp_struct);
+			uint64_t result;
+			if (x86_state->RAX == 6) {
+				result = native_syscall(__NR_newfstatat, (unsigned long)AT_FDCWD, (uintptr_t)name, (uintptr_t)&tmp_struct, (unsigned long)AT_SYMLINK_NOFOLLOW);
+			} else if (x86_state->RAX == 4) {
+				result = native_syscall(__NR_newfstatat, (unsigned long)AT_FDCWD, (uintptr_t)name, (uintptr_t)&tmp_struct, 0ul);
+			} else {
+				result = native_syscall(__NR_fstat, fd, (uintptr_t)&tmp_struct);
+			}
 			x86_state->RAX = result;
 
 			if (result == 0) {
@@ -255,6 +281,15 @@ int execution_context::internal_call(void *cpu_state, int call)
 			ts.tv_nsec = (msec%1000)*1000000;
 			auto ret = native_syscall(__NR_ppoll, ptr, x86_state->RSI, (uintptr_t)&ts, (uintptr_t)NULL, sizeof(sigset_t));
 			x86_state->RAX = ret;
+			break;
+		}
+		case 8: // lseek
+		{
+			util::global_logger.debug("System call: lseek()\n");
+			uint64_t fd = x86_state->RDI;
+			uint64_t offset = x86_state->RSI;
+			uint64_t whence = x86_state->RDX;
+			x86_state->RAX = native_syscall(__NR_lseek, fd, offset, whence);
 			break;
 		}
 		case 9: // mmap
@@ -369,6 +404,21 @@ int execution_context::internal_call(void *cpu_state, int call)
 			x86_state->RAX = native_syscall(__NR_ioctl, x86_state->RDI, request, arg);
 			break;
         }
+		case 19: // readv
+		{
+			util::global_logger.debug("System call: readv()\n");
+
+			auto iovec = (const struct iovec *)get_memory_ptr(x86_state->RSI);
+			auto iocnt = x86_state->RDX;
+			struct iovec iovec_new[iocnt];
+			for (auto i = 0ull; i < iocnt; ++i) {
+				iovec_new[i].iov_base = reinterpret_cast<void *>(get_memory_ptr(((uintptr_t)iovec[i].iov_base)));
+				iovec_new[i].iov_len = iovec[i].iov_len;
+			}
+
+			x86_state->RAX = native_syscall(__NR_readv, x86_state->RDI, (uintptr_t)iovec_new, iocnt);
+			break;
+		}
 		case 20: // writev
         {
             util::global_logger.debug("System call: writev()\n");
@@ -478,6 +528,10 @@ int execution_context::internal_call(void *cpu_state, int call)
 			}
             x86_state->R11=0x246;
 			break;
+		case 186: // gettid
+			util::global_logger.debug("System call: gettid()\n");
+			x86_state->RAX = gettid();
+			break;
 		case 200: // tkill
             util::global_logger.debug("System call: kill()\n");
 			x86_state->RAX = native_syscall(__NR_tkill, x86_state->RDI, x86_state->RSI);
@@ -534,7 +588,8 @@ int execution_context::internal_call(void *cpu_state, int call)
 	} else if (call == 3) {
 		auto x86_state = (x86::x86_cpu_state *)cpu_state;
 		auto pc = x86_state->PC;
-        util::global_logger.error("Poison Instr @ GuestPC: {}", pc);
+        util::global_logger.error("Poison Instr @ GuestPC: {:#x}", pc);
+		abort();
 	}else {
         util::global_logger.error("Unsupported internal call: {}", call);
 		return 1;

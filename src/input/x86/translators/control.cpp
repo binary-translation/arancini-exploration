@@ -38,11 +38,6 @@ void control_translator::do_translate()
   case XED_ICLASS_CLC:
     write_reg(reg_offsets::CF, builder().insert_constant_u1(0)->val());
     break;
-  case XED_ICLASS_STMXCSR:
-  case XED_ICLASS_LDMXCSR:
-	builder().insert_internal_call(builder().ifr().resolve("handle_poison"), {});
-	break;
-
 	default:
 		throw std::runtime_error("unhandled control register instruction");
 	}

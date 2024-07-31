@@ -660,7 +660,7 @@ private:
 	port zero_, negative_, overflow_, carry_;
 };
 
-enum class unary_arith_op { bnot, neg, complement };
+enum class unary_arith_op { bnot, neg, complement, sqrt };
 
 class unary_arith_node : public arith_node {
 public:

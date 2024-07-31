@@ -149,6 +149,7 @@ void llvm_static_output_engine_impl::initialise_types()
 	types.clk_fn = FunctionType::get(types.vd, { types.cpu_state_ptr, PointerType::get(Type::getInt8PtrTy(*llvm_context_), 0) }, false);
 	types.register_static_fn = FunctionType::get(Type::getVoidTy(*llvm_context_), {types.i64, types.i8->getPointerTo()}, false);
 	types.lookup_static_fn = FunctionType::get(types.i8->getPointerTo(), { types.i64 }, false);
+	types.poison_fn = FunctionType::get(Type::getVoidTy(*llvm_context_), PointerType::getInt8Ty(*llvm_context_));
 }
 
 void llvm_static_output_engine_impl::create_main_function(Function *loop_fn)
@@ -1009,7 +1010,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		auto un = (unary_arith_node *)n;
 
 		auto v = lower_port(builder, state_arg, pkt, un->lhs());
-		if (v->getType()->isFloatingPointTy())
+		if (v->getType()->isFloatingPointTy() && un->op() != unary_arith_op::sqrt)
 			v = builder.CreateBitCast(v, IntegerType::getIntNTy(*llvm_context_, v->getType()->getPrimitiveSizeInBits()));
 		if (v->getType()->isVectorTy() && v->getType()->isFPOrFPVectorTy()) {
 			auto ETy = ((VectorType *)v->getType())->getElementType();
@@ -1024,6 +1025,8 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			switch (un->op()) {
 			case unary_arith_op::bnot:
 				return builder.CreateNot(v);
+			case unary_arith_op::sqrt:
+				return builder.CreateUnaryIntrinsic(Intrinsic::sqrt, v);
 			default:
 				throw std::runtime_error("unsupported unary operator");
 			}
@@ -1040,7 +1043,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		auto amount = lower_port(builder, state_arg, pkt, bsn->amount());
 
 		if (p.kind() == port_kinds::value) {
-			amount = builder.CreateZExt(amount, input->getType());
+			amount = builder.CreateZExtOrTrunc(amount, input->getType());
 
 			switch (bsn->op()) {
 			case shift_op::asr:
@@ -1559,9 +1562,16 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 
 			builder.SetInsertPoint(cont_block);
 			return ret;
-		}
-		if (icn->fn().name() == "handle_poison" || icn->fn().name() == "hlt") {
+		} else if (icn->fn().name() == "handle_poison") {
+			auto name = ((label_node *)icn->args()[0]->owner())->name();
+			auto ptr = builder.CreateGlobalStringPtr(name);
+
+			auto pf = module_->getOrInsertFunction("poison", types.poison_fn);
+			return builder.CreateCall(pf, { ptr });
+		} else if (icn->fn().name() == "hlt") {
 			return builder.CreateCall(switch_callee, { state_arg, ConstantInt::get(types.i32, 3) });
+		} else if (icn->fn().name() == "handle_int") {
+			return builder.CreateCall(switch_callee, { state_arg, ConstantInt::get(types.i32, 2) });
 		} else {
 			const port &ret = icn->val();
 			const std::vector<port *> &args = icn->args();
@@ -2065,7 +2075,7 @@ void llvm_static_output_engine_impl::compile()
 	auto RM = optional<Reloc::Model>(Reloc::Model::PIC_);
 #if defined(ARCH_RISCV64)
 	//Add multiply(M), atomics(A), single(F) and double(D) precision float and compressed(C) extensions
-	const char *features = "+m,+a,+f,+d,+c";
+	const char *features = "+m,+a,+f,+d,+c,+unaligned-scalar-mem";
 	const char *cpu = "generic-rv64";
 	//Specify abi as 64 bits using double float registers
 	TO.MCOptions.ABIName="lp64d";

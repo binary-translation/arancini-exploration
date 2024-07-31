@@ -71,6 +71,16 @@ void unop_translator::do_translate()
     rslt = builder().insert_zx(value_type(value_type_class::unsigned_integer, get_operand_width(0)), rslt->val());
     break;
   }
+	case XED_ICLASS_SQRTSD: {
+		auto src = read_operand(1);
+		if (src->val().type().width() == 64) {
+			rslt = builder().insert_sqrt(builder().insert_bitcast(value_type::f64(), src->val())->val());
+		} else {
+			auto v = builder().insert_bitcast(value_type::vector(value_type::f64(), 2), src->val());
+			rslt = builder().insert_sqrt(builder().insert_vector_extract(v->val(), 0)->val());
+		}
+		break;
+	}
 
 	default:
 		throw std::runtime_error("unsupported unop");
@@ -80,7 +90,7 @@ void unop_translator::do_translate()
 
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
 	case XED_ICLASS_NOT:
-		write_flags(rslt, flag_op::update, flag_op::set0, flag_op::set0, flag_op::update, flag_op::update, flag_op::ignore);
+		//write_flags(rslt, flag_op::update, flag_op::set0, flag_op::set0, flag_op::update, flag_op::update, flag_op::ignore);
 		break;
   case XED_ICLASS_INC:
   case XED_ICLASS_DEC:

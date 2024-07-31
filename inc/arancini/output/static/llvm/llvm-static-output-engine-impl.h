@@ -91,6 +91,7 @@ private:
 		::llvm::FunctionType *clk_fn;
 		::llvm::FunctionType *register_static_fn;
 		::llvm::FunctionType *lookup_static_fn;
+		::llvm::FunctionType *poison_fn;
 
 		::llvm::IntegerType *integer(unsigned width) {
 			switch(width) {

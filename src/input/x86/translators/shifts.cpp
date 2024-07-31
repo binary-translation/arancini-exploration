@@ -128,6 +128,7 @@ void shifts_translator::do_translate()
 
     for (int i = 0; i < nr_splits; i++) {
       auto v = builder().insert_vector_extract(src_vec->val(), i);
+      // TODO: if amt > val width, zero out 
       auto shift = builder().insert_lsr(v->val(), amt->val());
       src_vec = builder().insert_vector_insert(src_vec->val(), i, shift->val());
     }

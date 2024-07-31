@@ -214,6 +214,7 @@ void punpck_translator::do_translate()
     auto result = builder().insert_bitcast(value_type::vector(pst_ty, bits/pst_ty.width()), op0->val());
 
     for (int i = 0; i < bits/pst_ty.width(); i++) {
+		/*
 		// word/double word
 		auto word = (i < bits/pre_ty.width()) ? builder().insert_vector_extract(dst->val(), i) : builder().insert_vector_extract(src->val(), i - bits/pre_ty.width());
       	auto gt_max = builder().insert_cmpgt(word->val(), cmp_max->val());
@@ -240,10 +241,32 @@ void punpck_translator::do_translate()
       	auto end_label1 = builder().insert_label("end");
       	br_end->add_br_target(end_label);
       	br_end2->add_br_target(end_label1);
+		*/
+
+		auto tmp = (i < bits/pre_ty.width()) ? builder().insert_vector_extract(dst->val(), i) : builder().insert_vector_extract(src->val(), i - bits/pre_ty.width());
+      	auto gt_max = builder().insert_cmpgt(tmp->val(), cmp_max->val());
+      	auto lt_min = builder().insert_cmpgt(cmp_min->val(), tmp->val());
+
+      	tmp = builder().insert_trunc(pst_ty, tmp->val());
+
+		tmp = builder().insert_csel(lt_min->val(), ins_min->val(), tmp->val());
+		tmp = builder().insert_csel(gt_max->val(), ins_max->val(), tmp->val());
+		result = builder().insert_vector_insert(result->val(), i, tmp->val());
     }
     write_operand(0, result->val());
     break;
   }
+	case XED_ICLASS_PEXTRW: {
+
+		auto index = read_operand(2);
+		auto idx =  ((constant_node *)index)->const_val_i() & 7;
+
+		auto src = builder().insert_bitcast(value_type::vector(value_type::u16(), 8), op1->val());
+		auto res = builder().insert_vector_extract(src->val(), idx);
+
+		write_operand(0, res->val());
+		break;
+	}
 
 	default:
 		throw std::runtime_error("unsupported punpck operation");

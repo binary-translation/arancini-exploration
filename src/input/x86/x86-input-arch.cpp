@@ -204,6 +204,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_NEG:
   case XED_ICLASS_BSWAP:
   case XED_ICLASS_PMOVMSKB:
+  case XED_ICLASS_SQRTSD:
 		return std::make_unique<unop_translator>(builder);
 
 	case XED_ICLASS_MUL:
@@ -240,8 +241,10 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_PACKUSWB:
 	case XED_ICLASS_PACKSSWB:
 	case XED_ICLASS_PACKSSDW:
+	case XED_ICLASS_PEXTRW:
 		return std::make_unique<punpck_translator>(builder);
 
+	case XED_ICLASS_XORPD:
 	case XED_ICLASS_XORPS:
 	case XED_ICLASS_VADDSS:
 	case XED_ICLASS_VSUBSS:
@@ -263,6 +266,8 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 
 	case XED_ICLASS_PSHUFD:
 	case XED_ICLASS_SHUFPD:
+	case XED_ICLASS_PSHUFLW:
+	case XED_ICLASS_PSHUFHW:
 		return std::make_unique<shuffle_translator>(builder);
 
 	case XED_ICLASS_XADD_LOCK:
@@ -280,8 +285,6 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_CLD:
 	case XED_ICLASS_STC:
 	case XED_ICLASS_CLC:
-	case XED_ICLASS_STMXCSR:
-	case XED_ICLASS_LDMXCSR:
 		return std::make_unique<control_translator>(builder);
 
   case XED_ICLASS_FNSTCW:
@@ -318,21 +321,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_FCOMIP:
   case XED_ICLASS_FUCOMI:
   case XED_ICLASS_FUCOMIP:
-  case XED_ICLASS_SQRTSD:
-  case XED_ICLASS_SQRTSS:
-  case XED_ICLASS_FSQRT:
-  case XED_ICLASS_FPREM1:
-  case XED_ICLASS_FRNDINT:
   case XED_ICLASS_FIMUL:
-  case XED_ICLASS_FPATAN:
-  case XED_ICLASS_FLDL2E:
-  case XED_ICLASS_FLDL2T:
-  case XED_ICLASS_FLDPI:
-  case XED_ICLASS_FLDLG2:
-  case XED_ICLASS_FLDLN2:
-  case XED_ICLASS_FYL2XP1:
-  case XED_ICLASS_FYL2X:
-  case XED_ICLASS_F2XM1:
 		return std::make_unique<fpu_translator>(builder);
   case XED_ICLASS_HLT:
 	case XED_ICLASS_INT:
@@ -342,9 +331,6 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_UD1:
   case XED_ICLASS_UD2:
 		return std::make_unique<interrupt_translator>(builder);
-	case XED_ICLASS_INSD:
-	case XED_ICLASS_OUTSD:
-		return std::make_unique<io_translator>(builder);
 
 	default:
 		return std::make_unique<unimplemented_translator>(builder);

@@ -483,11 +483,11 @@ void txlat_engine::add_symbol_to_output(const std::vector<std::shared_ptr<progra
 	}
 
 	s << ".type \"" << name << "\", " << type << '\n';
-	if (sym.is_hidden()) {
+	if (sym.is_hidden() & !force_global) {
 		s << ".hidden \"" << name << "\"\n";
 	} else if (sym.is_internal()) {
 		s << ".internal \"" << name << "\"\n";
-	} else if (sym.is_protected()) {
+	} else if (sym.is_protected() & !force_global) {
 		s << ".protected \"" << name << "\"\n";
 	}
 }

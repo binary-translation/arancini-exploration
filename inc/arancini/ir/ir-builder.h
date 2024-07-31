@@ -197,6 +197,12 @@ public:
 	/// @param rhs divisor
 	/// @return a mod node: lhs % rhs
 	value_node *insert_mod(port &lhs, port &rhs) { return create_and_insert<binary_arith_node>(binary_arith_op::mod, lhs, rhs); }
+	
+	/// @brief square root
+	/// @param lhs
+	/// @return a sqrt node: lhs^0.5
+	value_node *insert_sqrt(port &lhs) { return create_and_insert<unary_arith_node>(unary_arith_op::sqrt, lhs); }
+
 
 	/// @brief bitwise and
 	/// @param lhs first operand

@@ -8,6 +8,44 @@ using namespace arancini::input::x86::translators;
 void shuffle_translator::do_translate()
 {
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
+  case XED_ICLASS_PSHUFHW: {
+    auto dst = builder().insert_bitcast(value_type::vector(value_type::u16(), 8), read_operand(0)->val());
+    auto src = builder().insert_bitcast(value_type::vector(value_type::u16(), 8), read_operand(1)->val());
+	auto slct = ((constant_node *)read_operand(2))->const_val_i();
+
+	// shuffle high quadword
+	for (auto i = 0; i < 4; i++) {
+		auto tmp = builder().insert_vector_extract(src->val(), ((slct >> (i*2))&3) +4);
+		dst = builder().insert_vector_insert(dst->val(), i+4, tmp->val());
+	}
+	// keep low quadword
+	for (auto i = 0; i < 4; i++) {
+		auto tmp = builder().insert_vector_extract(src->val(), i);
+		dst = builder().insert_vector_insert(dst->val(), i, tmp->val());
+	}
+
+	write_operand(0, dst->val());
+    break;
+  }
+  case XED_ICLASS_PSHUFLW: {
+    auto dst = builder().insert_bitcast(value_type::vector(value_type::u16(), 8), read_operand(0)->val());
+    auto src = builder().insert_bitcast(value_type::vector(value_type::u16(), 8), read_operand(1)->val());
+	auto slct = ((constant_node *)read_operand(2))->const_val_i();
+
+	// shuffle lower quadword
+	for (auto i = 0; i < 4; i++) {
+		auto tmp = builder().insert_vector_extract(src->val(), (slct >> (i*2))&3);
+		dst = builder().insert_vector_insert(dst->val(), i, tmp->val());
+	}
+	// keep upper quadword
+	for (auto i = 4; i < 8; i++) {
+		auto tmp = builder().insert_vector_extract(src->val(), i);
+		dst = builder().insert_vector_insert(dst->val(), i, tmp->val());
+	}
+
+	write_operand(0, dst->val());
+    break;
+  }
   case XED_ICLASS_PSHUFD: {
 	auto slct = ((constant_node *)read_operand(2))->const_val_i();
 	auto dst_vec = builder().insert_bitcast(value_type::vector(value_type::u32(), 4), read_operand(0)->val());

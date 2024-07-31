@@ -397,6 +397,8 @@ extern "C" int invoke_code(void *cpu_state) { return ctx_->invoke(cpu_state); }
  */
 extern "C" int execute_internal_call(void *cpu_state, int call) { return ctx_->internal_call(cpu_state, call); }
 
+extern "C" void poison(char *s) { std::cerr << "Unimplemened Instr: " << s << "\n"; abort();}
+
 extern "C" void finalize() { delete ctx_; exit(0); }
 
 extern "C" void clk(void *cpu_state, char *s) { ctx_->get_thread(cpu_state)->clk(s); }
