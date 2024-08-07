@@ -264,10 +264,10 @@ void llvm_static_output_engine_impl::build()
 		lower_chunks(loop_fn);
 
 		{
-			func_map_.push_back(ConstantInt::get(types.i64, 0));
-			func_map_.push_back(ConstantInt::get(types.i64, 0));
+			func_map_.push_back(ConstantPointerNull::get(PointerType::get(*llvm_context_, 0)));
+			func_map_.push_back(ConstantPointerNull::get(PointerType::get(*llvm_context_, 0)));
 
-			ArrayType *ty = ArrayType::get(types.i64, func_map_.size());
+			ArrayType *ty = ArrayType::get(PointerType::get(*llvm_context_, 0), func_map_.size());
 			auto *gvar = reinterpret_cast<GlobalVariable *>(module_->getOrInsertGlobal("__FUNCMAP", ty));
 			gvar->setInitializer(ConstantArray::get(ty, func_map_));
 			gvar->setLinkage(GlobalValue::ExternalLinkage);
@@ -544,7 +544,8 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 
 		LoadInst *li = builder.CreateLoad(ty, address_ptr);
 		if (e_.fences_){
-			builder.CreateFence(AtomicOrdering::Acquire);
+			if (!is_stack(rmn))
+				builder.CreateFence(AtomicOrdering::Acquire);
 		}
 		li->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(li->getContext(), guest_mem_alias_scope_));
 		li->setMetadata(LLVMContext::MD_noalias, MDNode::get(li->getContext(), reg_file_alias_scope_));
@@ -1339,7 +1340,8 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto address_ptr = builder.CreateIntToPtr(address, PointerType::get(value->getType(), 256));
 
 		if (e_.fences_) {
-			builder.CreateFence(AtomicOrdering::Release);
+			if (!is_stack(wmn))
+				builder.CreateFence(AtomicOrdering::Release);
 		}
 		auto store = builder.CreateStore(value, address_ptr);
 		store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), guest_mem_alias_scope_));

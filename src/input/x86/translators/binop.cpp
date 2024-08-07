@@ -1,3 +1,4 @@
+#include "arancini/input/registers.h"
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/ir/ir-builder.h>
 #include <arancini/ir/node.h>
@@ -410,65 +411,36 @@ void binop_translator::do_translate()
 		auto op0_cast = builder().insert_bitcast(CastTy, op0->val());
 		auto and_exp = builder().insert_and(op0_cast->val(), cexp->val());
 		auto cmpeq_exp = builder().insert_cmpeq(and_exp->val(), cexp->val());
-		cond_br_node *op0_not_nan_br = (cond_br_node *)builder().insert_cond_br(cmpeq_exp->val(), nullptr);
 		auto and_frac = builder().insert_and(op0_cast->val(), cexp->val());
 		auto cmpeq_frac = builder().insert_cmpeq(and_frac->val(), z->val());
-		cond_br_node *op0_not_nan_br2 = (cond_br_node *)builder().insert_cond_br(cmpeq_frac->val(), nullptr);
-		write_flags(nullptr, flag_op::set1, flag_op::set1, flag_op::set0, flag_op::set0, flag_op::set1, flag_op::set0);
-		br_node *end0nan_br = (br_node *)builder().insert_br(nullptr);
+		auto op1_is_nan = builder().insert_or(builder().insert_not(cmpeq_exp->val())->val(), builder().insert_not(cmpeq_frac->val())->val());
 
 		// op1 is NaN?
-		auto op0_not_nan = builder().insert_label("op0_not_NaN");
-		auto op0_not_nan1 = builder().insert_label("op0_not_NaN");
-		op0_not_nan_br->add_br_target(op0_not_nan);
-		op0_not_nan_br2->add_br_target(op0_not_nan1);
 		auto op1_cast = builder().insert_bitcast(CastTy, op1->val());
 		and_exp = builder().insert_and(op1_cast->val(), cexp->val());
 		cmpeq_exp = builder().insert_cmpeq(and_exp->val(), z->val());
-		cond_br_node *op1_not_nan_br = (cond_br_node *)builder().insert_cond_br(cmpeq_exp->val(), nullptr);
 		and_frac = builder().insert_and(op1_cast->val(), cfrac->val());
 		cmpeq_frac = builder().insert_cmpeq(and_frac->val(), z->val());
-		cond_br_node *op1_not_nan_br2 = (cond_br_node *)builder().insert_cond_br(cmpeq_frac->val(), nullptr);
-		write_flags(nullptr, flag_op::set1, flag_op::set1, flag_op::set0, flag_op::set0, flag_op::set1, flag_op::set0);
-		br_node *end1nan_br = (br_node *)builder().insert_br(nullptr);
+		auto op2_is_nan = builder().insert_or(builder().insert_not(cmpeq_exp->val())->val(), builder().insert_not(cmpeq_frac->val())->val());
 
-		auto no_nan = builder().insert_label("not_NaN");
-		auto no_nan2 = builder().insert_label("not_NaN");
-		op1_not_nan_br->add_br_target(no_nan);
-		op1_not_nan_br2->add_br_target(no_nan2);
-		auto cmpeq = builder().insert_cmpeq(op0->val(), op1->val());
-		cond_br_node *eq_br = (cond_br_node *)builder().insert_cond_br(cmpeq->val(), nullptr);
-		auto cmpgt = builder().insert_cmpgt(op0->val(), op1->val());
-		cond_br_node *gt_br = (cond_br_node *)builder().insert_cond_br(cmpgt->val(), nullptr);
+		auto is_nan = builder().insert_or(op1_is_nan->val(), op2_is_nan->val());
 
-		// op0 < op1
-		write_flags(nullptr, flag_op::set0, flag_op::set1, flag_op::set0, flag_op::set0, flag_op::set0, flag_op::set0);
-		br_node *endlt_br = (br_node *)builder().insert_br(nullptr);
+		// is EQ?
+		auto eq = builder().insert_cmpeq(op0->val(), op1->val());
+		auto is_eq = builder().insert_and(eq->val(), builder().insert_not(is_nan->val())->val());
 
-		// equal
-		auto eq_branch = builder().insert_label("equal");
-		eq_br->add_br_target(eq_branch);
-		write_flags(nullptr, flag_op::set1, flag_op::set0, flag_op::set0, flag_op::set0, flag_op::set0, flag_op::set0);
-		br_node *endeq_br = (br_node *)builder().insert_br(nullptr);
+		// is GT or LT?
+		auto gt = builder().insert_cmpgt(op0->val(), op1->val());
+		auto is_gt = builder().insert_and(gt->val(), builder().insert_not(is_nan->val())->val());
+		auto is_lt = builder().insert_and(builder().insert_not(is_gt->val())->val(), builder().insert_not(is_eq->val())->val());
 
-		// op0 > op1
-		auto gt_branch = builder().insert_label("gt");
-		gt_br->add_br_target(gt_branch);
-		write_flags(nullptr, flag_op::set0, flag_op::set0, flag_op::set0, flag_op::set0, flag_op::set0, flag_op::set0);
-		br_node *endgt_br = (br_node *)builder().insert_br(nullptr);
+		auto is_nan_or_eq = builder().insert_or(is_nan->val(), is_eq->val());
+		auto is_nan_or_lt = builder().insert_or(is_nan->val(), is_lt->val());
 
-		// end
-		auto end = builder().insert_label("end");
-		auto end2 = builder().insert_label("end");
-		auto end3 = builder().insert_label("end");
-		auto end4 = builder().insert_label("end");
-		auto end5 = builder().insert_label("end");
-		endeq_br->add_br_target(end);
-		endgt_br->add_br_target(end2);
-		endlt_br->add_br_target(end3);
-		end0nan_br->add_br_target(end4);
-		end1nan_br->add_br_target(end5);
-
+		builder().insert_write_reg((unsigned long)reg_offsets::ZF, (unsigned long)reg_idx::ZF, "", builder().insert_csel(is_nan_or_eq->val(), builder().insert_constant_i(value_type::u1(), 1)->val(), builder().insert_constant_i(value_type::u1(), 0)->val())->val());
+		builder().insert_write_reg((unsigned long)reg_offsets::PF, (unsigned long)reg_idx::PF, "", builder().insert_csel(is_nan->val(), builder().insert_constant_i(value_type::u1(), 1)->val(), builder().insert_constant_i(value_type::u1(), 0)->val())->val());
+		builder().insert_write_reg((unsigned long)reg_offsets::CF, (unsigned long)reg_idx::CF, "", builder().insert_csel(is_nan_or_lt->val(), builder().insert_constant_i(value_type::u1(), 1)->val(), builder().insert_constant_i(value_type::u1(), 0)->val())->val());
+		write_flags(nullptr, flag_op::ignore, flag_op::ignore, flag_op::set0, flag_op::set0, flag_op::ignore, flag_op::set0);
 		break;
 	}
 	case XED_ICLASS_CMPSD_XMM:

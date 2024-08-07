@@ -729,9 +729,12 @@ public:
 		, lhs_(lhs)
 		, rhs_(rhs)
 	{
-		if (lhs.type() != rhs.type()) {
+		std::set<binary_arith_op> implicit_casts = { binary_arith_op::band, binary_arith_op::bor, binary_arith_op::bxor };
+		if (implicit_casts.find(op) == implicit_casts.end()) {
+			if (lhs.type() != rhs.type()) {
 			throw ir_exception("incompatible types in binary arith node: lhs={}, rhs={}",
                                lhs.type(), rhs.type());
+			}
 		}
 
 		op_ = op;
