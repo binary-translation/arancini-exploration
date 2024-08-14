@@ -73,6 +73,7 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 		("dump-llvm", po::value<std::string>(), "Dump generated LLVM IR") //
 		("keep-objs", po::value<std::string>(), "Keep generated obj files in <prefix> for manual linking") //
 		("nlib", po::value<std::string>(), "Parse the file at the given path for native library method definitions to substitute when translating.") //
+        ("disable-flag-opt", "Disable optimizations that eliminate uneeded flag computations") //
 		("llvm-codegen-nofence", "Do not generate fences on memory accesses. Only safe for single-threaded applications.");
 
     po::variables_map vm;

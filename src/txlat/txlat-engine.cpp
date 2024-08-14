@@ -11,12 +11,14 @@
 #include <arancini/txlat/txlat-engine.h>
 #include <arancini/util/tempfile-manager.h>
 #include <arancini/util/tempfile.h>
+
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <optional>
 #include <ostream>
 #include <string>
+#include <filesystem>
 
 using namespace arancini::txlat;
 using namespace arancini::elf;
@@ -216,11 +218,13 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	}
 	// Generate a dot graph of the IR if required
 	if (cmdline.count("graph")) {
-    generate_dot_graph(*oe, cmdline.at("graph").as<std::string>());
+        generate_dot_graph(*oe, cmdline.at("graph").as<std::string>());
 	}
 
 	// Execute required optimisations from the command line
-	optimise(*oe, cmdline);
+    if (!cmdline.count("disable-flag-opt")) {
+        optimise(*oe, cmdline);
+    }
 
 	// Generate a dot graph of the optimized IR if required
 	if (cmdline.count("graph")) {

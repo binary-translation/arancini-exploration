@@ -205,6 +205,26 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
         util::global_logger.set_level(util::global_logging::levels::info);
     }
 
+    // Determine logger level
+    flag = getenv("ARANCINI_LOG_STREAM");
+    if (flag && util::global_logger.is_enabled()) {
+        if (util::case_ignore_string_equal(flag, "stdout"))
+            util::global_logger.set_output_file(stdout);
+        else if (util::case_ignore_string_equal(flag, "stderr"))
+            util::global_logger.set_output_file(stderr);
+        else {
+            // Open file
+            FILE* out = std::fopen(flag, "w");
+            if (!out)
+                throw std::runtime_error("Unable to open requested file for the Arancini logger stream");
+
+            util::global_logger.set_output_file(out);
+        }
+    } else if (util::global_logger.is_enabled()) {
+        std::cerr << "Logger enabled without explicit log level; setting log level to default [info]\n";
+        util::global_logger.set_level(util::global_logging::levels::info);
+    }
+
     util::global_logger.info("arancini: dbt: initialise\n");
 
 	bool optimise = true;
