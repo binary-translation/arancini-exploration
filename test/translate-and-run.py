@@ -1,23 +1,21 @@
 #! /bin/python3
 
 import os
+import sys
 import json
 import logging
 import argparse
 import subprocess
 
+# Disable tracebacks
+sys.tracebacklimit = 0
+
 logger = logging.getLogger("tester")
 
-class CompilationError(Exception):
-    def __init__(self, command):
-        self.message = "Error when compiling with invocation: ".join(command)
-
-    def __str__(self):
-        return self.message
-
 class ExecutionError(Exception):
-    def __init__(self, command):
-        self.message = "Error when executing: ".join(command)
+    def __init__(self, command, stdout, stderr):
+        self.message = f"Error when executing {command}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+        super().__init__(self.message)
 
     def __str__(self):
         return self.message
@@ -72,17 +70,17 @@ class Tester:
         output_file = self.input_bin + ".out"
         compile_command = [self.txlat_path, "--input", self.input_bin, "--output", output_file,
                            *self.config["compile_flags"]]
-        proc = subprocess.run(compile_command)
+        proc = subprocess.run(compile_command, capture_output=True, text=True)
         if proc.returncode != 0:
-            raise CompilationError(compile_command)
+            raise ExecutionError(compile_command, proc.stdout, proc.stderr)
 
         return output_file
 
     def execute(self, binary):
         execute_command = [binary, *self.config["runtime_flags"]]
-        proc = subprocess.run(execute_command, capture_output=True)
+        proc = subprocess.run(execute_command, capture_output=True, text=True)
         if proc.returncode != 0:
-            raise ExecutionError(execute_command)
+            raise ExecutionError(execute_command, proc.stdout, proc.stderr)
 
         logger.info("Completed execution successfully")
 
@@ -139,7 +137,12 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=getattr(logging, args.log_level))
 
-    tester = Tester(args.txlat, args.input, args.config)
-    tester.run()
+    try:
+        tester = Tester(args.txlat, args.input, args.config)
+        tester.run()
+    except Exception as e:
+        print("Test failed:\n", str(e))
+        exit(2)
+
     exit(0)
 
