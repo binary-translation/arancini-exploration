@@ -153,13 +153,11 @@ elseif (DBT_ARCH STREQUAL "RISCV64")
 else ()
     message(FATAL_ERROR "Invalid ARCH specified: valid values are X86_64, AARCH64, RISCV64")
 endif ()
+
+# TODO: provide per-arch version
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
                    COMMAND ${CMAKE_COMMAND} -E copy
                    ${CMAKE_CURRENT_SOURCE_DIR}/lib.lds
-                   $<TARGET_FILE_DIR:${PROJECT_NAME}>)
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-                   COMMAND ${CMAKE_COMMAND} -E copy
-                   ${CMAKE_CURRENT_SOURCE_DIR}/guest-sections.lds
                    $<TARGET_FILE_DIR:${PROJECT_NAME}>)
 
 # Build tests

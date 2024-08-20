@@ -9,13 +9,13 @@ set(static-musl-phoenix-path "share/static-musl-phoenix" CACHE PATH "Path to sta
 
 set(smoke-tests
     hello-world/hello-static-musl
-    "${static-musl-phoenix-path}"/histogram-seq-static-musl
-    "${static-musl-phoenix-path}"/kmeans-seq-static-musl
-    "${static-musl-phoenix-path}"/linear_regression-seq
-    "${static-musl-phoenix-path}"/matrix_multiple-seq-static-musl
-    "${static-musl-phoenix-path}"/pca-seq-static-musl
-    "${static-musl-phoenix-path}"/string_match-seq-static-musl
-    "${static-musl-phoenix-path}"/word_count-seq-static-musl)
+    "${static-musl-phoenix-path}/histogram-seq-static-musl"
+    "${static-musl-phoenix-path}/kmeans-seq-static-musl"
+    "${static-musl-phoenix-path}/linear_regression-seq"
+    "${static-musl-phoenix-path}/matrix_multiple-seq-static-musl"
+    "${static-musl-phoenix-path}/pca-seq-static-musl"
+    "${static-musl-phoenix-path}/string_match-seq-static-musl"
+    "${static-musl-phoenix-path}/word_count-seq-static-musl")
 
 foreach (test ${smoke-tests})
     get_filename_component(filename "${test}" NAME)
