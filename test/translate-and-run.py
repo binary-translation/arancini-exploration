@@ -1,20 +1,32 @@
 #! /bin/python3
 
 import os
-import sys
 import json
+import shutil
+import pprint
+import difflib
 import logging
 import argparse
+import traceback
 import subprocess
 
-# Disable tracebacks
-sys.tracebacklimit = 0
+logger = logging.getLogger("Test Runner")
+keep_artifacts = False
 
-logger = logging.getLogger("tester")
+# Source: https://stackoverflow.com/questions/845276/how-to-print-the-comparison-of-two-multiline-strings-in-unified-diff-format
+def unified_diff(text1, text2):
+    text1 = text1.splitlines(1)
+    text2 = text2.splitlines(1)
+
+    diff = difflib.unified_diff(text1, text2)
+
+    return ''.join(diff)
 
 class ExecutionError(Exception):
     def __init__(self, command, stdout, stderr):
-        self.message = f"Error when executing {command}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+        self.message = f"Error when executing {' '.join(command)}"
+        self.stdout = stdout
+        self.stderr = stderr
         super().__init__(self.message)
 
     def __str__(self):
@@ -39,6 +51,7 @@ class Tester:
             'runtime_environment': os.environ.__dict__, # default environment same as tester's
             'expected_stdout': None,
             'expected_stderr': None,
+            'expected_status': 0,
             'produced_artifacts': []
         }
 
@@ -47,7 +60,11 @@ class Tester:
                             "executing test in default configuration")
         else:
             self.parse_config(config)
-            logger.info(f"Executing test with config:\n{self.config}")
+            term_size_tuple = shutil.get_terminal_size(fallback=(200, 100))
+            term_width = term_size_tuple[0]
+            if term_width > 5:
+                term_width -= 5
+            logger.info(f"Executing test with config:\n{pprint.pformat(self.config, width=term_width)}")
 
     def run(self):
         logger.info("Translating input binary")
@@ -58,10 +75,13 @@ class Tester:
         logger.info(f"Executing transated binary: {translated}")
         stdout, stderr = self.execute(translated)
 
-        self.compare_output(self.config["stdout"], stdout)
-        self.compare_output(self.config["stdout"], stdout)
+        self.compare_output(self.config["expected_stdout"], stdout)
+        self.compare_output(self.config["expected_stderr"], stderr)
 
     def __del__(self):
+        if keep_artifacts:
+            return
+
         for output_file in self.config["produced_artifacts"]:
             if os.path.exists(output_file):
                 os.remove(output_file)
@@ -79,7 +99,7 @@ class Tester:
     def execute(self, binary):
         execute_command = [binary, *self.config["runtime_flags"]]
         proc = subprocess.run(execute_command, capture_output=True, text=True)
-        if proc.returncode != 0:
+        if proc.returncode != self.config["expected_status"]:
             raise ExecutionError(execute_command, proc.stdout, proc.stderr)
 
         logger.info("Completed execution successfully")
@@ -99,11 +119,16 @@ class Tester:
                     else:
                         self.config[key].extend(config_data[key])
 
-    def compare_output(reference, output):
+    def compare_output(self, reference, output):
         if reference is not None:
-            # TODO
+            reference = '\n'.join(reference)
             if reference != output:
-                print("Output differs")
+                logger.error("Output differs")
+                logger.error(f"Reference:\n{reference}")
+                logger.error(f"Actual:\n{output}")
+
+                diff = unified_diff(reference, output)
+                logger.error(f"Diff:\n{diff}")
                 exit(2)
 
 def parse_arguments():
@@ -130,18 +155,38 @@ def parse_arguments():
                         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
                         help='Logging level for tester')
 
+    parser.add_argument('--keep-artifacts',
+                        required=False,
+                        default=False,
+                        action='store_true',
+                        help='Do not remove artifacts generated during test (including translated binaries)')
+
+    args = parser.parse_args()
+
+    global keep_artifacts
+    keep_artifacts = args.keep_artifacts
+
     return parser.parse_args()
 
 if __name__ == "__main__":
+    # Parse command-line flags
     args = parse_arguments()
 
-    logging.basicConfig(level=getattr(logging, args.log_level))
+    # Configure logger
+    logging.basicConfig(level=getattr(logging, args.log_level),
+                        format="[%(name)s][%(levelname)s] %(message)s")
 
     try:
         tester = Tester(args.txlat, args.input, args.config)
         tester.run()
-    except Exception as e:
-        print("Test failed:\n", str(e))
+    except ExecutionError as e:
+        logging.exception(f"Test failed: {str(e)}")
+        logging.error(f"Contents of STDOUT:\n{e.stdout}")
+        logging.error(f"Contents of STDERR:\n{e.stderr}")
+        exit(2)
+    except Exception as f:
+        logging.exception(f"Test failed: {str(f)}")
+        logging.error(f"Traceback:\n{traceback.format_exc()}")
         exit(2)
 
     exit(0)

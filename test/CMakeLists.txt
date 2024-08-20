@@ -26,9 +26,14 @@ foreach (test ${smoke-tests})
         get_filename_component(config-filename "${config}" NAME_WLE)
         string(REPLACE "${filename}." "" suffix "${config-filename}")
 
-        add_test(NAME "${filename}-${suffix}"
+        set(testname "${filename}:${suffix}")
+
+        add_test(NAME "${testname}"
                  COMMAND ${tester} -t "$<TARGET_FILE:txlat>" -i "${CMAKE_CURRENT_LIST_DIR}/${test}"
-                                   -c "${config}")
+                                   -c "${config}" --log-level DEBUG)
+
+        # Ensure that each test completes in at most 180 seconds (3 minutes)
+        set_tests_properties("${testname}" PROPERTIES TIMEOUT 180)
      endforeach ()
 endforeach ()
 
