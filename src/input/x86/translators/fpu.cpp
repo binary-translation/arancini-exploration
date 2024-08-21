@@ -309,46 +309,23 @@ void fpu_translator::do_translate()
     auto sti = read_operand(1);
 
     // comparisons
-    auto cmpgt = builder().insert_cmpgt(st0->val(), sti->val());
-    cond_br_node *gt_br = (cond_br_node *)builder().insert_cond_br(cmpgt->val(), nullptr);
-    auto cmplt = builder().insert_cmpgt(sti->val(), st0->val());
-    cond_br_node *lt_br = (cond_br_node *)builder().insert_cond_br(cmplt->val(), nullptr);
-    auto cmpeq = builder().insert_cmpeq(st0->val(), sti->val());
-    cond_br_node *eq_br = (cond_br_node *)builder().insert_cond_br(cmpeq->val(), nullptr);
+	st0 = builder().insert_convert(value_type::f64(), st0->val());
+	sti = builder().insert_convert(value_type::f64(), sti->val());
 
-    // unordered
-    write_flags(nullptr, flag_op::set1, flag_op::set1, flag_op::ignore, flag_op::ignore, flag_op::set1, flag_op::ignore);
-    br_node *end_un = (br_node *)builder().insert_br(nullptr);
+    auto cmplt = builder().insert_binop(binary_arith_op::cmpolt, st0->val(), sti->val());
+    auto cmpeq = builder().insert_binop(binary_arith_op::cmpoeq, sti->val(), st0->val());
 
-    // st(0) > st(i)
-    auto gt_branch = builder().insert_label("gt");
-    gt_br->add_br_target(gt_branch);
-    write_flags(nullptr, flag_op::set0, flag_op::set0, flag_op::ignore, flag_op::ignore, flag_op::set0, flag_op::ignore);
-    br_node *end_gt = (br_node *)builder().insert_br(nullptr);
-
-    // st(0) < st(i)
-    auto lt_branch = builder().insert_label("lt");
-    lt_br->add_br_target(lt_branch);
-    write_flags(nullptr, flag_op::set0, flag_op::set1, flag_op::ignore, flag_op::ignore, flag_op::set0, flag_op::ignore);
-    br_node *end_lt = (br_node *)builder().insert_br(nullptr);
-
-    // st(0) = st(i)
-    auto eq_branch = builder().insert_label("eq");
-    eq_br->add_br_target(eq_branch);
-    write_flags(nullptr, flag_op::set0, flag_op::set1, flag_op::ignore, flag_op::ignore, flag_op::set0, flag_op::ignore);
-
-    // end
-    auto end = builder().insert_label("end");
-    auto end1 = builder().insert_label("end");
-    auto end2 = builder().insert_label("end");
-    end_un->add_br_target(end);
-    end_gt->add_br_target(end1);
-    end_lt->add_br_target(end2);
+	auto zf = builder().insert_csel(cmpeq->val(), builder().insert_constant_i(value_type::u1(), 1)->val(), builder().insert_constant_i(value_type::u1(), 0)->val());
+	auto cf = builder().insert_csel(cmplt->val(), builder().insert_constant_i(value_type::u1(), 1)->val(), builder().insert_constant_i(value_type::u1(), 0)->val());
+	auto pf = builder().insert_constant_i(value_type::u1(), 0);
+	builder().insert_write_reg((unsigned long)reg_offsets::ZF, (unsigned long)reg_idx::ZF, "ZF", zf->val());
+	builder().insert_write_reg((unsigned long)reg_offsets::CF, (unsigned long)reg_idx::CF, "CF", cf->val());
+	builder().insert_write_reg((unsigned long)reg_offsets::PF, (unsigned long)reg_idx::PF, "PF", pf->val());
 
     break;
   }
   default:
-	  throw std::runtime_error("unsupported fpu operation");
+	  throw std::runtime_error(std::string("unsupported fpu operation")+xed_iclass_enum_t2str(xed_decoded_inst_get_iclass(xed_inst())));
   }
 
   switch (inst_class) {

@@ -717,7 +717,7 @@ enum class binary_arith_op {
 	cmpeq, cmpne, cmpgt,
 	// floating point stuff
 	cmpoeq, cmpolt, cmpole,
-	cmpune, cmpunlt, cmpunle,
+	cmpueq, cmpult, cmpune, cmpunlt, cmpunle,
 	cmpo, cmpu
 };
 

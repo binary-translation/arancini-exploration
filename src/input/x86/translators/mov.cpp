@@ -208,6 +208,7 @@ void mov_translator::do_translate()
 		break;
 	}
 
+  case XED_ICLASS_MOVLPS:
   case XED_ICLASS_MOVLPD: {
     auto src = read_operand(1);
     if (src->val().type().width() == 128) {
@@ -257,6 +258,14 @@ void mov_translator::do_translate()
 
 		if (dst->val().type().element_width() == 128) {
 			dst = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), dst->val());
+			if (src->val().type().element_width() == 32) {
+				// dst[127..32] = 0 iff src is mem and dst is xmm reg
+				auto zero = builder().insert_constant_f(value_type::f32(), 0.0f);
+				dst = builder().insert_vector_insert(dst->val(), 1, zero->val());
+				dst = builder().insert_vector_insert(dst->val(), 2, zero->val());
+				dst = builder().insert_vector_insert(dst->val(), 3, zero->val());
+			}
+
 			rslt = builder().insert_vector_insert(dst->val(), 0, val->val());
 		} else {
 			rslt = val;

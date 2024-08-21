@@ -148,53 +148,6 @@ void muldiv_translator::do_translate()
 		break;
 	}
 
-  case XED_ICLASS_MULSD: {
-    auto dst = read_operand(0);
-    auto src = read_operand(1);
-
-    auto src_low = builder().insert_bit_extract(src->val(), 0, 64);
-    auto dst_low = builder().insert_bit_extract(dst->val(), 0, 64);
-    auto mul = builder().insert_mul(src_low->val(), dst_low->val());
-    dst = builder().insert_bit_insert(dst->val(), mul->val(), 0, 64);
-    write_operand(0, dst->val());
-    break;
-  }
-
-  case XED_ICLASS_MULSS: {
-    auto dst = read_operand(0);
-    auto src = read_operand(1);
-
-    if (src->val().type().width() != 32) {
-      src = builder().insert_bit_extract(src->val(), 0, 32);
-    }
-    auto dst_low = builder().insert_bit_extract(dst->val(), 0, 32);
-
-    auto mul = builder().insert_mul(dst_low->val(), src->val());
-    dst = builder().insert_bit_insert(dst->val(), mul->val(), 0, 32);
-    write_operand(0, dst->val());
-
-    break;
-  }
-
-  case XED_ICLASS_DIVSS:
-  case XED_ICLASS_DIVSD: {
-    // divss xmm1, xmm2/m32
-    auto dst = read_operand(0);
-    auto src = read_operand(1);
-    auto size = (inst == XED_ICLASS_DIVSS) ? 32 : 64;
-
-    auto dst_low = builder().insert_bitcast(value_type(value_type_class::floating_point, size),
-                                            builder().insert_bit_extract(dst->val(), 0, size)->val());
-    if (src->val().type().width() == 128) { // if src is xmm
-			src = builder().insert_bit_extract(src->val(), 0, size);
-    }
-    src = builder().insert_bitcast(value_type(value_type_class::floating_point, size), src->val());
-
-    auto div = builder().insert_div(dst_low->val(), src->val());
-    dst = builder().insert_bit_insert(dst->val(), div->val(), 0, size);
-    write_operand(0, dst->val());
-    break;
-  }
 
   case XED_ICLASS_PMULUDQ: {
     // pmuludq xmm1, xmm2/m128 or pmuludq mm1, mm2/m64

@@ -46,6 +46,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_MOVAPS:
 	case XED_ICLASS_MOVDQA:
 	case XED_ICLASS_MOVAPD:
+	case XED_ICLASS_MOVLPS:
 	case XED_ICLASS_MOVLPD:
 	case XED_ICLASS_MOVHPD:
 	case XED_ICLASS_MOVSS:
@@ -134,14 +135,10 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_ORPS:
   case XED_ICLASS_ORPD:
   case XED_ICLASS_ADD:
-  case XED_ICLASS_ADDSS:
-  case XED_ICLASS_ADDSD:
   case XED_ICLASS_ADDPS:
   case XED_ICLASS_ADC:
   case XED_ICLASS_SUB:
   case XED_ICLASS_SBB:
-  case XED_ICLASS_SUBSS:
-  case XED_ICLASS_SUBSD:
   case XED_ICLASS_CMP:
   case XED_ICLASS_TEST:
   case XED_ICLASS_XADD:
@@ -211,10 +208,6 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_IMUL:
 	case XED_ICLASS_DIV:
 	case XED_ICLASS_IDIV:
-	case XED_ICLASS_MULSD:
-	case XED_ICLASS_MULSS:
-	case XED_ICLASS_DIVSS:
-	case XED_ICLASS_DIVSD:
 	case XED_ICLASS_PMULUDQ:
 	case XED_ICLASS_PMULLW:
 		return std::make_unique<muldiv_translator>(builder);
@@ -230,6 +223,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_REP_MOVSQ:
 		return std::make_unique<rep_translator>(builder);
 
+	case XED_ICLASS_UNPCKHPD:
 	case XED_ICLASS_PUNPCKLBW:
 	case XED_ICLASS_PUNPCKLWD:
 	case XED_ICLASS_PUNPCKLDQ:
@@ -244,16 +238,26 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 	case XED_ICLASS_PEXTRW:
 		return std::make_unique<punpck_translator>(builder);
 
+	case XED_ICLASS_SUBPD:
+	case XED_ICLASS_ADDPD:
 	case XED_ICLASS_XORPD:
 	case XED_ICLASS_XORPS:
 	case XED_ICLASS_VADDSS:
+	case XED_ICLASS_ADDSS:
 	case XED_ICLASS_VSUBSS:
+	case XED_ICLASS_SUBSS:
 	case XED_ICLASS_VDIVSS:
+	case XED_ICLASS_DIVSS:
 	case XED_ICLASS_VMULSS:
+	case XED_ICLASS_MULSS:
 	case XED_ICLASS_VADDSD:
+	case XED_ICLASS_ADDSD:
 	case XED_ICLASS_VSUBSD:
+	case XED_ICLASS_SUBSD:
 	case XED_ICLASS_VDIVSD:
+	case XED_ICLASS_DIVSD:
 	case XED_ICLASS_VMULSD:
+	case XED_ICLASS_MULSD:
 	case XED_ICLASS_CVTSD2SI:
 	case XED_ICLASS_CVTSD2SS:
 	case XED_ICLASS_CVTSS2SD:

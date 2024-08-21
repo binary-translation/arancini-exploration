@@ -654,6 +654,7 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 				}
 			}
 
+			bool is_f_or_fv = lhs->getType()->isFloatingPointTy() || (lhs->getType()->isVectorTy() && ((VectorType *)lhs->getType())->getElementType()->isFloatingPointTy());
 			switch (ban->op()) {
 			case binary_arith_op::bxor:
 				return builder.CreateXor(lhs, rhs);
@@ -667,17 +668,17 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 				return builder.CreateAdd(lhs, rhs);
 			}
 			case binary_arith_op::sub: {
-				if (lhs->getType()->isFloatingPointTy())
+				if (is_f_or_fv)
 					return builder.CreateFSub(lhs, rhs);
 				return builder.CreateSub(lhs, rhs);
 			}
 			case binary_arith_op::mul: {
-				if (lhs->getType()->isFloatingPointTy())
+				if (is_f_or_fv)
 					return builder.CreateFMul(lhs, rhs);
 				return builder.CreateMul(lhs, rhs);
 			}
 			case binary_arith_op::div: {
-				if (lhs->getType()->isFloatingPointTy())
+				if (is_f_or_fv)
 					return builder.CreateFDiv(lhs, rhs);
 				return builder.CreateUDiv(lhs, rhs);
 			}
@@ -724,8 +725,14 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 			case binary_arith_op::cmpole: {
 				return builder.CreateCmp(CmpInst::FCMP_OLE, lhs, rhs);
 			}
-			case binary_arith_op::cmpune: {
+			case binary_arith_op::cmpueq: {
 				return builder.CreateCmp(CmpInst::FCMP_UEQ, lhs, rhs);
+			}
+			case binary_arith_op::cmpult: {
+				return builder.CreateCmp(CmpInst::FCMP_ULT, lhs, rhs);
+			}
+			case binary_arith_op::cmpune: {
+				return builder.CreateCmp(CmpInst::FCMP_UNE, lhs, rhs);
 			}
 			case binary_arith_op::cmpunlt: {
 				return builder.CreateCmp(CmpInst::FCMP_UGE, lhs, rhs);
@@ -1945,11 +1952,11 @@ void llvm_static_output_engine_impl::restore_all_regs(IRBuilder<> &builder, Argu
 void llvm_static_output_engine_impl::save_callee_regs(IRBuilder<> &builder, Argument *state_arg, bool with_args)
 {
 	auto args = {
-		reg_offsets::RCX, reg_offsets::RDX, reg_offsets::RDI, reg_offsets::RSI, reg_offsets::R8, reg_offsets::R9 /*, reg_offsets::ZMM0,
-reg_offsets::ZMM1, reg_offsets::ZMM2, reg_offsets::ZMM3, reg_offsets::ZMM4, reg_offsets::ZMM5, reg_offsets::ZMM6, reg_offsets::ZMM7*/
+		reg_offsets::RCX, reg_offsets::RDX, reg_offsets::RDI, reg_offsets::RSI, reg_offsets::R8, reg_offsets::R9
 	};
 	auto regs = { reg_offsets::PC, reg_offsets::RBX, reg_offsets::RSP, reg_offsets::RBP, reg_offsets::R12, reg_offsets::R13, reg_offsets::R14, reg_offsets::R15,
-		reg_offsets::FS, reg_offsets::GS , reg_offsets::X87_STS, reg_offsets::X87_TAG, reg_offsets::X87_CTRL };
+		reg_offsets::FS, reg_offsets::GS , reg_offsets::X87_STS, reg_offsets::X87_TAG, reg_offsets::X87_CTRL, reg_offsets::ZMM0,
+reg_offsets::ZMM1, reg_offsets::ZMM2, reg_offsets::ZMM3, reg_offsets::ZMM4, reg_offsets::ZMM5, reg_offsets::ZMM6, reg_offsets::ZMM7 };
 	for (auto reg : regs) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
 		auto alloca = reg_to_alloca_.at(reg);
@@ -1969,9 +1976,9 @@ reg_offsets::ZMM1, reg_offsets::ZMM2, reg_offsets::ZMM3, reg_offsets::ZMM4, reg_
 
 void llvm_static_output_engine_impl::restore_callee_regs(IRBuilder<> &builder, Argument *state_arg, bool with_rets)
 {
-	auto rets = { reg_offsets::RAX, reg_offsets::RDX /*, reg_offsets::ZMM0, reg_offsets::ZMM1*/ };
+	auto rets = { reg_offsets::RAX, reg_offsets::RDX };
 	auto regs = { reg_offsets::PC, reg_offsets::RBX, reg_offsets::RSP, reg_offsets::RBP, reg_offsets::R12, reg_offsets::R13, reg_offsets::R14, reg_offsets::R15,
-		reg_offsets::FS, reg_offsets::GS , reg_offsets::X87_STACK_BASE, reg_offsets::X87_STS, reg_offsets::X87_TAG, reg_offsets::X87_CTRL };
+		reg_offsets::FS, reg_offsets::GS , reg_offsets::X87_STACK_BASE, reg_offsets::X87_STS, reg_offsets::X87_TAG, reg_offsets::X87_CTRL, reg_offsets::ZMM0, reg_offsets::ZMM1 };
 	for (auto reg : regs) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "restore_"+std::to_string((unsigned long)reg));
 		auto alloca = reg_to_alloca_.at(reg);

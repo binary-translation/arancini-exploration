@@ -152,6 +152,7 @@ private:
 
 	template <typename T>
 	bool is_stack(T *n) {
+		return false;
 		bool is_stack = false;
 
 		// check if RSP or RBP are used to calculate the adress
