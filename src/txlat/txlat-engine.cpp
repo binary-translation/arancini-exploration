@@ -664,7 +664,7 @@ std::map<uint64_t, std::string> txlat_engine::generate_guest_sections(const std:
 	}
 
 	for (const auto &sym : sym_t->symbols()) {
-		if (sym.name() == "_DYNAMIC") {
+		if (sym.name() == "_DYNAMIC" && sym.section_index() != SHN_UNDEF) {
 
 			add_symbol_to_output(load_phdrs, end_addresses, sym, s, ifuncs, true);
 			s << ".hidden __guest___DYNAMIC\n";
