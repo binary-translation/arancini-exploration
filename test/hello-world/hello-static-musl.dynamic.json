@@ -1,0 +1,10 @@
+{
+    "compile_flags": ["--no-static"],
+    "runtime_environment": {
+        "ARANCINI_LOG_LEVEL": "debug",
+        "ARANCINI_ENABLE_LOG": "true",
+        "ARANCINI_LOG_STREAM": "stderr"
+    },
+    "expected_stdout": ["Hello World!\n"]
+}
+

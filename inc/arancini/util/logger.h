@@ -69,11 +69,13 @@ public:
 
     levels get_level() const { return level_; }
 
+    void set_output_file(FILE* out) { out_ = out; }
+
     template<typename... Args>
     T &debug(Args&&... args) {
         if (level_ <= levels::debug)
-            return logger->log(stderr, 
-                               std::forward_as_tuple("[DEBUG]   "), 
+            return logger->log(out_,
+                               std::forward_as_tuple("[DEBUG]   "),
                                std::forward_as_tuple(std::forward<Args>(args)...));
         return *logger;
     }
@@ -81,8 +83,8 @@ public:
     template<typename... Args>
     T &info(Args&&... args) {
         if (level_ <= levels::info)
-            return logger->log(stderr, 
-                               std::forward_as_tuple("[INFO]    "), 
+            return logger->log(out_,
+                               std::forward_as_tuple("[INFO]    "),
                                std::forward_as_tuple(std::forward<Args>(args)...));
         return *logger;
     }
@@ -90,8 +92,8 @@ public:
     template<typename... Args>
     T &warn(Args&&... args) {
         if (level_ <= levels::warn)
-            return logger->log(stderr, 
-                               std::forward_as_tuple("[WARNING] "), 
+            return logger->log(out_,
+                               std::forward_as_tuple("[WARNING] "),
                                std::forward_as_tuple(std::forward<Args>(args)...));
         return *logger;
     }
@@ -99,8 +101,8 @@ public:
     template<typename... Args>
     T &error(Args&&... args) {
         if (level_ <= levels::error)
-            return logger->log(stderr, 
-                               std::forward_as_tuple("[ERROR]   "), 
+            return logger->log(out_,
+                               std::forward_as_tuple("[ERROR]   "),
                                std::forward_as_tuple(std::forward<Args>(args)...));
         return *logger;
     }
@@ -109,16 +111,20 @@ public:
     T &fatal(Args&&... args) {
         // Print FATAL messages even with disabled logger
         if (level_ <= levels::fatal) {
-            return logger->forced_log(stderr, 
-                                      std::forward_as_tuple("[FATAL]   "), 
+            return logger->forced_log(out_,
+                                      std::forward_as_tuple("[FATAL]   "),
                                       std::forward_as_tuple(std::forward<Args>(args)...));
         }
         return *logger;
     }
 protected:
+    // Logger level
     levels level_ = levels::warn;
 
     T* logger = static_cast<T*>(this);
+
+    // Output stream for logging messages
+    FILE* out_ = stderr;
 
     virtual ~level_policy() { }
 };
@@ -149,12 +155,12 @@ public:
     logger_impl() = default;
 
     // Specify a prefix for all printed messages
-    logger_impl(const std::string &prefix, bool enable = false, 
-                typename level_policy_type::levels level = level_policy_type::levels::lowest_level): 
+    logger_impl(const std::string &prefix, bool enable = false,
+                typename level_policy_type::levels level = level_policy_type::levels::lowest_level):
         prefix_(prefix),
         enabled_(enable),
         level_policy_type(level)
-    { 
+    {
     }
 
     // Enable/disable logger
@@ -189,7 +195,7 @@ public:
     // Meant for use only be wrappers or in special other cases
     template<typename... Args>
     base_type &forced_unsynch_log(FILE* dest, Args&&... args) {
-        static_assert((all_are_tuples<Args...>() || none_are_tuples<Args...>()), 
+        static_assert((all_are_tuples<Args...>() || none_are_tuples<Args...>()),
                   "Arguments must be all tuples or no tuples, not a mix.");
 
         if (!prefix_.empty()) fmt::print(dest, "{}", prefix_);
@@ -218,7 +224,7 @@ public:
 
         return *this;
     }
-    
+
     // Basic canonical interface for logging for printing to stdout
     //
     // Arguments are given as for the {fmt} library

@@ -136,6 +136,7 @@ add_subdirectory(src/txlat)
 
 # Build tests
 if (BUILD_TESTS)
+    enable_testing()
     add_subdirectory(test)
 endif ()
 
