@@ -656,16 +656,17 @@ public:
         append(instruction("ptrue", def(dest)));
     }
 
-    void insert_sep(const std::string &sep) { label(sep); }
+    void insert_separator(const std::string &sep) { label(sep); }
 
-    void insert_comment(const std::string &comment) {
-        append(instruction("// " + comment));
+    template <typename... Args>
+    void insert_comment(std::string_view format, Args&&... args) {
+        append(instruction(fmt::format("// {}", fmt::format(format, std::forward<Args>(args)...))));
     }
 
     bool has_label(const std::string &label) {
-        auto label_str = label + ":";
-        auto insn = instructions_;
-        return std::any_of(insn.rbegin(), insn.rend(),
+        auto label_str = fmt::format(label, ":");
+        auto instr = instructions_;
+        return std::any_of(instr.rbegin(), instr.rend(),
                             [&](const instruction &i) {
                                 return i.opcode() == label_str;
                             });
@@ -678,6 +679,19 @@ public:
 	void dump(std::ostream &os) const;
 
 	size_t nr_instructions() const { return instructions_.size(); }
+
+    using instruction_stream = std::vector<instruction>;
+
+    using instruction_stream_iterator = instruction_stream::iterator;
+    using const_instruction_stream_iterator = instruction_stream::const_iterator;
+
+    instruction_stream_iterator instruction_begin() { return instructions_.begin(); }
+    const_instruction_stream_iterator instruction_begin() const { return instructions_.begin(); }
+    const_instruction_stream_iterator instruction_cbegin() const { return instructions_.cbegin(); }
+
+    instruction_stream_iterator instruction_end() { return instructions_.end(); }
+    const_instruction_stream_iterator instruction_end() const { return instructions_.end(); }
+    const_instruction_stream_iterator instruction_cend() const { return instructions_.cend(); }
 private:
 	std::vector<instruction> instructions_;
 

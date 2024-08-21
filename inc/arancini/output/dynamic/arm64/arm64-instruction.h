@@ -1,17 +1,14 @@
 #pragma once
 
 #include <cstdint>
-#include <initializer_list>
 #include <keystone/keystone.h>
 
 #include <arancini/ir/value-type.h>
+#include <arancini/output/dynamic/arm64/arm64-common.h>
 #include <arancini/output/dynamic/machine-code-writer.h>
 
 #include <array>
-#include <vector>
 #include <variant>
-#include <sstream>
-#include <iostream>
 #include <stdexcept>
 #include <type_traits>
 
@@ -46,11 +43,6 @@ static ir::value_type u12() {
     return type;
 }
 
-static ir::value_type u8() {
-    static ir::value_type type(ir::value_type_class::unsigned_integer, 8, 1);
-    return type;
-}
-
 class vreg_operand {
 public:
     vreg_operand() = default;
@@ -62,7 +54,7 @@ public:
         , type_(type)
 	{
         if (type_.width() > 64)
-            throw std::runtime_error("[ARM64-DBT] Does not support virtual registers > 64-bit");
+            throw backend_exception("Does not support virtual registers > 64-bit");
 	}
 
     vreg_operand(const vreg_operand &o)
@@ -70,7 +62,7 @@ public:
         , type_(o.type_)
     {
         if (type_.width() > 64)
-            throw std::runtime_error("[ARM64-DBT] Does not support virtual registers > 64-bit");
+            throw backend_exception("Does not support virtual registers > 64-bit");
     }
 
     vreg_operand &operator=(const vreg_operand &o) {
@@ -78,7 +70,7 @@ public:
         index_ = o.index_;
 
         if (type_.width() > 64)
-            throw std::runtime_error("[ARM64-DBT] Does not support virtual registers > 64-bit");
+            throw backend_exception("Does not support virtual registers > 64-bit");
 
         return *this;
     }
@@ -245,13 +237,15 @@ class label_operand {
 public:
     label_operand() = default;
 
-    label_operand(const std::string &label):
+    label_operand(const std::string label):
         name_(label)
     {
     }
 
-
+    [[nodiscard]]
     std::string& name() { return name_; }
+
+    [[nodiscard]]
     const std::string& name() const { return name_; }
 private:
     std::string name_;
@@ -504,16 +498,28 @@ public:
     std::string dump() const;
 	void kill() { opcode_.clear(); }
 
+    [[nodiscard]]
 	bool is_dead() const { return opcode_.empty(); }
+
+    [[nodiscard]]
     bool is_branch() const { return branch_; }
+
+    [[nodiscard]]
     bool is_label() const { return label_; }
 
+    [[nodiscard]]
     std::string& opcode() { return opcode_; }
+
+    [[nodiscard]]
     const std::string& opcode() const { return opcode_; }
 
-    size_t operand_count() const { return opcount_; }
+    [[nodiscard]]
+    std::size_t operand_count() const { return opcount_; }
 
+    [[nodiscard]]
 	operand_array &operands() { return operands_; }
+
+    [[nodiscard]]
 	const operand_array &operands() const { return operands_; }
 private:
     std::string opcode_;
@@ -527,4 +533,86 @@ private:
 };
 
 } // namespace arancini::output::dynamic::arm64
+
+template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::operand> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(arancini::output::dynamic::arm64::operand op, FormatContext& ctx) const {
+        using namespace arancini::output::dynamic::arm64;
+
+        switch (op.type()) {
+        case operand_type::cond:
+            // TODO: rename
+            return fmt::format_to(ctx.out(), "{}", op.cond().condition());
+        case operand_type::label:
+            return fmt::format_to(ctx.out(), "{}", op.label().name());
+        case operand_type::shift:
+            if (!op.shift().modifier().empty())
+                fmt::format_to(ctx.out(), "{} ", op.shift().modifier());
+            return fmt::format_to(ctx.out(), "{:#x}", op.shift().value());
+        case operand_type::imm:
+            return fmt::format_to(ctx.out(), "{:#x}", op.immediate().value());
+        case operand_type::mem:
+            if (op.memory().is_virtual())
+                fmt::format_to(ctx.out(), "[%V{}_{}",
+                               op.memory().vreg_base().width(),
+                               op.memory().vreg_base().index());
+            else
+                fmt::format_to(ctx.out(), "[{}", to_string(op.memory().preg_base()));
+
+            if (!op.memory().offset().value()) {
+                return fmt::format_to(ctx.out(), "]");
+            }
+
+            if (!op.memory().post_index())
+                fmt::format_to(ctx.out(), ", {:#x}]", op.memory().offset().value());
+            else if (op.memory().pre_index())
+                fmt::format_to(ctx.out(), "!");
+
+            if (op.memory().post_index())
+                fmt::format_to(ctx.out(), "], {:#x}", op.memory().offset().value());
+
+            // TODO: register indirect with index
+            return ctx.out();
+        case operand_type::preg:
+            // TODO: provide printer for op.preg()
+            return fmt::format_to(ctx.out(), "{}", to_string(op.preg()));
+        case operand_type::vreg:
+            return fmt::format_to(ctx.out(), "%V{}", op.vreg().index());
+        default:
+            // TODO: specify which
+            throw backend_exception("Attempting to format unknown operand type");
+        }
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::instruction> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(arancini::output::dynamic::arm64::instruction instr, FormatContext& ctx) const {
+        if (instr.is_dead())
+            fmt::format_to(ctx.out(), "// Dead instruction: {}", instr.opcode());
+        else
+            fmt::format_to(ctx.out(), "{}", instr.opcode());
+
+        if (instr.operand_count() == 0) return ctx.out();
+
+        const auto& operands = instr.operands();
+        for (std::size_t i = 0; i < instr.operand_count() - 1; ++i) {
+            fmt::format_to(ctx.out(), " {},", operands[i]);
+        }
+
+        return fmt::format_to(ctx.out(), " {}", operands[instr.operand_count() - 1]);
+
+        // TODO: add support for comments
+        // if (!instr.comment_.empty())
+        //     os << " // " << comment_;
+    }
+};
 

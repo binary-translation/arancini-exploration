@@ -1,13 +1,14 @@
 #pragma once
 
-#include <map>
-#include <memory>
-#include <stdexcept>
-#include <vector>
-
-#include <arancini/ir/metadata.h>
 #include <arancini/ir/port.h>
 #include <arancini/ir/visitor.h>
+#include <arancini/ir/metadata.h>
+
+#include <fmt/core.h>
+
+#include <map>
+#include <memory>
+#include <vector>
 
 namespace arancini::ir {
 enum class node_kinds {
@@ -1153,4 +1154,27 @@ private:
 	const std::shared_ptr<internal_function> fn_;
 	std::vector<port *> args_;
 };
+
 } // namespace arancini::ir
+
+// Formatters
+template <>
+struct fmt::formatter<arancini::ir::shift_op> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(arancini::ir::shift_op op, FormatContext& ctx) const {
+        switch (op) {
+        case arancini::ir::shift_op::lsl:
+            return format_to(ctx.out(), "logical shift-left");
+        case arancini::ir::shift_op::lsr:
+            return format_to(ctx.out(), "logical shift-right");
+        case arancini::ir::shift_op::asr:
+            return format_to(ctx.out(), "arithmetic shift-right");
+        default:
+            return format_to(ctx.out(), "unknown shift operation");
+        }
+    }
+};
+

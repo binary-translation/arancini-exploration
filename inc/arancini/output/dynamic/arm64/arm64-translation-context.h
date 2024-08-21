@@ -3,6 +3,7 @@
 #include "arancini/ir/value-type.h"
 #include "arancini/output/dynamic/arm64/arm64-instruction.h"
 #include "arm64-instruction-builder.h"
+#include <arancini/output/dynamic/arm64/arm64-common.h>
 
 #include <arancini/ir/node.h>
 #include <arancini/ir/port.h>
@@ -11,6 +12,7 @@
 #include <unordered_map>
 
 namespace arancini::output::dynamic::arm64 {
+
 class arm64_translation_context : public translation_context {
 public:
 	arm64_translation_context(machine_code_writer &writer)
@@ -36,6 +38,8 @@ private:
 	int next_vreg_;
 	off_t this_pc_;
     size_t instr_cnt_ = 0;
+
+    std::string current_instruction_disasm_;
 
 	vreg_operand alloc_vreg(ir::value_type type) {
         return vreg_operand(next_vreg_++, type);

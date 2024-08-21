@@ -1,12 +1,9 @@
 #include "arancini/ir/node.h"
 #include <arancini/output/dynamic/arm64/arm64-instruction.h>
 
-#include <cstdint>
+#include <string>
 #include <ostream>
 #include <sstream>
-#include <stdexcept>
-#include <string>
-#include <unordered_set>
 
 using namespace arancini::output::dynamic::arm64;
 
@@ -95,7 +92,7 @@ std::string arancini::output::dynamic::arm64::to_string(const preg_operand &op) 
             name += ".d";
             break;
         default:
-            throw std::runtime_error("Vectors larger than 64-bit not supported");
+            throw backend_exception("Vectors larger than 64-bit not supported");
         }
         return name;
     } else if (type.is_floating_point()) {
@@ -103,19 +100,16 @@ std::string arancini::output::dynamic::arm64::to_string(const preg_operand &op) 
     } else if (type.is_integer()) {
         return type.element_width() > 32 ? name64[reg_idx] : name32[reg_idx];
     } else {
-        throw std::runtime_error("Physical registers are specified as 32-bit or 64-bit only");
+        throw backend_exception("Physical registers are specified as 32-bit or 64-bit only");
     }
 }
 
-size_t assembler::assemble(const char *code, unsigned char **out) {
-    size_t size = 0;
-    size_t count = 0;
-    if (ks_asm(ks_, code, 0, out, &size, &count)) {
-        std::string msg("Keystone assembler encountered error after count: ");
-        msg += std::to_string(count);
-        msg += ": ";
-        throw std::runtime_error(msg + ks_strerror(ks_errno(ks_)));
-    }
+std::size_t assembler::assemble(const char *code, unsigned char **out) {
+    std::size_t size = 0;
+    std::size_t count = 0;
+    if (ks_asm(ks_, code, 0, out, &size, &count))
+        throw backend_exception("Keystone assembler encountered error after {} instructions: {}",
+                                count, ks_strerror(ks_errno(ks_)));
 
     return size;
 }

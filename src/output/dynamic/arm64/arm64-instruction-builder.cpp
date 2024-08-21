@@ -16,27 +16,26 @@ void instruction_builder::spill() {
 }
 
 void instruction_builder::emit(machine_code_writer &writer) {
-    size_t size;
-    uint8_t* encode;
+    std::size_t size;
+    std::uint8_t* encode;
     std::stringstream assembly;
 
     for (std::size_t i = 0; i < instructions_.size(); ++i) {
-        const auto &insn = instructions_[i];
+        const auto &instr = instructions_[i];
 
-        if (insn.is_dead())
+        if (instr.is_dead())
             continue;
 
-        const auto &operands = insn.operands();
+        const auto &operands = instr.operands();
 
-        for (size_t i = 0; i < insn.operand_count(); ++i) {
+        for (size_t i = 0; i < instr.operand_count(); ++i) {
             const auto &op = operands[i];
             if (op.type() == operand_type::invalid ||
                 op.type() == operand_type::vreg ||
                 (op.type() == operand_type::mem && op.memory().is_virtual())) {
                 dump(assembly);
                 std::cerr << assembly.str() << '\n';
-                throw std::runtime_error("Virtual register after register allocation: "
-                                         + insn.dump());
+                throw backend_exception("Virtual register after register allocation: {}", instr);
             }
         }
     }
@@ -45,7 +44,7 @@ void instruction_builder::emit(machine_code_writer &writer) {
 
     size = asm_.assemble(assembly.str().c_str(), &encode);
 
-    std::cerr << assembly.str() << '\n';
+    logger.debug("{}", fmt::format("{}", fmt::join(instruction_begin(), instruction_end(), "\n")));
 
     // TODO: write directly
     writer.copy_in(encode, size);
@@ -74,11 +73,11 @@ void instruction_builder::allocate() {
 	std::bitset<32> avail_float_physregs = 0xFFFFFFFFF;
 
 	for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
-		auto &insn = *RI;
+		auto &instr = *RI;
 
 #ifdef DEBUG_REGALLOC
 		DEBUG_STREAM << "considering instruction ";
-		insn.dump(DEBUG_STREAM);
+		instr.dump(DEBUG_STREAM);
 		DEBUG_STREAM << '\n';
 #endif
 
@@ -99,7 +98,7 @@ void instruction_builder::allocate() {
                     vri = vreg.index();
                     type = vreg.type();
                 } else {
-                    throw std::runtime_error("Trying to allocate non-virtual register operand");
+                    throw backend_exception("Trying to allocate non-virtual register operand");
                 }
 
                 size_t allocation = 0;
@@ -123,8 +122,8 @@ void instruction_builder::allocate() {
         };
 
 		// kill defs first
-		for (size_t i = 0; i < insn.operand_count(); i++) {
-			auto &o = insn.operands()[i];
+		for (size_t i = 0; i < instr.operand_count(); i++) {
+			auto &o = instr.operands()[i];
 
 			// Only regs can be /real/ defs
 			if (o.is_def() && o.is_vreg() && !o.is_use()) {
@@ -161,7 +160,7 @@ void instruction_builder::allocate() {
 #ifdef DEBUG_REGALLOC
 					DEBUG_STREAM << " not allocated - killing instruction" << std::endl;
 #endif
-					insn.kill();
+					instr.kill();
 					break;
 				}
 
@@ -171,13 +170,13 @@ void instruction_builder::allocate() {
 			}
 		}
 
-		if (insn.is_dead()) {
+		if (instr.is_dead()) {
 			continue;
 		}
 
 		// alloc uses next
-		for (size_t i = 0; i < insn.operand_count(); i++) {
-			auto &o = insn.operands()[i];
+		for (size_t i = 0; i < instr.operand_count(); i++) {
+			auto &o = instr.operands()[i];
 
 			// We only care about REG uses - but we also need to consider REGs used in MEM expressions
 			if (o.is_use() && o.is_vreg()) {
@@ -229,8 +228,8 @@ void instruction_builder::allocate() {
 		}
 
         if (has_unused_keep) {
-            for (size_t i = 0; i < insn.operand_count(); i++) {
-                const auto &op = insn.operands()[i];
+            for (size_t i = 0; i < instr.operand_count(); i++) {
+                const auto &op = instr.operands()[i];
                 if (op.is_keep()) {
                     vreg_to_preg.erase(allocs[i].first);
                     avail_physregs.flip(allocs[i].second);
@@ -240,13 +239,13 @@ void instruction_builder::allocate() {
 
 		// Kill MOVs
         // TODO: refactor
-        if (insn.opcode().find("mov") != std::string::npos) {
-            operand op1 = insn.operands()[0];
-            operand op2 = insn.operands()[1];
+        if (instr.opcode().find("mov") != std::string::npos) {
+            operand op1 = instr.operands()[0];
+            operand op2 = instr.operands()[1];
 
             if (op1.is_preg() && op2.is_preg()) {
                 if (op1.preg().register_index() == op2.preg().register_index()) {
-                    insn.kill();
+                    instr.kill();
                 }
             }
         }
@@ -254,9 +253,9 @@ void instruction_builder::allocate() {
 }
 
 void instruction_builder::dump(std::ostream &os) const {
-	for (const auto &insn : instructions_) {
-		if (!insn.is_dead()) {
-            insn.dump(os);
+	for (const auto &instr : instructions_) {
+		if (!instr.is_dead()) {
+            instr.dump(os);
             os << '\n';
 		}
 	}
