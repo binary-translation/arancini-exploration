@@ -12,9 +12,16 @@ import subprocess
 
 logger = logging.getLogger("Test Runner")
 keep_artifacts = False
+executor_wrapper = ""
 
 # Source: https://stackoverflow.com/questions/845276/how-to-print-the-comparison-of-two-multiline-strings-in-unified-diff-format
 def unified_diff(text1, text2):
+    # Ensure that the diff outputs correctly even when no output is given
+    if text1 == None:
+        text1 = ""
+    if text2 == None:
+        text2 = ""
+
     text1 = text1.splitlines(1)
     text2 = text2.splitlines(1)
 
@@ -64,7 +71,13 @@ class Tester:
             term_width = term_size_tuple[0]
             if term_width > 5:
                 term_width -= 5
-            logger.info(f"Executing test with config:\n{pprint.pformat(self.config, width=term_width)}")
+
+        for extra in extra_runtime_env:
+            key, value = extra.split('=')
+            self.config['runtime_environment'][key] = value
+
+        logger.info(f"Executing test with config:\n{pprint.pformat(self.config, width=term_width)}")
+
 
     def run(self):
         logger.info("Translating input binary")
@@ -97,8 +110,16 @@ class Tester:
         return output_file
 
     def execute(self, binary):
-        execute_command = [binary, *self.config["runtime_flags"]]
-        proc = subprocess.run(execute_command, capture_output=True, text=True)
+        execute_command = [*executor_wrapper, binary, *self.config["runtime_flags"]]
+        logger.debug(f"Execution command: {execute_command}")
+
+        shell = False
+        capture_output = True
+        if executor_wrapper != "":
+            shell = True
+            capture_output = False
+
+        proc = subprocess.run(execute_command, capture_output=capture_output, text=True, shell=shell)
         if proc.returncode != self.config["expected_status"]:
             raise ExecutionError(execute_command, proc.stdout, proc.stderr)
 
@@ -130,6 +151,7 @@ class Tester:
                 diff = unified_diff(reference, output)
                 logger.error(f"Diff:\n{diff}")
                 exit(2)
+            logger.info("Output matches!")
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -161,10 +183,29 @@ def parse_arguments():
                         action='store_true',
                         help='Do not remove artifacts generated during test (including translated binaries)')
 
+    parser.add_argument('--execute-under',
+                        required=False,
+                        default='',
+                        nargs=1,
+                        help='Specify a wrapper for executing the translated binary (.e.g \"gdb --args\"')
+
+    parser.add_argument('--extra-runtime-env',
+                        required=False,
+                        default='',
+                        nargs='+',
+                        help='KEY=VALUE strings to be added to environment during translated program \
+                        execution (in addition to those added via -c and the default)')
+
     args = parser.parse_args()
 
     global keep_artifacts
     keep_artifacts = args.keep_artifacts
+
+    global executor_wrapper
+    executor_wrapper = args.execute_under
+
+    global extra_runtime_env
+    extra_runtime_env = args.extra_runtime_env
 
     return parser.parse_args()
 
