@@ -132,7 +132,7 @@ std::vector<register_operand> &arm64_translation_context::materialise_port(port 
 
 register_operand arm64_translation_context::add_membase(const register_operand &addr, const value_type &type) {
     auto mem_addr_vreg = alloc_vreg(type);
-    builder_.add(mem_addr_vreg, register_operand(memory_base_reg.index()-1, type), addr, "add memory base register");
+    builder_.add(mem_addr_vreg, register_operand(memory_base_reg.index(), type), addr, "add memory base register");
 
     return mem_addr_vreg;
 }

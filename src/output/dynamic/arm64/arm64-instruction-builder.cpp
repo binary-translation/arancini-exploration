@@ -206,9 +206,7 @@ void instruction_builder::allocate() {
             operand op1 = instr.operands()[0];
             operand op2 = instr.operands()[1];
 
-            if (op1.is_reg() && !op1.reg().is_virtual() &&
-                op2.is_reg() && op2.reg().is_virtual())
-            {
+            if (op1.is_reg() && op2.is_reg()) {
                 if (op1.reg().index() == op2.reg().index()) {
                     logger.debug("Killing instruction {} as part of copy optimization\n", instr);
 
