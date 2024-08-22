@@ -429,6 +429,11 @@ public:
     }
 
     instruction &add_comment(const std::string &comment) { comment_ = comment; return *this; }
+
+    std::string& comment() { return comment_; }
+
+    const std::string& comment() const { return comment_; }
+
     instruction &set_branch(bool is_branch) { branch_ = is_branch; return *this; }
 
 	void dump(std::ostream &os) const;
@@ -492,9 +497,9 @@ struct fmt::formatter<arancini::output::dynamic::arm64::operand> {
         case operand_type::shift:
             if (!op.shift().modifier().empty())
                 fmt::format_to(ctx.out(), "{} ", op.shift().modifier());
-            return fmt::format_to(ctx.out(), "{:#x}", op.shift().value());
+            return fmt::format_to(ctx.out(), "#{:#x}", op.shift().value());
         case operand_type::imm:
-            return fmt::format_to(ctx.out(), "{:#x}", op.immediate().value());
+            return fmt::format_to(ctx.out(), "#{:#x}", op.immediate().value());
         case operand_type::mem:
             if (op.memory().is_virtual())
                 fmt::format_to(ctx.out(), "[%V{}_{}",
@@ -508,12 +513,12 @@ struct fmt::formatter<arancini::output::dynamic::arm64::operand> {
             }
 
             if (!op.memory().post_index())
-                fmt::format_to(ctx.out(), ", {:#x}]", op.memory().offset().value());
+                fmt::format_to(ctx.out(), ", #{:#x}]", op.memory().offset().value());
             else if (op.memory().pre_index())
                 fmt::format_to(ctx.out(), "!");
 
             if (op.memory().post_index())
-                fmt::format_to(ctx.out(), "], {:#x}", op.memory().offset().value());
+                fmt::format_to(ctx.out(), "], #{:#x}", op.memory().offset().value());
 
             // TODO: register indirect with index
             return ctx.out();
@@ -538,18 +543,24 @@ struct fmt::formatter<arancini::output::dynamic::arm64::instruction> {
         else
             fmt::format_to(ctx.out(), "{}", instr.opcode());
 
-        if (instr.operand_count() == 0) return ctx.out();
+        if (instr.operand_count() == 0) {
+            if (!instr.comment().empty())
+                return fmt::format_to(ctx.out(), " // {}", instr.comment());
+
+            return ctx.out();
+        }
 
         const auto& operands = instr.operands();
         for (std::size_t i = 0; i < instr.operand_count() - 1; ++i) {
             fmt::format_to(ctx.out(), " {},", operands[i]);
         }
 
-        return fmt::format_to(ctx.out(), " {}", operands[instr.operand_count() - 1]);
+        fmt::format_to(ctx.out(), " {}", operands[instr.operand_count() - 1]);
 
-        // TODO: add support for comments
-        // if (!instr.comment_.empty())
-        //     os << " // " << comment_;
+        if (!instr.comment().empty())
+            return fmt::format_to(ctx.out(), " // {}", instr.comment());
+
+        return ctx.out();
     }
 };
 

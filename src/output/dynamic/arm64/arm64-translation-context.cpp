@@ -169,7 +169,7 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
     instr_cnt_++;
 
     // This should be done optionally
-    builder_.insert_separator(fmt::format("instruction_{}_{}", instr_cnt_, labelify(disasm)));
+    builder_.insert_separator(fmt::format("instruction_{}", instr_cnt_), disasm);
 
     // TODO: enable debug mode
     // const auto& opcode = disasm.substr(0, 3);

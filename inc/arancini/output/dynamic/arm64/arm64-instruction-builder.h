@@ -397,7 +397,7 @@ public:
     }
 
     void label(const std::string &label, const std::string &comment = "") {
-        append(instruction(label_operand(label + ":")).add_comment(comment));
+        append(instruction(label_operand(fmt::format("{}:", label))).add_comment(comment));
     }
 
     template <typename T1,
@@ -656,7 +656,7 @@ public:
         append(instruction("ptrue", def(dest)));
     }
 
-    void insert_separator(const std::string &sep) { label(sep); }
+    void insert_separator(const std::string &sep, const std::string &comment) { label(sep, comment); }
 
     template <typename... Args>
     void insert_comment(std::string_view format, Args&&... args) {
