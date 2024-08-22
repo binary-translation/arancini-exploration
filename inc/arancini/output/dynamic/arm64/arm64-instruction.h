@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <keystone/keystone.h>
 
 #include <arancini/ir/value-type.h>
@@ -8,6 +7,7 @@
 #include <arancini/output/dynamic/machine-code-writer.h>
 
 #include <array>
+#include <cstdint>
 #include <variant>
 #include <stdexcept>
 #include <type_traits>
@@ -43,143 +43,84 @@ static ir::value_type u12() {
     return type;
 }
 
-class vreg_operand {
+class register_operand {
 public:
-    vreg_operand() = default;
-
-    using value_type = arancini::ir::value_type;
-
-	vreg_operand(unsigned int i, arancini::ir::value_type type)
-		: index_(i)
-        , type_(type)
-	{
-        if (type_.width() > 64)
-            throw backend_exception("Does not support virtual registers > 64-bit");
-	}
-
-    vreg_operand(const vreg_operand &o)
-        : index_(o.index_)
-        , type_(o.type_)
-    {
-        if (type_.width() > 64)
-            throw backend_exception("Does not support virtual registers > 64-bit");
-    }
-
-    vreg_operand &operator=(const vreg_operand &o) {
-        type_ = o.type_;
-        index_ = o.index_;
-
-        if (type_.width() > 64)
-            throw backend_exception("Does not support virtual registers > 64-bit");
-
-        return *this;
-    }
-
-    value_type &type() { return type_; }
-    const value_type &type() const { return type_; }
-
-    size_t width() const { return type_.element_width(); }
-
-    unsigned int index() const { return index_; }
-private:
-	unsigned int index_;
-    value_type type_;
-};
-
-class preg_operand {
-public:
-    enum regname64 : uint8_t {
-        none = 0,
+    enum regname64 : std::uint8_t {
         x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15,
         x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, x29, x30,
         xzr_sp
     };
 
-    enum regname32 : uint8_t {
-        none32 = 0,
+    enum regname32 : std::uint8_t {
         w0, w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, w11, w12, w13, w14, w15,
         w16, w17, w18, w19, w20, w21, w22, w23, w24, w25, w26, w27, w28, w29, w30,
         wzr_sp
     };
 
     // NOTE: alias to regname_vector (32-bit LSB)
-    enum regname_float32 : uint8_t {
-        none_float32 = 0,
+    enum regname_float32 : std::uint8_t {
         s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15,
         s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30,
         s31
     };
 
     // NOTE: alias to regname_vector (64-bit LSB)
-    enum regname_float64 : uint8_t {
-        none_float64 = 0,
+    enum regname_float64 : std::uint8_t {
         d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15,
         d16, d17, d18, d19, d20, d21, d22, d23, d24, d25, d26, d27, d28, d29, d30,
         d31
     };
 
-    enum regname_vector: uint8_t {
-        none_vector = 0,
+    enum regname_vector: std::uint8_t {
         v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15,
         v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30,
         v31
     };
 
-    enum special : uint8_t {
-        none_special = 0,
+    enum special : std::uint8_t {
         nzcv
     };
 
-    using regname = uint8_t;
+    using regname = std::uint8_t;
 
-    preg_operand() = default;
+    using register_index_type = std::size_t;
 
-    explicit preg_operand(regname32 reg): type_(ir::value_type::u32()), index_(reg) { }
+    register_operand() = default;
 
-    explicit preg_operand(regname64 reg): type_(ir::value_type::u64()), index_(reg) { }
+    explicit register_operand(regname32 reg): type_(ir::value_type::u32()), index_(reg) { }
 
-    explicit preg_operand(regname_float32 reg): type_(ir::value_type::f32()), index_(reg) { }
+    explicit register_operand(regname64 reg): type_(ir::value_type::u64()), index_(reg) { }
 
-    explicit preg_operand(regname_float64 reg): type_(ir::value_type::f64()), index_(reg) { }
+    explicit register_operand(regname_float32 reg): type_(ir::value_type::f32()), index_(reg) { }
 
-    explicit preg_operand(special reg): special_(true), type_(ir::value_type::u64()), index_(reg) { }
+    explicit register_operand(regname_float64 reg): type_(ir::value_type::f64()), index_(reg) { }
 
-    explicit preg_operand(size_t index, ir::value_type type) {
-        type_ = type;
-        index_ = index+1;
-        if (index > static_cast<size_t>(xzr_sp) + 1)
-            throw std::runtime_error("Allocating unavailable register at index: "
-                                     + std::to_string(index));
-    }
+    explicit register_operand(special reg): special_(true), type_(ir::value_type::u64()), index_(reg) { }
 
-    preg_operand(const preg_operand& r)
-        : special_(r.special_)
-        , type_(r.type_)
-        , index_(r.index_)
+    register_operand(register_index_type index, ir::value_type type):
+        type_(type),
+        index_(index)
     { }
 
-    preg_operand& operator=(const preg_operand& r) {
-        index_ = r.index_;
-        type_ = r.type_;
-        special_ = r.special_;
-        return *this;
-    }
+    [[nodiscard]]
+    bool is_special() const { return special_; }
 
-    bool special() const { return special_; }
+    [[nodiscard]]
+    bool is_virtual() const { return index_ > 32; }
 
+    [[nodiscard]]
     ir::value_type type() const { return type_; }
 
-    size_t width() const { return type_.element_width();; }
-
-    size_t register_index() const { return index_; }
+    [[nodiscard]]
+    register_index_type index() const { return index_; }
 private:
     bool special_ = false;
-    ir::value_type type_;
 
-    size_t index_;
+    ir::value_type type_;
+    register_index_type index_;
 };
 
-std::string to_string(const preg_operand&);
+std::string to_string(const register_operand&);
 
 // TODO: how are immediates represented in arm
 // TODO: fix this
@@ -307,26 +248,29 @@ public:
     template <typename T>
     void set_base_reg(const T &op) { reg_base_ = op; }
 
-    bool is_virtual() const { return reg_base_.index() == 0; }
+    bool is_virtual() const { return reg_base_.is_virtual(); }
     bool is_physical() const { return !is_virtual(); }
 
-    vreg_operand &vreg_base() { return std::get<vreg_operand>(reg_base_); }
-    const vreg_operand &vreg_base() const { return std::get<vreg_operand>(reg_base_); }
+    [[nodiscard]]
+    register_operand &base_register() { return reg_base_; }
 
-    preg_operand &preg_base() { return std::get<preg_operand>(reg_base_); }
-    const preg_operand &preg_base() const { return std::get<preg_operand>(reg_base_); }
+    [[nodiscard]]
+    const register_operand &base_register() const { return reg_base_; }
 
-    size_t base_width() const {
-        if (is_virtual())
-            return std::get<vreg_operand>(reg_base_).width();
-        return std::get<preg_operand>(reg_base_).width();
+    std::size_t base_width() const {
+        return reg_base_.type().element_width();
     }
 
+    [[nodiscard]]
     immediate_operand offset() const { return offset_; }
+
+    [[nodiscard]]
     bool pre_index() const { return pre_index_; }
+
+    [[nodiscard]]
     bool post_index() const { return post_index_; }
 private:
-    std::variant<vreg_operand, preg_operand> reg_base_;
+    register_operand reg_base_;
 
 	immediate_operand offset_ = immediate_operand(0, u12());
     bool pre_index_ = false;
@@ -334,12 +278,11 @@ private:
 
 };
 
-enum class operand_type : uint8_t { invalid, preg, vreg, mem, imm, shift, label, cond};
+enum class operand_type : std::uint8_t { invalid, reg, mem, imm, shift, label, cond};
 
 struct operand {
     using operand_variant = std::variant<std::monostate,
-                                         preg_operand,
-                                         vreg_operand,
+                                         register_operand,
                                          memory_operand,
                                          immediate_operand,
                                          shift_operand,
@@ -361,19 +304,15 @@ struct operand {
         return static_cast<operand_type>(op_.index());
     }
 
-	bool is_preg() const { return type() == operand_type::preg; }
-	bool is_vreg() const { return type() == operand_type::vreg; }
+	bool is_reg() const { return type() == operand_type::reg; }
 	bool is_mem() const { return type() == operand_type::mem; }
 	bool is_imm() const { return type() == operand_type::imm; }
     bool is_shift() const { return type() == operand_type::shift; }
     bool is_cond() const { return type() == operand_type::cond; }
     bool is_label() const { return type() == operand_type::label; }
 
-    preg_operand &preg() { return std::get<preg_operand>(op_); }
-    const preg_operand &preg() const { return std::get<preg_operand>(op_); }
-
-    vreg_operand &vreg() { return std::get<vreg_operand>(op_); }
-    const vreg_operand &vreg() const { return std::get<vreg_operand>(op_); }
+    register_operand &reg() { return std::get<register_operand>(op_); }
+    const register_operand &reg() const { return std::get<register_operand>(op_); }
 
     memory_operand &memory() { return std::get<memory_operand>(op_); }
     const memory_operand &memory() const { return std::get<memory_operand>(op_); }
@@ -402,10 +341,8 @@ struct operand {
 
     size_t width() const {
         switch (type()) {
-        case operand_type::preg:
-            return preg().width();
-        case operand_type::vreg:
-            return vreg().width();
+        case operand_type::reg:
+            return reg().type().element_width();
         case operand_type::mem:
             return memory().base_width();
         case operand_type::imm:
@@ -416,10 +353,10 @@ struct operand {
     }
 
 	void allocate(int index, ir::value_type value_type) {
-		if (type() != operand_type::vreg)
+		if (type() != operand_type::reg && reg().is_virtual())
 			throw std::runtime_error("trying to allocate non-vreg");
 
-		op_ = preg_operand(index, value_type);
+		op_ = register_operand(index, value_type);
 	}
 
 	void allocate_base(int index, ir::value_type value_type) {
@@ -430,7 +367,7 @@ struct operand {
 		if (!memory.is_virtual())
 			throw std::runtime_error("trying to allocate non-virtual membase ");
 
-        memory.set_base_reg(preg_operand(index, value_type));
+        memory.set_base_reg(register_operand(index, value_type));
 	}
 
 	void dump(std::ostream &os) const;
@@ -495,11 +432,13 @@ public:
     instruction &set_branch(bool is_branch) { branch_ = is_branch; return *this; }
 
 	void dump(std::ostream &os) const;
+
     std::string dump() const;
-	void kill() { opcode_.clear(); }
+
+	void kill() { dead_ = true; }
 
     [[nodiscard]]
-	bool is_dead() const { return opcode_.empty(); }
+	bool is_dead() const { return dead_; }
 
     [[nodiscard]]
     bool is_branch() const { return branch_; }
@@ -527,6 +466,7 @@ private:
 
     bool branch_ = false;
     bool label_ = false;
+    bool dead_ = false;
 
     size_t opcount_ = 0;
     operand_array operands_;
@@ -558,10 +498,10 @@ struct fmt::formatter<arancini::output::dynamic::arm64::operand> {
         case operand_type::mem:
             if (op.memory().is_virtual())
                 fmt::format_to(ctx.out(), "[%V{}_{}",
-                               op.memory().vreg_base().width(),
-                               op.memory().vreg_base().index());
+                               op.memory().base_register().type().element_width(),
+                               op.memory().base_register().index());
             else
-                fmt::format_to(ctx.out(), "[{}", to_string(op.memory().preg_base()));
+                fmt::format_to(ctx.out(), "[{}", to_string(op.memory().base_register()));
 
             if (!op.memory().offset().value()) {
                 return fmt::format_to(ctx.out(), "]");
@@ -577,11 +517,8 @@ struct fmt::formatter<arancini::output::dynamic::arm64::operand> {
 
             // TODO: register indirect with index
             return ctx.out();
-        case operand_type::preg:
-            // TODO: provide printer for op.preg()
-            return fmt::format_to(ctx.out(), "{}", to_string(op.preg()));
-        case operand_type::vreg:
-            return fmt::format_to(ctx.out(), "%V{}", op.vreg().index());
+        case operand_type::reg:
+            return fmt::format_to(ctx.out(), "{}", to_string(op.reg()));
         default:
             // TODO: specify which
             throw backend_exception("Attempting to format unknown operand type");

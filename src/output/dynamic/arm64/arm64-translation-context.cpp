@@ -16,8 +16,8 @@
 using namespace arancini::output::dynamic::arm64;
 using namespace arancini::ir;
 
-preg_operand memory_base_reg(preg_operand::x18);
-preg_operand context_block_reg(preg_operand::x29);
+register_operand memory_base_reg(register_operand::x18);
+register_operand context_block_reg(register_operand::x29);
 
 static constexpr bool supports_lse = false;
 
@@ -28,12 +28,12 @@ enum class reg_offsets {
 #undef DEFREG
 };
 
-const preg_operand ZF(preg_operand::x10);
-const preg_operand CF(preg_operand::x11);
-const preg_operand OF(preg_operand::x12);
-const preg_operand SF(preg_operand::x13);
+const register_operand ZF(register_operand::x10);
+const register_operand CF(register_operand::x11);
+const register_operand OF(register_operand::x12);
+const register_operand SF(register_operand::x13);
 
-static std::unordered_map<unsigned long, vreg_operand> flag_map {
+static std::unordered_map<unsigned long, register_operand> flag_map {
 	{ (unsigned long)reg_offsets::ZF, {} },
 	{ (unsigned long)reg_offsets::CF, {} },
 	{ (unsigned long)reg_offsets::OF, {} },
@@ -53,7 +53,7 @@ static immediate_operand clamped_immediate(T v, value_type t) {
     return immediate_operand(v & ~(1 << t.element_width()), t);
 }
 
-std::vector<vreg_operand> &arm64_translation_context::alloc_vregs(const ir::port &p) {
+std::vector<register_operand> &arm64_translation_context::alloc_vregs(const ir::port &p) {
     auto reg_count = p.type().nr_elements();
     auto element_width = p.type().width();
     if (element_width > base_type().element_width()) {
@@ -69,14 +69,14 @@ std::vector<vreg_operand> &arm64_translation_context::alloc_vregs(const ir::port
     return vregs_for_port(p);
 }
 
-vreg_operand arm64_translation_context::cast(const vreg_operand &op, value_type type) {
+register_operand arm64_translation_context::cast(const register_operand &op, value_type type) {
     auto dest_vreg = alloc_vreg(type);
     builder_.mov(dest_vreg, op);
     return dest_vreg;
 }
 
 template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int>>
-vreg_operand arm64_translation_context::mov_immediate(T imm, ir::value_type type) {
+register_operand arm64_translation_context::mov_immediate(T imm, ir::value_type type) {
     auto actual_size = base_type().element_width() - __builtin_clzll(reinterpret_cast<unsigned long long&>(imm)|1);
     actual_size = std::min(actual_size, type.element_width());
 
@@ -114,27 +114,25 @@ arm64_translation_context::guestreg_memory_operand(int regoff, bool pre, bool po
 {
     memory_operand mem;
     if (regoff > 255 || regoff < -256) {
-        auto preg = context_block_reg;
         auto base_vreg = alloc_vreg(addr_type());
         builder_.mov(base_vreg, immediate_operand(regoff, value_type::u32()));
-        builder_.add(base_vreg, preg, base_vreg);
+        builder_.add(base_vreg, context_block_reg, base_vreg);
         mem = memory_operand(base_vreg, immediate_operand(0, u12()), pre, post);
     } else {
-        auto preg = context_block_reg;
-        mem = memory_operand(preg, immediate_operand(regoff, u12()), pre, post);
+        mem = memory_operand(context_block_reg, immediate_operand(regoff, u12()), pre, post);
     }
 
 	return mem;
 }
 
-std::vector<vreg_operand> &arm64_translation_context::materialise_port(port &p) {
+std::vector<register_operand> &arm64_translation_context::materialise_port(port &p) {
 	materialise(p.owner());
 	return vregs_for_port(p);
 }
 
-vreg_operand arm64_translation_context::add_membase(const vreg_operand &addr, const value_type &type) {
+register_operand arm64_translation_context::add_membase(const register_operand &addr, const value_type &type) {
     auto mem_addr_vreg = alloc_vreg(type);
-    builder_.add(mem_addr_vreg, preg_operand(memory_base_reg.register_index()-1, type), addr, "add memory base register");
+    builder_.add(mem_addr_vreg, register_operand(memory_base_reg.index()-1, type), addr, "add memory base register");
 
     return mem_addr_vreg;
 }
@@ -166,7 +164,7 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
     current_instruction_disasm_ = disasm;
 
 	this_pc_ = address;
-	std::cerr << "  " << std::hex << address << ": " << disasm << std::endl;
+    logger.debug("Translating instruction {} at address {:#x}\n", disasm, address);
 
     instr_cnt_++;
 
@@ -174,7 +172,7 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
     builder_.insert_separator(fmt::format("instruction_{}_{}", instr_cnt_, labelify(disasm)));
 
     // TODO: enable debug mode
-    const auto& opcode = disasm.substr(0, 3);
+    // const auto& opcode = disasm.substr(0, 3);
     /* if (opcode == "jnz" || opcode == "tes") { */
     /*     std::cerr << "Adding BRK for instruction " << disasm << '\n'; */
     /*     builder_.brk(immediate_operand(instr_cnt_, 64)); */
@@ -199,7 +197,7 @@ void arm64_translation_context::end_instruction() {
 
 void arm64_translation_context::end_block() {
     // Return value in x0 = 0;
-	builder_.mov(preg_operand(preg_operand::x0),
+	builder_.mov(register_operand(register_operand::x0),
                  mov_immediate(ret_, value_type::u64()));
 
     try {
@@ -758,16 +756,16 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
         break;
     }
 
-    auto pstate = alloc_vreg(preg_operand(preg_operand::nzcv).type());
+    auto pstate = alloc_vreg(register_operand(register_operand::nzcv).type());
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
         // Set carry flag
-        builder_.mrs(pstate, preg_operand(preg_operand::nzcv));
+        builder_.mrs(pstate, register_operand(register_operand::nzcv));
         builder_.lsl(top_vregs[i], top_vregs[i], immediate_operand(0x3, value_type::u8()));
 
         cast(top_vregs[i], pstate.type());
 
         builder_.orr_(pstate, pstate, top_vregs[i]);
-        builder_.msr(preg_operand(preg_operand::nzcv), pstate);
+        builder_.msr(register_operand(register_operand::nzcv), pstate);
 
         switch (n.op()) {
         case ternary_arith_op::adc:
@@ -1187,8 +1185,8 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             break;
         default:
             throw backend_exception("Cannot sign-extend from size {} to size {}",
-                                    src_vreg.width(),
-                                    dest_vreg.width());
+                                    src_vreg.type().width(),
+                                    dest_vreg.type().width());
         }
 
         // Determine sign and write to upper registers
@@ -1222,7 +1220,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
                 builder_.lsl(src_vreg, src_vreg, mov_immediate(dest_pos % n.val().type().element_width(), src_vreg.type()));
                 builder_.orr_(dest_vregs[dest_idx], dest_vregs[dest_idx], src_vreg);
 
-                dest_pos += src_vregs[i].width();
+                dest_pos += src_vregs[i].type().width();
                 dest_idx = (dest_pos / dest_vregs[dest_idx].type().width());
             }
         } else if (n.val().type().element_width() < n.source_value().type().element_width()) {
@@ -1235,7 +1233,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
                 builder_.lsl(src_vreg, src_vreg, mov_immediate(src_pos % n.source_value().type().element_width(), src_vreg.type()));
                 builder_.mov(dest_vregs[i], src_vreg);
 
-                src_pos += src_vregs[i].width();
+                src_pos += src_vregs[i].type().width();
                 src_idx = (src_pos / src_vregs[src_idx].type().width());
             }
         } else {
@@ -1287,9 +1285,8 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             }
             break;
         default:
-            throw backend_exception("Cannot sign-extend from size " +
-                    std::to_string(src_vreg.width()) + " to size " +
-                    std::to_string(dest_vreg.width()));
+            throw backend_exception("Cannot sign-extend from size {} to size {}",
+                                    src_vreg.type().width(), dest_vreg.type().width());
         }
 
         // Set upper registers to zero
@@ -1300,9 +1297,9 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         }
         break;
     case cast_op::trunc:
-        if (dest_vreg.width() > src_vreg.width()) {
+        if (dest_vreg.type().element_width() > src_vreg.type().element_width()) {
             throw backend_exception("Cannot truncate from {} to large size {}",
-                                    dest_vreg.width(), src_vreg.width());
+                                    dest_vreg.type().width(), src_vreg.type().width());
         }
 
         for (size_t i = 0; i < dest_vregs.size(); ++i) {
@@ -1321,7 +1318,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         } else if (src_vregs.size() == 1) {
             // TODO: again register reallocation problems, this should be clearly
             // specified as a smaller size
-            auto immediate = mov_immediate(64 - dest_vreg.width(), value_type::u64());
+            auto immediate = mov_immediate(64 - dest_vreg.type().element_width(), value_type::u64());
             builder_.lsl(dest_vreg, src_vreg, immediate);
             builder_.asr(dest_vreg, dest_vreg, immediate);
         }
@@ -1443,8 +1440,8 @@ void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
     }
 }
 
-static inline std::size_t total_width(const std::vector<vreg_operand> &vec) {
-    return std::ceil(vec.size() * vec[0].width());
+static inline std::size_t total_width(const std::vector<register_operand> &vec) {
+    return std::ceil(vec.size() * vec[0].type().element_width());
 }
 
 void arm64_translation_context::materialise_bit_extract(const bit_extract_node &n) {
@@ -1459,9 +1456,10 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
     auto src_total_width = total_width(src_vregs);
     auto extract_start = n.from() / src_total_width;
 
-    std::size_t extracted = 0;
-    auto extract_idx = n.from() % src_vregs[0].width();
-    auto extract_len = std::min(src_vregs[0].width() - extract_idx, n.length() - extracted);
+    // TODO: we shouldn't be using ints here
+    int extracted = 0;
+    int extract_idx = n.from() % src_vregs[0].type().element_width();
+    auto extract_len = std::min(src_vregs[0].type().element_width() - extract_idx, n.length() - extracted);
 
     std::size_t dest_idx = 0;
 
@@ -1474,7 +1472,7 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
                       immediate_operand(extract_len, value_type::u8()));
         extract_idx = 0;
         extracted += extract_len;
-        extract_len = std::min(n.length() - extracted, src_vregs[i].width());
+        extract_len = std::min(n.length() - extracted, src_vregs[i].type().element_width());
         dest_idx = extracted % dest_total_width;
     }
 }
@@ -1499,16 +1497,17 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
     auto dest_total_width = total_width(dest_vregs);
     auto insert_start = n.to() / dest_total_width;
 
-    std::size_t inserted = 0;
-    std::size_t insert_idx = n.to() % dest_vregs[0].width();
-    std::size_t insert_len = std::min(dest_vregs[0].width() - insert_idx, n.length() - inserted);
+    // TODO: We shouldn't be using ints here
+    int inserted = 0;
+    int insert_idx = n.to() % dest_vregs[0].type().element_width();
+    std::size_t insert_len = std::min(dest_vregs[0].type().element_width() - insert_idx, n.length() - inserted);
 
     std::size_t bits_idx = 0;
     std::size_t bits_total_width = total_width(bits_vregs);
 
     builder_.insert_comment("Insert specific bits into destination");
     for (std::size_t i = insert_start; inserted < n.length(); ++i) {
-        auto bits_vreg_width = bits_vregs[bits_idx].width();
+        auto bits_vreg_width = bits_vregs[bits_idx].type().element_width();
         bits_vregs[bits_idx] = cast(bits_vregs[bits_idx], dest_vregs[i].type());
         builder_.bfi(dest_vregs[i], bits_vregs[bits_idx],
                      immediate_operand(insert_idx, value_type::u8()),

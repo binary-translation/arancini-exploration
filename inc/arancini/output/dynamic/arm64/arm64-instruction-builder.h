@@ -13,13 +13,13 @@ template <typename T, typename A, typename B>
 using is_one_of = std::disjunction<std::is_same<T, A>, std::is_same<T, B>>;
 
 template <typename T>
-using is_reg = std::enable_if_t<is_one_of<T, preg_operand, vreg_operand>::value, int>;
+using is_reg = std::enable_if_t<std::is_same_v<T, register_operand>, int>;
 
 template <typename T>
 using is_imm = std::enable_if_t<std::is_same<T, immediate_operand>::value, int>;
 
 template <typename T>
-using is_reg_or_immediate = std::enable_if_t<std::disjunction<is_one_of<T, preg_operand, vreg_operand>,
+using is_reg_or_immediate = std::enable_if_t<std::disjunction<std::is_same<T, register_operand>,
                                                               std::is_same<T, immediate_operand>>::value,
                                                               int>;
 

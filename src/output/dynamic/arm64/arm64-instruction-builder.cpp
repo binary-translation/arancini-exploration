@@ -1,18 +1,20 @@
-#include "arancini/output/dynamic/arm64/arm64-instruction.h"
+#include <arancini/output/dynamic/arm64/arm64-instruction.h>
 #include <arancini/output/dynamic/arm64/arm64-instruction-builder.h>
+
 #include <array>
 #include <bitset>
-#include <exception>
 #include <utility>
-#include <stdexcept>
 #include <unordered_map>
 
 using namespace arancini::output::dynamic::arm64;
 
-/* #define DEBUG_REGALLOC */
-#define DEBUG_STREAM std::cerr
-
 void instruction_builder::spill() {
+}
+
+[[nodiscard]]
+inline bool is_virtual(const operand& op) {
+    return (op.type() == operand_type::reg && op.reg().is_virtual()) ||
+           (op.type() == operand_type::mem && op.memory().is_virtual());
 }
 
 void instruction_builder::emit(machine_code_writer &writer) {
@@ -28,13 +30,9 @@ void instruction_builder::emit(machine_code_writer &writer) {
 
         const auto &operands = instr.operands();
 
-        for (size_t i = 0; i < instr.operand_count(); ++i) {
+        for (std::size_t i = 0; i < instr.operand_count(); ++i) {
             const auto &op = operands[i];
-            if (op.type() == operand_type::invalid ||
-                op.type() == operand_type::vreg ||
-                (op.type() == operand_type::mem && op.memory().is_virtual())) {
-                dump(assembly);
-                std::cerr << assembly.str() << '\n';
+            if (op.type() == operand_type::invalid || is_virtual(op)) {
                 throw backend_exception("Virtual register after register allocation: {}", instr);
             }
         }
@@ -44,7 +42,7 @@ void instruction_builder::emit(machine_code_writer &writer) {
 
     size = asm_.assemble(assembly.str().c_str(), &encode);
 
-    logger.debug("{}", fmt::format("{}", fmt::join(instruction_begin(), instruction_end(), "\n")));
+    logger.debug("Translation:\n{}\n", fmt::format("{}", fmt::join(instruction_begin(), instruction_end(), "\n")));
 
     // TODO: write directly
     writer.copy_in(encode, size);
@@ -55,9 +53,6 @@ void instruction_builder::emit(machine_code_writer &writer) {
 
 void instruction_builder::allocate() {
 	// reverse linear scan allocator
-#ifdef DEBUG_REGALLOC
-	DEBUG_STREAM << "REGISTER ALLOCATION" << std::endl;
-#endif
     // TODO: handle direct physical register usage
     // TODO: handle different sizes
 
@@ -75,11 +70,7 @@ void instruction_builder::allocate() {
 	for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
 		auto &instr = *RI;
 
-#ifdef DEBUG_REGALLOC
-		DEBUG_STREAM << "considering instruction ";
-		instr.dump(DEBUG_STREAM);
-		DEBUG_STREAM << '\n';
-#endif
+        logger.debug("Allocating instruction {}\n", instr);
 
         std::array<std::pair<size_t, size_t>, 5> allocs;
         bool has_unused_keep = false;
@@ -90,18 +81,18 @@ void instruction_builder::allocate() {
         {
                 unsigned int vri;
                 ir::value_type type;
-                if (o.is_vreg()) {
-                    vri = o.vreg().index();
-                    type = o.vreg().type();
-                } else if (o.is_mem()) {
-                    auto vreg = o.memory().vreg_base();
+                if (o.is_reg() && o.reg().is_virtual()) {
+                    vri = o.reg().index();
+                    type = o.reg().type();
+                } else if (o.is_mem() && o.memory().is_virtual()) {
+                    auto vreg = o.memory().base_register();
                     vri = vreg.index();
                     type = vreg.type();
                 } else {
                     throw backend_exception("Trying to allocate non-virtual register operand");
                 }
 
-                size_t allocation = 0;
+                std::size_t allocation = 0;
                 if (type.is_floating_point()) {
                     allocation = avail_float_physregs._Find_first();
                     avail_float_physregs.flip(allocation);
@@ -122,18 +113,15 @@ void instruction_builder::allocate() {
         };
 
 		// kill defs first
-		for (size_t i = 0; i < instr.operand_count(); i++) {
+		for (std::size_t i = 0; i < instr.operand_count(); i++) {
 			auto &o = instr.operands()[i];
 
 			// Only regs can be /real/ defs
-			if (o.is_def() && o.is_vreg() && !o.is_use()) {
-#ifdef DEBUG_REGALLOC
-				DEBUG_STREAM << "  DEF ";
-				o.dump(DEBUG_STREAM);
-#endif
+			if (o.is_def() && o.is_reg() && o.reg().is_virtual() && !o.is_use()) {
+                logger.debug("Defining register {}\n", o);
 
-                auto type = o.vreg().type();
-				unsigned int vri = o.vreg().index();
+                auto type = o.reg().type();
+				unsigned int vri = o.reg().index();
 
 				auto alloc = vreg_to_preg.find(vri);
 
@@ -147,26 +135,18 @@ void instruction_builder::allocate() {
                     }
 
 					o.allocate(pri, type);
-#ifdef DEBUG_REGALLOC
-					DEBUG_STREAM << " allocated to ";
-					o.dump(DEBUG_STREAM);
-					DEBUG_STREAM << " -- releasing\n";
-#endif
+
+                    logger.debug("Allocated to {} -- releasing\n", o);
                 } else if (o.is_keep()) {
                     has_unused_keep = true;
 
                     allocate(o, i);
 				} else {
-#ifdef DEBUG_REGALLOC
-					DEBUG_STREAM << " not allocated - killing instruction" << std::endl;
-#endif
+                    logger.debug("Register not allocated - killing instruction\n", o);
 					instr.kill();
 					break;
 				}
 
-#ifdef DEBUG_REGALLOC
-				DEBUG_STREAM << std::endl;
-#endif
 			}
 		}
 
@@ -175,52 +155,33 @@ void instruction_builder::allocate() {
 		}
 
 		// alloc uses next
-		for (size_t i = 0; i < instr.operand_count(); i++) {
+		for (std::size_t i = 0; i < instr.operand_count(); i++) {
 			auto &o = instr.operands()[i];
 
 			// We only care about REG uses - but we also need to consider REGs used in MEM expressions
-			if (o.is_use() && o.is_vreg()) {
-#ifdef DEBUG_REGALLOC
-				DEBUG_STREAM << "  USE ";
-				o.dump(DEBUG_STREAM);
-                DEBUG_STREAM << '\n';
-#endif
+			if (o.is_use() && o.is_reg() && o.reg().is_virtual()) {
+                logger.debug("Allocating register {}\n", o);
 
-                auto type = o.vreg().type();
-                unsigned int vri = o.vreg().index();
+                auto type = o.reg().type();
+                unsigned int vri = o.reg().index();
 				if (!vreg_to_preg.count(vri)) {
                     allocate(o, i);
-#ifdef DEBUG_REGALLOC
-					DEBUG_STREAM << " allocating vreg to ";
-					o.dump(DEBUG_STREAM);
-                    DEBUG_STREAM << '\n';
-#endif
+                    logger.debug("Allocating register to {}\n", o);
 				} else {
 					o.allocate(vreg_to_preg.at(vri), type);
 				}
 
-#ifdef DEBUG_REGALLOC
-				DEBUG_STREAM << std::endl;
-#endif
 			} else if (o.is_mem()) {
-#ifdef DEBUG_REGALLOC
-				DEBUG_STREAM << "  USE ";
-				o.dump(DEBUG_STREAM);
-				DEBUG_STREAM << std::endl;
-#endif
+                logger.debug("Allocating base register used as part of memory reference {}\n", o);
 
 				if (o.memory().is_virtual()) {
-                    unsigned int vri = o.memory().vreg_base().index();
+                    unsigned int vri = o.memory().base_register().index();
 
 					if (!vreg_to_preg.count(vri)) {
                         allocate(o, i);
-#ifdef DEBUG_REGALLOC
-						DEBUG_STREAM << " allocating vreg to ";
-						o.dump(DEBUG_STREAM);
-                        DEBUG_STREAM << '\n';
-#endif
+                        logger.debug("Allocating base register to {}\n", o);
 					} else {
-                        auto type = o.memory().vreg_base().type();
+                        auto type = o.memory().base_register().type();
 						o.allocate_base(vreg_to_preg.at(vri), type);
 					}
 				}
@@ -228,7 +189,7 @@ void instruction_builder::allocate() {
 		}
 
         if (has_unused_keep) {
-            for (size_t i = 0; i < instr.operand_count(); i++) {
+            for (std::size_t i = 0; i < instr.operand_count(); i++) {
                 const auto &op = instr.operands()[i];
                 if (op.is_keep()) {
                     vreg_to_preg.erase(allocs[i].first);
@@ -240,11 +201,17 @@ void instruction_builder::allocate() {
 		// Kill MOVs
         // TODO: refactor
         if (instr.opcode().find("mov") != std::string::npos) {
+            logger.debug("Attempting to eliminate copies between the same register\n");
+
             operand op1 = instr.operands()[0];
             operand op2 = instr.operands()[1];
 
-            if (op1.is_preg() && op2.is_preg()) {
-                if (op1.preg().register_index() == op2.preg().register_index()) {
+            if (op1.is_reg() && !op1.reg().is_virtual() &&
+                op2.is_reg() && op2.reg().is_virtual())
+            {
+                if (op1.reg().index() == op2.reg().index()) {
+                    logger.debug("Killing instruction {} as part of copy optimization\n", instr);
+
                     instr.kill();
                 }
             }

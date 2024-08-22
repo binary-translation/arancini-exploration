@@ -31,35 +31,35 @@ private:
 	instruction_builder builder_;
     std::vector<ir::node *> nodes_;
 	std::set<const ir::node *> materialised_nodes_;
-	std::unordered_map<const ir::port *, std::vector<vreg_operand>> port_to_vreg_;
+	std::unordered_map<const ir::port *, std::vector<register_operand>> port_to_vreg_;
 	std::unordered_map<unsigned long, off_t> instruction_index_to_guest_;
-    std::unordered_map<const ir::local_var *, std::vector<vreg_operand>> locals_;
+    std::unordered_map<const ir::local_var *, std::vector<register_operand>> locals_;
     int ret_;
-	int next_vreg_;
+	int next_vreg_ = 33; // TODO: formalize this
 	off_t this_pc_;
     size_t instr_cnt_ = 0;
 
     std::string current_instruction_disasm_;
 
-	vreg_operand alloc_vreg(ir::value_type type) {
-        return vreg_operand(next_vreg_++, type);
+	register_operand alloc_vreg(ir::value_type type) {
+        return register_operand(next_vreg_++, type);
     }
 
-	vreg_operand &alloc_vreg(const ir::port &p, ir::value_type type) {
+	register_operand &alloc_vreg(const ir::port &p, ir::value_type type) {
 		auto v = alloc_vreg(type);
         port_to_vreg_[&p].push_back(v);
 		return port_to_vreg_[&p].back();
 	}
 
-    vreg_operand &alloc_vreg(const ir::port &p) { return alloc_vreg(p, p.type()); }
+    register_operand &alloc_vreg(const ir::port &p) { return alloc_vreg(p, p.type()); }
 
-    std::vector<vreg_operand> &alloc_vregs(const ir::port &p);
+    std::vector<register_operand> &alloc_vregs(const ir::port &p);
 
-	vreg_operand &vreg_for_port(const ir::port &p, size_t index = 0) { return vregs_for_port(p)[index]; }
+	register_operand &vreg_for_port(const ir::port &p, size_t index = 0) { return vregs_for_port(p)[index]; }
 
-    std::vector<vreg_operand> &vregs_for_port(const ir::port &p) { return port_to_vreg_[&p]; }
+    std::vector<register_operand> &vregs_for_port(const ir::port &p) { return port_to_vreg_[&p]; }
 
-    std::vector<vreg_operand> &materialise_port(ir::port &p);
+    std::vector<register_operand> &materialise_port(ir::port &p);
 
 
     memory_operand guestreg_memory_operand(int regoff,
@@ -93,12 +93,12 @@ private:
     void materialise_read_local(const ir::read_local_node &n);
     void materialise_write_local(const ir::write_local_node &n);
 
-    vreg_operand add_membase(const vreg_operand &addr, const ir::value_type &t = ir::value_type::u64());
+    register_operand add_membase(const register_operand &addr, const ir::value_type &t = ir::value_type::u64());
 
     template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
-    vreg_operand mov_immediate(T imm, ir::value_type type);
+    register_operand mov_immediate(T imm, ir::value_type type);
 
-    vreg_operand cast(const vreg_operand &op, ir::value_type type);
+    register_operand cast(const register_operand &op, ir::value_type type);
 };
 
 } // namespace arancini::output::dynamic::arm64
