@@ -19,9 +19,9 @@ translate_only = False
 # Source: https://stackoverflow.com/questions/845276/how-to-print-the-comparison-of-two-multiline-strings-in-unified-diff-format
 def unified_diff(text1, text2):
     # Ensure that the diff outputs correctly even when no output is given
-    if text1 == None:
+    if text1 is None:
         text1 = ""
-    if text2 == None:
+    if text2 is None:
         text2 = ""
 
     text1 = text1.splitlines(1)
