@@ -53,11 +53,13 @@ class Tester:
         if not os.path.isfile(self.input_bin):
             raise ValueError(f"input binary does not exist at path: {self.input_bin}")
 
+        env = os.environ.copy()
+
         self.config = {
             'compile_flags': [],
-            'compile_environment': os.environ.__dict__, # default environment same as tester's
+            'compile_environment': env, # default environment same as tester's
             'runtime_flags': [],
-            'runtime_environment': os.environ.__dict__, # default environment same as tester's
+            'runtime_environment': env, # default environment same as tester's
             'expected_stdout': None,
             'expected_stderr': None,
             'expected_status': 0,
@@ -110,13 +112,15 @@ class Tester:
         output_file = self.input_bin + ".out"
         compile_command = [self.txlat_path, "--input", self.input_bin, "--output", output_file,
                            *self.config["compile_flags"]]
-        proc = subprocess.run(compile_command, capture_output=True, text=True)
+        proc = subprocess.run(compile_command, env=self.config['compile_environment'],
+                              capture_output=True, text=True, errors="ignore")
         if proc.returncode != 0:
             raise ExecutionError(compile_command, proc.stdout, proc.stderr)
 
         return output_file
 
     def execute(self, binary):
+        # TODO: include runtime environment
         execute_command = [*executor_wrapper, binary, *self.config["runtime_flags"]]
         logger.debug(f"Execution command: {execute_command}")
 
@@ -126,7 +130,9 @@ class Tester:
             shell = True
             capture_output = False
 
-        proc = subprocess.run(execute_command, capture_output=capture_output, text=True, shell=shell)
+        proc = subprocess.run(execute_command, env=self.config['runtime_environment'],
+                              capture_output=capture_output, text=True, shell=shell, errors="ignore")
+
         if proc.returncode != self.config["expected_status"]:
             raise ExecutionError(execute_command, proc.stdout, proc.stderr)
 
