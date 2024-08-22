@@ -162,9 +162,7 @@ int execution_context::invoke(void *cpu_state) {
 	return result.exit_code;
 }
 
-int execution_context::internal_call(void *cpu_state, int call)
-{
-    util::global_logger.info("Executing internal call via TEMPORARY interface\n");
+int execution_context::internal_call(void *cpu_state, int call) {
 	if (call == 1) { // syscall
 		auto x86_state = (x86::x86_cpu_state *)cpu_state;
         util::global_logger.debug("System call number: {}\n", util::copy(x86_state->RAX));
