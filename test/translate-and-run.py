@@ -11,8 +11,10 @@ import traceback
 import subprocess
 
 logger = logging.getLogger("Test Runner")
+
 keep_artifacts = False
 executor_wrapper = ""
+translate_only = False
 
 # Source: https://stackoverflow.com/questions/845276/how-to-print-the-comparison-of-two-multiline-strings-in-unified-diff-format
 def unified_diff(text1, text2):
@@ -84,6 +86,11 @@ class Tester:
 
         translated = self.compile()
         self.config["produced_artifacts"].append(translated)
+
+        logger.info("Translation successful")
+
+        if translate_only:
+            return
 
         logger.info(f"Executing transated binary: {translated}")
         stdout, stderr = self.execute(translated)
@@ -196,8 +203,15 @@ def parse_arguments():
                         help='KEY=VALUE strings to be added to environment during translated program \
                         execution (in addition to those added via -c and the default)')
 
+    parser.add_argument('--translate-only',
+                        required=False,
+                        default=False,
+                        action='store_true',
+                        help='Invoke translator for input binary and exit (can be combined with --keep-artifacts to get the translator output')
+
     args = parser.parse_args()
 
+    # TODO: refactor parsing here to directly store those flags
     global keep_artifacts
     keep_artifacts = args.keep_artifacts
 
@@ -206,6 +220,9 @@ def parse_arguments():
 
     global extra_runtime_env
     extra_runtime_env = args.extra_runtime_env
+
+    global translate_only
+    translate_only = args.translate_only
 
     return parser.parse_args()
 
