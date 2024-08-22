@@ -1,5 +1,6 @@
 #pragma once
 
+#include <fmt/format.h>
 #include <keystone/keystone.h>
 
 #include <arancini/ir/value-type.h>
@@ -9,7 +10,6 @@
 #include <array>
 #include <cstdint>
 #include <variant>
-#include <stdexcept>
 #include <type_traits>
 
 namespace arancini::output::dynamic::arm64 {
@@ -18,10 +18,9 @@ class assembler {
 public:
     assembler() {
         status_ = ks_open(KS_ARCH_ARM64, 0, &ks_);
-        if (status_ != KS_ERR_OK) {
-            std::string msg("Failed to initialise keystone assembler: ");
-            throw std::runtime_error(msg + ks_strerror(status_));
-        }
+
+        if (status_ != KS_ERR_OK)
+            throw backend_exception("failed to initialise keystone assembler: {}", ks_strerror(status_));
     }
 
     size_t assemble(const char *code, unsigned char **out);
@@ -120,8 +119,6 @@ private:
     register_index_type index_;
 };
 
-std::string to_string(const register_operand&);
-
 // TODO: how are immediates represented in arm
 // TODO: fix this
 class immediate_operand {
@@ -136,11 +133,10 @@ public:
         , type_(type)
 	{
         if (type_.is_vector() || type_.element_width() > 64)
-            throw std::runtime_error("Cannot represent vectors as immediates");
+            throw backend_exception("cannot represent vectors as immediates");
 
         if (!fits(v, type))
-            throw std::runtime_error("Specified immediate does not fit in width: " +
-                                     std::to_string(width()) + " " + std::to_string(v));
+            throw backend_exception("specified immediate {} does not fit in width {}", v, width());
 	}
 
     static bool fits(uintmax_t v, value_type type) {
@@ -225,7 +221,7 @@ public:
         , post_index_(post_index)
 	{
         if (pre_index == post_index && pre_index)
-            throw std::runtime_error("Both pre- and post-index passed to ARM DBT");
+            throw backend_exception("Addressing may be either pre-index or post-index but not both in aarch64 memory operands");
     }
 
     memory_operand(const memory_operand& m)
@@ -354,23 +350,21 @@ struct operand {
 
 	void allocate(int index, ir::value_type value_type) {
 		if (type() != operand_type::reg && reg().is_virtual())
-			throw std::runtime_error("trying to allocate non-vreg");
+			throw backend_exception("trying to allocate non-vreg");
 
 		op_ = register_operand(index, value_type);
 	}
 
 	void allocate_base(int index, ir::value_type value_type) {
 		if (type() != operand_type::mem)
-			throw std::runtime_error("trying to allocate non-mem");
+			throw backend_exception("trying to allocate non-mem");
 
         auto &memory = std::get<memory_operand>(op_);
 		if (!memory.is_virtual())
-			throw std::runtime_error("trying to allocate non-virtual membase ");
+			throw backend_exception("trying to allocate non-virtual membase ");
 
         memory.set_base_reg(register_operand(index, value_type));
 	}
-
-	void dump(std::ostream &os) const;
 protected:
     operand_variant op_;
 	bool use_, def_, keep_;
@@ -436,10 +430,6 @@ public:
 
     instruction &set_branch(bool is_branch) { branch_ = is_branch; return *this; }
 
-	void dump(std::ostream &os) const;
-
-    std::string dump() const;
-
 	void kill() { dead_ = true; }
 
     [[nodiscard]]
@@ -480,6 +470,137 @@ private:
 } // namespace arancini::output::dynamic::arm64
 
 template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::register_operand> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(arancini::output::dynamic::arm64::register_operand op, FormatContext& ctx) const {
+        using namespace arancini::output::dynamic::arm64;
+
+        static const char* name64[] = {
+            "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
+            "x11", "x12", "x13", "x14", "x15", "x16", "x17", "x18", "x19", "x20",
+            "x21", "x22", "x23", "x24", "x25", "x26", "x27", "x28", "x29", "x30",
+            "sp"
+        };
+
+        static const char* name32[] = {
+            "w0", "w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8", "w9", "w10",
+            "w11", "w12", "w13", "w14", "w15", "w16", "w17", "w18", "w19", "w20",
+            "w21", "w22", "w23", "w24", "w25", "w26", "w27", "w28", "w29", "w30",
+            "sp"
+        };
+
+        static const char* name_float32[] = {
+            "s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
+            "s11", "s12", "s13", "s14", "s15", "s16", "s17", "s18", "s19", "s20",
+            "s21", "s22", "s23", "s24", "s25", "s26", "s27", "s28", "s29", "s30",
+            "s31"
+        };
+
+        static const char* name_float64[] = {
+            "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8", "d9", "d10",
+            "d11", "d12", "d13", "d14", "d15", "d16", "d17", "d18", "d19", "d20",
+            "d21", "d22", "d23", "d24", "d25", "d26", "d27", "d28", "d29", "d30",
+            "d31"
+        };
+
+        static const char* name_special[] = {
+            "nzcv"
+        };
+
+        // TODO: introduce check for NEON availability
+        static const char* name_vector_neon[] = {
+            "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10",
+            "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20",
+            "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30",
+            "v31"
+        };
+
+        // TODO: introduce check for SVE2 availability
+        static const char* name_vector_sve2[] = {
+            "z0", "z1", "z2", "z3", "z4", "z5", "z6", "z7", "z8", "z9", "z10",
+            "z11", "z12", "z13", "z14", "z15", "z16", "z17", "z18", "z19", "z20",
+            "z21", "z22", "z23", "z24", "z25", "z26", "z27", "z28", "z29", "z30",
+            "z31"
+        };
+
+        // TODO: vector predicates not used yet
+        [[maybe_unused]]
+        static const char* name_vector_pred[] = {
+            "p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10",
+            "p11", "p12", "p13", "p14", "p15"
+        };
+
+        if (op.is_virtual())
+            return fmt::format_to(ctx.out(), "%V{}_{}", op.index(), op.type().element_width());
+
+        if (op.is_special())
+            return fmt::format_to(ctx.out(), "{}", name_special[op.index()]);
+
+        std::string name;
+        if (op.type().is_vector()) {
+            name = op.type().width() == 128 ? name_vector_neon[op.index()] : name_vector_sve2[op.index()];
+            switch (op.type().width()) {
+            case 8:
+                return fmt::format_to(ctx.out(), "{}.b", name);
+            case 16:
+                return fmt::format_to(ctx.out(), "{}.h", name);
+            case 32:
+                return fmt::format_to(ctx.out(), "{}.w", name);
+            case 64:
+                return fmt::format_to(ctx.out(), "{}.d", name);
+            default:
+                throw backend_exception("vectors larger than 64-bit not supported");
+            }
+        } else if (op.type().is_floating_point()) {
+            name =  op.type().element_width() > 32 ? name_float64[op.index()] : name_float32[op.index()];
+        } else if (op.type().is_integer()) {
+            name =  op.type().element_width() > 32 ? name64[op.index()] : name32[op.index()];
+        } else {
+            throw backend_exception("physical registers are specified as 32-bit or 64-bit only");
+        }
+
+        return fmt::format_to(ctx.out(), "{}", name);
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::memory_operand> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(arancini::output::dynamic::arm64::memory_operand mem, FormatContext& ctx) const {
+        using namespace arancini::output::dynamic::arm64;
+
+        if (mem.is_virtual())
+            fmt::format_to(ctx.out(), "[%V{}_{}",
+                           mem.base_register().type().element_width(),
+                           mem.base_register().index());
+        else
+            fmt::format_to(ctx.out(), "[{}", mem.base_register());
+
+        if (!mem.offset().value()) {
+            return fmt::format_to(ctx.out(), "]");
+        }
+
+        if (!mem.post_index())
+            fmt::format_to(ctx.out(), ", #{:#x}]", mem.offset().value());
+        else if (mem.pre_index())
+            fmt::format_to(ctx.out(), "!");
+
+        if (mem.post_index())
+            fmt::format_to(ctx.out(), "], #{:#x}", mem.offset().value());
+
+        // TODO: register indirect with index
+        return ctx.out();
+    }
+};
+
+// TODO: maybe this should inherit from the formatter for std::string_view (to get formatting)?
+template <>
 struct fmt::formatter<arancini::output::dynamic::arm64::operand> {
     template <typename FormatContext>
     constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
@@ -488,6 +609,7 @@ struct fmt::formatter<arancini::output::dynamic::arm64::operand> {
     auto format(arancini::output::dynamic::arm64::operand op, FormatContext& ctx) const {
         using namespace arancini::output::dynamic::arm64;
 
+        // TODO: should just be an std::visit() call
         switch (op.type()) {
         case operand_type::cond:
             // TODO: rename
@@ -501,40 +623,20 @@ struct fmt::formatter<arancini::output::dynamic::arm64::operand> {
         case operand_type::imm:
             return fmt::format_to(ctx.out(), "#{:#x}", op.immediate().value());
         case operand_type::mem:
-            if (op.memory().is_virtual())
-                fmt::format_to(ctx.out(), "[%V{}_{}",
-                               op.memory().base_register().type().element_width(),
-                               op.memory().base_register().index());
-            else
-                fmt::format_to(ctx.out(), "[{}", to_string(op.memory().base_register()));
-
-            if (!op.memory().offset().value()) {
-                return fmt::format_to(ctx.out(), "]");
-            }
-
-            if (!op.memory().post_index())
-                fmt::format_to(ctx.out(), ", #{:#x}]", op.memory().offset().value());
-            else if (op.memory().pre_index())
-                fmt::format_to(ctx.out(), "!");
-
-            if (op.memory().post_index())
-                fmt::format_to(ctx.out(), "], #{:#x}", op.memory().offset().value());
-
-            // TODO: register indirect with index
-            return ctx.out();
+            return fmt::format_to(ctx.out(), "{}", op.memory());
         case operand_type::reg:
-            return fmt::format_to(ctx.out(), "{}", to_string(op.reg()));
+            return fmt::format_to(ctx.out(), "{}", op.reg());
         default:
             // TODO: specify which
-            throw backend_exception("Attempting to format unknown operand type");
+            throw backend_exception("attempting to format unknown operand type");
         }
     }
 };
 
 template <>
 struct fmt::formatter<arancini::output::dynamic::arm64::instruction> {
-    template <typename FormatContext>
-    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+    template <typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
 
     template <typename FormatContext>
     auto format(arancini::output::dynamic::arm64::instruction instr, FormatContext& ctx) const {

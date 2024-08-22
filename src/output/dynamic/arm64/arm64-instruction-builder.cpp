@@ -18,10 +18,6 @@ inline bool is_virtual(const operand& op) {
 }
 
 void instruction_builder::emit(machine_code_writer &writer) {
-    std::size_t size;
-    std::uint8_t* encode;
-    std::stringstream assembly;
-
     for (std::size_t i = 0; i < instructions_.size(); ++i) {
         const auto &instr = instructions_[i];
 
@@ -38,11 +34,13 @@ void instruction_builder::emit(machine_code_writer &writer) {
         }
     }
 
-    dump(assembly);
+    auto instruction_stream = fmt::format("{}", fmt::join(instruction_begin(), instruction_end(), "\n"));
 
-    size = asm_.assemble(assembly.str().c_str(), &encode);
+    std::size_t size;
+    std::uint8_t* encode;
+    size = asm_.assemble(instruction_stream.c_str(), &encode);
 
-    logger.debug("Translation:\n{}\n", fmt::format("{}", fmt::join(instruction_begin(), instruction_end(), "\n")));
+    logger.debug("Translation:\n{}\n", instruction_stream);
 
     // TODO: write directly
     writer.copy_in(encode, size);
@@ -214,15 +212,6 @@ void instruction_builder::allocate() {
                 }
             }
         }
-	}
-}
-
-void instruction_builder::dump(std::ostream &os) const {
-	for (const auto &instr : instructions_) {
-		if (!instr.is_dead()) {
-            instr.dump(os);
-            os << '\n';
-		}
 	}
 }
 
