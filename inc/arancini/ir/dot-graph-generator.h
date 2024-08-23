@@ -83,7 +83,7 @@ private:
 			break;
 		}
 
-		s << ":" << p->type().to_string();
+		s << fmt::format(":{}", p->type());
 		return s.str();
 	}
 

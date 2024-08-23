@@ -581,25 +581,26 @@ public:
 	{
 		if (op == cast_op::bitcast) {
 			if (target_type.width() != source_value.type().width()) {
-				throw std::logic_error(
-					"cannot bitcast between types with different sizes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
+				throw std::logic_error(fmt::format("cannot bitcast between types with different sizes target={}, source={}",
+                                                   target_type, source_value.type()));
 			}
 		} else if (op == cast_op::convert) {
 			if ((target_type.type_class() != value_type_class::floating_point) && (source_value.type().type_class() != value_type_class::floating_point)) {
 				if (target_type.type_class() == source_value.type().type_class()) {
-					throw std::logic_error("cannot convert between the same non-FP type classes target=" + target_type.to_string()
-						+ ", source=" + source_value.type().to_string());
+					throw std::logic_error(fmt::format("cannot convert between the same non-FP type classes target={}, source={}",
+                                                       target_type, source_value.type()));
 				}
 			}
 		} else if (op != cast_op::zx) {
 			if (target_type.type_class() != source_value.type().type_class()) {
-				throw std::logic_error("cannot cast between type classes target=" + target_type.to_string() + ", source=" + source_value.type().to_string());
+				throw std::logic_error(fmt::format("cannot cast between type classes target={}, source={}",
+                                                   target_type, source_value.type()));
 			}
 		}
 
 		if ((convert_type != fp_convert_type::none) && (op != cast_op::convert)) {
-			throw std::logic_error("convert type should be 'none' if the cast_op is not 'convert' target=" + target_type.to_string()
-				+ ", source=" + source_value.type().to_string());
+			throw std::logic_error(fmt::format("convert type should be 'none' if the cast_op is not 'convert' target={}, source={}",
+                                               target_type, source_value.type()));
 		}
 
 		source_value.add_target(this);
@@ -707,7 +708,8 @@ public:
 		, rhs_(rhs)
 	{
 		if (!lhs.type().equivalent_to(rhs.type())) {
-			throw std::logic_error("incompatible types in binary arith node: lhs=" + lhs.type().to_string() + ", rhs=" + rhs.type().to_string());
+			throw std::logic_error(fmt::format("incompatible types in binary arith node: lhs={}, rhs={}",
+                                                lhs.type(), rhs.type()));
 		}
 
 		op_ = op;

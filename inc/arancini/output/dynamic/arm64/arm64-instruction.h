@@ -133,25 +133,28 @@ public:
         , type_(type)
 	{
         if (type_.is_vector() || type_.element_width() > 64)
-            throw backend_exception("cannot represent vectors as immediates");
+            throw backend_exception("cannot represent vector {} as immediate", type_);
 
         if (!fits(v, type))
-            throw backend_exception("specified immediate {} does not fit in width {}", v, width());
+            throw backend_exception("specified immediate {} does not fit in width {}", v, type_.width());
 	}
 
+    [[nodiscard]]
     static bool fits(uintmax_t v, value_type type) {
         return type.element_width() == 64 || (v & ((1llu << type.element_width()) - 1)) == v;
     }
 
-    size_t width() const { return type_.element_width(); }
-    uintmax_t value() const { return value_; }
+    [[nodiscard]]
+    std::uintmax_t value() const { return value_; }
 
+    [[nodiscard]]
     value_type &type() { return type_; }
+
+    [[nodiscard]]
     const value_type &type() const { return type_; }
 private:
     uintmax_t value_;
     value_type type_;
-
 };
 
 class shift_operand : public immediate_operand {
@@ -342,7 +345,7 @@ struct operand {
         case operand_type::mem:
             return memory().base_width();
         case operand_type::imm:
-            return immediate().width();
+            return immediate().type().width();
         default:
             return 0;
         }

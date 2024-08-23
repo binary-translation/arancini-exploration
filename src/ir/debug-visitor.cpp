@@ -183,6 +183,8 @@ void debug_visitor::visit_binary_arith_node(binary_arith_node &n)
 	case binary_arith_op::mod:
 		os_ << "mod ";
 		break;
+    default:
+        os_ << "unknown ";
 	}
 
 	os_ << get_port_name(n.lhs()) << ", " << get_port_name(n.rhs()) << std::endl;
@@ -315,7 +317,7 @@ void debug_visitor::visit_cast_node(cast_node &n)
 		break;
 	}
 
-	os_ << get_port_name(n.source_value()) << " -> " << n.val().type().to_string() << std::endl;
+	os_ << fmt::format("{} -> {}\n", get_port_name(n.source_value()), n.val().type());
 }
 
 void debug_visitor::visit_csel_node(csel_node &n)

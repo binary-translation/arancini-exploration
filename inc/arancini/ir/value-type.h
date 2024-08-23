@@ -1,9 +1,10 @@
 #pragma once
 
+#include <fmt/core.h>
+
 #include <string>
 #include <vector>
 #include <sstream>
-#include <iomanip>
 
 namespace arancini::ir {
 enum class value_type_class { none, signed_integer, unsigned_integer, floating_point };
@@ -63,7 +64,7 @@ public:
 		else if (tc_ == value_type_class::unsigned_integer)
 			dst_class = value_type_class::signed_integer;
 		else
-			throw std::logic_error(__FILE__ ":" + std::to_string(__LINE__) + ": Initial type must be an integer");
+			throw std::logic_error(fmt::format("{}:{}: Initial type must be an integer", __FILE__, __LINE__));
 
 		return value_type(dst_class, element_width_, nr_elements_);
 	}
@@ -72,48 +73,15 @@ public:
 	{
 		if (tc_ == value_type_class::signed_integer || tc_ == value_type_class::unsigned_integer)
 			return value_type(value_type_class::signed_integer, element_width_, nr_elements_);
-		throw std::logic_error(__FILE__ ":" + std::to_string(__LINE__) + ": Initial type must be an integer");
+		throw std::logic_error(fmt::format("{}:{}: Initial type must be an integer", __FILE__, __LINE__));
 	}
 
 	value_type get_unsigned_type() const
 	{
 		if (tc_ == value_type_class::signed_integer || tc_ == value_type_class::unsigned_integer)
 			return value_type(value_type_class::unsigned_integer, element_width_, nr_elements_);
-		throw std::logic_error(__FILE__ ":" + std::to_string(__LINE__) + ": Initial type must be an integer");
+		throw std::logic_error(fmt::format("{}:{}: Initial type must be an integer", __FILE__, __LINE__));
 	}
-
-	std::string to_string() const
-	{
-		std::stringstream s;
-
-		if (nr_elements_ > 1) {
-			s << "v" << std::dec << nr_elements_;
-		}
-
-		switch (tc_) {
-		case value_type_class::none:
-			return "v";
-
-		case value_type_class::signed_integer:
-			s << "s";
-			break;
-
-		case value_type_class::unsigned_integer:
-			s << "u";
-			break;
-		case value_type_class::floating_point:
-			s << "f";
-			break;
-		default:
-			s << "?";
-			break;
-		}
-
-		s << std::dec << std::to_string(element_width_);
-
-		return s.str();
-	}
-
 private:
 	value_type_class tc_;
 	int element_width_;
@@ -135,4 +103,34 @@ private:
 	value_type return_type_;
 	std::vector<value_type> param_types_;
 };
+
 } // namespace arancini::ir
+
+template <>
+struct fmt::formatter<arancini::ir::value_type> {
+    template <typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(arancini::ir::value_type vt, FormatContext& ctx) const {
+        using namespace arancini::ir;
+
+		if (vt.nr_elements() > 1) {
+            fmt::format_to(ctx.out(), "v{}_", vt.nr_elements());
+		}
+
+		switch (vt.type_class()) {
+		case value_type_class::none:
+            return fmt::format_to(ctx.out(), "none");
+		case value_type_class::signed_integer:
+            return fmt::format_to(ctx.out(), "s{}", vt.element_width());
+		case value_type_class::unsigned_integer:
+            return fmt::format_to(ctx.out(), "u{}", vt.element_width());
+		case value_type_class::floating_point:
+            return fmt::format_to(ctx.out(), "f{}", vt.element_width());
+		default:
+            return fmt::format_to(ctx.out(), "unknown");
+		}
+    }
+};
+
