@@ -135,7 +135,7 @@ void instruction_builder::allocate() {
 					o.allocate(pri, type);
 
                     logger.debug("Allocated to {} -- releasing\n", o);
-                } else if (o.is_keep()) {
+                } else if (instr.is_keep()) {
                     has_unused_keep = true;
 
                     allocate(o, i);
@@ -188,8 +188,7 @@ void instruction_builder::allocate() {
 
         if (has_unused_keep) {
             for (std::size_t i = 0; i < instr.operand_count(); i++) {
-                const auto &op = instr.operands()[i];
-                if (op.is_keep()) {
+                if (instr.operands()[i].is_def()) {
                     vreg_to_preg.erase(allocs[i].first);
                     avail_physregs.flip(allocs[i].second);
                 }

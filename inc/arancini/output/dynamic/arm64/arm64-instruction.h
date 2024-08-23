@@ -271,11 +271,8 @@ struct operand {
     operand() = default;
 
     template <typename T>
-    operand (const T &o)
+    operand(const T &o)
           : op_(o)
-          , use_(false)
-          , def_(false)
-          , keep_(false)
     {
     }
 
@@ -283,54 +280,72 @@ struct operand {
         return static_cast<operand_type>(op_.index());
     }
 
+    [[nodiscard]]
 	bool is_reg() const { return type() == operand_type::reg; }
+
+    [[nodiscard]]
 	bool is_mem() const { return type() == operand_type::mem; }
+
+    [[nodiscard]]
 	bool is_imm() const { return type() == operand_type::imm; }
+
+    [[nodiscard]]
     bool is_shift() const { return type() == operand_type::shift; }
+
+    [[nodiscard]]
     bool is_cond() const { return type() == operand_type::cond; }
+
+    [[nodiscard]]
     bool is_label() const { return type() == operand_type::label; }
 
+    [[nodiscard]]
     register_operand &reg() { return std::get<register_operand>(op_); }
+
+    [[nodiscard]]
     const register_operand &reg() const { return std::get<register_operand>(op_); }
 
+    [[nodiscard]]
     memory_operand &memory() { return std::get<memory_operand>(op_); }
+
+    [[nodiscard]]
     const memory_operand &memory() const { return std::get<memory_operand>(op_); }
 
+    [[nodiscard]]
     immediate_operand &immediate() { return std::get<immediate_operand>(op_); }
+
+    [[nodiscard]]
     const immediate_operand &immediate() const { return std::get<immediate_operand>(op_); }
 
+    [[nodiscard]]
     shift_operand &shift() { return std::get<shift_operand>(op_); }
+
+    [[nodiscard]]
     const shift_operand &shift() const { return std::get<shift_operand>(op_); }
 
+    [[nodiscard]]
     cond_operand &cond() { return std::get<cond_operand>(op_); }
+
+    [[nodiscard]]
     const cond_operand &cond() const { return std::get<cond_operand>(op_); }
 
+    [[nodiscard]]
     label_operand &label() { return std::get<label_operand>(op_); }
+
+    [[nodiscard]]
     const label_operand &label() const { return std::get<label_operand>(op_); }
 
+    [[nodiscard]]
 	bool is_use() const { return use_; }
+
+    [[nodiscard]]
 	bool is_def() const { return def_; }
-    bool is_keep() const { return keep_; }
+
+    [[nodiscard]]
 	bool is_usedef() const { return use_ && def_; }
 
-    void set_use() { use_ = true; }
-    void set_def() { def_ = true; }
-    void set_keep() { keep_ = true; }
-    void set_usedef() { set_use(); set_def(); }
+    operand& as_use() { use_ = true; return *this; }
 
-    // TODO: why is this needed?
-    std::size_t width() const {
-        switch (type()) {
-        case operand_type::reg:
-            return reg().type().width();
-        case operand_type::mem:
-            return memory().base_reg_type().width();
-        case operand_type::imm:
-            return immediate().type().width();
-        default:
-            return 0;
-        }
-    }
+    operand& as_def() { def_ = true; return *this; }
 
 	void allocate(int index, ir::value_type value_type) {
 		if (type() != operand_type::reg && reg().is_virtual())
@@ -351,39 +366,18 @@ struct operand {
 	}
 protected:
     operand_variant op_;
-	bool use_, def_, keep_;
+	bool use_ = false;
+    bool def_ = false;
 };
 
 template <typename T>
-static operand def(const T &o)
-{
-    operand r = o;
-    r.set_def();
-    return r;
+operand def(const T& o) {
+    return operand{o}.as_def();
 }
 
 template <typename T>
-static operand use(const T &o)
-{
-    operand r = o;
-    r.set_use();
-    return r;
-}
-
-template <typename T>
-static operand keep(const T &o)
-{
-    operand r = o;
-    r.set_keep();
-    return r;
-}
-
-template <typename T>
-static operand usedef(const T &o)
-{
-    operand r = o;
-    r.set_usedef();
-    return r;
+operand use(const T& o) {
+    return operand{o}.as_use();
 }
 
 class instruction {
@@ -413,7 +407,10 @@ public:
     [[nodiscard]]
     const std::string& comment() const { return comment_; }
 
-    instruction &set_branch(bool is_branch) { branch_ = is_branch; return *this; }
+    // NOTE: branches must always be kept => keep_ is also set
+    instruction &as_branch() { branch_ = true; keep_ = true; return *this; }
+
+    instruction &as_keep() { keep_ = true; return *this; }
 
 	void kill() { dead_ = true; }
 
@@ -425,6 +422,9 @@ public:
 
     [[nodiscard]]
     bool is_label() const { return label_; }
+
+    [[nodiscard]]
+    bool is_keep() const { return keep_; }
 
     [[nodiscard]]
     std::string& opcode() { return opcode_; }
@@ -447,6 +447,7 @@ private:
     bool branch_ = false;
     bool label_ = false;
     bool dead_ = false;
+    bool keep_ = false;
 
     std::size_t opcount_ = 0;
     operand_array operands_;
@@ -613,8 +614,8 @@ struct fmt::formatter<arancini::output::dynamic::arm64::operand> {
         case operand_type::reg:
             return fmt::format_to(ctx.out(), "{}", op.reg());
         default:
-            // TODO: specify which
-            throw backend_exception("attempting to format unknown operand type");
+            throw backend_exception("attempting to format unknown operand type with index {}",
+                                    util::to_underlying(op.type()));
         }
     }
 };

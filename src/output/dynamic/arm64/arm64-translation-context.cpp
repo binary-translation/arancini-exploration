@@ -54,10 +54,10 @@ static immediate_operand clamped_immediate(T v, value_type t) {
 }
 
 std::vector<register_operand> &arm64_translation_context::alloc_vregs(const ir::port &p) {
-    auto reg_count = p.type().nr_elements();
+    std::size_t reg_count = p.type().nr_elements();
     auto element_width = p.type().width();
-    if (element_width > base_type().element_width()) {
-        element_width = base_type().element_width();
+    if (element_width > base_type().width()) {
+        element_width = base_type().width();
         reg_count = p.type().width() / element_width;
     }
 
@@ -537,8 +537,9 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
     const auto &lhs_vregs = materialise_port(n.lhs());
     const auto &rhs_vregs = materialise_port(n.rhs());
 
-    if (lhs_vregs.size() != rhs_vregs.size())
+    if (lhs_vregs.size() != rhs_vregs.size()) {
         throw backend_exception("Binary operations not supported with different sized operands");
+    }
 
 	const auto &dest_vregs = alloc_vregs(n.val());
     size_t dest_width = n.val().type().element_width();
