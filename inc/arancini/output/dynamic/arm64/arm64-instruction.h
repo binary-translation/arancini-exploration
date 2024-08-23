@@ -119,8 +119,8 @@ private:
     register_index_type index_;
 };
 
-// TODO: how are immediates represented in arm
-// TODO: fix this
+// TODO: ARM uses logical immediates that make determining their encoding completely different than
+// what fits() does
 class immediate_operand {
 public:
     immediate_operand() = default;
@@ -140,7 +140,7 @@ public:
 	}
 
     [[nodiscard]]
-    static bool fits(uintmax_t v, value_type type) {
+    static bool fits(std::uintmax_t v, value_type type) {
         return type.element_width() == 64 || (v & ((1llu << type.element_width()) - 1)) == v;
     }
 
@@ -153,7 +153,7 @@ public:
     [[nodiscard]]
     const value_type &type() const { return type_; }
 private:
-    uintmax_t value_;
+    std::uintmax_t value_;
     value_type type_;
 };
 
@@ -163,11 +163,13 @@ public:
 
     shift_operand(const std::string &modifier, immediate_operand imm)
         : immediate_operand(imm)
-    {
-        modifier_ = modifier;
-    }
+        , modifier_(modifier)
+    { }
 
+    [[nodiscard]]
     std::string& modifier() { return modifier_; }
+
+    [[nodiscard]]
     const std::string& modifier() const { return modifier_; }
 private:
     std::string modifier_;
@@ -179,8 +181,7 @@ public:
 
     label_operand(const std::string label):
         name_(label)
-    {
-    }
+    { }
 
     [[nodiscard]]
     std::string& name() { return name_; }
@@ -195,54 +196,38 @@ class cond_operand {
 public:
     cond_operand() = default;
 
-    cond_operand(const std::string &cond): cond_(cond)
-    {
-    }
+    cond_operand(const std::string &cond):
+        cond_(cond)
+    { }
 
-    cond_operand(const cond_operand &c): cond_(c.cond_) { }
-
-    const cond_operand &operator=(const cond_operand &c) { cond_ = c.cond_; return *this; }
-
+    [[nodiscard]]
     std::string& condition() { return cond_; }
+
+    [[nodiscard]]
     const std::string& condition() const { return cond_; }
 private:
     std::string cond_;
 };
 
+// TODO: replace indexing with enum
 class memory_operand {
 public:
     memory_operand() = default;
 
+    enum class address_mode {
+        direct,
+        pre_index,
+        post_index
+    };
+
     template<typename T>
 	memory_operand(const T &base,
                    immediate_operand offset = immediate_operand(0, u12()),
-                   bool pre_index = false,
-                   bool post_index = false)
+                   address_mode mode = address_mode::direct)
         : reg_base_(base)
 		, offset_(offset)
-        , pre_index_(pre_index)
-        , post_index_(post_index)
-	{
-        if (pre_index == post_index && pre_index)
-            throw backend_exception("Addressing may be either pre-index or post-index but not both in aarch64 memory operands");
-    }
-
-    memory_operand(const memory_operand& m)
-        : reg_base_(m.reg_base_)
-        , offset_(m.offset_)
-        , pre_index_(m.pre_index_)
-        , post_index_(m.post_index_)
-    {
-    }
-
-    memory_operand& operator=(const memory_operand& m) {
-        reg_base_ = m.reg_base_;
-        offset_ = m.offset_;
-        pre_index_ = m.pre_index_;
-        post_index_ = m.post_index_;
-
-        return *this;
-    }
+        , mode_(mode)
+	{ }
 
     template <typename T>
     void set_base_reg(const T &op) { reg_base_ = op; }
@@ -256,25 +241,20 @@ public:
     [[nodiscard]]
     const register_operand &base_register() const { return reg_base_; }
 
-    std::size_t base_width() const {
-        return reg_base_.type().element_width();
-    }
+    [[nodiscard]]
+    ir::value_type base_reg_type() const { return reg_base_.type(); }
 
     [[nodiscard]]
     immediate_operand offset() const { return offset_; }
 
     [[nodiscard]]
-    bool pre_index() const { return pre_index_; }
-
-    [[nodiscard]]
-    bool post_index() const { return post_index_; }
+    address_mode mode() const { return mode_; }
 private:
     register_operand reg_base_;
 
 	immediate_operand offset_ = immediate_operand(0, u12());
-    bool pre_index_ = false;
-    bool post_index_ = false;
 
+    address_mode mode_;
 };
 
 enum class operand_type : std::uint8_t { invalid, reg, mem, imm, shift, label, cond};
@@ -338,12 +318,13 @@ struct operand {
     void set_keep() { keep_ = true; }
     void set_usedef() { set_use(); set_def(); }
 
-    size_t width() const {
+    // TODO: why is this needed?
+    std::size_t width() const {
         switch (type()) {
         case operand_type::reg:
-            return reg().type().element_width();
+            return reg().type().width();
         case operand_type::mem:
-            return memory().base_width();
+            return memory().base_reg_type().width();
         case operand_type::imm:
             return immediate().type().width();
         default:
@@ -422,13 +403,14 @@ public:
     instruction(const label_operand &label)
         : opcode_(label.name())
         , label_(true)
-    {
-    }
+    { }
 
     instruction &add_comment(const std::string &comment) { comment_ = comment; return *this; }
 
+    [[nodiscard]]
     std::string& comment() { return comment_; }
 
+    [[nodiscard]]
     const std::string& comment() const { return comment_; }
 
     instruction &set_branch(bool is_branch) { branch_ = is_branch; return *this; }
@@ -466,7 +448,7 @@ private:
     bool label_ = false;
     bool dead_ = false;
 
-    size_t opcount_ = 0;
+    std::size_t opcount_ = 0;
     operand_array operands_;
 };
 
@@ -577,6 +559,7 @@ struct fmt::formatter<arancini::output::dynamic::arm64::memory_operand> {
     template <typename FormatContext>
     auto format(arancini::output::dynamic::arm64::memory_operand mem, FormatContext& ctx) const {
         using namespace arancini::output::dynamic::arm64;
+        using address_mode = memory_operand::address_mode;
 
         if (mem.is_virtual())
             fmt::format_to(ctx.out(), "[%V{}_{}",
@@ -589,12 +572,12 @@ struct fmt::formatter<arancini::output::dynamic::arm64::memory_operand> {
             return fmt::format_to(ctx.out(), "]");
         }
 
-        if (!mem.post_index())
+        if (mem.mode() != address_mode::post_index)
             fmt::format_to(ctx.out(), ", #{:#x}]", mem.offset().value());
-        else if (mem.pre_index())
+        else if (mem.mode() == address_mode::pre_index)
             fmt::format_to(ctx.out(), "!");
 
-        if (mem.post_index())
+        if (mem.mode() == address_mode::post_index)
             fmt::format_to(ctx.out(), "], #{:#x}", mem.offset().value());
 
         // TODO: register indirect with index

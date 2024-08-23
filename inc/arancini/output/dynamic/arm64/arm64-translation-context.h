@@ -63,8 +63,7 @@ private:
 
 
     memory_operand guestreg_memory_operand(int regoff,
-                                           bool pre = false,
-                                           bool post = false);
+                                           memory_operand::address_mode mode = memory_operand::address_mode::direct);
 
     void materialise(const ir::node *n);
     void materialise_read_reg(const ir::read_reg_node &n);

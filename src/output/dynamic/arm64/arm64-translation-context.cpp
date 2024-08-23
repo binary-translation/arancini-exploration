@@ -110,16 +110,16 @@ register_operand arm64_translation_context::mov_immediate(T imm, ir::value_type 
 }
 
 memory_operand
-arm64_translation_context::guestreg_memory_operand(int regoff, bool pre, bool post)
+arm64_translation_context::guestreg_memory_operand(int regoff, memory_operand::address_mode mode)
 {
     memory_operand mem;
     if (regoff > 255 || regoff < -256) {
         auto base_vreg = alloc_vreg(addr_type());
         builder_.mov(base_vreg, immediate_operand(regoff, value_type::u32()));
         builder_.add(base_vreg, context_block_reg, base_vreg);
-        mem = memory_operand(base_vreg, immediate_operand(0, u12()), pre, post);
+        mem = memory_operand(base_vreg, immediate_operand(0, u12()), mode);
     } else {
-        mem = memory_operand(context_block_reg, immediate_operand(regoff, u12()), pre, post);
+        mem = memory_operand(context_block_reg, immediate_operand(regoff, u12()), mode);
     }
 
 	return mem;
