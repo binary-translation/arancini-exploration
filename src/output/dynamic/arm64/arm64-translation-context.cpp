@@ -53,7 +53,7 @@ static immediate_operand clamped_immediate(T v, value_type t) {
     return immediate_operand(v & ~(1 << t.element_width()), t);
 }
 
-std::vector<register_operand> &arm64_translation_context::alloc_vregs(const ir::port &p) {
+std::vector<register_operand> &virtual_register_allocator::alloc_vregs(const ir::port &p) {
     std::size_t reg_count = p.type().nr_elements();
     auto element_width = p.type().width();
     if (element_width > base_type().width()) {
@@ -70,7 +70,7 @@ std::vector<register_operand> &arm64_translation_context::alloc_vregs(const ir::
 }
 
 register_operand arm64_translation_context::cast(const register_operand &op, value_type type) {
-    auto dest_vreg = alloc_vreg(type);
+    auto dest_vreg = vreg_alloc_.alloc_vreg(type);
     builder_.mov(dest_vreg, op);
     return dest_vreg;
 }
@@ -80,24 +80,24 @@ register_operand arm64_translation_context::mov_immediate(T imm, ir::value_type 
     auto actual_size = base_type().element_width() - __builtin_clzll(reinterpret_cast<unsigned long long&>(imm)|1);
     actual_size = std::min(actual_size, type.element_width());
 
-    size_t move_count = static_cast<size_t>(std::ceil(actual_size / 16.0));
+    std::size_t move_count = static_cast<std::size_t>(std::ceil(actual_size / 16.0));
 
     auto immediate = reinterpret_cast<unsigned long long&>(imm);
 
     if (actual_size < 16) {
         builder_.insert_comment("Move immediate directly as < 16-bits");
-        auto reg = alloc_vreg(type);
+        auto reg = vreg_alloc_.alloc_vreg(type);
         builder_.mov(reg, immediate_operand(immediate & 0xFFFF, value_type::u16()));
         return reg;
     }
 
-    auto reg = alloc_vreg(type);
+    auto reg = vreg_alloc_.alloc_vreg(type);
     if (actual_size <= base_type().element_width()) {
         builder_.insert_comment("Move immediate directly as > 16-bits");
         builder_.movz(reg,
                       immediate_operand(immediate & 0xFFFF, value_type::u16()),
                       shift_operand("LSL", immediate_operand(0, value_type::u1())));
-        for (size_t i = 1; i < move_count; ++i) {
+        for (std::size_t i = 1; i < move_count; ++i) {
             builder_.movk(reg,
                           immediate_operand(immediate >> (i * 16) & 0xFFFF, value_type::u16()),
                           shift_operand("LSL", immediate_operand(i * 16, value_type::u16())));
@@ -114,7 +114,7 @@ arm64_translation_context::guestreg_memory_operand(int regoff, memory_operand::a
 {
     memory_operand mem;
     if (regoff > 255 || regoff < -256) {
-        auto base_vreg = alloc_vreg(addr_type());
+        auto base_vreg = vreg_alloc_.alloc_vreg(addr_type());
         builder_.mov(base_vreg, immediate_operand(regoff, value_type::u32()));
         builder_.add(base_vreg, context_block_reg, base_vreg);
         mem = memory_operand(base_vreg, immediate_operand(0, u12()), mode);
@@ -127,11 +127,11 @@ arm64_translation_context::guestreg_memory_operand(int regoff, memory_operand::a
 
 std::vector<register_operand> &arm64_translation_context::materialise_port(port &p) {
 	materialise(p.owner());
-	return vregs_for_port(p);
+	return vreg_alloc_.vregs_for_port(p);
 }
 
 register_operand arm64_translation_context::add_membase(const register_operand &addr, const value_type &type) {
-    auto mem_addr_vreg = alloc_vreg(type);
+    auto mem_addr_vreg = vreg_alloc_.alloc_vreg(type);
     builder_.add(mem_addr_vreg, register_operand(memory_base_reg.index(), type), addr, "add memory base register");
 
     return mem_addr_vreg;
@@ -166,17 +166,9 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
 	this_pc_ = address;
     logger.debug("Translating instruction {} at address {:#x}\n", disasm, address);
 
-    instr_cnt_++;
-
     // This should be done optionally
+    instr_cnt_++;
     builder_.insert_separator(fmt::format("instruction_{}", instr_cnt_), disasm);
-
-    // TODO: enable debug mode
-    // const auto& opcode = disasm.substr(0, 3);
-    /* if (opcode == "jnz" || opcode == "tes") { */
-    /*     std::cerr << "Adding BRK for instruction " << disasm << '\n'; */
-    /*     builder_.brk(immediate_operand(instr_cnt_, 64)); */
-    /* } */
 
     nodes_.clear();
 }
@@ -216,11 +208,14 @@ void arm64_translation_context::end_block() {
         throw backend_exception("Register allocation failed: {}", e.what());
     }
 
-    // FIXME: should handle resources separately
-	instruction_builder builder_;
+    // Reset context for next block of instructions
+    reset_context();
+}
+
+void arm64_translation_context::reset_context() {
     nodes_.clear();
     materialised_nodes_.clear();
-    port_to_vreg_.clear();
+    vreg_alloc_.reset();
     instruction_index_to_guest_.clear();
     locals_.clear();
 }
@@ -232,13 +227,13 @@ void arm64_translation_context::lower(const std::shared_ptr<ir::action_node> &n)
 void arm64_translation_context::materialise(const ir::node* n) {
     // Invalid node
     if (!n)
-        throw backend_exception("Received NULL pointer to node");
+        throw backend_exception("Received NULL pointer to node when materialising");
 
     // Avoid materialising again
     if (materialised_nodes_.count(n))
         return;
 
-    /* std::cerr << "Handling " << n->to_string() << '\n'; */
+    logger.debug("Handling {}\n", n->to_string());
     switch (n->kind()) {
     case node_kinds::read_reg:
         materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));
@@ -337,9 +332,9 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
 
     auto comment = fmt::format("read register: {}", n.regname());
 
-    auto &dest_vregs = alloc_vregs(n.val());
+    auto &dest_vregs = vreg_alloc_.alloc_vregs(n.val());
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
-        size_t width = dest_vregs[i].type().width();
+        std::size_t width = dest_vregs[i].type().width();
         auto addr = guestreg_memory_operand(n.regoff() + i * width);
         switch (width) {
             case 1:
@@ -389,7 +384,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
         if (src_vregs[i].type().width() > n.value().type().width() && n.value().type().width() <= base_type().element_width())
             src_vregs[i] = cast(src_vregs[i], n.value().type());
 
-        size_t width = src_vregs[i].type().width();
+        std::size_t width = src_vregs[i].type().width();
         auto addr = guestreg_memory_operand(n.regoff() + i * width);
         switch (width) {
             case 1:
@@ -420,7 +415,7 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
     if (addr_vregs.size() != 1)
         throw backend_exception("Only a single address can be specified in a read memory node");
 
-    const auto &dest_vregs = alloc_vregs(n.val());
+    const auto &dest_vregs = vreg_alloc_.alloc_vregs(n.val());
 
     const auto &addr_vreg = add_membase(addr_vregs[0]);
 
@@ -465,7 +460,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
 
     auto comment = "write memory";
     for (std::size_t i = 0; i < src_vregs.size(); ++i) {
-        size_t width = src_vregs[i].type().width();
+        std::size_t width = src_vregs[i].type().width();
 
         memory_operand mem_op(addr_vreg, immediate_operand(i * width, u12()));
         switch (width) {
@@ -488,7 +483,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
 }
 
 void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
-	auto dest_vreg = alloc_vreg(n.val());
+	auto dest_vreg = vreg_alloc_.alloc_vreg(n.val());
     builder_.mov(dest_vreg, mov_immediate(this_pc_, value_type::u64()), "read program counter");
 }
 
@@ -522,7 +517,7 @@ void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
 }
 
 void arm64_translation_context::materialise_constant(const constant_node &n) {
-	const auto &dest_vreg = alloc_vreg(n.val());
+	const auto &dest_vreg = vreg_alloc_.alloc_vreg(n.val());
 
     if (n.val().type().is_floating_point()) {
         auto value = n.const_val_f();
@@ -541,17 +536,17 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         throw backend_exception("Binary operations not supported with different sized operands");
     }
 
-	const auto &dest_vregs = alloc_vregs(n.val());
-    size_t dest_width = n.val().type().element_width();
+	const auto &dest_vregs = vreg_alloc_.alloc_vregs(n.val());
+    std::size_t dest_width = n.val().type().element_width();
 
     const auto &lhs_vreg = lhs_vregs[0];
     const auto &rhs_vreg = rhs_vregs[0];
     const auto &dest_vreg = dest_vregs[0];
 
-    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg(n.carry(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::ZF] = vreg_alloc_.alloc_vreg(n.zero(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::SF] = vreg_alloc_.alloc_vreg(n.negative(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::OF] = vreg_alloc_.alloc_vreg(n.overflow(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::CF] = vreg_alloc_.alloc_vreg(n.carry(), value_type::u1());
 
     // TODO: check
     const char* mod = nullptr;
@@ -590,7 +585,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 	switch (n.op()) {
 	case binary_arith_op::add:
         if (n.val().type().is_vector()) {
-            for (size_t i = 0; i < dest_vregs.size(); ++i)
+            for (std::size_t i = 0; i < dest_vregs.size(); ++i)
                 builder_.adds(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
             break;
         }
@@ -599,7 +594,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             builder_.adds(dest_vreg, lhs_vreg, rhs_vreg);
         else
             builder_.adds(dest_vreg, lhs_vreg, rhs_vreg, shift_operand(mod, immediate_operand(0, value_type::u16())));
-        for (size_t i = 1; i < dest_vregs.size(); ++i)
+        for (std::size_t i = 1; i < dest_vregs.size(); ++i)
             builder_.adcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
         break;
 	case binary_arith_op::sub:
@@ -607,7 +602,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             builder_.subs(dest_vreg, lhs_vreg, rhs_vreg);
         else
             builder_.subs(dest_vreg, lhs_vreg, rhs_vreg, shift_operand(mod, immediate_operand(0, value_type::u16())));
-        for (size_t i = 1; i < dest_vregs.size(); ++i)
+        for (std::size_t i = 1; i < dest_vregs.size(); ++i)
             builder_.sbcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
         builder_.setcc(flag_map[(unsigned long)reg_offsets::CF], "compute flag: CF");
         break;
@@ -694,7 +689,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 		break;
 	case binary_arith_op::bxor:
         builder_.eor_(dest_vreg, lhs_vreg, rhs_vreg);
-        for (size_t i = 1; i < dest_vregs.size(); ++i)
+        for (std::size_t i = 1; i < dest_vregs.size(); ++i)
             builder_.eor_(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
         // EOR does not set flags
         // CMP is used to set the flags
@@ -707,7 +702,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 	case binary_arith_op::cmpgt:
         builder_.cmp(lhs_vreg, rhs_vreg, "compare LHS and RHS to generate condition for conditional set");
         builder_.cset(dest_vreg, cond_operand(cset_type), "set to 1 if condition is true (based flags from the previous compare)");
-        for (size_t i = 1; i < dest_vregs.size(); ++i) {
+        for (std::size_t i = 1; i < dest_vregs.size(); ++i) {
             builder_.cset(dest_vregs[i], cond_operand(cset_type));
         }
 		break;
@@ -725,12 +720,12 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 }
 
 void arm64_translation_context::materialise_ternary_arith(const ternary_arith_node &n) {
-    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg(n.carry(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::ZF] = vreg_alloc_.alloc_vreg(n.zero(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::SF] = vreg_alloc_.alloc_vreg(n.negative(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::OF] = vreg_alloc_.alloc_vreg(n.overflow(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::CF] = vreg_alloc_.alloc_vreg(n.carry(), value_type::u1());
 
-	const auto &dest_vregs = alloc_vregs(n.val());
+	const auto &dest_vregs = vreg_alloc_.alloc_vregs(n.val());
     const auto &lhs_vregs = materialise_port(n.lhs());
     const auto &rhs_vregs = materialise_port(n.rhs());
     auto &top_vregs = materialise_port(n.top());
@@ -757,7 +752,7 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
         break;
     }
 
-    auto pstate = alloc_vreg(register_operand(register_operand::nzcv).type());
+    auto pstate = vreg_alloc_.alloc_vreg(register_operand(register_operand::nzcv).type());
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
         // Set carry flag
         builder_.mrs(pstate, register_operand(register_operand::nzcv));
@@ -793,9 +788,9 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
 }
 
 void arm64_translation_context::materialise_binary_atomic(const binary_atomic_node &n) {
-	const auto &dest_vregs = vregs_for_port(n.val());
+	const auto &dest_vregs = vreg_alloc_.vregs_for_port(n.val());
     const auto &src_vregs = materialise_port(n.rhs());
-    const auto &addr_regs = vregs_for_port(n.address());
+    const auto &addr_regs = vreg_alloc_.vregs_for_port(n.address());
 
     if (addr_regs.size() != 1)
         throw backend_exception("Binary atomic operation address cannot be > 64-bits");
@@ -806,10 +801,10 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
     const auto &dest_vreg = dest_vregs[0];
 
     // No need to handle flags: they are not visible to other PEs
-    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg(n.carry(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::ZF] = vreg_alloc_.alloc_vreg(n.zero(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::SF] = vreg_alloc_.alloc_vreg(n.negative(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::OF] = vreg_alloc_.alloc_vreg(n.overflow(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::CF] = vreg_alloc_.alloc_vreg(n.carry(), value_type::u1());
 
     memory_operand mem_addr(add_membase(addr_regs[0]));
 
@@ -969,7 +964,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             }
             builder_.adds(dest_vreg, dest_vreg, src_vreg, "perform addition with loaded source");
 
-            auto status = alloc_vreg(value_type::u32());
+            auto status = vreg_alloc_.alloc_vreg(value_type::u32());
             switch(n.val().type().element_width()) {
             case 1:
             case 8:
@@ -1026,7 +1021,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
 void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_node &n) {
     // TODO: this is completely wrong
     // FIXME
-    const auto &dest_vregs = alloc_vregs(n.val());
+    const auto &dest_vregs = vreg_alloc_.alloc_vregs(n.val());
     const auto &acc_vregs = materialise_port(n.rhs());
     const auto &src_vregs = materialise_port(n.top());
     const auto &addr_vregs = materialise_port(n.address());
@@ -1044,10 +1039,10 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
                                  std::to_string(n.rhs().type().nr_elements()) + " x " + std::to_string(n.rhs().type().element_width()));
     }
 
-    flag_map[(unsigned long)reg_offsets::ZF] = alloc_vreg(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = alloc_vreg(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = alloc_vreg(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = alloc_vreg(n.carry(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::ZF] = vreg_alloc_.alloc_vreg(n.zero(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::SF] = vreg_alloc_.alloc_vreg(n.negative(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::OF] = vreg_alloc_.alloc_vreg(n.overflow(), value_type::u1());
+    flag_map[(unsigned long)reg_offsets::CF] = vreg_alloc_.alloc_vreg(n.carry(), value_type::u1());
 
     auto mem_addr = memory_operand(add_membase(addr_vregs[0]));
 
@@ -1090,7 +1085,7 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
 }
 
 void arm64_translation_context::materialise_unary_arith(const unary_arith_node &n) {
-    const auto &dest_vregs = alloc_vregs(n.val());
+    const auto &dest_vregs = vreg_alloc_.alloc_vregs(n.val());
     const auto &lhs_vregs = materialise_port(n.lhs());
 
     if (dest_vregs.size() != 1 || lhs_vregs.size() != 1)
@@ -1130,7 +1125,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
     // Allocate as many destination registers as necessary
     // TODO: this is not exactly correct, since we need to create different
     // registers of the base type in such cases
-    const auto &dest_vregs = alloc_vregs(n.val());
+    const auto &dest_vregs = vreg_alloc_.alloc_vregs(n.val());
 
     const auto &src_vreg = src_vregs[0];
     const auto &dest_vreg = dest_vregs[0];
@@ -1181,7 +1176,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             // Move existing values into destination register
             // Sign extension for remaining registers handled outside of the
             // switch
-            for (size_t i = 0; i < src_vregs.size(); ++i)
+            for (std::size_t i = 0; i < src_vregs.size(); ++i)
                 builder_.mov(dest_vregs[i], src_vregs[i]);
             break;
         default:
@@ -1194,7 +1189,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         // This really only happens when dest_reg_count > src_reg_count > 1
         if (dest_vregs.size() > 1) {
             builder_.insert_comment("Determine sign and write to upper registers");
-            for (size_t i = src_vregs.size(); i < dest_vregs.size(); ++i) {
+            for (std::size_t i = src_vregs.size(); i < dest_vregs.size(); ++i) {
                 builder_.mov(dest_vregs[i], src_vregs[src_vregs.size()-1]);
                 builder_.asr(dest_vregs[i], dest_vregs[i], immediate_operand(64, value_type::u8()));
             }
@@ -1213,10 +1208,10 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 
         if (n.val().type().element_width() > n.source_value().type().element_width()) {
             // Destination consists of fewer elements but of larger widths
-            size_t dest_idx = 0;
-            size_t dest_pos = 0;
-            for (size_t i = 0; i < src_vregs.size(); ++i) {
-                auto src_vreg = alloc_vreg(dest_vreg.type());
+            std::size_t dest_idx = 0;
+            std::size_t dest_pos = 0;
+            for (std::size_t i = 0; i < src_vregs.size(); ++i) {
+                auto src_vreg = vreg_alloc_.alloc_vreg(dest_vreg.type());
                 builder_.mov(src_vreg, src_vregs[i]);
                 builder_.lsl(src_vreg, src_vreg, mov_immediate(dest_pos % n.val().type().element_width(), src_vreg.type()));
                 builder_.orr_(dest_vregs[dest_idx], dest_vregs[dest_idx], src_vreg);
@@ -1226,10 +1221,10 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             }
         } else if (n.val().type().element_width() < n.source_value().type().element_width()) {
             // Destination consists of more elements but of smaller widths
-            size_t src_idx = 0;
-            size_t src_pos = 0;
-            for (size_t i = 0; i < dest_vregs.size(); ++i) {
-                auto src_vreg = alloc_vreg(dest_vreg.type());
+            std::size_t src_idx = 0;
+            std::size_t src_pos = 0;
+            for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
+                auto src_vreg = vreg_alloc_.alloc_vreg(dest_vreg.type());
                 builder_.mov(src_vreg, src_vregs[src_idx]);
                 builder_.lsl(src_vreg, src_vreg, mov_immediate(src_pos % n.source_value().type().element_width(), src_vreg.type()));
                 builder_.mov(dest_vregs[i], src_vreg);
@@ -1238,7 +1233,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
                 src_idx = (src_pos / src_vregs[src_idx].type().width());
             }
         } else {
-            for (size_t i = 0; i < dest_vregs.size(); ++i)
+            for (std::size_t i = 0; i < dest_vregs.size(); ++i)
                 builder_.mov(dest_vregs[i], src_vregs[i]);
         }
 		break;
@@ -1281,7 +1276,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         case 128:
         case 256:
             // Handle separately
-            for (size_t i = 0; i < src_vregs.size(); ++i) {
+            for (std::size_t i = 0; i < src_vregs.size(); ++i) {
                 builder_.mov(dest_vregs[i], src_vregs[i]);
             }
             break;
@@ -1293,7 +1288,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         // Set upper registers to zero
         builder_.insert_comment("Set upper registers to zero");
         if (dest_vregs.size() > 1) {
-            for (size_t i = src_vregs.size(); i < dest_vregs.size(); ++i)
+            for (std::size_t i = src_vregs.size(); i < dest_vregs.size(); ++i)
                 builder_.mov(dest_vregs[i], immediate_operand(0, value_type::u1()));
         }
         break;
@@ -1303,7 +1298,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
                                     dest_vreg.type().width(), src_vreg.type().width());
         }
 
-        for (size_t i = 0; i < dest_vregs.size(); ++i) {
+        for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
             builder_.mov(dest_vregs[i], src_vregs[i]);
         }
 
@@ -1389,7 +1384,7 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
                                   vectors and elements widths exceeding 64-bits");
     }
 
-    const auto &dest_vreg = alloc_vreg(n.val());
+    const auto &dest_vreg = vreg_alloc_.alloc_vreg(n.val());
     const auto &cond_vregs = materialise_port(n.condition());
     const auto &true_vregs = materialise_port(n.trueval());
     const auto &false_vregs = materialise_port(n.falseval());
@@ -1421,10 +1416,10 @@ void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
     if (dest_type.element_width() < amount1.type().element_width())
         dest_type = amount1.type();
 
-    auto amount = alloc_vreg(dest_type);
+    auto amount = vreg_alloc_.alloc_vreg(dest_type);
     builder_.mov(amount, amount1);
 
-    auto dest_vreg = alloc_vreg(n.val(), dest_type);;
+    auto dest_vreg = vreg_alloc_.alloc_vreg(n.val(), dest_type);;
 
     switch (n.op()) {
     case shift_op::lsl:
@@ -1447,7 +1442,7 @@ static inline std::size_t total_width(const std::vector<register_operand> &vec) 
 
 void arm64_translation_context::materialise_bit_extract(const bit_extract_node &n) {
     const auto &src_vregs = materialise_port(n.source_value());
-    auto &dest_vregs = alloc_vregs(n.val());
+    auto &dest_vregs = vreg_alloc_.alloc_vregs(n.val());
 
     // Sanity check
     if (dest_vregs.size() > src_vregs.size())
@@ -1481,7 +1476,7 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
 void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n) {
     auto &bits_vregs = materialise_port(n.bits());
     const auto &src_vregs  = materialise_port(n.source_value());
-    const auto &dest_vregs = alloc_vregs(n.val());
+    const auto &dest_vregs = vreg_alloc_.alloc_vregs(n.val());
 
     // Sanity check
     if (dest_vregs.size() != src_vregs.size())
@@ -1521,40 +1516,40 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
 }
 
 void arm64_translation_context::materialise_vector_insert(const vector_insert_node &n) {
-    const auto &dest_vregs = alloc_vregs(n.val()) ;
+    const auto &dest_vregs = vreg_alloc_.alloc_vregs(n.val()) ;
     const auto &src_vregs = materialise_port(n.source_vector());
     const auto &value_vregs = materialise_port(n.insert_value());
 
     if (dest_vregs.size() < src_vregs.size())
         throw backend_exception("Destination vector for vector insert is smaller than source vector");
 
-    size_t index = (n.index() * n.insert_value().type().element_width()) / base_type().element_width();
+    std::size_t index = (n.index() * n.insert_value().type().element_width()) / base_type().element_width();
     if (index + value_vregs.size() > dest_vregs.size())
         throw backend_exception("Cannot insert at index {} in destination vector", index);
 
     builder_.insert_comment("Insert vector by first copying source to destination");
-    for (size_t i = 0; i < src_vregs.size(); ++i)
+    for (std::size_t i = 0; i < src_vregs.size(); ++i)
         builder_.mov(dest_vregs[i], src_vregs[i]);
 
     builder_.insert_comment("Insert value into destination");
-    for (size_t i = 0; i < value_vregs.size(); ++i) {
+    for (std::size_t i = 0; i < value_vregs.size(); ++i) {
         const auto &value_vreg = cast(value_vregs[i], dest_vregs[index + i].type());
         builder_.mov(dest_vregs[index + i], value_vreg);
     }
 }
 
 void arm64_translation_context::materialise_vector_extract(const vector_extract_node &n) {
-    const auto &dest_vregs = alloc_vregs(n.val()) ;
+    const auto &dest_vregs = vreg_alloc_.alloc_vregs(n.val()) ;
     const auto &src_vregs = materialise_port(n.source_vector());
 
-    size_t index = (n.index() * n.source_vector().type().element_width()) / base_type().element_width();
+    std::size_t index = (n.index() * n.source_vector().type().element_width()) / base_type().element_width();
     if (dest_vregs.size() >= src_vregs.size())
         throw backend_exception("Cannot extract vector larger than source vector");
     if (index + dest_vregs.size() > src_vregs.size())
         throw backend_exception("Cannot extract from index {} in source vector", index);
 
     builder_.insert_comment("Extract vector by copying to destination");
-    for (size_t i = 0; i < dest_vregs.size(); ++i) {
+    for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
         const auto &src_vreg = cast(src_vregs[index+i], dest_vregs[i].type());
         builder_.mov(dest_vregs[i], src_vreg);
     }
@@ -1575,21 +1570,21 @@ void arm64_translation_context::materialise_internal_call(const internal_call_no
 }
 
 void arm64_translation_context::materialise_read_local(const read_local_node &n) {
-    const auto &dest_vregs = alloc_vregs(n.val());
+    const auto &dest_vregs = vreg_alloc_.alloc_vregs(n.val());
     const auto &locals = locals_[n.local()];
 
     if (locals.size() != dest_vregs.size())
         throw backend_exception("Read local received mismatched types");
 
     builder_.insert_comment("Read local variable");
-    for (size_t i = 0; i < dest_vregs.size(); ++i)
+    for (std::size_t i = 0; i < dest_vregs.size(); ++i)
         builder_.mov(dest_vregs[i], locals[i]);
 }
 
 void arm64_translation_context::materialise_write_local(const write_local_node &n) {
-    const auto &write_vregs = vregs_for_port(n.write_value());
+    const auto &write_vregs = vreg_alloc_.vregs_for_port(n.write_value());
     if (locals_.count(n.local()) == 0) {
-        const auto &dest_vregs = alloc_vregs(n.val());
+        const auto &dest_vregs = vreg_alloc_.alloc_vregs(n.val());
         locals_[n.local()] = dest_vregs;
     }
 
@@ -1598,7 +1593,7 @@ void arm64_translation_context::materialise_write_local(const write_local_node &
         throw backend_exception("Write local received mismatched types");
 
     builder_.insert_comment("Write local variable");
-    for (size_t i = 0; i < dest_vregs.size(); ++i)
+    for (std::size_t i = 0; i < dest_vregs.size(); ++i)
         builder_.mov(dest_vregs[i], dest_vregs[i]);
 }
 

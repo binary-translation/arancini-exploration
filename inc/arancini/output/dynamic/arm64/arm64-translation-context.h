@@ -10,37 +10,12 @@
 #include <arancini/output/dynamic/translation-context.h>
 
 #include <unordered_map>
+#include <unordered_set>
 
 namespace arancini::output::dynamic::arm64 {
 
-class arm64_translation_context : public translation_context {
+class virtual_register_allocator {
 public:
-	arm64_translation_context(machine_code_writer &writer)
-		: translation_context(writer)
-	{
-	}
-
-	virtual void begin_block() override;
-	virtual void begin_instruction(off_t address, const std::string &disasm) override;
-	virtual void end_instruction() override;
-	virtual void end_block() override;
-	virtual void lower(const std::shared_ptr<ir::action_node> &n) override;
-
-    virtual ~arm64_translation_context() { }
-private:
-	instruction_builder builder_;
-    std::vector<ir::node *> nodes_;
-	std::set<const ir::node *> materialised_nodes_;
-	std::unordered_map<const ir::port *, std::vector<register_operand>> port_to_vreg_;
-	std::unordered_map<unsigned long, off_t> instruction_index_to_guest_;
-    std::unordered_map<const ir::local_var *, std::vector<register_operand>> locals_;
-    int ret_;
-	int next_vreg_ = 33; // TODO: formalize this
-	off_t this_pc_;
-    size_t instr_cnt_ = 0;
-
-    std::string current_instruction_disasm_;
-
 	register_operand alloc_vreg(ir::value_type type) {
         return register_operand(next_vreg_++, type);
     }
@@ -59,8 +34,44 @@ private:
 
     std::vector<register_operand> &vregs_for_port(const ir::port &p) { return port_to_vreg_[&p]; }
 
-    std::vector<register_operand> &materialise_port(ir::port &p);
+    void reset() { next_vreg_ = 33; port_to_vreg_.clear(); }
+private:
+    std::size_t next_vreg_ = 33; // TODO: formalize this
+	std::unordered_map<const ir::port *, std::vector<register_operand>> port_to_vreg_;
+};
 
+class arm64_translation_context : public translation_context {
+public:
+	arm64_translation_context(machine_code_writer &writer)
+		: translation_context(writer)
+	{ }
+
+	virtual void begin_block() override;
+	virtual void begin_instruction(off_t address, const std::string &disasm) override;
+	virtual void end_instruction() override;
+	virtual void end_block() override;
+	virtual void lower(const std::shared_ptr<ir::action_node> &n) override;
+
+    void reset_context();
+
+    virtual ~arm64_translation_context() { }
+private:
+	instruction_builder builder_;
+    std::vector<ir::node *> nodes_;
+	std::unordered_set<const ir::node *> materialised_nodes_;
+	std::unordered_map<unsigned long, off_t> instruction_index_to_guest_;
+    std::unordered_map<const ir::local_var *, std::vector<register_operand>> locals_;
+
+    virtual_register_allocator vreg_alloc_;
+
+    int ret_;
+	off_t this_pc_;
+    std::size_t instr_cnt_ = 0;
+
+    // TODO: this should be included only when debugging is enabled
+    std::string current_instruction_disasm_;
+
+    std::vector<register_operand> &materialise_port(ir::port &p);
 
     memory_operand guestreg_memory_operand(int regoff,
                                            memory_operand::address_mode mode = memory_operand::address_mode::direct);
