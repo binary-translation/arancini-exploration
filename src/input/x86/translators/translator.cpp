@@ -339,6 +339,8 @@ value_node *translator::read_operand(int opnum)
 			return builder_.insert_read_mem(value_type::u32(), addr->val());
 		case 8:
 			return builder_.insert_read_mem(value_type::u64(), addr->val());
+		case 10:
+			return builder_.insert_read_mem(value_type::f80(), addr->val());
 		case 16:
 			return builder_.insert_read_mem(value_type::u128(), addr->val());
 
@@ -473,16 +475,19 @@ value_node *translator::compute_fpu_stack_addr(int stack_idx)
 
   // Get the TOP of the stack and multiply by 10 to get the proper offset (an FPU stack register is 10-bytes wide)
 	auto top = builder_.insert_zx(value_type::u64(), builder_.insert_bit_extract(x87_status->val(), 11, 3)->val());
+
+  // If accessing ST(i) with i > 0, add the offset of the index to the address
+	if (stack_idx) {
+		auto idx_offset = builder_.insert_constant_u64(stack_idx);
+		top = builder_.insert_add(top->val(), idx_offset->val());
+		top = builder_.insert_mod(top->val(), builder_.insert_constant_u64(8)->val());
+
+	}
 	top = builder_.insert_mul(top->val(), cst_10->val());
 
   // Add the TOP offset to the base address of the stack
   auto addr = builder_.insert_add(x87_stack_base->val(), top->val());
 
-  // If accessing ST(i) with i > 0, add the offset of the index to the address
-	if (stack_idx) {
-		auto idx_offset = builder_.insert_constant_u64(stack_idx * 10);
-    addr = builder_.insert_add(addr->val(), idx_offset->val());
-  }
 
   return addr;
 }

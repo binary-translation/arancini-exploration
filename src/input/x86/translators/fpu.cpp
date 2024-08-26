@@ -30,7 +30,8 @@ void fpu_translator::do_translate()
   }
 
   case XED_ICLASS_FLD: {
-    auto val = read_operand(0);
+    auto dst = read_operand(0); // always st(0)
+	auto val = read_operand(1);
 
     if (val->val().type().width() != 80) {
       val = builder().insert_convert(value_type::f80(), val->val());
