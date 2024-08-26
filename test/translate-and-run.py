@@ -1,9 +1,11 @@
 #! /bin/python3
 
 import os
+import sys
 import json
 import shutil
 import pprint
+import filecmp
 import difflib
 import logging
 import argparse
@@ -58,6 +60,8 @@ class Tester:
         self.config = {
             'compile_flags': [],
             'compile_environment': env, # default environment same as tester's
+            'compile_artifacts': [],
+            'compile_artifact_reference': {},
             'runtime_flags': [],
             'runtime_environment': env, # default environment same as tester's
             'expected_stdout': None,
@@ -88,6 +92,21 @@ class Tester:
 
         translated = self.compile()
         self.config["produced_artifacts"].append(translated)
+
+        # TODO: generalize this to check artifacts for runtime execution too
+        for artifact in self.config['compile_artifacts']:
+            # Check artifact exists
+            if not os.path.exists(artifact):
+                raise ValueError(f"Artifact {artifact} not produced after compilation")
+
+            # Check if artifact matches reference
+            if artifact in self.config['compile_artifact_reference'].keys():
+                reference = self.config['compile_artifact_reference'][artifact]
+                if not filecmp.cmp(artifact, reference, shallow=False):
+                    output_bytes = open(artifact, 'r').read()
+                    reference_bytes = open(reference, 'r').read()
+                    logger.error(f"Artifact {artifact} does not match reference {reference}, \
+                                 diff:\n{unified_diff(reference_bytes, output_bytes)}\n")
 
         logger.info("Translation successful")
 
@@ -133,7 +152,9 @@ class Tester:
         proc = subprocess.run(execute_command, env=self.config['runtime_environment'],
                               capture_output=capture_output, text=True, shell=shell, errors="ignore")
 
-        if proc.returncode != self.config["expected_status"]:
+        expected_returncode = self.config["expected_status"]
+        if proc.returncode != expected_returncode:
+            logger.error(f"Exit code {proc.returncode} different from expected exit code {expected_returncode}")
             raise ExecutionError(execute_command, proc.stdout, proc.stderr)
 
         logger.info("Completed execution successfully")
@@ -244,6 +265,9 @@ if __name__ == "__main__":
         tester = Tester(args.txlat, args.input, args.config)
         tester.run()
     except ExecutionError as e:
+        # Disable traceback
+        sys.tracebacklimit=0
+
         logging.exception(f"Test failed: {str(e)}")
         logging.error(f"Contents of STDOUT:\n{e.stdout}")
         logging.error(f"Contents of STDERR:\n{e.stderr}")
