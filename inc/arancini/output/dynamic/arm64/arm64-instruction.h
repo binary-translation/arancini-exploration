@@ -273,8 +273,7 @@ struct operand {
     template <typename T>
     operand(const T &o)
           : op_(o)
-    {
-    }
+    { }
 
     operand_type type() const {
         return static_cast<operand_type>(op_.index());
