@@ -383,9 +383,9 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 	size_t offset = 0;
 	std::string disasm;
-	
+
 	translation_result r;
-	
+
 	while (offset < code_size) {
 		xed_decoded_inst_t xedd;
 		xed_decoded_inst_zero(&xedd);
@@ -394,12 +394,8 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 		xed_error_enum_t xed_error = xed_decode(&xedd, &mc[offset], code_size - offset);
 		if (xed_error != XED_ERROR_NONE) {
-			std::stringstream stream;
-			stream << std::hex << base_address + offset;
-			std::string s = stream.str();
-			throw std::runtime_error("unable to decode instruction: " +
-									 std::to_string(xed_error) +
-									 " inst: " + s);
+			throw std::runtime_error(fmt::format("unable to decode instruction: {} instruction: {}",
+                                                 std::to_string(xed_error), base_address + offset));
 		}
 
 		xed_uint_t length = xed_decoded_inst_get_length(&xedd);

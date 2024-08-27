@@ -2,9 +2,7 @@
 
 #include <fmt/core.h>
 
-#include <string>
 #include <vector>
-#include <sstream>
 
 namespace arancini::ir {
 enum class value_type_class { none, signed_integer, unsigned_integer, floating_point };
@@ -29,34 +27,47 @@ public:
 	static value_type f64() { return value_type(value_type_class::floating_point, 64, 1); }
     static value_type f80() { return value_type(value_type_class::floating_point, 80, 1); } // x87 double extended-precision
 
-	static value_type vector(const value_type &underlying_type, int nr_elements)
-	{
+    using size_type = std::size_t;
+
+	static value_type vector(const value_type &underlying_type, size_type nr_elements) {
 		return value_type(underlying_type.tc_, underlying_type.element_width_, nr_elements);
 	}
 
     value_type() = default;
 
-	value_type(value_type_class tc, int element_width, int nr_elements = 1)
+	value_type(value_type_class tc, size_type element_width, size_type nr_elements = 1)
 		: tc_(tc)
 		, element_width_(element_width)
 		, nr_elements_(nr_elements)
 	{
 	}
 
-	int element_width() const { return element_width_; }
+    [[nodiscard]]
+	size_type element_width() const { return element_width_; }
+
+    [[nodiscard]]
 	value_type_class type_class() const { return tc_; }
-	int nr_elements() const { return nr_elements_; }
+
+    [[nodiscard]]
+	size_type nr_elements() const { return nr_elements_; }
+
+    [[nodiscard]]
 	bool is_vector() const { return nr_elements_ > 1; }
-	int width() const { return element_width_ * nr_elements_; }
+
+    [[nodiscard]]
+	size_type width() const { return element_width_ * nr_elements_; }
+
+    [[nodiscard]]
 	bool is_floating_point() const { return tc_ == value_type_class::floating_point; }
+
+    [[nodiscard]]
 	bool is_integer() const { return tc_ == value_type_class::signed_integer || tc_ == value_type_class::unsigned_integer; }
 
+    [[nodiscard]]
 	value_type element_type() const { return value_type(tc_, element_width_, 1); }
 
-	bool equivalent_to(const value_type &o) const { return element_width_ == o.element_width_ && tc_ == o.tc_ && nr_elements_ == o.nr_elements_; }
-
-	value_type get_opposite_signedness() const
-	{
+    [[nodiscard]]
+	value_type get_opposite_signedness() const {
 		value_type_class dst_class;
 
 		if (tc_ == value_type_class::signed_integer)
@@ -69,24 +80,37 @@ public:
 		return value_type(dst_class, element_width_, nr_elements_);
 	}
 
-	value_type get_signed_type() const
-	{
+    [[nodiscard]]
+	value_type get_signed_type() const {
 		if (tc_ == value_type_class::signed_integer || tc_ == value_type_class::unsigned_integer)
 			return value_type(value_type_class::signed_integer, element_width_, nr_elements_);
 		throw std::logic_error(fmt::format("{}:{}: Initial type must be an integer", __FILE__, __LINE__));
 	}
 
-	value_type get_unsigned_type() const
-	{
+    [[nodiscard]]
+	value_type get_unsigned_type() const {
 		if (tc_ == value_type_class::signed_integer || tc_ == value_type_class::unsigned_integer)
 			return value_type(value_type_class::unsigned_integer, element_width_, nr_elements_);
 		throw std::logic_error(fmt::format("{}:{}: Initial type must be an integer", __FILE__, __LINE__));
 	}
 private:
 	value_type_class tc_;
-	int element_width_;
-	int nr_elements_;
+	size_type element_width_;
+	size_type nr_elements_;
 };
+
+// Comparison operator for value type
+[[nodiscard]]
+inline bool operator==(const value_type &v1, const value_type &v2) {
+    return v1.element_width() == v2.element_width() &&
+           v1.type_class()    == v2.type_class() &&
+           v1.nr_elements()   == v2.nr_elements();
+}
+
+[[nodiscard]]
+inline bool operator!=(const value_type &v1, const value_type &v2) {
+    return !(v1 == v2);
+}
 
 class function_type {
 public:

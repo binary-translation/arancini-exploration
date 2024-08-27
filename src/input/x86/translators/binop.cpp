@@ -472,7 +472,7 @@ void binop_translator::do_translate()
 		break;
 	}
 	case XED_ICLASS_CMPSD_XMM:
-	case XED_ICLASS_CMPSS: {	
+	case XED_ICLASS_CMPSS: {
 		auto dest = read_operand(0);
 		auto op0 = read_operand(0);
 		auto op1 = read_operand(1);
@@ -494,6 +494,8 @@ void binop_translator::do_translate()
 				false_val = builder().insert_constant_f64((float)0x000000000000000);
 				VecTy = value_type::vector(value_type::f64(), 2);
 			} break;
+            default:
+                throw std::logic_error("Unhandled XED instruction class");
 		}
 
 		auto mask = builder().insert_constant_u8(3);
@@ -614,7 +616,7 @@ void binop_translator::do_translate()
 	auto src1_nn1 = builder().insert_label("src1_not_nan");
 	next->add_br_target(src1_nn);
 	src1_not_nan->add_br_target(src1_nn1);
-	
+
 	value_node *src0_lt_src1;
 	if (inst_class == XED_ICLASS_MINSD | inst_class == XED_ICLASS_MINSS)
 		src0_lt_src1 = builder().insert_cmpgt(src1->val(), src0->val());
@@ -622,7 +624,7 @@ void binop_translator::do_translate()
 		src0_lt_src1 = builder().insert_cmpgt(src0->val(), src1->val());
 	auto src0_is_min = (cond_br_node *)builder().insert_cond_br(src0_lt_src1->val(), nullptr);
 	next = (br_node *)builder().insert_br(nullptr);
-	
+
 	auto src1_out = builder().insert_label("src1_out");
 	auto src1_out1 = builder().insert_label("src1_out");
 	auto src1_out2 = builder().insert_label("src1_out");

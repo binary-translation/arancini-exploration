@@ -234,7 +234,7 @@ void arm64_translation_context::materialise(const ir::node* n) {
     if (materialised_nodes_.count(n))
         return;
 
-    logger.debug("Handling {}\n", n->to_string());
+    logger.debug("Handling {}\n", n->kind());
     switch (n->kind()) {
     case node_kinds::read_reg:
         materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));
@@ -312,7 +312,7 @@ void arm64_translation_context::materialise(const ir::node* n) {
         materialise_write_local(*reinterpret_cast<const write_local_node*>(n));
         break;
     default:
-        throw backend_exception("Unknown node encountered: {}", n->to_string());
+        throw backend_exception("Unknown node encountered with index {}", util::to_underlying(n->kind()));
     }
 
     materialised_nodes_.insert(n);
@@ -1103,6 +1103,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
     const auto &src_vreg = src_vregs[0];
     const auto &dest_vreg = dest_vregs[0];
 
+    logger.debug("Materializing cast operation: {}", n.op());
 	switch (n.op()) {
 	case cast_op::sx:
         // Sanity check
@@ -1343,8 +1344,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         }
         break;
 	default:
-        // TODO: shouldn't use to_string here
-		throw backend_exception("unsupported cast operation: {}", to_string(n.op()));
+		throw backend_exception("unsupported cast operation with index {}", util::to_underlying(n.op()));
 	}
 }
 
@@ -1419,8 +1419,8 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
     auto extract_start = n.from() / src_total_width;
 
     // TODO: we shouldn't be using ints here
-    int extracted = 0;
-    int extract_idx = n.from() % src_vregs[0].type().element_width();
+    std::size_t extracted = 0;
+    std::size_t extract_idx = n.from() % src_vregs[0].type().element_width();
     auto extract_len = std::min(src_vregs[0].type().element_width() - extract_idx, n.length() - extracted);
 
     std::size_t dest_idx = 0;

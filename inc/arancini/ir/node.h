@@ -6,11 +6,12 @@
 
 #include <fmt/core.h>
 
-#include <map>
 #include <memory>
 #include <vector>
+#include <unordered_map>
 
 namespace arancini::ir {
+
 enum class node_kinds {
 	label = 0,
 	read_pc,
@@ -42,26 +43,37 @@ enum class node_kinds {
 
 enum br_type { none,sys , br, csel, call, ret };
 
+class ir_exception : public std::runtime_error {
+public:
+    template <typename... Args>
+    ir_exception(std::string_view format, Args&&... args):
+        std::runtime_error(fmt::format(format, std::forward<Args>(args)...))
+    { }
+};
+
 class node {
 public:
 	node(node_kinds kind)
 		: kind_(kind)
-	{
-	}
+	{ }
 
+    [[nodiscard]]
 	node_kinds kind() const { return kind_; }
 
+    [[nodiscard]]
 	virtual bool is_action() const { return false; }
 
 	virtual void accept(visitor &v) { v.visit_node(*this); }
-
 #ifndef NDEBUG
-	void set_metadata(const std::string &key, std::shared_ptr<metadata> value) { md_[key] = value; }
+	void set_metadata(const std::string &key, std::shared_ptr<metadata> value) {
+        md_[key] = value;
+    }
 
+    [[nodiscard]]
 	std::shared_ptr<metadata> get_metadata(const std::string &key) const { return md_.at(key); }
 
-	std::vector<std::pair<std::string, std::shared_ptr<metadata>>> get_metadata_of_kind(metadata_kind kind) const
-	{
+    [[nodiscard]]
+	std::vector<std::pair<std::string, std::shared_ptr<metadata>>> get_metadata_of_kind(metadata_kind kind) const {
 		std::vector<std::pair<std::string, std::shared_ptr<metadata>>> r;
 
 		for (auto &n : md_) {
@@ -73,8 +85,8 @@ public:
 		return r;
 	}
 
-	std::shared_ptr<metadata> try_get_metadata(const std::string &key) const
-	{
+    [[nodiscard]]
+	std::shared_ptr<metadata> try_get_metadata(const std::string &key) const {
 		auto m = md_.find(key);
 
 		if (m == md_.end()) {
@@ -84,73 +96,15 @@ public:
 		}
 	}
 
+    [[nodiscard]]
 	bool has_metadata(const std::string &key) const { return md_.count(key) > 0; }
 #endif
 
 	virtual ~node() = default;
-
-    const char *to_string() const {
-        switch (kind()) {
-        case node_kinds::label:
-            return "label node";
-        case node_kinds::read_pc:
-            return "read PC node";
-        case node_kinds::write_pc:
-            return "write PC node";
-        case node_kinds::constant:
-            return "constant node";
-        case node_kinds::unary_arith:
-            return "unary arithmetic node";
-        case node_kinds::binary_arith:
-            return "binary arithmetic node";
-        case node_kinds::ternary_arith:
-            return "ternary arithmetic node";
-        case node_kinds::unary_atomic:
-            return "unary atomic node";
-        case node_kinds::binary_atomic:
-            return "binary atomic node";
-        case node_kinds::ternary_atomic:
-            return "ternary atomic node";
-        case node_kinds::read_reg:
-            return "read register node";
-        case node_kinds::read_mem:
-            return "read memory node";
-        case node_kinds::write_reg:
-            return "write memory node";
-        case node_kinds::write_mem:
-            return "write memory node";
-        case node_kinds::cast:
-            return "cast node";
-        case node_kinds::csel:
-            return "conditional select node";
-        case node_kinds::bit_shift:
-            return "bit shift node";
-        case node_kinds::br:
-            return "branch node";
-        case node_kinds::cond_br:
-            return "conditional branch node";
-        case node_kinds::bit_extract:
-            return "bit extract node";
-        case node_kinds::bit_insert:
-            return "bit insert node";
-        case node_kinds::vector_extract:
-            return "vector extract node";
-        case node_kinds::vector_insert:
-            return "vector insert node";
-        case node_kinds::read_local:
-            return "read local node";
-        case node_kinds::write_local:
-            return "write local node";
-        case node_kinds::internal_call:
-            return "internal call node";
-        default:
-            return "Unknown node";
-        }
-    }
 private:
 	node_kinds kind_;
 #ifndef NDEBUG
-	std::map<std::string, std::shared_ptr<metadata>> md_;
+	std::unordered_map<std::string, std::shared_ptr<metadata>> md_;
 #endif
 };
 
@@ -163,15 +117,16 @@ public:
 	{
 	}
 
+    [[nodiscard]]
 	port &val() { return value_; }
+
+    [[nodiscard]]
 	const port &val() const { return value_; }
 
-	virtual void accept(visitor &v) override
-	{
+	virtual void accept(visitor &v) override {
 		node::accept(v);
 		v.visit_value_node(*this);
 	}
-
 protected:
 	port value_;
 };
@@ -180,20 +135,19 @@ class action_node : public value_node {
 public:
 	action_node(node_kinds kind)
 		: value_node(kind, value_type(value_type_class::none, 0, 0))
-	{
-	}
+	{ }
 
 	action_node(node_kinds kind, const value_type &vt)
 		: value_node(kind, vt)
-	{
-	}
+	{ }
 
+    [[nodiscard]]
 	virtual bool is_action() const override { return true; }
 
+    [[nodiscard]]
 	virtual br_type updates_pc() const { return br_type::none; }
 
-	virtual void accept(visitor &v) override
-	{
+	virtual void accept(visitor &v) override {
 		if (v.seen_node(this))
 			return;
 		node::accept(v);
@@ -206,33 +160,31 @@ public:
 	label_node(std::string name)
 		: action_node(node_kinds::label)
 		, name_(name)
-	{
-	}
+	{ }
 
+    // TODO: this looks like a mistake
 	label_node()
 		: label_node("")
-	{
-	}
+	{ }
 
+    [[nodiscard]]
 	const std::string& name() const { return name_; }
 
-	virtual void accept(visitor &v) override
-	{
+	virtual void accept(visitor &v) override {
 		action_node::accept(v);
 		v.visit_label_node(*this);
 	}
 
-	void add_use()
-	{
+	void add_use() {
 		if (used_) {
-			throw std::runtime_error("Label node used by multiple jumps");
+			throw ir_exception("Label node (name: {}) used by multiple jumps", name_);
 		}
 		used_ = true;
 	}
-
-	std::string name_;
 private:
 	bool used_{false};
+
+	std::string name_;
 };
 
 class br_node : public action_node {
@@ -246,21 +198,21 @@ public:
 		}
 	}
 
+    [[nodiscard]]
+	label_node *target() { return target_; }
 
-	label_node *target() const { return target_; }
+    [[nodiscard]]
+	const label_node *target() const { return target_; }
 
-	void add_br_target(label_node *n)
-	{
+	void add_br_target(label_node *n) {
 		target_ = n;
 		n->add_use();
 	}
 
-	virtual void accept(visitor &v) override
-	{
+	virtual void accept(visitor &v) override {
 		action_node::accept(v);
 		v.visit_br_node(*this);
 	}
-
 private:
 	label_node *target_;
 };
@@ -278,22 +230,28 @@ public:
 		}
 	}
 
-	port &cond() const { return cond_; }
-	label_node *target() const { return target_; }
+    [[nodiscard]]
+	port &cond() { return cond_; }
 
-	void add_br_target(label_node *n)
-	{
+    [[nodiscard]]
+	const port &cond() const { return cond_; }
+
+    [[nodiscard]]
+	label_node *target() { return target_; }
+
+    [[nodiscard]]
+	const label_node *target() const { return target_; }
+
+	void add_br_target(label_node *n) {
 		target_ = n;
 		n->add_use();
 
 	}
 
-	virtual void accept(visitor &v) override
-	{
+	virtual void accept(visitor &v) override {
 		action_node::accept(v);
 		v.visit_cond_br_node(*this);
 	}
-
 private:
 	port &cond_;
 	label_node *target_;
@@ -303,11 +261,9 @@ class read_pc_node : public value_node {
 public:
 	read_pc_node()
 		: value_node(node_kinds::read_pc, value_type::u64())
-	{
-	}
+	{ }
 
-	virtual void accept(visitor &v) override
-	{
+	virtual void accept(visitor &v) override {
 		value_node::accept(v);
 		v.visit_read_pc_node(*this);
 	}
@@ -324,17 +280,22 @@ public:
 		value.add_target(this);
 	}
 
-	port &value() const { return value_; }
+    [[nodiscard]]
+	port &value() { return value_; }
 
+    [[nodiscard]]
+	const port &value() const { return value_; }
+
+    [[nodiscard]]
 	virtual br_type updates_pc() const override { return br_type_; }
 
-	virtual void accept(visitor &v) override
-	{
+	virtual void accept(visitor &v) override {
 		action_node::accept(v);
 		v.visit_write_pc_node(*this);
 	}
 
-	unsigned long const_target() { return target_; };
+    [[nodiscard]]
+	unsigned long const_target() const { return target_; };
 private:
 	port &value_;
 	br_type br_type_;
@@ -348,7 +309,8 @@ public:
 		, cvi_(cv)
 	{
 		if (vt.type_class() != value_type_class::signed_integer && vt.type_class() != value_type_class::unsigned_integer) {
-			throw std::runtime_error("constructing a constant node with an integer for a non-integer value type");
+			throw ir_exception("constructing a constant node with an integer (value: {}) for a non-integer value type {}",
+                               cv, vt);
 		}
 	}
 
@@ -357,21 +319,24 @@ public:
 		, cvf_(cv)
 	{
 		if (vt.type_class() != value_type_class::floating_point) {
-			throw std::runtime_error("constructing a constant node with a float for a non-float value type");
+			throw ir_exception("constructing a constant node with a float {} for a non-float value type {}",
+                               cv, vt);
 		}
 	}
 
+    [[nodiscard]]
 	unsigned long const_val_i() const { return cvi_; }
+
+    [[nodiscard]]
 	double const_val_f() const { return cvf_; }
 
+    [[nodiscard]]
 	bool is_zero() const { return val().type().is_floating_point() ? cvf_ == 0 : cvi_ == 0; }
 
-	virtual void accept(visitor &v) override
-	{
+	virtual void accept(visitor &v) override {
 		value_node::accept(v);
 		v.visit_constant_node(*this);
 	}
-
 private:
 	union {
 		unsigned long cvi_;
@@ -389,16 +354,19 @@ public:
 	{
 	}
 
+    [[nodiscard]]
 	unsigned long regoff() const { return regoff_; }
+
+    [[nodiscard]]
 	unsigned long regidx() const { return regidx_; }
+
+    [[nodiscard]]
 	const char *regname() const { return regname_; }
 
-	virtual void accept(visitor &v) override
-	{
+	virtual void accept(visitor &v) override {
 		value_node::accept(v);
 		v.visit_read_reg_node(*this);
 	}
-
 private:
 	unsigned long regoff_;
 	unsigned long regidx_;
@@ -414,14 +382,16 @@ public:
 		addr.add_target(this);
 	}
 
-	port &address() const { return addr_; }
+    [[nodiscard]]
+	port &address() { return addr_; }
 
-	virtual void accept(visitor &v) override
-	{
+    [[nodiscard]]
+	const port &address() const { return addr_; }
+
+	virtual void accept(visitor &v) override {
 		value_node::accept(v);
 		v.visit_read_mem_node(*this);
 	}
-
 private:
 	port &addr_;
 };
@@ -438,17 +408,25 @@ public:
 		val.add_target(this);
 	}
 
+    [[nodiscard]]
 	unsigned long regoff() const { return regoff_; }
-	unsigned long regidx() const { return regidx_; }
-	const char *regname() const { return regname_; }
-	port &value() const { return val_; }
 
-	virtual void accept(visitor &v) override
-	{
+    [[nodiscard]]
+	unsigned long regidx() const { return regidx_; }
+
+    [[nodiscard]]
+	const char *regname() const { return regname_; }
+
+    [[nodiscard]]
+	port &value() { return val_; }
+
+    [[nodiscard]]
+	const port &value() const { return val_; }
+
+	virtual void accept(visitor &v) override {
 		action_node::accept(v);
 		v.visit_write_reg_node(*this);
 	}
-
 private:
 	unsigned long regoff_;
 	unsigned long regidx_;
@@ -467,15 +445,22 @@ public:
 		val.add_target(this);
 	}
 
-	port &address() const { return addr_; }
-	port &value() const { return val_; }
+    [[nodiscard]]
+	port &address() { return addr_; }
 
-	virtual void accept(visitor &v) override
-	{
+    [[nodiscard]]
+	const port &address() const { return addr_; }
+
+    [[nodiscard]]
+	port &value() { return val_; }
+
+    [[nodiscard]]
+	const port &value() const { return val_; }
+
+	virtual void accept(visitor &v) override {
 		action_node::accept(v);
 		v.visit_write_mem_node(*this);
 	}
-
 private:
 	port &addr_;
 	port &val_;
@@ -494,16 +479,28 @@ public:
 		falseval.add_target(this);
 	}
 
-	port &condition() const { return condition_; }
-	port &trueval() const { return trueval_; }
-	port &falseval() const { return falseval_; }
+    [[nodiscard]]
+	port &condition() { return condition_; }
 
-	virtual void accept(visitor &v) override
-	{
+    [[nodiscard]]
+	const port &condition() const { return condition_; }
+
+    [[nodiscard]]
+	port &trueval() { return trueval_; }
+
+    [[nodiscard]]
+	const port &trueval() const { return trueval_; }
+
+    [[nodiscard]]
+	port &falseval() { return falseval_; }
+
+    [[nodiscard]]
+	const port &falseval() const { return falseval_; }
+
+	virtual void accept(visitor &v) override {
 		value_node::accept(v);
 		v.visit_csel_node(*this);
 	}
-
 private:
 	port &condition_;
 	port &trueval_;
@@ -526,23 +523,37 @@ public:
 		amount.add_target(this);
 	}
 
+    [[nodiscard]]
 	shift_op op() const { return op_; }
 
-	port &input() const { return input_; }
-	port &amount() const { return amount_; }
+    [[nodiscard]]
+	port &input() { return input_; }
 
+    [[nodiscard]]
+	const port &input() const { return input_; }
+
+    [[nodiscard]]
+	port &amount() { return amount_; }
+
+    [[nodiscard]]
+	const port &amount() const { return amount_; }
+
+    [[nodiscard]]
 	port &zero() { return zero_; }
+
+    [[nodiscard]]
+	const port &zero() const { return zero_; }
+
+    [[nodiscard]]
 	port &negative() { return negative_; }
 
-	[[nodiscard]] const port &zero() const { return zero_; }
-	[[nodiscard]] const port &negative() const { return negative_; }
+    [[nodiscard]]
+	const port &negative() const { return negative_; }
 
-	virtual void accept(visitor &v) override
-	{
+	virtual void accept(visitor &v) override {
 		value_node::accept(v);
 		v.visit_bit_shift_node(*this);
 	}
-
 private:
 	shift_op op_;
 	port &input_;
@@ -552,23 +563,6 @@ private:
 
 enum class cast_op : uint8_t { bitcast, zx, sx, trunc, convert };
 enum class fp_convert_type : uint8_t { none, round, trunc };
-
-inline std::string to_string(cast_op op) {
-    switch (op) {
-    case cast_op::bitcast:
-        return "bitcast";
-    case cast_op::zx:
-        return "zero-extend";
-    case cast_op::sx:
-        return "sign-extend";
-    case cast_op::trunc:
-        return "truncate";
-    case cast_op::convert:
-        return "convert";
-    default:
-        return "unknown cast operation";
-    }
-}
 
 class cast_node : public value_node {
 public:
@@ -581,26 +575,31 @@ public:
 	{
 		if (op == cast_op::bitcast) {
 			if (target_type.width() != source_value.type().width()) {
-				throw std::logic_error(fmt::format("cannot bitcast between types with different sizes target={}, source={}",
-                                                   target_type, source_value.type()));
+				throw ir_exception("cannot bitcast between types with different sizes target={}, source={}",
+                                   target_type, source_value.type());
 			}
 		} else if (op == cast_op::convert) {
-			if ((target_type.type_class() != value_type_class::floating_point) && (source_value.type().type_class() != value_type_class::floating_point)) {
+			if ((target_type.type_class() != value_type_class::floating_point) &&
+                (source_value.type().type_class() != value_type_class::floating_point))
+            {
+                [[unlikely]]
 				if (target_type.type_class() == source_value.type().type_class()) {
-					throw std::logic_error(fmt::format("cannot convert between the same non-FP type classes target={}, source={}",
-                                                       target_type, source_value.type()));
+					throw ir_exception("cannot convert between the same non-FP type classes target={}, source={}",
+                                       target_type, source_value.type());
 				}
 			}
 		} else if (op != cast_op::zx) {
+            [[unlikely]]
 			if (target_type.type_class() != source_value.type().type_class()) {
-				throw std::logic_error(fmt::format("cannot cast between type classes target={}, source={}",
-                                                   target_type, source_value.type()));
+				throw ir_exception("cannot cast between type classes target={}, source={}",
+                                   target_type, source_value.type());
 			}
 		}
 
+        [[unlikely]]
 		if ((convert_type != fp_convert_type::none) && (op != cast_op::convert)) {
-			throw std::logic_error(fmt::format("convert type should be 'none' if the cast_op is not 'convert' target={}, source={}",
-                                               target_type, source_value.type()));
+			throw ir_exception("convert type should be 'none' if the cast_op is not 'convert' target={}, source={}",
+                               target_type, source_value.type());
 		}
 
 		source_value.add_target(this);
@@ -608,22 +607,30 @@ public:
 
 	cast_node(cast_op op, const value_type &target_type, port &source_value)
 		: cast_node(op, target_type, source_value, fp_convert_type::none)
-	{
-	}
+	{ }
 
+    [[nodiscard]]
 	cast_op op() const { return op_; }
+
+    [[nodiscard]]
 	fp_convert_type convert_type() const { return convert_type_; }
 
-	port &source_value() const { return source_value_; }
+    [[nodiscard]]
+	port &source_value() { return source_value_; }
+
+    [[nodiscard]]
+	const port &source_value() const { return source_value_; }
+
+    [[nodiscard]]
 	value_type &target_type() { return target_type_; }
+
+    [[nodiscard]]
 	const value_type &target_type() const { return target_type_; }
 
-	virtual void accept(visitor &v) override
-	{
+	virtual void accept(visitor &v) override {
 		value_node::accept(v);
 		v.visit_cast_node(*this);
 	}
-
 private:
 	cast_op op_;
 	value_type target_type_;
@@ -642,22 +649,34 @@ public:
 	{
 	}
 
+    [[nodiscard]]
 	port &zero() { return zero_; }
+
+    [[nodiscard]]
 	port &negative() { return negative_; }
+
+    [[nodiscard]]
 	port &overflow() { return overflow_; }
+
+    [[nodiscard]]
 	port &carry() { return carry_; }
 
+    [[nodiscard]]
 	const port &zero() const { return zero_; }
+
+    [[nodiscard]]
 	const port &negative() const { return negative_; }
+
+    [[nodiscard]]
 	const port &overflow() const { return overflow_; }
+
+    [[nodiscard]]
 	const port &carry() const { return carry_; }
 
-	virtual void accept(visitor &v) override
-	{
+	virtual void accept(visitor &v) override {
 		value_node::accept(v);
 		v.visit_arith_node(*this);
 	}
-
 private:
 	port zero_, negative_, overflow_, carry_;
 };
@@ -674,16 +693,19 @@ public:
 		lhs.add_target(this);
 	}
 
+    [[nodiscard]]
 	unary_arith_op op() const { return op_; }
 
-	port &lhs() const { return lhs_; }
+    [[nodiscard]]
+	port &lhs() { return lhs_; }
 
-	virtual void accept(visitor &v) override
-	{
+    [[nodiscard]]
+	const port &lhs() const { return lhs_; }
+
+	virtual void accept(visitor &v) override {
 		arith_node::accept(v);
 		v.visit_unary_arith_node(*this);
 	}
-
 private:
 	unary_arith_op op_;
 	port &lhs_;
@@ -707,9 +729,9 @@ public:
 		, lhs_(lhs)
 		, rhs_(rhs)
 	{
-		if (!lhs.type().equivalent_to(rhs.type())) {
-			throw std::logic_error(fmt::format("incompatible types in binary arith node: lhs={}, rhs={}",
-                                                lhs.type(), rhs.type()));
+		if (lhs.type() != rhs.type()) {
+			throw ir_exception("incompatible types in binary arith node: lhs={}, rhs={}",
+                               lhs.type(), rhs.type());
 		}
 
 		op_ = op;
@@ -720,17 +742,25 @@ public:
 		rhs.add_target(this);
 	}
 
+    [[nodiscard]]
 	binary_arith_op op() const { return op_; }
 
-	port &lhs() const { return lhs_; }
-	port &rhs() const { return rhs_; }
+    [[nodiscard]]
+	port &lhs() { return lhs_; }
 
-	virtual void accept(visitor &v) override
-	{
+    [[nodiscard]]
+	const port &lhs() const { return lhs_; }
+
+    [[nodiscard]]
+	port &rhs() { return rhs_; }
+
+    [[nodiscard]]
+	const port &rhs() const { return rhs_; }
+
+	virtual void accept(visitor &v) override {
 		arith_node::accept(v);
 		v.visit_binary_arith_node(*this);
 	}
-
 private:
 	binary_arith_op op_;
 	port &lhs_;
@@ -755,16 +785,28 @@ public:
 
 	ternary_arith_op op() const { return op_; }
 
-	port &lhs() const { return lhs_; }
-	port &rhs() const { return rhs_; }
-	port &top() const { return top_; }
+    [[nodiscard]]
+	port &lhs() { return lhs_; }
 
-	virtual void accept(visitor &v) override
-	{
+    [[nodiscard]]
+	const port &lhs() const { return lhs_; }
+
+    [[nodiscard]]
+	port &rhs() { return rhs_; }
+
+    [[nodiscard]]
+	const port &rhs() const { return rhs_; }
+
+    [[nodiscard]]
+	port &top() { return top_; }
+
+    [[nodiscard]]
+	const port &top() const { return top_; }
+
+	virtual void accept(visitor &v) override {
 		arith_node::accept(v);
 		v.visit_ternary_arith_node(*this);
 	}
-
 private:
 	ternary_arith_op op_;
 	port &lhs_;
@@ -781,30 +823,47 @@ public:
 		, overflow_(port_kinds::overflow, value_type::u1(), this)
 		, carry_(port_kinds::carry, value_type::u1(), this)
 		, operation_value_(port_kinds::operation_value, vt, this)
-	{
-	}
+	{ }
 
+    [[nodiscard]]
 	port &value() { return value_; }
+
+    [[nodiscard]]
 	port &zero() { return zero_; }
+
+    [[nodiscard]]
 	port &negative() { return negative_; }
+
+    [[nodiscard]]
 	port &overflow() { return overflow_; }
+
+    [[nodiscard]]
 	port &carry() { return carry_; }
+
+    [[nodiscard]]
 	port &operation_value() { return operation_value_; }
 
+    [[nodiscard]]
 	const port &zero() const { return zero_; }
+
+    [[nodiscard]]
 	const port &negative() const { return negative_; }
+
+    [[nodiscard]]
 	const port &overflow() const { return overflow_; }
+
+    [[nodiscard]]
 	const port &carry() const { return carry_; }
+
+    [[nodiscard]]
 	const port &operation_value() const { return operation_value_; }
 
-	virtual void accept(visitor &v) override
-	{
+	virtual void accept(visitor &v) override {
 		if (v.seen_node(this))
 			return;
 		action_node::accept(v);
 		v.visit_atomic_node(*this);
 	}
-
 private:
 	port zero_, negative_, overflow_, carry_, operation_value_;
 };
@@ -820,18 +879,21 @@ public:
 		lhs.add_target(this);
 	}
 
+    [[nodiscard]]
 	unary_atomic_op op() const { return op_; }
 
-	port &lhs() const { return lhs_; }
+    [[nodiscard]]
+	port &lhs() { return lhs_; }
 
-	virtual void accept(visitor &v) override
-	{
+    [[nodiscard]]
+	const port &lhs() const { return lhs_; }
+
+	virtual void accept(visitor &v) override {
 		if (v.seen_node(this))
 			return;
 		atomic_node::accept(v);
 		v.visit_unary_atomic_node(*this);
 	}
-
 private:
 	unary_atomic_op op_;
 	port &lhs_;
@@ -851,19 +913,27 @@ public:
 		operand.add_target(this);
 	}
 
+    [[nodiscard]]
 	binary_atomic_op op() const { return op_; }
 
-	port &address() const { return address_; }
-	port &rhs() const { return operand_; }
+    [[nodiscard]]
+	port &address() { return address_; }
 
-	virtual void accept(visitor &v) override
-	{
+    [[nodiscard]]
+	const port &address() const { return address_; }
+
+    [[nodiscard]]
+	port &rhs() { return operand_; }
+
+    [[nodiscard]]
+	const port &rhs() const { return operand_; }
+
+	virtual void accept(visitor &v) override {
 		if (v.seen_node(this))
 			return;
 		atomic_node::accept(v);
 		v.visit_binary_atomic_node(*this);
 	}
-
 private:
 	binary_atomic_op op_;
 	port &address_;
@@ -886,20 +956,33 @@ public:
 		top.add_target(this);
 	}
 
+    [[nodiscard]]
 	ternary_atomic_op op() const { return op_; }
 
-	port &address() const { return address_; }
-	port &rhs() const { return rhs_; }
-	port &top() const { return top_; }
+    [[nodiscard]]
+	port &address() { return address_; }
 
-	virtual void accept(visitor &v) override
-	{
+    [[nodiscard]]
+	const port &address() const { return address_; }
+
+    [[nodiscard]]
+	port &rhs() { return rhs_; }
+
+    [[nodiscard]]
+	const port &rhs() const { return rhs_; }
+
+    [[nodiscard]]
+	port &top() { return top_; }
+
+    [[nodiscard]]
+	const port &top() const { return top_; }
+
+	virtual void accept(visitor &v) override {
 		if (v.seen_node(this))
 			return;
 		atomic_node::accept(v);
 		v.visit_ternary_atomic_node(*this);
 	}
-
 private:
 	ternary_atomic_op op_;
 	port &address_;
@@ -909,66 +992,86 @@ private:
 
 class bit_extract_node : public value_node {
 public:
-	bit_extract_node(port &value, int from, int length)
+	bit_extract_node(port &value, std::size_t from, std::size_t length)
 		: value_node(node_kinds::bit_extract, value_type(value_type_class::unsigned_integer, length))
 		, source_value_(value)
 		, from_(from)
 		, length_(length)
 	{
 		if (from + length - 1 > source_value_.type().width() - 1) {
-			throw std::logic_error("bit extract range [" + std::to_string(from + length - 1) + ":" + std::to_string(from)
-				+ "] is out of bounds from source value [" + std::to_string(source_value_.type().width()) + ":0]");
+			throw ir_exception("bit extract range [{}:{}] is out of bound from source value [{}:0]",
+                               from + length - 1, from, source_value_.type().width());
 		}
 
 		source_value_.add_target(this);
 	}
 
-	port &source_value() const { return source_value_; }
+    [[nodiscard]]
+	port &source_value() { return source_value_; }
 
-	int from() const { return from_; }
-	int length() const { return length_; }
+    [[nodiscard]]
+	const port &source_value() const { return source_value_; }
 
-	virtual void accept(visitor &v) override
-	{
+    [[nodiscard]]
+    std::size_t from() const { return from_; }
+
+    [[nodiscard]]
+	std::size_t length() const { return length_; }
+
+	virtual void accept(visitor &v) override {
 		value_node::accept(v);
 		v.visit_bit_extract_node(*this);
 	}
-
 private:
 	port &source_value_;
-	int from_, length_;
+    std::size_t from_, length_;
 };
 
 class bit_insert_node : public value_node {
 public:
-	bit_insert_node(port &value, port &bits, int to, int length)
+	bit_insert_node(port &value, port &bits, std::size_t to, std::size_t length)
 		: value_node(node_kinds::bit_insert, value.type())
 		, source_value_(value)
 		, bits_(bits)
 		, to_(to)
 		, length_(length)
 	{
+        [[unlikely]]
 		if (bits.type().width() > value.type().width()) {
-			throw std::runtime_error("width of type of incoming bits cannot be greater than type of value");
+			throw ir_exception("width of type of incoming bits cannot be greater than type of value");
 		}
 
+        [[unlikely]]
 		if (length > source_value_.type().width()) {
-			throw std::logic_error("width of type of incoming bits cannot be smaller than requested length");
+			throw ir_exception("width of type of incoming bits cannot be smaller than requested length");
 		}
+
+        [[unlikely]]
 		if (to + length - 1 > source_value_.type().width() - 1) {
-			throw std::logic_error("bit insert range [" + std::to_string(to + length - 1) + ":" + std::to_string(to) + "] is out of bounds in target value ["
-				+ std::to_string(source_value_.type().width()) + ":0]");
+			throw ir_exception("bit insert range [{}:{}] is out of bounds in target value [{}:0]",
+                               to + length - 1, to, source_value_.type().width());
 		}
 
 		value.add_target(this);
 	}
 
-	port &source_value() const { return source_value_; }
+    [[nodiscard]]
+	port &source_value() { return source_value_; }
 
-	port &bits() const { return bits_; }
+    [[nodiscard]]
+	const port &source_value() const { return source_value_; }
 
-	int to() const { return to_; }
-	int length() const { return length_; }
+    [[nodiscard]]
+	port &bits() { return bits_; }
+
+    [[nodiscard]]
+	const port &bits() const { return bits_; }
+
+    [[nodiscard]]
+    std::size_t to() const { return to_; }
+
+    [[nodiscard]]
+	std::size_t length() const { return length_; }
 
 	virtual void accept(visitor &v) override
 	{
@@ -979,7 +1082,7 @@ public:
 private:
 	port &source_value_;
 	port &bits_;
-	int to_, length_;
+    std::size_t to_, length_;
 };
 
 class vector_node : public value_node {
@@ -990,47 +1093,44 @@ public:
 	{
 	}
 
-	port &source_vector() const { return vct_; }
+    [[nodiscard]]
+	port &source_vector() { return vct_; }
 
-	virtual void accept(visitor &v) override
-	{
+    [[nodiscard]]
+	const port &source_vector() const { return vct_; }
+
+	virtual void accept(visitor &v) override {
 		value_node::accept(v);
 		v.visit_vector_node(*this);
 	}
-
 private:
 	port &vct_;
 };
 
 class vector_element_node : public vector_node {
 public:
-	vector_element_node(node_kinds kind, const value_type &type, port &vct, int index)
+	vector_element_node(node_kinds kind, const value_type &type, port &vct, std::size_t index)
 		: vector_node(kind, type, vct)
 		, index_(index)
-	{
-	}
+	{ }
 
-	int index() const { return index_; }
+    std::size_t index() const { return index_; }
 
-	virtual void accept(visitor &v) override
-	{
+	virtual void accept(visitor &v) override {
 		vector_node::accept(v);
 		v.visit_vector_element_node(*this);
 	}
-
 private:
 	int index_;
 };
 
 class vector_extract_node : public vector_element_node {
 public:
-	vector_extract_node(port &vct, int index)
+	vector_extract_node(port &vct, std::size_t index)
 		: vector_element_node(node_kinds::vector_extract, vct.type().element_type(), vct, index)
-	{
-	}
+	{ }
 
-	virtual void accept(visitor &v) override
-	{
+	virtual void accept(visitor &v) override {
 		vector_element_node::accept(v);
 		v.visit_vector_extract_node(*this);
 	}
@@ -1038,20 +1138,21 @@ public:
 
 class vector_insert_node : public vector_element_node {
 public:
-	vector_insert_node(port &vct, int index, port &val)
+	vector_insert_node(port &vct, std::size_t index, port &val)
 		: vector_element_node(node_kinds::vector_insert, vct.type(), vct, index)
 		, val_(val)
-	{
-	}
+	{ }
 
-	virtual void accept(visitor &v) override
-	{
+	virtual void accept(visitor &v) override {
 		vector_element_node::accept(v);
 		v.visit_vector_insert_node(*this);
 	}
 
-	port &insert_value() const { return val_; }
+    [[nodiscard]]
+	port &insert_value() { return val_; }
 
+    [[nodiscard]]
+	const port &insert_value() const { return val_; }
 private:
 	port &val_;
 };
@@ -1060,11 +1161,13 @@ class local_var {
 public:
 	local_var(const value_type &type)
 		: type_(type)
-	{
-	}
+	{ }
 
+    [[nodiscard]]
+	value_type &type() { return type_; }
+
+    [[nodiscard]]
 	const value_type &type() const { return type_; }
-
 private:
 	value_type type_;
 };
@@ -1074,17 +1177,15 @@ public:
 	read_local_node(const local_var *local)
 		: value_node(node_kinds::read_local, local->type())
 		, lvar_(local)
-	{
-	}
+	{ }
 
+    [[nodiscard]]
 	const local_var *local() const { return lvar_; }
 
-	virtual void accept(visitor &v) override
-	{
+	virtual void accept(visitor &v) override {
 		value_node::accept(v);
 		v.visit_read_local_node(*this);
 	}
-
 private:
 	const local_var *lvar_;
 };
@@ -1098,16 +1199,19 @@ public:
 	{
 	}
 
+    [[nodiscard]]
 	const local_var *local() const { return lvar_; }
 
-	port &write_value() const { return val_; }
+    [[nodiscard]]
+	port &write_value() { return val_; }
 
-	virtual void accept(visitor &v) override
-	{
+    [[nodiscard]]
+	const port &write_value() const { return val_; }
+
+	virtual void accept(visitor &v) override {
 		action_node::accept(v);
 		v.visit_write_local_node(*this);
 	}
-
 private:
 	const local_var *lvar_;
 	port &val_;
@@ -1121,10 +1225,11 @@ public:
 	{
 	}
 
+    [[nodiscard]]
 	const std::string &name() const { return name_; }
 
+    [[nodiscard]]
 	const function_type &signature() const { return sig_; }
-
 private:
 	std::string name_;
 	function_type sig_;
@@ -1136,22 +1241,23 @@ public:
 		: action_node(node_kinds::internal_call, fn->signature().return_type())
 		, fn_(fn)
 		, args_(args)
-	{
-	}
+	{ }
 
+    [[nodiscard]]
 	const internal_function &fn() const { return *fn_; }
+
+    [[nodiscard]]
 	const std::vector<port *> &args() const { return args_; }
 
+    [[nodiscard]]
 	virtual br_type updates_pc() const override { return br_type::sys; }
 
-	virtual void accept(visitor &v) override
-	{
+	virtual void accept(visitor &v) override {
 		if (v.seen_node(this))
 			return;
 		action_node::accept(v);
 		v.visit_internal_call_node(*this);
 	}
-
 private:
 	const std::shared_ptr<internal_function> fn_;
 	std::vector<port *> args_;
@@ -1176,6 +1282,100 @@ struct fmt::formatter<arancini::ir::shift_op> {
             return format_to(ctx.out(), "arithmetic shift-right");
         default:
             return format_to(ctx.out(), "unknown shift operation");
+        }
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::ir::cast_op> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(arancini::ir::cast_op op, FormatContext& ctx) const {
+        using arancini::ir::cast_op;
+
+        switch (op) {
+        case cast_op::bitcast:
+            return format_to(ctx.out(), "bitcast operation");
+        case cast_op::zx:
+            return format_to(ctx.out(), "zero-extend operation");
+        case cast_op::sx:
+            return format_to(ctx.out(), "sign-extend operation");
+        case cast_op::trunc:
+            return format_to(ctx.out(), "truncate operation");
+        case cast_op::convert:
+            return format_to(ctx.out(), "convert operation");
+        default:
+            return format_to(ctx.out(), "unknown cast operation");
+        }
+    }
+};
+
+
+template <>
+struct fmt::formatter<arancini::ir::node_kinds> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(arancini::ir::node_kinds kind, FormatContext& ctx) const {
+        using arancini::ir::node_kinds;
+        switch (kind) {
+        case node_kinds::label:
+            return fmt::format_to(ctx.out(), "label node");
+        case node_kinds::read_pc:
+            return fmt::format_to(ctx.out(), "read PC node");
+        case node_kinds::write_pc:
+            return fmt::format_to(ctx.out(), "write PC node");
+        case node_kinds::constant:
+            return fmt::format_to(ctx.out(), "constant node");
+        case node_kinds::unary_arith:
+            return fmt::format_to(ctx.out(), "unary arithmetic node");
+        case node_kinds::binary_arith:
+            return fmt::format_to(ctx.out(), "binary arithmetic node");
+        case node_kinds::ternary_arith:
+            return fmt::format_to(ctx.out(), "ternary arithmetic node");
+        case node_kinds::unary_atomic:
+            return fmt::format_to(ctx.out(), "unary atomic node");
+        case node_kinds::binary_atomic:
+            return fmt::format_to(ctx.out(), "binary atomic node");
+        case node_kinds::ternary_atomic:
+            return fmt::format_to(ctx.out(), "ternary atomic node");
+        case node_kinds::read_reg:
+            return fmt::format_to(ctx.out(), "read register node");
+        case node_kinds::read_mem:
+            return fmt::format_to(ctx.out(), "read memory node");
+        case node_kinds::write_reg:
+            return fmt::format_to(ctx.out(), "write memory node");
+        case node_kinds::write_mem:
+            return fmt::format_to(ctx.out(), "write memory node");
+        case node_kinds::cast:
+            return fmt::format_to(ctx.out(), "cast node");
+        case node_kinds::csel:
+            return fmt::format_to(ctx.out(), "conditional select node");
+        case node_kinds::bit_shift:
+            return fmt::format_to(ctx.out(), "bit shift node");
+        case node_kinds::br:
+            return fmt::format_to(ctx.out(), "branch node");
+        case node_kinds::cond_br:
+            return fmt::format_to(ctx.out(), "conditional branch node");
+        case node_kinds::bit_extract:
+            return fmt::format_to(ctx.out(), "bit extract node");
+        case node_kinds::bit_insert:
+            return fmt::format_to(ctx.out(), "bit insert node");
+        case node_kinds::vector_extract:
+            return fmt::format_to(ctx.out(), "vector extract node");
+        case node_kinds::vector_insert:
+            return fmt::format_to(ctx.out(), "vector insert node");
+        case node_kinds::read_local:
+            return fmt::format_to(ctx.out(), "read local node");
+        case node_kinds::write_local:
+            return fmt::format_to(ctx.out(), "write local node");
+        case node_kinds::internal_call:
+            return fmt::format_to(ctx.out(), "internal call node");
+        default:
+            return format_to(ctx.out(), "unknown node");
         }
     }
 };
