@@ -16,6 +16,7 @@ namespace arancini::output::dynamic::arm64 {
 
 class register_sequence {
 public:
+    // TODO: do we need this?
     register_sequence() = default;
 
     register_sequence(const register_operand& reg):
@@ -43,9 +44,26 @@ public:
         return regs_;
     }
 
-    register_operand& get_register() { return regs_[0]; }
+    [[nodiscard]]
+    register_operand& operator[](std::size_t i) { return regs_[i]; }
 
-    std::vector<register_operand>& get_registers() { return regs_; }
+    [[nodiscard]]
+    const register_operand& operator[](std::size_t i) const { return regs_[i]; }
+
+    [[nodiscard]]
+    register_operand& front() { return regs_[0]; }
+
+    [[nodiscard]]
+    const register_operand& front() const { return regs_[0]; }
+
+    [[nodiscard]]
+    register_operand& back() { return regs_[regs_.size()]; }
+
+    [[nodiscard]]
+    const register_operand& back() const { return regs_[regs_.size()]; }
+
+    [[nodiscard]]
+    std::size_t size() const { return regs_.size(); }
 private:
     std::vector<register_operand> regs_;
 };
