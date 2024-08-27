@@ -14,30 +14,74 @@
 
 namespace arancini::output::dynamic::arm64 {
 
-class virtual_register_allocator {
+class register_sequence {
 public:
-	register_operand alloc_vreg(ir::value_type type) {
-        return register_operand(next_vreg_++, type);
+    register_sequence() = default;
+
+    register_sequence(const register_operand& reg):
+        regs_{reg}
+    { }
+
+    register_sequence(std::initializer_list<register_operand> regs):
+        regs_(regs)
+    { }
+
+    template <typename It>
+    register_sequence(It begin, It end):
+        regs_(begin, end)
+    { }
+
+    operator register_operand() const {
+        [[unlikely]]
+        if (regs_.size() > 1)
+            throw backend_exception("Accessing register set of {} registers as single register",
+                                    regs_.size());
+        return regs_[0];
     }
 
-	register_operand &alloc_vreg(const ir::port &p, ir::value_type type) {
-		auto v = alloc_vreg(type);
-        port_to_vreg_[&p].push_back(v);
-		return port_to_vreg_[&p].back();
+    operator std::vector<register_operand>() const {
+        return regs_;
+    }
+
+    register_operand& get_register() { return regs_[0]; }
+
+    std::vector<register_operand>& get_registers() { return regs_; }
+private:
+    std::vector<register_operand> regs_;
+};
+
+class virtual_register_allocator {
+public:
+    [[nodiscard]]
+	register_sequence allocate(ir::value_type type) {
+        return register_sequence{register_operand(next_vreg_++, type)};
+    }
+
+    register_sequence& allocate(const ir::port& p) {
+        if (base_representable(p.type()))
+            return allocate(p, p.type());
+        return allocate_sequence(p);
+    }
+
+	register_sequence &allocate(const ir::port &p, ir::value_type type) {
+		auto v = allocate(type);
+        port_to_vreg_[&p] = v;
+		return port_to_vreg_[&p];
 	}
 
-    register_operand &alloc_vreg(const ir::port &p) { return alloc_vreg(p, p.type()); }
-
-    std::vector<register_operand> &alloc_vregs(const ir::port &p);
-
-	register_operand &vreg_for_port(const ir::port &p, size_t index = 0) { return vregs_for_port(p)[index]; }
-
-    std::vector<register_operand> &vregs_for_port(const ir::port &p) { return port_to_vreg_[&p]; }
+    [[nodiscard]]
+    register_sequence& get(const ir::port& p) { return port_to_vreg_[&p]; }
 
     void reset() { next_vreg_ = 33; port_to_vreg_.clear(); }
 private:
     std::size_t next_vreg_ = 33; // TODO: formalize this
-	std::unordered_map<const ir::port *, std::vector<register_operand>> port_to_vreg_;
+	std::unordered_map<const ir::port *, register_sequence> port_to_vreg_;
+
+    register_sequence& allocate_sequence(const ir::port& p);
+
+    bool base_representable(const ir::value_type& type) {
+        return type.width() <= 64; // TODO: formalize this
+    }
 };
 
 class arm64_translation_context : public translation_context {
@@ -71,7 +115,11 @@ private:
     // TODO: this should be included only when debugging is enabled
     std::string current_instruction_disasm_;
 
-    std::vector<register_operand> &materialise_port(ir::port &p);
+    [[nodiscard]]
+    register_sequence& materialise_port(const ir::port &p) {
+        materialise(p.owner());
+        return vreg_alloc_.get(p);
+    }
 
     memory_operand guestreg_memory_operand(int regoff,
                                            memory_operand::address_mode mode = memory_operand::address_mode::direct);
