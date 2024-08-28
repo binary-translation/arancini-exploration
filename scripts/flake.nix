@@ -247,6 +247,7 @@
 			];
 
 			configurePhase = "patchShebangs ./bin; patchShebangs .;";
+			# build the following benchmarks
 			buildPhase = "./bin/parsecmgmt -a build -p blackscholes bodytrack ferret fluidanimate freqmine swaptions streamcluster";
 			installPhase = ''
 				mkdir $out;

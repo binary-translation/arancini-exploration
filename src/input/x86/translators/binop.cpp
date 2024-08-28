@@ -1,4 +1,5 @@
 #include "arancini/input/registers.h"
+#include "type-utils.h"
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/ir/ir-builder.h>
 #include <arancini/ir/node.h>
@@ -362,11 +363,36 @@ void binop_translator::do_translate()
 
 		auto is_nan_or_lt = builder().insert_binop(binary_arith_op::cmpult, op0->val(), op1->val());
 
-		builder().insert_write_reg((unsigned long)reg_offsets::ZF, (unsigned long)reg_idx::ZF, "ZF", builder().insert_csel(is_nan_or_eq->val(), builder().insert_constant_i(value_type::u1(), 1)->val(), builder().insert_constant_i(value_type::u1(), 0)->val())->val());
+		builder().insert_write_reg(
+			util::to_underlying(reg_offsets::ZF),
+			util::to_underlying(reg_idx::ZF),
+			"ZF",
+			builder().insert_csel(is_nan_or_eq->val(),
+				builder().insert_constant_i(value_type::u1(), 1)->val(),
+				builder().insert_constant_i(value_type::u1(), 0)->val()
+			)->val()
+		);
 
-		builder().insert_write_reg((unsigned long)reg_offsets::PF, (unsigned long)reg_idx::PF, "PF", builder().insert_csel(is_nan->val(), builder().insert_constant_i(value_type::u1(), 1)->val(), builder().insert_constant_i(value_type::u1(), 0)->val())->val());
+		builder().insert_write_reg(
+			util::to_underlying(reg_offsets::PF),
+			util::to_underlying(reg_idx::PF),
+			"PF",
+			builder().insert_csel(is_nan->val(),
+				builder().insert_constant_i(value_type::u1(), 1)->val(),
+				builder().insert_constant_i(value_type::u1(), 0)->val()
+			)->val()
+		);
 
-		builder().insert_write_reg((unsigned long)reg_offsets::CF, (unsigned long)reg_idx::CF, "CF", builder().insert_csel(is_nan_or_lt->val(), builder().insert_constant_i(value_type::u1(), 1)->val(), builder().insert_constant_i(value_type::u1(), 0)->val())->val());
+		builder().insert_write_reg(
+			util::to_underlying(reg_offsets::CF),
+			util::to_underlying(reg_idx::CF),
+			"CF",
+			builder().insert_csel(is_nan_or_lt->val(),
+				builder().insert_constant_i(value_type::u1(), 1)->val(),
+				builder().insert_constant_i(value_type::u1(), 0)->val()
+			)->val()
+		);
+
 		write_flags(nullptr, flag_op::ignore, flag_op::ignore, flag_op::set0, flag_op::set0, flag_op::ignore, flag_op::set0);
 		break;
 	}

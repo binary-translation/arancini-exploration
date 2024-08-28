@@ -151,8 +151,9 @@ private:
 	void debug_dump();
 
 	template <typename T>
-	bool is_stack(T *n) {
+	bool is_stack(T *n) const {
 		return false;
+		/* We keep this because in theory it should work
 		bool is_stack = false;
 
 		// check if RSP or RBP are used to calculate the adress
@@ -175,6 +176,7 @@ private:
 		}
 
 		return is_stack;
+		*/
 	};
 };
 } // namespace arancini::output::o_static::llvm
