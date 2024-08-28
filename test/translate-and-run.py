@@ -1,9 +1,11 @@
 #! /bin/python3
 
 import os
+import sys
 import json
 import shutil
 import pprint
+import filecmp
 import difflib
 import logging
 import argparse
@@ -11,10 +13,19 @@ import traceback
 import subprocess
 
 logger = logging.getLogger("Test Runner")
+
 keep_artifacts = False
+executor_wrapper = ""
+translate_only = False
 
 # Source: https://stackoverflow.com/questions/845276/how-to-print-the-comparison-of-two-multiline-strings-in-unified-diff-format
 def unified_diff(text1, text2):
+    # Ensure that the diff outputs correctly even when no output is given
+    if text1 is None:
+        text1 = ""
+    if text2 is None:
+        text2 = ""
+
     text1 = text1.splitlines(1)
     text2 = text2.splitlines(1)
 
@@ -44,11 +55,15 @@ class Tester:
         if not os.path.isfile(self.input_bin):
             raise ValueError(f"input binary does not exist at path: {self.input_bin}")
 
+        env = os.environ.copy()
+
         self.config = {
             'compile_flags': [],
-            'compile_environment': os.environ.__dict__, # default environment same as tester's
+            'compile_environment': env, # default environment same as tester's
+            'compile_artifacts': [],
+            'compile_artifact_reference': {},
             'runtime_flags': [],
-            'runtime_environment': os.environ.__dict__, # default environment same as tester's
+            'runtime_environment': env, # default environment same as tester's
             'expected_stdout': None,
             'expected_stderr': None,
             'expected_status': 0,
@@ -64,13 +79,39 @@ class Tester:
             term_width = term_size_tuple[0]
             if term_width > 5:
                 term_width -= 5
-            logger.info(f"Executing test with config:\n{pprint.pformat(self.config, width=term_width)}")
+
+        for extra in extra_runtime_env:
+            key, value = extra.split('=')
+            self.config['runtime_environment'][key] = value
+
+        logger.info(f"Executing test with config:\n{pprint.pformat(self.config, width=term_width)}")
+
 
     def run(self):
         logger.info("Translating input binary")
 
         translated = self.compile()
         self.config["produced_artifacts"].append(translated)
+
+        # TODO: generalize this to check artifacts for runtime execution too
+        for artifact in self.config['compile_artifacts']:
+            # Check artifact exists
+            if not os.path.exists(artifact):
+                raise ValueError(f"Artifact {artifact} not produced after compilation")
+
+            # Check if artifact matches reference
+            if artifact in self.config['compile_artifact_reference'].keys():
+                reference = self.config['compile_artifact_reference'][artifact]
+                if not filecmp.cmp(artifact, reference, shallow=False):
+                    output_bytes = open(artifact, 'r').read()
+                    reference_bytes = open(reference, 'r').read()
+                    logger.error(f"Artifact {artifact} does not match reference {reference}, \
+                                 diff:\n{unified_diff(reference_bytes, output_bytes)}\n")
+
+        logger.info("Translation successful")
+
+        if translate_only:
+            return
 
         logger.info(f"Executing transated binary: {translated}")
         stdout, stderr = self.execute(translated)
@@ -90,16 +131,30 @@ class Tester:
         output_file = self.input_bin + ".out"
         compile_command = [self.txlat_path, "--input", self.input_bin, "--output", output_file,
                            *self.config["compile_flags"]]
-        proc = subprocess.run(compile_command, capture_output=True, text=True)
+        proc = subprocess.run(compile_command, env=self.config['compile_environment'],
+                              capture_output=True, text=True, errors="ignore")
         if proc.returncode != 0:
             raise ExecutionError(compile_command, proc.stdout, proc.stderr)
 
         return output_file
 
     def execute(self, binary):
-        execute_command = [binary, *self.config["runtime_flags"]]
-        proc = subprocess.run(execute_command, capture_output=True, text=True)
-        if proc.returncode != self.config["expected_status"]:
+        # TODO: include runtime environment
+        execute_command = [*executor_wrapper, binary, *self.config["runtime_flags"]]
+        logger.debug(f"Execution command: {execute_command}")
+
+        shell = False
+        capture_output = True
+        if executor_wrapper != "":
+            shell = True
+            capture_output = False
+
+        proc = subprocess.run(execute_command, env=self.config['runtime_environment'],
+                              capture_output=capture_output, text=True, shell=shell, errors="ignore")
+
+        expected_returncode = self.config["expected_status"]
+        if proc.returncode != expected_returncode:
+            logger.error(f"Exit code {proc.returncode} different from expected exit code {expected_returncode}")
             raise ExecutionError(execute_command, proc.stdout, proc.stderr)
 
         logger.info("Completed execution successfully")
@@ -130,6 +185,7 @@ class Tester:
                 diff = unified_diff(reference, output)
                 logger.error(f"Diff:\n{diff}")
                 exit(2)
+            logger.info("Output matches!")
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -161,10 +217,39 @@ def parse_arguments():
                         action='store_true',
                         help='Do not remove artifacts generated during test (including translated binaries)')
 
+    parser.add_argument('--execute-under',
+                        required=False,
+                        default='',
+                        nargs=1,
+                        help='Specify a wrapper for executing the translated binary (.e.g \"gdb --args\"')
+
+    parser.add_argument('--extra-runtime-env',
+                        required=False,
+                        default='',
+                        nargs='+',
+                        help='KEY=VALUE strings to be added to environment during translated program \
+                        execution (in addition to those added via -c and the default)')
+
+    parser.add_argument('--translate-only',
+                        required=False,
+                        default=False,
+                        action='store_true',
+                        help='Invoke translator for input binary and exit (can be combined with --keep-artifacts to get the translator output')
+
     args = parser.parse_args()
 
+    # TODO: refactor parsing here to directly store those flags
     global keep_artifacts
     keep_artifacts = args.keep_artifacts
+
+    global executor_wrapper
+    executor_wrapper = args.execute_under
+
+    global extra_runtime_env
+    extra_runtime_env = args.extra_runtime_env
+
+    global translate_only
+    translate_only = args.translate_only
 
     return parser.parse_args()
 
@@ -180,6 +265,9 @@ if __name__ == "__main__":
         tester = Tester(args.txlat, args.input, args.config)
         tester.run()
     except ExecutionError as e:
+        # Disable traceback
+        sys.tracebacklimit=0
+
         logging.exception(f"Test failed: {str(e)}")
         logging.error(f"Contents of STDOUT:\n{e.stdout}")
         logging.error(f"Contents of STDERR:\n{e.stderr}")
