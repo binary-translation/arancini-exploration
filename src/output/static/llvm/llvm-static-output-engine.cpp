@@ -41,6 +41,7 @@
 #include <ostream>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #if LLVM_VERSION_MAJOR < 16
@@ -56,6 +57,7 @@ using optional = std::optional<T>;
 using namespace arancini::output::o_static::llvm;
 using namespace arancini::ir;
 using namespace ::llvm;
+using arancini::input::x86::reg_idx;
 using arancini::input::x86::off_to_idx;
 using arancini::input::x86::regnames;
 
@@ -182,6 +184,27 @@ void llvm_static_output_engine_impl::create_main_function(Function *loop_fn)
 	builder.CreateRet(ConstantInt::get(types.i32, 1));
 }
 
+::llvm::PHINode *llvm_static_output_engine_impl::create_static_fn_switch(::llvm::IRBuilder<> &builder, ::llvm::Value *pc, ::llvm::BasicBlock *cont_block) {
+	auto *pc_switch = builder.CreateSwitch(pc, cont_block);
+
+	auto *call_block = BasicBlock::Create(*llvm_context_, "call_static_fn", cont_block->getParent());
+	builder.SetInsertPoint(call_block);
+	auto *fn_addr = builder.CreatePHI(get_fn_type()->getPointerTo(), chunks_.size());
+	for (const auto f : *fns_) {
+		auto *b = BasicBlock::Create(*llvm_context_, "Call" + f.second->getName(), cont_block->getParent());
+		builder.SetInsertPoint(b);
+		fn_addr->addIncoming(f.second, b);
+		builder.CreateBr(call_block);
+		pc_switch->addCase(ConstantInt::get(types.i64, f.first), b);
+	}
+
+	builder.SetInsertPoint(call_block);
+	return fn_addr;
+//	auto *call = builder.CreateCall(get_fn_type(), fn_addr, args);
+//	call->setCallingConv(internal_calling_conv);
+//	return call;
+}
+
 void llvm_static_output_engine_impl::create_function_decls() {
 
 	for (auto n : extern_fns_) {
@@ -211,6 +234,7 @@ void llvm_static_output_engine_impl::create_static_functions()
 			fn->addParamAttr(0, Attribute::getWithDereferenceableBytes(*llvm_context_, sizeof(runtime::exec::x86::x86_cpu_state)));
 			fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
 			fn->addParamAttr(0, Attribute::getWithAlignment(*llvm_context_, Align(16)));
+			fn->setCallingConv(internal_calling_conv);
 			(*fns_)[addr] = fn;
 		} else {
 			// Wrapper
@@ -221,6 +245,7 @@ void llvm_static_output_engine_impl::create_static_functions()
 			fn->addParamAttr(0, Attribute::getWithDereferenceableBytes(*llvm_context_, sizeof(runtime::exec::x86::x86_cpu_state)));
 			fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
 			fn->addParamAttr(0, Attribute::getWithAlignment(*llvm_context_, Align(16)));
+			fn->setCallingConv(internal_calling_conv);
 			(*wrapper_fns_)[c->name()] = fn;
 		}
 	}
@@ -246,23 +271,20 @@ void llvm_static_output_engine_impl::build()
 
 	// Only the executable needs a MainLoop and main
 	Function *loop_fn;
+	Function *internal_loop_fn;
 	if (e_.is_exec()) {
-		loop_fn = Function::Create(types.loop_fn, GlobalValue::LinkageTypes::ExternalLinkage, "MainLoop", *module_);
-		loop_fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
-		loop_fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
-		loop_fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
-		loop_fn->addParamAttr(0, Attribute::getWithAlignment(*llvm_context_, Align(16)));
+		loop_fn = create_main_loop();
+		internal_loop_fn = create_main_internal_loop();
 
 		create_main_function(loop_fn);
 	} else {
 		loop_fn = static_cast<Function *>(module_->getOrInsertFunction("MainLoop", types.loop_fn).getCallee());
+		internal_loop_fn = static_cast<Function *>(module_->getOrInsertFunction("internal_loop_fn", get_fn_type()).getCallee());
 	}
 
-	// TODO: Input Arch Specific (maybe need some kind of descriptor?)
+	lower_chunks(internal_loop_fn);
 
 	if (!e_.is_exec()) {
-		lower_chunks(loop_fn);
-
 		{
 			func_map_.push_back(ConstantInt::get(types.i64, 0));
 			func_map_.push_back(ConstantInt::get(types.i64, 0));
@@ -277,6 +299,15 @@ void llvm_static_output_engine_impl::build()
 		debug_dump();
 		return;
 	}
+}
+
+Function *llvm_static_output_engine_impl::create_main_loop() {
+	auto *loop_fn = Function::Create(types.loop_fn, GlobalValue::LinkageTypes::ExternalLinkage, "MainLoop", *module_);
+	loop_fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
+	loop_fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
+	loop_fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
+	loop_fn->addParamAttr(0, Attribute::getWithAlignment(*llvm_context_, Align(16)));
+
 	auto state_arg = loop_fn->getArg(0);
 
 	auto entry_block = BasicBlock::Create(*llvm_context_, "entry", loop_fn);
@@ -309,9 +340,48 @@ void llvm_static_output_engine_impl::build()
 	//auto alert = module_->getOrInsertFunction("alert", types.finalize);
 	//builder.CreateCall(alert, { });
 	auto program_counter_val = builder.CreateLoad(types.i64, program_counter, "top_pc");
-	lower_static_fn_lookup(builder, switch_to_dbt, program_counter_val);
+	auto *static_fn_addr = lower_static_fn_lookup(builder, switch_to_dbt, program_counter_val);
 
-	lower_chunks(loop_fn);
+	// calling the static function
+	const std::vector<unsigned long> regIndices = {
+		static_cast<unsigned long>(reg_idx::PC),
+		static_cast<unsigned long>(reg_idx::RAX),
+		static_cast<unsigned long>(reg_idx::RCX),
+		static_cast<unsigned long>(reg_idx::RDX),
+		static_cast<unsigned long>(reg_idx::RBX),
+		static_cast<unsigned long>(reg_idx::RSP),
+		static_cast<unsigned long>(reg_idx::RBP),
+		static_cast<unsigned long>(reg_idx::RSI),
+		static_cast<unsigned long>(reg_idx::RDI),
+		static_cast<unsigned long>(reg_idx::R8),
+		static_cast<unsigned long>(reg_idx::R9),
+		static_cast<unsigned long>(reg_idx::R10),
+		static_cast<unsigned long>(reg_idx::R11),
+		static_cast<unsigned long>(reg_idx::R12),
+		static_cast<unsigned long>(reg_idx::R13),
+		static_cast<unsigned long>(reg_idx::R14),
+		static_cast<unsigned long>(reg_idx::R15),
+	};
+
+	std::vector<Value *> args = { state_arg };
+	for (const auto regIdx : regIndices) {
+		args.emplace_back(createLoadFromCPU(builder, state_arg, regIdx));
+	}
+	assert(args.size() == 18 && "Expected 18 arguments");
+
+	auto call = builder.CreateCall(get_fn_type(), static_fn_addr, args);
+	call->setCallingConv(internal_calling_conv);
+
+	assert(call->getType()->isStructTy() && "Expected return type to be struct type");
+
+	for (unsigned i = 0; i < regIndices.size(); ++i) {
+		createStoreToCPU(builder, state_arg, i, call, regIndices[i]);
+	}
+
+#if defined(DEBUG)
+	builder.CreateCall(clk_, {state_arg, builder.CreateGlobalStringPtr("done-loop")});
+#endif
+	builder.CreateRetVoid();
 
 	builder.SetInsertPoint(switch_to_dbt);
 
@@ -376,7 +446,208 @@ void llvm_static_output_engine_impl::build()
 	if (verifyFunction(*loop_fn, &errs())) {
 		throw std::runtime_error("function verification failed");
 	}
+
+	return loop_fn;
 }
+
+
+Function *llvm_static_output_engine_impl::create_main_internal_loop() {
+	auto *loop_fn = Function::Create(get_fn_type(), GlobalValue::LinkageTypes::ExternalLinkage, "internal_main_loop", *module_);
+	loop_fn->addParamAttr(0, Attribute::AttrKind::NoCapture);
+	loop_fn->addParamAttr(0, Attribute::AttrKind::NoAlias);
+	loop_fn->addParamAttr(0, Attribute::AttrKind::NoUndef);
+	loop_fn->addParamAttr(0, Attribute::getWithAlignment(*llvm_context_, Align(16)));
+	loop_fn->setCallingConv(internal_calling_conv);
+
+	auto *state_arg = loop_fn->getArg(0);
+
+	auto entry_block = BasicBlock::Create(*llvm_context_, "entry", loop_fn);
+	auto loop_block = BasicBlock::Create(*llvm_context_, "loop", loop_fn);
+	auto switch_to_dbt = BasicBlock::Create(*llvm_context_, "switch_to_dbt", loop_fn);
+	auto check_for_call_block = BasicBlock::Create(*llvm_context_, "check_for_call", loop_fn);
+	auto check_for_ret_block = BasicBlock::Create(*llvm_context_, "check_for_ret", loop_fn);
+	auto check_for_int_call_block = BasicBlock::Create(*llvm_context_, "check_for_internal_call", loop_fn);
+	auto internal_call_block = BasicBlock::Create(*llvm_context_, "internal_call", loop_fn);
+	auto call_block = BasicBlock::Create(*llvm_context_, "call", loop_fn);
+	auto ret_block = BasicBlock::Create(*llvm_context_, "return", loop_fn);
+	auto exit_block = BasicBlock::Create(*llvm_context_, "exit", loop_fn);
+
+	auto clk_ = module_->getOrInsertFunction("clk", types.clk_fn);
+	IRBuilder<> builder(*llvm_context_);
+
+	builder.SetInsertPoint(entry_block);
+
+	const std::vector<reg_offsets> regs = {
+		reg_offsets::PC,
+		reg_offsets::RAX,
+		reg_offsets::RCX,
+		reg_offsets::RDX,
+		reg_offsets::RBX,
+		reg_offsets::RSP,
+		reg_offsets::RBP,
+		reg_offsets::RSI,
+		reg_offsets::RDI,
+		reg_offsets::R8,
+		reg_offsets::R9,
+		reg_offsets::R10,
+		reg_offsets::R11,
+		reg_offsets::R12,
+		reg_offsets::R13,
+		reg_offsets::R14,
+		reg_offsets::R15,
+	};
+
+	init_regs(builder);
+	for (unsigned i = 0; i < regs.size(); ++i) {
+		builder.CreateStore(loop_fn->getArg(i + 1), reg_to_alloca_.at(regs[i]));
+	}
+
+
+#if defined(DEBUG)
+	builder.CreateCall(clk_, {builder.CreateLoad(types.cpu_state, state_alloca_), builder.CreateGlobalStringPtr("do-loop")});
+#endif
+
+	auto program_counter = reg_to_alloca_.at(reg_offsets::PC);
+	builder.CreateBr(loop_block);
+
+	builder.SetInsertPoint(loop_block);
+
+	//DEBUG
+	//auto alert = module_->getOrInsertFunction("alert", types.finalize);
+	//builder.CreateCall(alert, { });
+	auto program_counter_val = builder.CreateLoad(types.i64, program_counter, "top_pc");
+	auto *static_fn_addr = lower_static_fn_lookup(builder, switch_to_dbt, program_counter_val);
+
+	// calling the static function
+	std::vector<Value *> args = { state_arg };
+	for (const auto reg : regs) {
+		args.emplace_back(builder.CreateLoad(types.i64, reg_to_alloca_.at(reg)));
+	}
+	assert(args.size() == 18 && "Expected 18 arguments");
+
+	auto call = builder.CreateCall(get_fn_type(), static_fn_addr, args);
+	call->setCallingConv(internal_calling_conv);
+
+	assert(call->getType()->isStructTy() && "Expected return type to be struct type");
+
+#if defined(DEBUG)
+	builder.CreateCall(clk_, {builder.CreateLoad(types.cpu_state, state_alloca_), builder.CreateGlobalStringPtr("done-loop")});
+#endif
+	builder.CreateRet(call);
+
+	builder.SetInsertPoint(switch_to_dbt);
+
+	auto switch_callee = module_->getOrInsertFunction("invoke_code", types.dbt_invoke);
+#if defined(DEBUG)
+	builder.CreateCall(clk_, {builder.CreateLoad(types.cpu_state, state_alloca_), builder.CreateGlobalStringPtr("do-dyn")});
+#endif
+	for (auto reg : regs) {
+		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
+		auto alloca = reg_to_alloca_.at(reg);
+		StoreInst *store = builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), alloca), ptr);
+		store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), reg_file_alias_scope_));
+		store->setMetadata(LLVMContext::MD_noalias, MDNode::get(store->getContext(), guest_mem_alias_scope_));
+	}
+	auto invoke_result = builder.CreateCall(switch_callee, { state_arg });
+	for (auto reg : regs) {
+		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "restore_"+std::to_string((unsigned long)reg));
+		auto alloca = reg_to_alloca_.at(reg);
+		LoadInst *load = builder.CreateLoad(alloca->getAllocatedType(), ptr);
+		load->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(load->getContext(), reg_file_alias_scope_));
+		load->setMetadata(LLVMContext::MD_noalias, MDNode::get(load->getContext(), guest_mem_alias_scope_));
+		builder.CreateStore(load, alloca);
+	}
+#if defined(DEBUG)
+	builder.CreateCall(clk_, {state_arg, builder.CreateGlobalStringPtr("done-dyn")});
+#endif
+	/*
+	 * RETURN CODES:
+	 * 4: last instr was a ret  -> emit a return
+	 * 3: last instr was a call -> call MainLoop to figure out the next Fn
+	 * 2: do internal call
+	 * 1: do syscall
+	 * 0: all other instr		-> we did not leave the current unknown function
+	 */
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 0)), loop_block, check_for_call_block);
+
+	builder.SetInsertPoint(check_for_call_block);
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 3)), call_block, check_for_ret_block);
+
+	builder.SetInsertPoint(check_for_ret_block);
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, invoke_result, ConstantInt::get(types.i32, 4)), ret_block, check_for_int_call_block);
+
+	builder.SetInsertPoint(check_for_int_call_block);
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_SGT, invoke_result, ConstantInt::get(types.i32, 0)), internal_call_block, exit_block);
+
+	builder.SetInsertPoint(internal_call_block);
+#if defined(DEBUG)
+	builder.CreateCall(clk_, {state_arg, builder.CreateGlobalStringPtr("do-internal")});
+#endif
+	auto internal_call_callee = module_->getOrInsertFunction("execute_internal_call", types.internal_call_handler);
+#if defined(DEBUG)
+	builder.CreateCall(clk_, {state_arg, builder.CreateGlobalStringPtr("done-internal")});
+#endif
+	for (auto reg : regs) {
+		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
+		auto alloca = reg_to_alloca_.at(reg);
+		StoreInst *store = builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), alloca), ptr);
+		store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), reg_file_alias_scope_));
+		store->setMetadata(LLVMContext::MD_noalias, MDNode::get(store->getContext(), guest_mem_alias_scope_));
+	}
+	auto internal_call_result = builder.CreateCall(internal_call_callee, { state_arg, invoke_result });
+	for (auto reg : regs) {
+		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "restore_"+std::to_string((unsigned long)reg));
+		auto alloca = reg_to_alloca_.at(reg);
+		LoadInst *load = builder.CreateLoad(alloca->getAllocatedType(), ptr);
+		load->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(load->getContext(), reg_file_alias_scope_));
+		load->setMetadata(LLVMContext::MD_noalias, MDNode::get(load->getContext(), guest_mem_alias_scope_));
+		builder.CreateStore(load, alloca);
+	}
+	builder.CreateCondBr(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, internal_call_result, ConstantInt::get(types.i32, 0)), loop_block, exit_block);
+
+
+	builder.SetInsertPoint(exit_block);
+
+	for (auto reg : regs) {
+		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
+		auto alloca = reg_to_alloca_.at(reg);
+		StoreInst *store = builder.CreateStore(builder.CreateLoad(alloca->getAllocatedType(), alloca), ptr);
+		store->setMetadata(LLVMContext::MD_alias_scope, MDNode::get(store->getContext(), reg_file_alias_scope_));
+		store->setMetadata(LLVMContext::MD_noalias, MDNode::get(store->getContext(), guest_mem_alias_scope_));
+	}
+	auto finalize_call_callee = module_->getOrInsertFunction("finalize", types.finalize);
+	builder.CreateCall(finalize_call_callee, {});
+
+	{
+		auto return_values = wrap_ret(&builder, state_arg);
+		builder.CreateAggregateRet(return_values.data(), return_values.size());
+	}
+
+	builder.SetInsertPoint(call_block);
+	auto ret = builder.CreateCall(loop_fn, load_args(&builder, state_arg));
+	ret->setCallingConv(internal_calling_conv);
+	unwrap_ret(&builder, ret, state_arg);
+	builder.CreateBr(loop_block);
+
+	builder.SetInsertPoint(ret_block);
+#if defined(DEBUG)
+	builder.CreateCall(clk_, {state_arg, builder.CreateGlobalStringPtr("done-loop")});
+#endif
+	{
+		auto return_values = wrap_ret(&builder, state_arg);
+		builder.CreateAggregateRet(return_values.data(), return_values.size());
+	}
+
+	debug_dump();
+
+	if (verifyFunction(*loop_fn, &errs())) {
+		loop_fn->dump();
+		throw std::runtime_error("function verification failed");
+	}
+
+	return loop_fn;
+}
+
 
 void llvm_static_output_engine_impl::debug_dump() {
 	if (e_.debug_dump_filename.has_value()) {
@@ -423,44 +694,28 @@ void llvm_static_output_engine_impl::lower_chunks(Function *main_loop)
 	}
 }
 
-void llvm_static_output_engine_impl::lower_static_fn_lookup(IRBuilder<> &builder, BasicBlock *contblock, Value *guestAddr) {
+Value *llvm_static_output_engine_impl::lower_static_fn_lookup(IRBuilder<> &builder, BasicBlock *contblock, Value *guestAddr) {
+	auto lookup_block = BasicBlock::Create(*llvm_context_, "lookup", contblock->getParent());
 	auto LookupFn = module_->getOrInsertFunction("lookup_static_fn_addr", types.lookup_static_fn);
 
 	auto clk_ = module_->getOrInsertFunction("clk", types.clk_fn);
 
+	auto *fn_addr_phi = create_static_fn_switch(builder, guestAddr, lookup_block);
+
+	builder.SetInsertPoint(lookup_block);
 	auto result = builder.CreateCall(LookupFn, { guestAddr });
+	fn_addr_phi->addIncoming(result, lookup_block);
 	auto cmp = builder.CreateCmp(CmpInst::Predicate::ICMP_NE, result, ConstantPointerNull::get(Type::getInt8PtrTy(*llvm_context_)));
 
-	auto b = BasicBlock::Create(*llvm_context_, "call_static_fn", contblock->getParent());
+	auto *b = fn_addr_phi->getParent();
 
 	builder.CreateCondBr(cmp, b, contblock);
+
 	auto cpu_state = contblock->getParent()->getArg(0);
 
 	builder.SetInsertPoint(b);
-	auto rdi = createLoadFromCPU(builder, cpu_state, 8);
-	auto rsi = createLoadFromCPU(builder, cpu_state, 7);
-	auto rdx = createLoadFromCPU(builder, cpu_state, 3);
-	auto rcx = createLoadFromCPU(builder, cpu_state, 2);
-	auto r8 = createLoadFromCPU(builder, cpu_state, 9);
-	auto r9 = createLoadFromCPU(builder, cpu_state, 10);
-	//	auto zmm0 = createLoadFromCPU(builder, cpu_state, 27);
-	//	auto zmm1 = createLoadFromCPU(builder, cpu_state, 28);
-	//	auto zmm2 = createLoadFromCPU(builder, cpu_state, 29);
-	//	auto zmm3 = createLoadFromCPU(builder, cpu_state, 30);
-	//	auto zmm4 = createLoadFromCPU(builder, cpu_state, 31);
-	//	auto zmm5 = createLoadFromCPU(builder, cpu_state, 32);
-	//	auto zmm6 = createLoadFromCPU(builder, cpu_state, 33);
-	//	auto zmm7 = createLoadFromCPU(builder, cpu_state, 34);
-	auto f = builder.CreateBitCast(result, get_fn_type()->getPointerTo());
-	auto call = builder.CreateCall(get_fn_type(), f, { cpu_state, rdi, rsi, rdx, rcx, r8, r9 /*, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6, zmm7*/ });
-	createStoreToCPU(builder, cpu_state, 0, call, 1);
-	createStoreToCPU(builder, cpu_state, 1, call, 3);
-//	createStoreToCPU(builder, cpu_state, 2, call, 27);
-//	createStoreToCPU(builder, cpu_state, 3, call, 28);
-#if defined(DEBUG)
-	builder.CreateCall(clk_, {cpu_state, builder.CreateGlobalStringPtr("done-loop")});
-#endif
-	builder.CreateRetVoid();
+
+	return fn_addr_phi;
 }
 
 Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Argument *state_arg, std::shared_ptr<packet> pkt, port &p)
@@ -1660,32 +1915,75 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 }
 
 std::vector<Value*> llvm_static_output_engine_impl::load_args(IRBuilder<> *builder, Argument *state_arg) {
-
 	std::vector<Value *> ret = {
-		state_arg, builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RDI)), builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RSI)),
-		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RDX)), builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RCX)),
-		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R8)), builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R9)),
-//			  builder->CreateLoad(types.i512, reg_to_alloca_.at(reg_offsets::ZMM0)), builder->CreateLoad(types.i512, reg_to_alloca_.at(reg_offsets::ZMM1)),
-//			  builder->CreateLoad(types.i512, reg_to_alloca_.at(reg_offsets::ZMM2)), builder->CreateLoad(types.i512, reg_to_alloca_.at(reg_offsets::ZMM3)),
-//			  builder->CreateLoad(types.i512, reg_to_alloca_.at(reg_offsets::ZMM4)), builder->CreateLoad(types.i512, reg_to_alloca_.at(reg_offsets::ZMM5)),
-//			  builder->CreateLoad(types.i512, reg_to_alloca_.at(reg_offsets::ZMM6)), builder->CreateLoad(types.i512, reg_to_alloca_.at(reg_offsets::ZMM7))
+		state_arg,
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::PC)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RAX)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RCX)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RDX)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RBX)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RSP)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RBP)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RSI)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RDI)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R8)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R9)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R10)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R11)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R12)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R13)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R14)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R15)),
 	};
 	return ret;
 };
 
 void llvm_static_output_engine_impl::unwrap_ret(IRBuilder<> *builder, Value *value, Argument *state_arg) {
-	builder->CreateStore(builder->CreateExtractValue(value, { 0 }), reg_to_alloca_.at(reg_offsets::RAX));
-	builder->CreateStore(builder->CreateExtractValue(value, { 1 }), reg_to_alloca_.at(reg_offsets::RDX));
-	//	builder->CreateStore(builder->CreateExtractValue(value, { 2 }), reg_to_alloca_.at(reg_offsets::ZMM0));
-	//	builder->CreateStore(builder->CreateExtractValue(value, { 3 }), reg_to_alloca_.at(reg_offsets::ZMM1));
-};
+	const std::vector<Value *> allocas = {
+		reg_to_alloca_.at(reg_offsets::PC),
+		reg_to_alloca_.at(reg_offsets::RAX),
+		reg_to_alloca_.at(reg_offsets::RCX),
+		reg_to_alloca_.at(reg_offsets::RDX),
+		reg_to_alloca_.at(reg_offsets::RBX),
+		reg_to_alloca_.at(reg_offsets::RSP),
+		reg_to_alloca_.at(reg_offsets::RBP),
+		reg_to_alloca_.at(reg_offsets::RSI),
+		reg_to_alloca_.at(reg_offsets::RDI),
+		reg_to_alloca_.at(reg_offsets::R8),
+		reg_to_alloca_.at(reg_offsets::R9),
+		reg_to_alloca_.at(reg_offsets::R10),
+		reg_to_alloca_.at(reg_offsets::R11),
+		reg_to_alloca_.at(reg_offsets::R12),
+		reg_to_alloca_.at(reg_offsets::R13),
+		reg_to_alloca_.at(reg_offsets::R14),
+		reg_to_alloca_.at(reg_offsets::R15),
+	};
+
+	for (unsigned i = 0; i < allocas.size(); ++i) {
+		builder->CreateStore(builder->CreateExtractValue(value, { i }), allocas[i]);
+	}
+}
 
 std::vector<Value*> llvm_static_output_engine_impl::wrap_ret(IRBuilder<> *builder, Argument *state_arg) {
-	std::vector<Value*> ret;
-	ret.push_back(builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RAX)));
-	ret.push_back(builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RDX)));
-	//	ret.push_back(builder->CreateLoad(types.i512, reg_to_alloca_.at(reg_offsets::ZMM0)));
-	//	ret.push_back(builder->CreateLoad(types.i512, reg_to_alloca_.at(reg_offsets::ZMM1)));
+	std::vector<Value*> ret = {
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::PC)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RAX)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RCX)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RDX)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RBX)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RSP)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RBP)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RSI)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RDI)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R8)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R9)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R10)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R11)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R12)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R13)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R14)),
+		builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R15)),
+	};
 	return ret;
 }
 
@@ -1749,22 +2047,24 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 #endif
 	init_regs(*builder);
 	restore_callee_regs(*builder, state_arg, false);
+	builder->CreateStore(fn->getArg(1), reg_to_alloca_.at(reg_offsets::PC));
+	builder->CreateStore(fn->getArg(2), reg_to_alloca_.at(reg_offsets::RAX));
+	builder->CreateStore(fn->getArg(3), reg_to_alloca_.at(reg_offsets::RCX));
+	builder->CreateStore(fn->getArg(4), reg_to_alloca_.at(reg_offsets::RDX));
+	builder->CreateStore(fn->getArg(5), reg_to_alloca_.at(reg_offsets::RBX));
+	builder->CreateStore(fn->getArg(6), reg_to_alloca_.at(reg_offsets::RSP));
+	builder->CreateStore(fn->getArg(7), reg_to_alloca_.at(reg_offsets::RBP));
+	builder->CreateStore(fn->getArg(8), reg_to_alloca_.at(reg_offsets::RSI));
+	builder->CreateStore(fn->getArg(9), reg_to_alloca_.at(reg_offsets::RDI));
+	builder->CreateStore(fn->getArg(10), reg_to_alloca_.at(reg_offsets::R8));
+	builder->CreateStore(fn->getArg(11), reg_to_alloca_.at(reg_offsets::R9));
+	builder->CreateStore(fn->getArg(12), reg_to_alloca_.at(reg_offsets::R10));
+	builder->CreateStore(fn->getArg(13), reg_to_alloca_.at(reg_offsets::R11));
+	builder->CreateStore(fn->getArg(14), reg_to_alloca_.at(reg_offsets::R12));
+	builder->CreateStore(fn->getArg(15), reg_to_alloca_.at(reg_offsets::R13));
+	builder->CreateStore(fn->getArg(16), reg_to_alloca_.at(reg_offsets::R14));
+	builder->CreateStore(fn->getArg(17), reg_to_alloca_.at(reg_offsets::R15));
 
-	builder->CreateStore(fn->getArg(1), reg_to_alloca_.at(reg_offsets::RDI));
-	builder->CreateStore(fn->getArg(2), reg_to_alloca_.at(reg_offsets::RSI));
-	builder->CreateStore(fn->getArg(3), reg_to_alloca_.at(reg_offsets::RDX));
-	builder->CreateStore(fn->getArg(4), reg_to_alloca_.at(reg_offsets::RCX));
-	builder->CreateStore(fn->getArg(5), reg_to_alloca_.at(reg_offsets::R8));
-	builder->CreateStore(fn->getArg(6), reg_to_alloca_.at(reg_offsets::R9));
-
-	//	builder->CreateStore(fn->getArg(7), reg_to_alloca_.at(reg_offsets::ZMM0));
-	//	builder->CreateStore(fn->getArg(8), reg_to_alloca_.at(reg_offsets::ZMM1));
-	//	builder->CreateStore(fn->getArg(9), reg_to_alloca_.at(reg_offsets::ZMM2));
-	//	builder->CreateStore(fn->getArg(10), reg_to_alloca_.at(reg_offsets::ZMM3));
-	//	builder->CreateStore(fn->getArg(11), reg_to_alloca_.at(reg_offsets::ZMM4));
-	//	builder->CreateStore(fn->getArg(12), reg_to_alloca_.at(reg_offsets::ZMM5));
-	//	builder->CreateStore(fn->getArg(13), reg_to_alloca_.at(reg_offsets::ZMM6));
-	//	builder->CreateStore(fn->getArg(14), reg_to_alloca_.at(reg_offsets::ZMM7));
 	auto pc_ptr = reg_to_alloca_.at(reg_offsets::PC);
 
 	for (auto p : c->packets()) {
@@ -1799,16 +2099,14 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 				break;
 			case br_type::call: {
 				auto f = get_static_fn(p);
-				if (f) {
-					save_callee_regs(*builder, state_arg, false);
-					auto ret = builder->CreateCall(f, load_args(builder, state_arg));
-					restore_callee_regs(*builder, state_arg, false);
-					unwrap_ret(builder, ret, state_arg);
-				} else {
-					save_callee_regs(*builder, state_arg);
-					builder->CreateCall(main_loop, { state_arg });
-					restore_callee_regs(*builder, state_arg);
+				if (!f) {
+					f = main_loop;
 				}
+				save_callee_regs(*builder, state_arg, false);
+				auto ret = builder->CreateCall(f, load_args(builder, state_arg));
+				ret->setCallingConv(internal_calling_conv);
+				restore_callee_regs(*builder, state_arg, false);
+				unwrap_ret(builder, ret, state_arg);
 				break;
 			}
 			case br_type::br: {
@@ -1830,21 +2128,23 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 			case br_type::ret: {
 				save_callee_regs(*builder, state_arg, false);
 #if defined(DEBUG)
-				builder->CreateCall(clk_, {state_arg, builder->CreateGlobalStringPtr(exit.str())});
+				builder->CreateCall(clk_, {get_state(*builder), builder->CreateGlobalStringPtr(exit.str())});
 #endif
-			builder->CreateAggregateRet(wrap_ret(builder, state_arg).data(), 2);
-			packet_block = nullptr;
-			break;
-		}
+				const auto return_values = wrap_ret(builder, state_arg);
+				builder->CreateAggregateRet(return_values.data(), return_values.size());
+				packet_block = nullptr;
+				break;
+			}
 		}
 	}
 
 	if (packet_block != nullptr) {
 		save_callee_regs(*builder, state_arg, false);
 #if defined(DEBUG)
-		builder->CreateCall(clk_, {state_arg, builder->CreateGlobalStringPtr(exit.str())});
+		builder->CreateCall(clk_, {get_state(*builder), builder->CreateGlobalStringPtr(exit.str())});
 #endif
-		builder->CreateAggregateRet(wrap_ret(builder, state_arg).data(), 2);
+		const auto return_values = wrap_ret(builder, state_arg);
+		builder->CreateAggregateRet(return_values.data(), return_values.size());
 	}
 
 	mid->insertInto(fn);
@@ -1865,13 +2165,14 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 	}
 
 	builder->SetInsertPoint(dyn);
-	save_callee_regs(*builder, state_arg);
-	builder->CreateCall(main_loop, { state_arg });
-	restore_callee_regs(*builder, state_arg);
+	save_callee_regs(*builder, state_arg, false);
+	auto ret = builder->CreateCall(main_loop, load_args(builder, state_arg));
+	ret->setCallingConv(internal_calling_conv);
+
 #if defined(DEBUG)
 	builder->CreateCall(clk_, {state_arg, builder->CreateGlobalStringPtr(exit.str())});
 #endif
-	builder->CreateAggregateRet(wrap_ret(builder, state_arg).data(), 2);
+	builder->CreateRet(ret);
 
 	if (verifyFunction(*fn, &errs())) {
 		module_->print(errs(), nullptr);
@@ -1880,22 +2181,21 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder, Function 
 }
 
 FunctionType *llvm_static_output_engine_impl::get_fn_type() {
-	std::vector<Type*> argv;
-	StructType* retv;
+	std::vector<Type *> argValues{};
+	std::vector<Type *> retValues{};
 
-	retv = StructType::get(*llvm_context_, { types.i64, types.i64 /*, types.i512, types.i512*/ }, false);
-	argv = {
-		types.cpu_state_ptr, types.i64, types.i64, types.i64, types.i64, types.i64, types.i64,
-		//		types.i512,
-		//		types.i512,
-		//		types.i512,
-		//		types.i512,
-		//		types.i512,
-		//		types.i512,
-		//		types.i512,
-		//		types.i512,
-	}; // cpu_state, 6 int args, 8 float args
-	return FunctionType::get(retv, argv, false);
+	// cpu state
+	argValues.emplace_back(types.cpu_state_ptr);
+
+	// 17 registers
+	for (int i = 0; i < 17; ++i) {
+		argValues.emplace_back(types.i64);
+		retValues.emplace_back(types.i64);
+	}
+
+	Type *retValue = StructType::get(*llvm_context_, retValues, false);
+
+	return FunctionType::get(retValue, argValues, false);
 }
 
 void llvm_static_output_engine_impl::init_regs(IRBuilder<> &builder) {
@@ -1943,11 +2243,40 @@ void llvm_static_output_engine_impl::restore_all_regs(IRBuilder<> &builder, Argu
 void llvm_static_output_engine_impl::save_callee_regs(IRBuilder<> &builder, Argument *state_arg, bool with_args)
 {
 	auto args = {
-		reg_offsets::RCX, reg_offsets::RDX, reg_offsets::RDI, reg_offsets::RSI, reg_offsets::R8, reg_offsets::R9 /*, reg_offsets::ZMM0,
-reg_offsets::ZMM1, reg_offsets::ZMM2, reg_offsets::ZMM3, reg_offsets::ZMM4, reg_offsets::ZMM5, reg_offsets::ZMM6, reg_offsets::ZMM7*/
+		reg_offsets::PC,
+		reg_offsets::RAX,
+		reg_offsets::RCX,
+		reg_offsets::RDX,
+		reg_offsets::RBX,
+		reg_offsets::RSP,
+		reg_offsets::RBP,
+		reg_offsets::RSI,
+		reg_offsets::RDI,
+		reg_offsets::R8,
+		reg_offsets::R9,
+		reg_offsets::R10,
+		reg_offsets::R11,
+		reg_offsets::R12,
+		reg_offsets::R13,
+		reg_offsets::R14,
+		reg_offsets::R15,
 	};
-	auto regs = { reg_offsets::PC, reg_offsets::RBX, reg_offsets::RSP, reg_offsets::RBP, reg_offsets::R12, reg_offsets::R13, reg_offsets::R14, reg_offsets::R15,
-		reg_offsets::FS, reg_offsets::GS , reg_offsets::X87_STS, reg_offsets::X87_TAG, reg_offsets::X87_CTRL };
+	auto regs = {
+//		reg_offsets::ZMM0,
+//		reg_offsets::ZMM1,
+//		reg_offsets::ZMM2,
+//		reg_offsets::ZMM3,
+//		reg_offsets::ZMM4,
+//		reg_offsets::ZMM5,
+//		reg_offsets::ZMM6,
+//		reg_offsets::ZMM7,
+		reg_offsets::FS,
+		reg_offsets::GS,
+		reg_offsets::X87_STACK_BASE,
+		reg_offsets::X87_STS,
+		reg_offsets::X87_TAG,
+		reg_offsets::X87_CTRL,
+	};
 	for (auto reg : regs) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "save_"+std::to_string((unsigned long)reg));
 		auto alloca = reg_to_alloca_.at(reg);
@@ -1967,9 +2296,35 @@ reg_offsets::ZMM1, reg_offsets::ZMM2, reg_offsets::ZMM3, reg_offsets::ZMM4, reg_
 
 void llvm_static_output_engine_impl::restore_callee_regs(IRBuilder<> &builder, Argument *state_arg, bool with_rets)
 {
-	auto rets = { reg_offsets::RAX, reg_offsets::RDX /*, reg_offsets::ZMM0, reg_offsets::ZMM1*/ };
-	auto regs = { reg_offsets::PC, reg_offsets::RBX, reg_offsets::RSP, reg_offsets::RBP, reg_offsets::R12, reg_offsets::R13, reg_offsets::R14, reg_offsets::R15,
-		reg_offsets::FS, reg_offsets::GS , reg_offsets::X87_STACK_BASE, reg_offsets::X87_STS, reg_offsets::X87_TAG, reg_offsets::X87_CTRL };
+	auto rets = {
+		reg_offsets::PC,
+		reg_offsets::RAX,
+		reg_offsets::RCX,
+		reg_offsets::RDX,
+		reg_offsets::RBX,
+		reg_offsets::RSP,
+		reg_offsets::RBP,
+		reg_offsets::RSI,
+		reg_offsets::RDI,
+		reg_offsets::R8,
+		reg_offsets::R9,
+		reg_offsets::R10,
+		reg_offsets::R11,
+		reg_offsets::R12,
+		reg_offsets::R13,
+		reg_offsets::R14,
+		reg_offsets::R15,
+	};
+	auto regs = {
+		reg_offsets::FS,
+		reg_offsets::GS,
+//		reg_offsets::ZMM0,
+//		reg_offsets::ZMM1,
+		reg_offsets::X87_STACK_BASE,
+		reg_offsets::X87_STS,
+		reg_offsets::X87_TAG,
+		reg_offsets::X87_CTRL,
+	};
 	for (auto reg : regs) {
 		auto ptr = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, off_to_idx.at((unsigned long)reg)) }, "restore_"+std::to_string((unsigned long)reg));
 		auto alloca = reg_to_alloca_.at(reg);

@@ -110,6 +110,9 @@ private:
 	::llvm::MDNode *guest_mem_alias_scope_;
 	::llvm::MDNode *reg_file_alias_scope_;
 
+	::llvm::CallingConv::ID internal_calling_conv = ::llvm::CallingConv::Arancini;
+//	::llvm::CallingConv::ID internal_calling_conv = ::llvm::CallingConv::C;
+
 	std::map<ir::port *, ::llvm::Value *> node_ports_to_llvm_values_;
 	std::map<ir::label_node *, ::llvm::BasicBlock *> label_nodes_to_llvm_blocks_;
 	std::unordered_map<const ir::local_var *, ::llvm::Value *> local_var_to_llvm_addr_;
@@ -118,16 +121,18 @@ private:
 	void build();
 	void initialise_types();
 	void create_main_function(::llvm::Function *loop_fn);
+	::llvm::Function *create_main_loop();
+	::llvm::Function *create_main_internal_loop();
 	void optimise();
 	void compile();
 	void lower_chunks(::llvm::Function *main_loop_fn);
 	void lower_chunk(::llvm::IRBuilder<> *builder, ::llvm::Function *main_loop_fn, std::shared_ptr<ir::chunk> chunk);
-	void lower_static_fn_lookup(::llvm::IRBuilder<> &builder, ::llvm::BasicBlock *contblock, ::llvm::Value *guestAddr);
-	::llvm::Value *lower_node(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
+	::llvm::Value *lower_static_fn_lookup(::llvm::IRBuilder<> &builder, ::llvm::BasicBlock *contblock, ::llvm::Value *guestAddr);
+	::llvm::Value *lower_node(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *state_arg,
 		std::shared_ptr<ir::packet> pkt, ir::node *a);
-	::llvm::Value *lower_port(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
+	::llvm::Value *lower_port(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *state_arg,
 		std::shared_ptr<ir::packet> pkt, ir::port &p);
-	::llvm::Value *materialise_port(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *start_arg,
+	::llvm::Value *materialise_port(::llvm::IRBuilder<::llvm::ConstantFolder, ::llvm::IRBuilderDefaultInserter> &builder, ::llvm::Argument *state_arg,
 		std::shared_ptr<ir::packet> pkt, ir::port &p);
 	void init_regs(::llvm::IRBuilder<> &builder);
 	void save_all_regs(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg);
@@ -144,6 +149,7 @@ private:
 	std::vector<::llvm::Value*> wrap_ret(::llvm::IRBuilder<> *builder, ::llvm::Argument *state_arg);
 	void create_function_decls();
 	void create_static_functions();
+	::llvm::PHINode *create_static_fn_switch(::llvm::IRBuilder<> &builder, ::llvm::Value *pc, ::llvm::BasicBlock *cont_block);
 	
 	::llvm::Value *createLoadFromCPU(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, unsigned long reg_idx);
 	void createStoreToCPU(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, unsigned int ret_idx, ::llvm::Value *ret, unsigned long reg_idx);

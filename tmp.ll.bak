@@ -1,0 +1,1054 @@
+; ModuleID = 'generated'
+source_filename = "generated"
+
+@guest_base = external global i8
+
+
+declare arancini { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } @__arancini__libc_start_init(ptr %0, i64 %1, i64 %2, i64 %3, i64 %4, i64 %5, i64 %6, i64 %7, i64 %8, i64 %9, i64 %10, i64 %11, i64 %12, i64 %13, i64 %14, i64 %15, i64 %16, i64 %17) 
+declare arancini { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } @__arancini__exit(ptr %0, i64 %1, i64 %2, i64 %3, i64 %4, i64 %5, i64 %6, i64 %7, i64 %8, i64 %9, i64 %10, i64 %11, i64 %12, i64 %13, i64 %14, i64 %15, i64 %16, i64 %17) 
+declare void @MainLoop(ptr %0)
+
+define arancini { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } @__arancini__libc_start_main_stage2(ptr noalias nocapture noundef nonnull align 16 dereferenceable(2232) %0, i64 %1, i64 %2, i64 %3, i64 %4, i64 %5, i64 %6, i64 %7, i64 %8, i64 %9, i64 %10, i64 %11, i64 %12, i64 %13, i64 %14, i64 %15, i64 %16, i64 %17) {
+__arancini__libc_start_main_stage2-pre:
+  %regPC = alloca i64, align 8, addrspace(128)
+  store i64 0, ptr addrspace(128) %regPC, align 4
+  %regRAX = alloca i64, align 8, addrspace(128), !alias.scope !0
+  store i64 0, ptr addrspace(128) %regRAX, align 4
+  %regRCX = alloca i64, align 8, addrspace(128)
+  store i64 0, ptr addrspace(128) %regRCX, align 4
+  %regRDX = alloca i64, align 8, addrspace(128), !alias.scope !0
+  store i64 0, ptr addrspace(128) %regRDX, align 4
+  %regRBX = alloca i64, align 8, addrspace(128), !alias.scope !0
+  store i64 0, ptr addrspace(128) %regRBX, align 4
+  %regRSP = alloca i64, align 8, addrspace(128), !alias.scope !0
+  store i64 0, ptr addrspace(128) %regRSP, align 4
+  %regRBP = alloca i64, align 8, addrspace(128), !alias.scope !0
+  store i64 0, ptr addrspace(128) %regRBP, align 4
+  %regRSI = alloca i64, align 8, addrspace(128), !alias.scope !0
+  store i64 0, ptr addrspace(128) %regRSI, align 4
+  %regRDI = alloca i64, align 8, addrspace(128), !alias.scope !0
+  store i64 0, ptr addrspace(128) %regRDI, align 4
+  %regR8 = alloca i64, align 8, addrspace(128)
+  store i64 0, ptr addrspace(128) %regR8, align 4
+  %regR9 = alloca i64, align 8, addrspace(128)
+  store i64 0, ptr addrspace(128) %regR9, align 4
+  %regR10 = alloca i64, align 8, addrspace(128)
+  store i64 0, ptr addrspace(128) %regR10, align 4
+  %regR11 = alloca i64, align 8, addrspace(128)
+  store i64 0, ptr addrspace(128) %regR11, align 4
+  %regR12 = alloca i64, align 8, addrspace(128), !alias.scope !0
+  store i64 0, ptr addrspace(128) %regR12, align 4
+  %regR13 = alloca i64, align 8, addrspace(128), !alias.scope !0
+  store i64 0, ptr addrspace(128) %regR13, align 4
+  %regR14 = alloca i64, align 8, addrspace(128)
+  store i64 0, ptr addrspace(128) %regR14, align 4
+  %regR15 = alloca i64, align 8, addrspace(128)
+  store i64 0, ptr addrspace(128) %regR15, align 4
+  %regZF = alloca i8, align 1, addrspace(128), !alias.scope !0
+  store i8 0, ptr addrspace(128) %regZF, align 1
+  %regCF = alloca i8, align 1, addrspace(128), !alias.scope !0
+  store i8 0, ptr addrspace(128) %regCF, align 1
+  %regOF = alloca i8, align 1, addrspace(128), !alias.scope !0
+  store i8 0, ptr addrspace(128) %regOF, align 1
+  %regSF = alloca i8, align 1, addrspace(128), !alias.scope !0
+  store i8 0, ptr addrspace(128) %regSF, align 1
+  %regPF = alloca i8, align 1, addrspace(128)
+  store i8 0, ptr addrspace(128) %regPF, align 1
+  %regDF = alloca i8, align 1, addrspace(128)
+  store i8 0, ptr addrspace(128) %regDF, align 1
+  %regunused2 = alloca i8, align 1, addrspace(128)
+  store i8 0, ptr addrspace(128) %regunused2, align 1
+  %regunused3 = alloca i8, align 1, addrspace(128)
+  store i8 0, ptr addrspace(128) %regunused3, align 1
+  %regFS = alloca i64, align 8, addrspace(128)
+  store i64 0, ptr addrspace(128) %regFS, align 4
+  %regGS = alloca i64, align 8, addrspace(128)
+  store i64 0, ptr addrspace(128) %regGS, align 4
+  %regZMM0 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM0, align 4
+  %regZMM1 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM1, align 4
+  %regZMM2 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM2, align 4
+  %regZMM3 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM3, align 4
+  %regZMM4 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM4, align 4
+  %regZMM5 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM5, align 4
+  %regZMM6 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM6, align 4
+  %regZMM7 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM7, align 4
+  %regZMM8 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM8, align 4
+  %regZMM9 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM9, align 4
+  %regZMM10 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM10, align 4
+  %regZMM11 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM11, align 4
+  %regZMM12 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM12, align 4
+  %regZMM13 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM13, align 4
+  %regZMM14 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM14, align 4
+  %regZMM15 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM15, align 4
+  %regZMM16 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM16, align 4
+  %regZMM17 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM17, align 4
+  %regZMM18 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM18, align 4
+  %regZMM19 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM19, align 4
+  %regZMM20 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM20, align 4
+  %regZMM21 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM21, align 4
+  %regZMM22 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM22, align 4
+  %regZMM23 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM23, align 4
+  %regZMM24 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM24, align 4
+  %regZMM25 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM25, align 4
+  %regZMM26 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM26, align 4
+  %regZMM27 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM27, align 4
+  %regZMM28 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM28, align 4
+  %regZMM29 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM29, align 4
+  %regZMM30 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM30, align 4
+  %regZMM31 = alloca i512, align 8, addrspace(128)
+  store i512 0, ptr addrspace(128) %regZMM31, align 4
+  %regX87_STACK_BASE = alloca i64, align 8, addrspace(128)
+  store i64 0, ptr addrspace(128) %regX87_STACK_BASE, align 4
+  %regX87_CTRL = alloca i16, align 2, addrspace(128)
+  store i16 0, ptr addrspace(128) %regX87_CTRL, align 2
+  %regX87_STS = alloca i16, align 2, addrspace(128)
+  store i16 0, ptr addrspace(128) %regX87_STS, align 2
+  %regX87_TAG = alloca i16, align 2, addrspace(128)
+  store i16 0, ptr addrspace(128) %regX87_TAG, align 2
+  %regunused4 = alloca i16, align 2, addrspace(128)
+  store i16 0, ptr addrspace(128) %regunused4, align 2
+  %regXCR0 = alloca i64, align 8, addrspace(128)
+  store i64 0, ptr addrspace(128) %regXCR0, align 4
+  %restore_144 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 25
+  %18 = load i64, ptr %restore_144, align 4
+  store i64 %18, ptr addrspace(128) %regFS, align 4
+  %restore_152 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 26
+  %19 = load i64, ptr %restore_152, align 4
+  store i64 %19, ptr addrspace(128) %regGS, align 4
+  %restore_160 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 27
+  %20 = load i512, ptr %restore_160, align 4
+  store i512 %20, ptr addrspace(128) %regZMM0, align 4
+  %restore_224 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 28
+  %21 = load i512, ptr %restore_224, align 4
+  store i512 %21, ptr addrspace(128) %regZMM1, align 4
+  %restore_2208 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 59
+  %22 = load i16, ptr %restore_2208, align 2
+  store i16 %22, ptr addrspace(128) %regX87_STACK_BASE, align 2
+  %restore_2218 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 61
+  %23 = load i16, ptr %restore_2218, align 2
+  store i16 %23, ptr addrspace(128) %regX87_STS, align 2
+  %restore_2220 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 62
+  %24 = load i16, ptr %restore_2220, align 2
+  store i16 %24, ptr addrspace(128) %regX87_TAG, align 2
+  %restore_2216 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 60
+  %25 = load i16, ptr %restore_2216, align 2
+  store i16 %25, ptr addrspace(128) %regX87_CTRL, align 2
+  store i64 %1, ptr addrspace(128) %regPC, align 4
+  store i64 %2, ptr addrspace(128) %regRAX, align 4
+  store i64 %3, ptr addrspace(128) %regRCX, align 4
+  store i64 %4, ptr addrspace(128) %regRDX, align 4
+  store i64 %5, ptr addrspace(128) %regRBX, align 4
+  store i64 %6, ptr addrspace(128) %regRSP, align 4
+  store i64 %7, ptr addrspace(128) %regRBP, align 4
+  store i64 %8, ptr addrspace(128) %regRSI, align 4
+  store i64 %9, ptr addrspace(128) %regRDI, align 4
+  store i64 %10, ptr addrspace(128) %regR8, align 4
+  store i64 %11, ptr addrspace(128) %regR9, align 4
+  store i64 %12, ptr addrspace(128) %regR10, align 4
+  store i64 %13, ptr addrspace(128) %regR11, align 4
+  store i64 %14, ptr addrspace(128) %regR12, align 4
+  store i64 %15, ptr addrspace(128) %regR13, align 4
+  store i64 %16, ptr addrspace(128) %regR14, align 4
+  store i64 %17, ptr addrspace(128) %regR15, align 4
+  br label %INSN_401a90
+
+INSN_401a90:                                      ; preds = %__arancini__libc_start_main_stage2-mid, %__arancini__libc_start_main_stage2-pre
+  br label %INSN_401a94
+
+INSN_401a94:                                      ; preds = %__arancini__libc_start_main_stage2-mid, %INSN_401a90
+  %26 = load i64, ptr addrspace(128) %regRSP, align 8
+  %27 = sub i64 %26, 8
+  %28 = load i64, ptr addrspace(128) %regR13, align 8
+  %29 = inttoptr i64 %27 to ptr addrspace(256), !alias.scope !3
+  store i64 %28, ptr addrspace(256) %29, align 4, !alias.scope !3
+  store i64 %27, ptr addrspace(128) %regRSP, align 8
+  br label %INSN_401a96
+
+INSN_401a96:                                      ; preds = %__arancini__libc_start_main_stage2-mid, %INSN_401a94
+  %30 = load i32, ptr addrspace(128) %regRSI, align 8
+  %31 = sext i32 %30 to i64
+  store i64 %31, ptr addrspace(128) %regRAX, align 8
+  br label %INSN_401a99
+
+INSN_401a99:                                      ; preds = %__arancini__libc_start_main_stage2-mid, %INSN_401a96
+  %32 = load i64, ptr addrspace(128) %regRSP, align 8
+  %33 = sub i64 %32, 8
+  %34 = load i64, ptr addrspace(128) %regR12, align 8
+  %35 = inttoptr i64 %33 to ptr addrspace(256), !alias.scope !3
+  store i64 %34, ptr addrspace(256) %35, align 4, !alias.scope !3
+  store i64 %33, ptr addrspace(128) %regRSP, align 8
+  br label %INSN_401a9b
+
+INSN_401a9b:                                      ; preds = %__arancini__libc_start_main_stage2-mid, %INSN_401a99
+  %36 = load i64, ptr addrspace(128) %regRDX, align 8
+  %37 = load i64, ptr addrspace(128) %regRAX, align 8
+  %bit_shift = shl i64 %37, 3
+  %38 = add i64 %36, %bit_shift
+  %39 = add i64 %38, 8
+  store i64 %39, ptr addrspace(128) %regR13, align 8
+  br label %INSN_401aa0
+
+INSN_401aa0:                                      ; preds = %__arancini__libc_start_main_stage2-mid, %INSN_401a9b
+  %40 = load i64, ptr addrspace(128) %regRDX, align 8
+  store i64 %40, ptr addrspace(128) %regR12, align 8
+  br label %INSN_401aa3
+
+INSN_401aa3:                                      ; preds = %__arancini__libc_start_main_stage2-mid, %INSN_401aa0
+  %41 = load i64, ptr addrspace(128) %regRSP, align 8
+  %42 = sub i64 %41, 8
+  %43 = load i64, ptr addrspace(128) %regRBP, align 8
+  %44 = inttoptr i64 %42 to ptr addrspace(256), !alias.scope !3
+  store i64 %43, ptr addrspace(256) %44, align 4, !alias.scope !3
+  store i64 %42, ptr addrspace(128) %regRSP, align 8
+  br label %INSN_401aa4
+
+INSN_401aa4:                                      ; preds = %__arancini__libc_start_main_stage2-mid, %INSN_401aa3
+  %45 = load i64, ptr addrspace(128) %regRAX, align 8
+  store i64 %45, ptr addrspace(128) %regRBP, align 8
+  br label %INSN_401aa7
+
+INSN_401aa7:                                      ; preds = %__arancini__libc_start_main_stage2-mid, %INSN_401aa4
+  %46 = load i64, ptr addrspace(128) %regRSP, align 8
+  %47 = sub i64 %46, 8
+  %48 = load i64, ptr addrspace(128) %regRBX, align 8
+  %49 = inttoptr i64 %47 to ptr addrspace(256), !alias.scope !3
+  store i64 %48, ptr addrspace(256) %49, align 4, !alias.scope !3
+  store i64 %47, ptr addrspace(128) %regRSP, align 8
+  br label %INSN_401aa8
+
+INSN_401aa8:                                      ; preds = %__arancini__libc_start_main_stage2-mid, %INSN_401aa7
+  %50 = load i64, ptr addrspace(128) %regRDI, align 8
+  store i64 %50, ptr addrspace(128) %regRBX, align 8
+  br label %INSN_401aab
+
+INSN_401aab:                                      ; preds = %__arancini__libc_start_main_stage2-mid, %INSN_401aa8
+  %51 = load i64, ptr addrspace(128) %regRSP, align 8
+  %52 = sub i64 %51, 8
+  store i64 %52, ptr addrspace(128) %regRSP, align 8
+  %53 = icmp eq i64 %52, 0
+  %54 = zext i1 %53 to i8
+  store i8 %54, ptr addrspace(128) %regZF, align 1
+  %borrow = icmp ult i64 %51, 8
+  %55 = zext i1 %borrow to i8
+  store i8 %55, ptr addrspace(128) %regCF, align 1
+  %56 = add i64 %51, -8
+  %"SUM neg" = icmp slt i64 %56, 0
+  %57 = and i1 false, %"SUM neg"
+  %"LHS pos" = icmp sge i64 %51, 0
+  %58 = and i1 %"LHS pos", %57
+  %"SUM pos" = icmp sge i64 %56, 0
+  %59 = and i1 true, %"SUM pos"
+  %"LHS neg" = icmp slt i64 %51, 0
+  %60 = and i1 %"LHS neg", %59
+  %overflow = or i1 %58, %60
+  %61 = zext i1 %overflow to i8
+  store i8 %61, ptr addrspace(128) %regOF, align 1
+  %62 = icmp slt i64 %52, 0
+  %63 = zext i1 %62 to i8
+  store i8 %63, ptr addrspace(128) %regSF, align 1
+  br label %INSN_401aaf
+
+INSN_401aaf:                                      ; preds = %__arancini__libc_start_main_stage2-mid, %INSN_401aab
+  %64 = load i64, ptr addrspace(128) %regRSP, align 8
+  %65 = sub i64 %64, 8
+  store i64 %65, ptr addrspace(128) %regRSP, align 8
+  %66 = inttoptr i64 %65 to ptr addrspace(256), !alias.scope !3
+  store i64 4201140, ptr addrspace(256) %66, align 4, !alias.scope !3
+  %pcptr = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 0
+  store i64 4201040, ptr addrspace(128) %regPC, align 4
+  %save_160 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 27
+  %67 = load i512, ptr addrspace(128) %regZMM0, align 4
+  store i512 %67, ptr %save_160, align 4
+  %save_224 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 28
+  %68 = load i512, ptr addrspace(128) %regZMM1, align 4
+  store i512 %68, ptr %save_224, align 4
+  %save_288 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 29
+  %69 = load i512, ptr addrspace(128) %regZMM2, align 4
+  store i512 %69, ptr %save_288, align 4
+  %save_352 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 30
+  %70 = load i512, ptr addrspace(128) %regZMM3, align 4
+  store i512 %70, ptr %save_352, align 4
+  %save_416 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 31
+  %71 = load i512, ptr addrspace(128) %regZMM4, align 4
+  store i512 %71, ptr %save_416, align 4
+  %save_480 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 32
+  %72 = load i512, ptr addrspace(128) %regZMM5, align 4
+  store i512 %72, ptr %save_480, align 4
+  %save_544 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 33
+  %73 = load i512, ptr addrspace(128) %regZMM6, align 4
+  store i512 %73, ptr %save_544, align 4
+  %save_608 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 34
+  %74 = load i512, ptr addrspace(128) %regZMM7, align 4
+  store i512 %74, ptr %save_608, align 4
+  %save_144 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 25
+  %75 = load i64, ptr addrspace(128) %regFS, align 4
+  store i64 %75, ptr %save_144, align 4
+  %save_152 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 26
+  %76 = load i64, ptr addrspace(128) %regGS, align 4
+  store i64 %76, ptr %save_152, align 4
+  %save_2208 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 59
+  %77 = load i16, ptr addrspace(128) %regX87_STACK_BASE, align 2
+  store i16 %77, ptr %save_2208, align 2
+  %save_2218 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 61
+  %78 = load i16, ptr addrspace(128) %regX87_STS, align 2
+  store i16 %78, ptr %save_2218, align 2
+  %save_2220 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 62
+  %79 = load i16, ptr addrspace(128) %regX87_TAG, align 2
+  store i16 %79, ptr %save_2220, align 2
+  %save_2216 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 60
+  %80 = load i16, ptr addrspace(128) %regX87_CTRL, align 2
+  store i16 %80, ptr %save_2216, align 2
+  %81 = load i64, ptr addrspace(128) %regPC, align 4
+  %82 = load i64, ptr addrspace(128) %regRAX, align 4
+  %83 = load i64, ptr addrspace(128) %regRCX, align 4
+  %84 = load i64, ptr addrspace(128) %regRDX, align 4
+  %85 = load i64, ptr addrspace(128) %regRBX, align 4
+  %86 = load i64, ptr addrspace(128) %regRSP, align 4
+  %87 = load i64, ptr addrspace(128) %regRBP, align 4
+  %88 = load i64, ptr addrspace(128) %regRSI, align 4
+  %89 = load i64, ptr addrspace(128) %regRDI, align 4
+  %90 = load i64, ptr addrspace(128) %regR8, align 4
+  %91 = load i64, ptr addrspace(128) %regR9, align 4
+  %92 = load i64, ptr addrspace(128) %regR10, align 4
+  %93 = load i64, ptr addrspace(128) %regR11, align 4
+  %94 = load i64, ptr addrspace(128) %regR12, align 4
+  %95 = load i64, ptr addrspace(128) %regR13, align 4
+  %96 = load i64, ptr addrspace(128) %regR14, align 4
+  %97 = load i64, ptr addrspace(128) %regR15, align 4
+  %98 = call arancini { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } @__arancini__libc_start_init(ptr %0, i64 %81, i64 %82, i64 %83, i64 %84, i64 %85, i64 %86, i64 %87, i64 %88, i64 %89, i64 %90, i64 %91, i64 %92, i64 %93, i64 %94, i64 %95, i64 %96, i64 %97)
+  %restore_1441 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 25
+  %99 = load i64, ptr %restore_1441, align 4
+  store i64 %99, ptr addrspace(128) %regFS, align 4
+  %restore_1522 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 26
+  %100 = load i64, ptr %restore_1522, align 4
+  store i64 %100, ptr addrspace(128) %regGS, align 4
+  %restore_1603 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 27
+  %101 = load i512, ptr %restore_1603, align 4
+  store i512 %101, ptr addrspace(128) %regZMM0, align 4
+  %restore_2244 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 28
+  %102 = load i512, ptr %restore_2244, align 4
+  store i512 %102, ptr addrspace(128) %regZMM1, align 4
+  %restore_22085 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 59
+  %103 = load i16, ptr %restore_22085, align 2
+  store i16 %103, ptr addrspace(128) %regX87_STACK_BASE, align 2
+  %restore_22186 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 61
+  %104 = load i16, ptr %restore_22186, align 2
+  store i16 %104, ptr addrspace(128) %regX87_STS, align 2
+  %restore_22207 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 62
+  %105 = load i16, ptr %restore_22207, align 2
+  store i16 %105, ptr addrspace(128) %regX87_TAG, align 2
+  %restore_22168 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 60
+  %106 = load i16, ptr %restore_22168, align 2
+  store i16 %106, ptr addrspace(128) %regX87_CTRL, align 2
+  %107 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %98, 1
+  store i64 %107, ptr addrspace(128) %regPC, align 4
+  %108 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %98, 2
+  store i64 %108, ptr addrspace(128) %regRAX, align 4
+  %109 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %98, 3
+  store i64 %109, ptr addrspace(128) %regRCX, align 4
+  %110 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %98, 4
+  store i64 %110, ptr addrspace(128) %regRDX, align 4
+  %111 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %98, 5
+  store i64 %111, ptr addrspace(128) %regRBX, align 4
+  %112 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %98, 6
+  store i64 %112, ptr addrspace(128) %regRSP, align 4
+  %113 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %98, 7
+  store i64 %113, ptr addrspace(128) %regRBP, align 4
+  %114 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %98, 8
+  store i64 %114, ptr addrspace(128) %regRSI, align 4
+  %115 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %98, 9
+  store i64 %115, ptr addrspace(128) %regRDI, align 4
+  %116 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %98, 10
+  store i64 %116, ptr addrspace(128) %regR8, align 4
+  %117 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %98, 11
+  store i64 %117, ptr addrspace(128) %regR9, align 4
+  %118 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %98, 12
+  store i64 %118, ptr addrspace(128) %regR10, align 4
+  %119 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %98, 13
+  store i64 %119, ptr addrspace(128) %regR11, align 4
+  %120 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %98, 14
+  store i64 %120, ptr addrspace(128) %regR12, align 4
+  %121 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %98, 15
+  store i64 %121, ptr addrspace(128) %regR13, align 4
+  %122 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %98, 16
+  store i64 %122, ptr addrspace(128) %regR14, align 4
+  %123 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %98, 17
+  store i64 %123, ptr addrspace(128) %regR15, align 4
+  br label %INSN_401ab4
+
+INSN_401ab4:                                      ; preds = %__arancini__libc_start_main_stage2-mid, %INSN_401aaf
+  %124 = load i32, ptr addrspace(128) %regRBP, align 8
+  %zx = zext i32 %124 to i64
+  store i64 %zx, ptr addrspace(128) %regRDI, align 8
+  br label %INSN_401ab6
+
+INSN_401ab6:                                      ; preds = %__arancini__libc_start_main_stage2-mid, %INSN_401ab4
+  %125 = load i64, ptr addrspace(128) %regR13, align 8
+  store i64 %125, ptr addrspace(128) %regRDX, align 8
+  br label %INSN_401ab9
+
+INSN_401ab9:                                      ; preds = %__arancini__libc_start_main_stage2-mid, %INSN_401ab6
+  %126 = load i64, ptr addrspace(128) %regR12, align 8
+  store i64 %126, ptr addrspace(128) %regRSI, align 8
+  br label %INSN_401abc
+
+INSN_401abc:                                      ; preds = %__arancini__libc_start_main_stage2-mid, %INSN_401ab9
+  %127 = load i64, ptr addrspace(128) %regRSP, align 8
+  %128 = sub i64 %127, 8
+  store i64 %128, ptr addrspace(128) %regRSP, align 8
+  %129 = inttoptr i64 %128 to ptr addrspace(256), !alias.scope !3
+  store i64 4201150, ptr addrspace(256) %129, align 4, !alias.scope !3
+  %pcptr9 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 0
+  %130 = load i64, ptr addrspace(128) %regRBX, align 8
+  store i64 %130, ptr addrspace(128) %regPC, align 4
+  %save_16010 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 27
+  %131 = load i512, ptr addrspace(128) %regZMM0, align 4
+  store i512 %131, ptr %save_16010, align 4
+  %save_22411 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 28
+  %132 = load i512, ptr addrspace(128) %regZMM1, align 4
+  store i512 %132, ptr %save_22411, align 4
+  %save_28812 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 29
+  %133 = load i512, ptr addrspace(128) %regZMM2, align 4
+  store i512 %133, ptr %save_28812, align 4
+  %save_35213 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 30
+  %134 = load i512, ptr addrspace(128) %regZMM3, align 4
+  store i512 %134, ptr %save_35213, align 4
+  %save_41614 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 31
+  %135 = load i512, ptr addrspace(128) %regZMM4, align 4
+  store i512 %135, ptr %save_41614, align 4
+  %save_48015 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 32
+  %136 = load i512, ptr addrspace(128) %regZMM5, align 4
+  store i512 %136, ptr %save_48015, align 4
+  %save_54416 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 33
+  %137 = load i512, ptr addrspace(128) %regZMM6, align 4
+  store i512 %137, ptr %save_54416, align 4
+  %save_60817 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 34
+  %138 = load i512, ptr addrspace(128) %regZMM7, align 4
+  store i512 %138, ptr %save_60817, align 4
+  %save_14418 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 25
+  %139 = load i64, ptr addrspace(128) %regFS, align 4
+  store i64 %139, ptr %save_14418, align 4
+  %save_15219 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 26
+  %140 = load i64, ptr addrspace(128) %regGS, align 4
+  store i64 %140, ptr %save_15219, align 4
+  %save_220820 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 59
+  %141 = load i16, ptr addrspace(128) %regX87_STACK_BASE, align 2
+  store i16 %141, ptr %save_220820, align 2
+  %save_221821 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 61
+  %142 = load i16, ptr addrspace(128) %regX87_STS, align 2
+  store i16 %142, ptr %save_221821, align 2
+  %save_222022 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 62
+  %143 = load i16, ptr addrspace(128) %regX87_TAG, align 2
+  store i16 %143, ptr %save_222022, align 2
+  %save_221623 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 60
+  %144 = load i16, ptr addrspace(128) %regX87_CTRL, align 2
+  store i16 %144, ptr %save_221623, align 2
+  %save_0 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 0
+  %145 = load i64, ptr addrspace(128) %regPC, align 4
+  store i64 %145, ptr %save_0, align 4
+  %save_8 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 1
+  %146 = load i64, ptr addrspace(128) %regRAX, align 4
+  store i64 %146, ptr %save_8, align 4
+  %save_16 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 2
+  %147 = load i64, ptr addrspace(128) %regRCX, align 4
+  store i64 %147, ptr %save_16, align 4
+  %save_24 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 3
+  %148 = load i64, ptr addrspace(128) %regRDX, align 4
+  store i64 %148, ptr %save_24, align 4
+  %save_32 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 4
+  %149 = load i64, ptr addrspace(128) %regRBX, align 4
+  store i64 %149, ptr %save_32, align 4
+  %save_40 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 5
+  %150 = load i64, ptr addrspace(128) %regRSP, align 4
+  store i64 %150, ptr %save_40, align 4
+  %save_48 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 6
+  %151 = load i64, ptr addrspace(128) %regRBP, align 4
+  store i64 %151, ptr %save_48, align 4
+  %save_56 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 7
+  %152 = load i64, ptr addrspace(128) %regRSI, align 4
+  store i64 %152, ptr %save_56, align 4
+  %save_64 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 8
+  %153 = load i64, ptr addrspace(128) %regRDI, align 4
+  store i64 %153, ptr %save_64, align 4
+  %save_72 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 9
+  %154 = load i64, ptr addrspace(128) %regR8, align 4
+  store i64 %154, ptr %save_72, align 4
+  %save_80 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 10
+  %155 = load i64, ptr addrspace(128) %regR9, align 4
+  store i64 %155, ptr %save_80, align 4
+  %save_88 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 11
+  %156 = load i64, ptr addrspace(128) %regR10, align 4
+  store i64 %156, ptr %save_88, align 4
+  %save_96 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 12
+  %157 = load i64, ptr addrspace(128) %regR11, align 4
+  store i64 %157, ptr %save_96, align 4
+  %save_104 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 13
+  %158 = load i64, ptr addrspace(128) %regR12, align 4
+  store i64 %158, ptr %save_104, align 4
+  %save_112 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 14
+  %159 = load i64, ptr addrspace(128) %regR13, align 4
+  store i64 %159, ptr %save_112, align 4
+  %save_120 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 15
+  %160 = load i64, ptr addrspace(128) %regR14, align 4
+  store i64 %160, ptr %save_120, align 4
+  %save_128 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 16
+  %161 = load i64, ptr addrspace(128) %regR15, align 4
+  store i64 %161, ptr %save_128, align 4
+  call void @MainLoop(ptr %0)
+  %restore_14424 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 25
+  %162 = load i64, ptr %restore_14424, align 4
+  store i64 %162, ptr addrspace(128) %regFS, align 4
+  %restore_15225 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 26
+  %163 = load i64, ptr %restore_15225, align 4
+  store i64 %163, ptr addrspace(128) %regGS, align 4
+  %restore_16026 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 27
+  %164 = load i512, ptr %restore_16026, align 4
+  store i512 %164, ptr addrspace(128) %regZMM0, align 4
+  %restore_22427 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 28
+  %165 = load i512, ptr %restore_22427, align 4
+  store i512 %165, ptr addrspace(128) %regZMM1, align 4
+  %restore_220828 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 59
+  %166 = load i16, ptr %restore_220828, align 2
+  store i16 %166, ptr addrspace(128) %regX87_STACK_BASE, align 2
+  %restore_221829 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 61
+  %167 = load i16, ptr %restore_221829, align 2
+  store i16 %167, ptr addrspace(128) %regX87_STS, align 2
+  %restore_222030 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 62
+  %168 = load i16, ptr %restore_222030, align 2
+  store i16 %168, ptr addrspace(128) %regX87_TAG, align 2
+  %restore_221631 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 60
+  %169 = load i16, ptr %restore_221631, align 2
+  store i16 %169, ptr addrspace(128) %regX87_CTRL, align 2
+  %restore_0 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 0
+  %170 = load i64, ptr %restore_0, align 4
+  store i64 %170, ptr addrspace(128) %regPC, align 4
+  %restore_8 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 1
+  %171 = load i64, ptr %restore_8, align 4
+  store i64 %171, ptr addrspace(128) %regRAX, align 4
+  %restore_16 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 2
+  %172 = load i64, ptr %restore_16, align 4
+  store i64 %172, ptr addrspace(128) %regRCX, align 4
+  %restore_24 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 3
+  %173 = load i64, ptr %restore_24, align 4
+  store i64 %173, ptr addrspace(128) %regRDX, align 4
+  %restore_32 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 4
+  %174 = load i64, ptr %restore_32, align 4
+  store i64 %174, ptr addrspace(128) %regRBX, align 4
+  %restore_40 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 5
+  %175 = load i64, ptr %restore_40, align 4
+  store i64 %175, ptr addrspace(128) %regRSP, align 4
+  %restore_48 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 6
+  %176 = load i64, ptr %restore_48, align 4
+  store i64 %176, ptr addrspace(128) %regRBP, align 4
+  %restore_56 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 7
+  %177 = load i64, ptr %restore_56, align 4
+  store i64 %177, ptr addrspace(128) %regRSI, align 4
+  %restore_64 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 8
+  %178 = load i64, ptr %restore_64, align 4
+  store i64 %178, ptr addrspace(128) %regRDI, align 4
+  %restore_72 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 9
+  %179 = load i64, ptr %restore_72, align 4
+  store i64 %179, ptr addrspace(128) %regR8, align 4
+  %restore_80 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 10
+  %180 = load i64, ptr %restore_80, align 4
+  store i64 %180, ptr addrspace(128) %regR9, align 4
+  %restore_88 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 11
+  %181 = load i64, ptr %restore_88, align 4
+  store i64 %181, ptr addrspace(128) %regR10, align 4
+  %restore_96 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 12
+  %182 = load i64, ptr %restore_96, align 4
+  store i64 %182, ptr addrspace(128) %regR11, align 4
+  %restore_104 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 13
+  %183 = load i64, ptr %restore_104, align 4
+  store i64 %183, ptr addrspace(128) %regR12, align 4
+  %restore_112 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 14
+  %184 = load i64, ptr %restore_112, align 4
+  store i64 %184, ptr addrspace(128) %regR13, align 4
+  %restore_120 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 15
+  %185 = load i64, ptr %restore_120, align 4
+  store i64 %185, ptr addrspace(128) %regR14, align 4
+  %restore_128 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 16
+  %186 = load i64, ptr %restore_128, align 4
+  store i64 %186, ptr addrspace(128) %regR15, align 4
+  br label %INSN_401abe
+
+INSN_401abe:                                      ; preds = %__arancini__libc_start_main_stage2-mid, %INSN_401abc
+  %187 = load i32, ptr addrspace(128) %regRAX, align 8
+  %zx32 = zext i32 %187 to i64
+  store i64 %zx32, ptr addrspace(128) %regRDI, align 8
+  br label %INSN_401ac0
+
+INSN_401ac0:                                      ; preds = %__arancini__libc_start_main_stage2-mid, %INSN_401abe
+  %188 = load i64, ptr addrspace(128) %regRSP, align 8
+  %189 = sub i64 %188, 8
+  store i64 %189, ptr addrspace(128) %regRSP, align 8
+  %190 = inttoptr i64 %189 to ptr addrspace(256), !alias.scope !3
+  store i64 4201157, ptr addrspace(256) %190, align 4, !alias.scope !3
+  %pcptr33 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 0
+  store i64 4198416, ptr addrspace(128) %regPC, align 4
+  %save_16034 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 27
+  %191 = load i512, ptr addrspace(128) %regZMM0, align 4
+  store i512 %191, ptr %save_16034, align 4
+  %save_22435 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 28
+  %192 = load i512, ptr addrspace(128) %regZMM1, align 4
+  store i512 %192, ptr %save_22435, align 4
+  %save_28836 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 29
+  %193 = load i512, ptr addrspace(128) %regZMM2, align 4
+  store i512 %193, ptr %save_28836, align 4
+  %save_35237 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 30
+  %194 = load i512, ptr addrspace(128) %regZMM3, align 4
+  store i512 %194, ptr %save_35237, align 4
+  %save_41638 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 31
+  %195 = load i512, ptr addrspace(128) %regZMM4, align 4
+  store i512 %195, ptr %save_41638, align 4
+  %save_48039 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 32
+  %196 = load i512, ptr addrspace(128) %regZMM5, align 4
+  store i512 %196, ptr %save_48039, align 4
+  %save_54440 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 33
+  %197 = load i512, ptr addrspace(128) %regZMM6, align 4
+  store i512 %197, ptr %save_54440, align 4
+  %save_60841 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 34
+  %198 = load i512, ptr addrspace(128) %regZMM7, align 4
+  store i512 %198, ptr %save_60841, align 4
+  %save_14442 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 25
+  %199 = load i64, ptr addrspace(128) %regFS, align 4
+  store i64 %199, ptr %save_14442, align 4
+  %save_15243 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 26
+  %200 = load i64, ptr addrspace(128) %regGS, align 4
+  store i64 %200, ptr %save_15243, align 4
+  %save_220844 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 59
+  %201 = load i16, ptr addrspace(128) %regX87_STACK_BASE, align 2
+  store i16 %201, ptr %save_220844, align 2
+  %save_221845 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 61
+  %202 = load i16, ptr addrspace(128) %regX87_STS, align 2
+  store i16 %202, ptr %save_221845, align 2
+  %save_222046 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 62
+  %203 = load i16, ptr addrspace(128) %regX87_TAG, align 2
+  store i16 %203, ptr %save_222046, align 2
+  %save_221647 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 60
+  %204 = load i16, ptr addrspace(128) %regX87_CTRL, align 2
+  store i16 %204, ptr %save_221647, align 2
+  %205 = load i64, ptr addrspace(128) %regPC, align 4
+  %206 = load i64, ptr addrspace(128) %regRAX, align 4
+  %207 = load i64, ptr addrspace(128) %regRCX, align 4
+  %208 = load i64, ptr addrspace(128) %regRDX, align 4
+  %209 = load i64, ptr addrspace(128) %regRBX, align 4
+  %210 = load i64, ptr addrspace(128) %regRSP, align 4
+  %211 = load i64, ptr addrspace(128) %regRBP, align 4
+  %212 = load i64, ptr addrspace(128) %regRSI, align 4
+  %213 = load i64, ptr addrspace(128) %regRDI, align 4
+  %214 = load i64, ptr addrspace(128) %regR8, align 4
+  %215 = load i64, ptr addrspace(128) %regR9, align 4
+  %216 = load i64, ptr addrspace(128) %regR10, align 4
+  %217 = load i64, ptr addrspace(128) %regR11, align 4
+  %218 = load i64, ptr addrspace(128) %regR12, align 4
+  %219 = load i64, ptr addrspace(128) %regR13, align 4
+  %220 = load i64, ptr addrspace(128) %regR14, align 4
+  %221 = load i64, ptr addrspace(128) %regR15, align 4
+  %222 = call arancini { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } @__arancini__exit(ptr %0, i64 %205, i64 %206, i64 %207, i64 %208, i64 %209, i64 %210, i64 %211, i64 %212, i64 %213, i64 %214, i64 %215, i64 %216, i64 %217, i64 %218, i64 %219, i64 %220, i64 %221)
+  %restore_14448 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 25
+  %223 = load i64, ptr %restore_14448, align 4
+  store i64 %223, ptr addrspace(128) %regFS, align 4
+  %restore_15249 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 26
+  %224 = load i64, ptr %restore_15249, align 4
+  store i64 %224, ptr addrspace(128) %regGS, align 4
+  %restore_16050 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 27
+  %225 = load i512, ptr %restore_16050, align 4
+  store i512 %225, ptr addrspace(128) %regZMM0, align 4
+  %restore_22451 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 28
+  %226 = load i512, ptr %restore_22451, align 4
+  store i512 %226, ptr addrspace(128) %regZMM1, align 4
+  %restore_220852 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 59
+  %227 = load i16, ptr %restore_220852, align 2
+  store i16 %227, ptr addrspace(128) %regX87_STACK_BASE, align 2
+  %restore_221853 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 61
+  %228 = load i16, ptr %restore_221853, align 2
+  store i16 %228, ptr addrspace(128) %regX87_STS, align 2
+  %restore_222054 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 62
+  %229 = load i16, ptr %restore_222054, align 2
+  store i16 %229, ptr addrspace(128) %regX87_TAG, align 2
+  %restore_221655 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 60
+  %230 = load i16, ptr %restore_221655, align 2
+  store i16 %230, ptr addrspace(128) %regX87_CTRL, align 2
+  %231 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %222, 1
+  store i64 %231, ptr addrspace(128) %regPC, align 4
+  %232 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %222, 2
+  store i64 %232, ptr addrspace(128) %regRAX, align 4
+  %233 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %222, 3
+  store i64 %233, ptr addrspace(128) %regRCX, align 4
+  %234 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %222, 4
+  store i64 %234, ptr addrspace(128) %regRDX, align 4
+  %235 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %222, 5
+  store i64 %235, ptr addrspace(128) %regRBX, align 4
+  %236 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %222, 6
+  store i64 %236, ptr addrspace(128) %regRSP, align 4
+  %237 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %222, 7
+  store i64 %237, ptr addrspace(128) %regRBP, align 4
+  %238 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %222, 8
+  store i64 %238, ptr addrspace(128) %regRSI, align 4
+  %239 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %222, 9
+  store i64 %239, ptr addrspace(128) %regRDI, align 4
+  %240 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %222, 10
+  store i64 %240, ptr addrspace(128) %regR8, align 4
+  %241 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %222, 11
+  store i64 %241, ptr addrspace(128) %regR9, align 4
+  %242 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %222, 12
+  store i64 %242, ptr addrspace(128) %regR10, align 4
+  %243 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %222, 13
+  store i64 %243, ptr addrspace(128) %regR11, align 4
+  %244 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %222, 14
+  store i64 %244, ptr addrspace(128) %regR12, align 4
+  %245 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %222, 15
+  store i64 %245, ptr addrspace(128) %regR13, align 4
+  %246 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %222, 16
+  store i64 %246, ptr addrspace(128) %regR14, align 4
+  %247 = extractvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %222, 17
+  store i64 %247, ptr addrspace(128) %regR15, align 4
+  %save_16056 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 27
+  %248 = load i512, ptr addrspace(128) %regZMM0, align 4
+  store i512 %248, ptr %save_16056, align 4
+  %save_22457 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 28
+  %249 = load i512, ptr addrspace(128) %regZMM1, align 4
+  store i512 %249, ptr %save_22457, align 4
+  %save_28858 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 29
+  %250 = load i512, ptr addrspace(128) %regZMM2, align 4
+  store i512 %250, ptr %save_28858, align 4
+  %save_35259 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 30
+  %251 = load i512, ptr addrspace(128) %regZMM3, align 4
+  store i512 %251, ptr %save_35259, align 4
+  %save_41660 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 31
+  %252 = load i512, ptr addrspace(128) %regZMM4, align 4
+  store i512 %252, ptr %save_41660, align 4
+  %save_48061 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 32
+  %253 = load i512, ptr addrspace(128) %regZMM5, align 4
+  store i512 %253, ptr %save_48061, align 4
+  %save_54462 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 33
+  %254 = load i512, ptr addrspace(128) %regZMM6, align 4
+  store i512 %254, ptr %save_54462, align 4
+  %save_60863 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 34
+  %255 = load i512, ptr addrspace(128) %regZMM7, align 4
+  store i512 %255, ptr %save_60863, align 4
+  %save_14464 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 25
+  %256 = load i64, ptr addrspace(128) %regFS, align 4
+  store i64 %256, ptr %save_14464, align 4
+  %save_15265 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 26
+  %257 = load i64, ptr addrspace(128) %regGS, align 4
+  store i64 %257, ptr %save_15265, align 4
+  %save_220866 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 59
+  %258 = load i16, ptr addrspace(128) %regX87_STACK_BASE, align 2
+  store i16 %258, ptr %save_220866, align 2
+  %save_221867 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 61
+  %259 = load i16, ptr addrspace(128) %regX87_STS, align 2
+  store i16 %259, ptr %save_221867, align 2
+  %save_222068 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 62
+  %260 = load i16, ptr addrspace(128) %regX87_TAG, align 2
+  store i16 %260, ptr %save_222068, align 2
+  %save_221669 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 60
+  %261 = load i16, ptr addrspace(128) %regX87_CTRL, align 2
+  store i16 %261, ptr %save_221669, align 2
+  %262 = load i64, ptr addrspace(128) %regPC, align 4
+  %263 = load i64, ptr addrspace(128) %regRAX, align 4
+  %264 = load i64, ptr addrspace(128) %regRCX, align 4
+  %265 = load i64, ptr addrspace(128) %regRDX, align 4
+  %266 = load i64, ptr addrspace(128) %regRBX, align 4
+  %267 = load i64, ptr addrspace(128) %regRSP, align 4
+  %268 = load i64, ptr addrspace(128) %regRBP, align 4
+  %269 = load i64, ptr addrspace(128) %regRSI, align 4
+  %270 = load i64, ptr addrspace(128) %regRDI, align 4
+  %271 = load i64, ptr addrspace(128) %regR8, align 4
+  %272 = load i64, ptr addrspace(128) %regR9, align 4
+  %273 = load i64, ptr addrspace(128) %regR10, align 4
+  %274 = load i64, ptr addrspace(128) %regR11, align 4
+  %275 = load i64, ptr addrspace(128) %regR12, align 4
+  %276 = load i64, ptr addrspace(128) %regR13, align 4
+  %277 = load i64, ptr addrspace(128) %regR14, align 4
+  %278 = load i64, ptr addrspace(128) %regR15, align 4
+  %mrv = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } poison, ptr %0, 0
+  %mrv70 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv, i64 %262, 1
+  %mrv71 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv70, i64 %263, 2
+  %mrv72 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv71, i64 %264, 3
+  %mrv73 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv72, i64 %265, 4
+  %mrv74 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv73, i64 %266, 5
+  %mrv75 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv74, i64 %267, 6
+  %mrv76 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv75, i64 %268, 7
+  %mrv77 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv76, i64 %269, 8
+  %mrv78 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv77, i64 %270, 9
+  %mrv79 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv78, i64 %271, 10
+  %mrv80 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv79, i64 %272, 11
+  %mrv81 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv80, i64 %273, 12
+  %mrv82 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv81, i64 %274, 13
+  %mrv83 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv82, i64 %275, 14
+  %mrv84 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv83, i64 %276, 15
+  %mrv85 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv84, i64 %277, 16
+  %mrv86 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv85, i64 %278, 17
+  ret { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv86
+
+__arancini__libc_start_main_stage2-mid:           ; No predecessors!
+  %local-pc = load i64, ptr addrspace(128) %regPC, align 4
+  switch i64 %local-pc, label %__arancini__libc_start_main_stage2-dyn [
+    i64 4201104, label %INSN_401a90
+    i64 4201108, label %INSN_401a94
+    i64 4201110, label %INSN_401a96
+    i64 4201113, label %INSN_401a99
+    i64 4201115, label %INSN_401a9b
+    i64 4201120, label %INSN_401aa0
+    i64 4201123, label %INSN_401aa3
+    i64 4201124, label %INSN_401aa4
+    i64 4201127, label %INSN_401aa7
+    i64 4201128, label %INSN_401aa8
+    i64 4201131, label %INSN_401aab
+    i64 4201135, label %INSN_401aaf
+    i64 4201140, label %INSN_401ab4
+    i64 4201142, label %INSN_401ab6
+    i64 4201145, label %INSN_401ab9
+    i64 4201148, label %INSN_401abc
+    i64 4201150, label %INSN_401abe
+    i64 4201152, label %INSN_401ac0
+  ]
+
+__arancini__libc_start_main_stage2-dyn:           ; preds = %__arancini__libc_start_main_stage2-mid
+  %save_16087 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 27
+  %279 = load i512, ptr addrspace(128) %regZMM0, align 4
+  store i512 %279, ptr %save_16087, align 4
+  %save_22488 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 28
+  %280 = load i512, ptr addrspace(128) %regZMM1, align 4
+  store i512 %280, ptr %save_22488, align 4
+  %save_28889 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 29
+  %281 = load i512, ptr addrspace(128) %regZMM2, align 4
+  store i512 %281, ptr %save_28889, align 4
+  %save_35290 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 30
+  %282 = load i512, ptr addrspace(128) %regZMM3, align 4
+  store i512 %282, ptr %save_35290, align 4
+  %save_41691 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 31
+  %283 = load i512, ptr addrspace(128) %regZMM4, align 4
+  store i512 %283, ptr %save_41691, align 4
+  %save_48092 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 32
+  %284 = load i512, ptr addrspace(128) %regZMM5, align 4
+  store i512 %284, ptr %save_48092, align 4
+  %save_54493 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 33
+  %285 = load i512, ptr addrspace(128) %regZMM6, align 4
+  store i512 %285, ptr %save_54493, align 4
+  %save_60894 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 34
+  %286 = load i512, ptr addrspace(128) %regZMM7, align 4
+  store i512 %286, ptr %save_60894, align 4
+  %save_14495 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 25
+  %287 = load i64, ptr addrspace(128) %regFS, align 4
+  store i64 %287, ptr %save_14495, align 4
+  %save_15296 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 26
+  %288 = load i64, ptr addrspace(128) %regGS, align 4
+  store i64 %288, ptr %save_15296, align 4
+  %save_220897 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 59
+  %289 = load i16, ptr addrspace(128) %regX87_STACK_BASE, align 2
+  store i16 %289, ptr %save_220897, align 2
+  %save_221898 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 61
+  %290 = load i16, ptr addrspace(128) %regX87_STS, align 2
+  store i16 %290, ptr %save_221898, align 2
+  %save_222099 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 62
+  %291 = load i16, ptr addrspace(128) %regX87_TAG, align 2
+  store i16 %291, ptr %save_222099, align 2
+  %save_2216100 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 60
+  %292 = load i16, ptr addrspace(128) %regX87_CTRL, align 2
+  store i16 %292, ptr %save_2216100, align 2
+  %save_0101 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 0
+  %293 = load i64, ptr addrspace(128) %regPC, align 4
+  store i64 %293, ptr %save_0101, align 4
+  %save_8102 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 1
+  %294 = load i64, ptr addrspace(128) %regRAX, align 4
+  store i64 %294, ptr %save_8102, align 4
+  %save_16103 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 2
+  %295 = load i64, ptr addrspace(128) %regRCX, align 4
+  store i64 %295, ptr %save_16103, align 4
+  %save_24104 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 3
+  %296 = load i64, ptr addrspace(128) %regRDX, align 4
+  store i64 %296, ptr %save_24104, align 4
+  %save_32105 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 4
+  %297 = load i64, ptr addrspace(128) %regRBX, align 4
+  store i64 %297, ptr %save_32105, align 4
+  %save_40106 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 5
+  %298 = load i64, ptr addrspace(128) %regRSP, align 4
+  store i64 %298, ptr %save_40106, align 4
+  %save_48107 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 6
+  %299 = load i64, ptr addrspace(128) %regRBP, align 4
+  store i64 %299, ptr %save_48107, align 4
+  %save_56108 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 7
+  %300 = load i64, ptr addrspace(128) %regRSI, align 4
+  store i64 %300, ptr %save_56108, align 4
+  %save_64109 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 8
+  %301 = load i64, ptr addrspace(128) %regRDI, align 4
+  store i64 %301, ptr %save_64109, align 4
+  %save_72110 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 9
+  %302 = load i64, ptr addrspace(128) %regR8, align 4
+  store i64 %302, ptr %save_72110, align 4
+  %save_80111 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 10
+  %303 = load i64, ptr addrspace(128) %regR9, align 4
+  store i64 %303, ptr %save_80111, align 4
+  %save_88112 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 11
+  %304 = load i64, ptr addrspace(128) %regR10, align 4
+  store i64 %304, ptr %save_88112, align 4
+  %save_96113 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 12
+  %305 = load i64, ptr addrspace(128) %regR11, align 4
+  store i64 %305, ptr %save_96113, align 4
+  %save_104114 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 13
+  %306 = load i64, ptr addrspace(128) %regR12, align 4
+  store i64 %306, ptr %save_104114, align 4
+  %save_112115 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 14
+  %307 = load i64, ptr addrspace(128) %regR13, align 4
+  store i64 %307, ptr %save_112115, align 4
+  %save_120116 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 15
+  %308 = load i64, ptr addrspace(128) %regR14, align 4
+  store i64 %308, ptr %save_120116, align 4
+  %save_128117 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 16
+  %309 = load i64, ptr addrspace(128) %regR15, align 4
+  store i64 %309, ptr %save_128117, align 4
+  call void @MainLoop(ptr %0)
+  %restore_144118 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 25
+  %310 = load i64, ptr %restore_144118, align 4
+  store i64 %310, ptr addrspace(128) %regFS, align 4
+  %restore_152119 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 26
+  %311 = load i64, ptr %restore_152119, align 4
+  store i64 %311, ptr addrspace(128) %regGS, align 4
+  %restore_160120 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 27
+  %312 = load i512, ptr %restore_160120, align 4
+  store i512 %312, ptr addrspace(128) %regZMM0, align 4
+  %restore_224121 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 28
+  %313 = load i512, ptr %restore_224121, align 4
+  store i512 %313, ptr addrspace(128) %regZMM1, align 4
+  %restore_2208122 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 59
+  %314 = load i16, ptr %restore_2208122, align 2
+  store i16 %314, ptr addrspace(128) %regX87_STACK_BASE, align 2
+  %restore_2218123 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 61
+  %315 = load i16, ptr %restore_2218123, align 2
+  store i16 %315, ptr addrspace(128) %regX87_STS, align 2
+  %restore_2220124 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 62
+  %316 = load i16, ptr %restore_2220124, align 2
+  store i16 %316, ptr addrspace(128) %regX87_TAG, align 2
+  %restore_2216125 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 60
+  %317 = load i16, ptr %restore_2216125, align 2
+  store i16 %317, ptr addrspace(128) %regX87_CTRL, align 2
+  %restore_0126 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 0
+  %318 = load i64, ptr %restore_0126, align 4
+  store i64 %318, ptr addrspace(128) %regPC, align 4
+  %restore_8127 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 1
+  %319 = load i64, ptr %restore_8127, align 4
+  store i64 %319, ptr addrspace(128) %regRAX, align 4
+  %restore_16128 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 2
+  %320 = load i64, ptr %restore_16128, align 4
+  store i64 %320, ptr addrspace(128) %regRCX, align 4
+  %restore_24129 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 3
+  %321 = load i64, ptr %restore_24129, align 4
+  store i64 %321, ptr addrspace(128) %regRDX, align 4
+  %restore_32130 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 4
+  %322 = load i64, ptr %restore_32130, align 4
+  store i64 %322, ptr addrspace(128) %regRBX, align 4
+  %restore_40131 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 5
+  %323 = load i64, ptr %restore_40131, align 4
+  store i64 %323, ptr addrspace(128) %regRSP, align 4
+  %restore_48132 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 6
+  %324 = load i64, ptr %restore_48132, align 4
+  store i64 %324, ptr addrspace(128) %regRBP, align 4
+  %restore_56133 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 7
+  %325 = load i64, ptr %restore_56133, align 4
+  store i64 %325, ptr addrspace(128) %regRSI, align 4
+  %restore_64134 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 8
+  %326 = load i64, ptr %restore_64134, align 4
+  store i64 %326, ptr addrspace(128) %regRDI, align 4
+  %restore_72135 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 9
+  %327 = load i64, ptr %restore_72135, align 4
+  store i64 %327, ptr addrspace(128) %regR8, align 4
+  %restore_80136 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 10
+  %328 = load i64, ptr %restore_80136, align 4
+  store i64 %328, ptr addrspace(128) %regR9, align 4
+  %restore_88137 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 11
+  %329 = load i64, ptr %restore_88137, align 4
+  store i64 %329, ptr addrspace(128) %regR10, align 4
+  %restore_96138 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 12
+  %330 = load i64, ptr %restore_96138, align 4
+  store i64 %330, ptr addrspace(128) %regR11, align 4
+  %restore_104139 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 13
+  %331 = load i64, ptr %restore_104139, align 4
+  store i64 %331, ptr addrspace(128) %regR12, align 4
+  %restore_112140 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 14
+  %332 = load i64, ptr %restore_112140, align 4
+  store i64 %332, ptr addrspace(128) %regR13, align 4
+  %restore_120141 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 15
+  %333 = load i64, ptr %restore_120141, align 4
+  store i64 %333, ptr addrspace(128) %regR14, align 4
+  %restore_128142 = getelementptr <{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i8, i8, i8, i8, i8, i8, i8, i8, i64, i64, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i512, i64, i16, i16, i16, i16, i64 }>, ptr %0, i64 0, i32 16
+  %334 = load i64, ptr %restore_128142, align 4
+  store i64 %334, ptr addrspace(128) %regR15, align 4
+  %335 = load i64, ptr addrspace(128) %regPC, align 4
+  %336 = load i64, ptr addrspace(128) %regRAX, align 4
+  %337 = load i64, ptr addrspace(128) %regRCX, align 4
+  %338 = load i64, ptr addrspace(128) %regRDX, align 4
+  %339 = load i64, ptr addrspace(128) %regRBX, align 4
+  %340 = load i64, ptr addrspace(128) %regRSP, align 4
+  %341 = load i64, ptr addrspace(128) %regRBP, align 4
+  %342 = load i64, ptr addrspace(128) %regRSI, align 4
+  %343 = load i64, ptr addrspace(128) %regRDI, align 4
+  %344 = load i64, ptr addrspace(128) %regR8, align 4
+  %345 = load i64, ptr addrspace(128) %regR9, align 4
+  %346 = load i64, ptr addrspace(128) %regR10, align 4
+  %347 = load i64, ptr addrspace(128) %regR11, align 4
+  %348 = load i64, ptr addrspace(128) %regR12, align 4
+  %349 = load i64, ptr addrspace(128) %regR13, align 4
+  %350 = load i64, ptr addrspace(128) %regR14, align 4
+  %351 = load i64, ptr addrspace(128) %regR15, align 4
+  %mrv143 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } poison, ptr %0, 0
+  %mrv144 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv143, i64 %335, 1
+  %mrv145 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv144, i64 %336, 2
+  %mrv146 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv145, i64 %337, 3
+  %mrv147 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv146, i64 %338, 4
+  %mrv148 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv147, i64 %339, 5
+  %mrv149 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv148, i64 %340, 6
+  %mrv150 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv149, i64 %341, 7
+  %mrv151 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv150, i64 %342, 8
+  %mrv152 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv151, i64 %343, 9
+  %mrv153 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv152, i64 %344, 10
+  %mrv154 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv153, i64 %345, 11
+  %mrv155 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv154, i64 %346, 12
+  %mrv156 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv155, i64 %347, 13
+  %mrv157 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv156, i64 %348, 14
+  %mrv158 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv157, i64 %349, 15
+  %mrv159 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv158, i64 %350, 16
+  %mrv160 = insertvalue { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv159, i64 %351, 17
+  ret { ptr, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64 } %mrv160
+}
+
+!0 = !{!1}
+!1 = distinct !{!1, !2, !"reg-file-scope"}
+!2 = distinct !{!2, !"reg-file"}
+!3 = !{!4}
+!4 = distinct !{!4, !5, !"guest-mem-scope"}
+!5 = distinct !{!5, !"guest-mem"}
+

@@ -9,6 +9,7 @@
 #include <arancini/output/dynamic/riscv64/riscv64-translation-context.h>
 #include <arancini/output/dynamic/riscv64/shift.h>
 #include <arancini/output/dynamic/riscv64/utils.h>
+#include <arancini/ir/debug-visitor.h>
 
 #include <algorithm>
 #include <unordered_map>
@@ -1543,6 +1544,9 @@ TypedRegister &riscv64_translation_context::materialise_vector_insert(const vect
 		throw std::runtime_error("Unsupported vector insert width");
 	}
 	if (!(n.val().type().element_width() == 64 || n.val().type().element_width() == 128 || n.val().type().element_width() == 32)) {
+		std::cerr << "1 Encountered element width 0x" << std::hex << n.val().type().element_width() << "\n";
+		debug_visitor visitor{std::cerr};
+		visitor.visit_vector_insert_node(const_cast<vector_insert_node &>(n));
 		throw std::runtime_error("Unsupported vector insert element width");
 	}
 	if (!(n.insert_value().type().width() == 64 || n.insert_value().type().width() == 128 || n.insert_value().type().width() == 32)) {
@@ -1593,8 +1597,12 @@ TypedRegister &riscv64_translation_context::materialise_vector_insert(const vect
 			throw std::runtime_error("Unsupported vector insert index");
 		}
 	}
-	default:
+	default: {
+		std::cerr << "2 Encountered element width 0x" << std::hex << n.val().type().element_width() << "\n";
+		debug_visitor visitor { std::cerr };
+		visitor.visit_vector_insert_node(const_cast<vector_insert_node &>(n));
 		throw std::runtime_error("Unsupported vector insert element width");
+		}
 	}
 }
 

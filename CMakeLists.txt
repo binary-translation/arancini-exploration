@@ -14,6 +14,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Needed to get stdlibs in compile_commands.json on NixOS
 set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
 
+# Reconfigure if llvm.nix changes
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS llvm.nix)
+
 # Get host architecture
 include(cmake/utils.cmake)
 get_arch(ARCH)
@@ -57,7 +60,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/out/${CMAKE_BUILD
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/out/${CMAKE_BUILD_TYPE})
 
 # Get XED (if not found)
-if(NOT DEFINED ENV{FLAKE_BUILD})
+if(NOT DEFINED ENV{FLAKE_BUILD} AND NOT DEFINED ENV{MF_CLION_WORKAROUND})
 	# Nix takes care of fetching the dependencies, this check will still fail though
 	list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/lib)
 	find_package(XED GLOBAL)
