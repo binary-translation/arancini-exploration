@@ -1,10 +1,13 @@
 #pragma once
 
+#include <fmt/format.h>
+
 #include <arancini/ir/default-visitor.h>
-#include <iostream>
+
 #include <set>
 
 namespace arancini::ir {
+
 class dot_graph_generator : public default_visitor {
 public:
 	dot_graph_generator(std::ostream &os)
@@ -53,60 +56,65 @@ private:
 	node *cur_node_;
 	std::set<node *> seen_;
 
-	void add_node(const node *n, const std::string &label) { os_ << std::hex << "N" << n << " [shape=Mrecord, label=\"" << label << "\"]" << std::endl; }
+	void add_node(const node *n, const std::string &label) {
+        fmt::println("N{} [shape=Mrecord, label=\"{}\"", fmt::ptr(n), label);
+    }
 
-	std::string compute_port_label(const port *p) const
-	{
-		std::stringstream s;
+    [[nodiscard]]
+	std::string compute_port_label(const port *p) const {
+		std::string_view s;
 
 		switch (p->kind()) {
 		case port_kinds::value:
-			s << "value";
+			s = "value";
 			break;
 		case port_kinds::constant:
-			s << "#";
+			s = "#";
 			break;
 		case port_kinds::negative:
-			s << "N";
+			s  = "N";
 			break;
 		case port_kinds::overflow:
-			s << "V";
+			s  = "V";
 			break;
 		case port_kinds::carry:
-			s << "C";
+			s  = "C";
 			break;
 		case port_kinds::zero:
-			s << "Z";
+			s  = "Z";
 			break;
 		default:
-			s << "?";
+			s  = "?";
 			break;
 		}
 
-		s << ":" << p->type().to_string();
-		return s.str();
+        return fmt::format("{}:{}", s, p->type());
 	}
 
-	void add_port_edge(const port *from, const node *to, const std::string &link = "") { add_edge(from->owner(), to, "black", compute_port_label(from), link); }
+	void add_port_edge(const port *from, const node *to, const std::string &link = "") {
+        add_edge(from->owner(), to, "black", compute_port_label(from), link);
+    }
 
-	void add_control_edge(const node *from, const node *to, const std::string &link = "") { add_edge(from, to, "green3", "", link); }
+	void add_control_edge(const node *from, const node *to, const std::string &link = "") {
+        add_edge(from, to, "green3", "", link);
+    }
 
-	void add_edge(const node *from, const node *to, const std::string &colour = "black", const std::string &label = "", const std::string &link = "")
+	void add_edge(const node *from, const node *to, const std::string &colour = "black",
+                  const std::string &label = "", const std::string &link = "")
 	{
-		os_ << std::hex << "N" << from << " -> "
-			<< "N" << to;
+        fmt::print("N{} -> N{}", fmt::ptr(from), fmt::ptr(to));
 
-		if (link != "") {
-			os_ << ":" << link;
-		}
+		if (!link.empty())
+            fmt::print(":{}", link);
 
-		os_ << " [color=" << colour;
+        fmt::print(" [color={}", colour);
 
-		if (label != "") {
-			os_ << ", label=\"" << label << "\"";
-		}
+		if (!label.empty())
+            fmt::print(", label=\"{}\"", label);
 
-		os_ << "]" << std::endl;
+        fmt::println("]");
 	}
 };
+
 } // namespace arancini::ir
+

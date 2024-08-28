@@ -42,6 +42,7 @@ struct fmt::formatter<arancini::runtime::exec::x86::x86_cpu_state> {
                                                 "RDI:     \t{:#x}\n"
                                                 "RBP:     \t{:#x}\n"
                                                 "RSP:     \t{:#x}\n"
+                                                "RIP:     \t{:#x}\n"
                                                 "R8:      \t{:#x}\n"
                                                 "R9:      \t{:#x}\n"
                                                 "R10:     \t{:#x}\n"
@@ -58,12 +59,12 @@ struct fmt::formatter<arancini::runtime::exec::x86::x86_cpu_state> {
                                                 "flag DF: \t{:#x}",
                               regs.RAX, regs.RBX, regs.RCX,
                               regs.RDX, regs.RSI, regs.RDI,
-                              regs.RBP, regs.RSP, regs.R8,
-                              regs.R9, regs.R10, regs.R11,
-                              regs.R12, regs.R13, regs.R14,
-                              regs.R15, regs.ZF, regs.CF,
-                              regs.OF, regs.SF, regs.PF,
-                              regs.DF);
+                              regs.RBP, regs.RSP, regs.PC,
+                              regs.R8, regs.R9, regs.R10,
+                              regs.R11, regs.R12, regs.R13,
+                              regs.R14, regs.R15, regs.ZF,
+                              regs.CF, regs.OF, regs.SF,
+                              regs.PF, regs.DF);
 
     }
 };

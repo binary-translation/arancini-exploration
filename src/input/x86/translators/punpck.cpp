@@ -208,12 +208,14 @@ void punpck_translator::do_translate()
 			ins_max = builder().insert_constant_s8(0x7F);
 			ins_min = builder().insert_constant_s8(0x80);
 		} break;
+        default:
+            throw std::logic_error("XED instruction class not handled in switch");
 	}
     auto dst = builder().insert_bitcast(value_type::vector(pre_ty, bits/pre_ty.width()), op0->val());
     auto src = builder().insert_bitcast(value_type::vector(pre_ty, bits/pre_ty.width()), op1->val());
     auto result = builder().insert_bitcast(value_type::vector(pst_ty, bits/pst_ty.width()), op0->val());
 
-    for (int i = 0; i < bits/pst_ty.width(); i++) {
+    for (std::size_t i = 0; i < bits/pst_ty.width(); i++) {
 		/*
 		// word/double word
 		auto word = (i < bits/pre_ty.width()) ? builder().insert_vector_extract(dst->val(), i) : builder().insert_vector_extract(src->val(), i - bits/pre_ty.width());

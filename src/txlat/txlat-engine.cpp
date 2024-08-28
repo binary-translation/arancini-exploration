@@ -228,10 +228,10 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
 	// Generate a dot graph of the optimized IR if required
 	if (cmdline.count("graph")) {
-    std::string opt_filename = cmdline.at("graph").as<std::string>();
-    opt_filename = opt_filename.substr(0, opt_filename.find_last_of('.'));
-    opt_filename += ".opt.dot";
-    generate_dot_graph(*oe, opt_filename);
+        std::string opt_filename = cmdline.at("graph").as<std::string>();
+        opt_filename = opt_filename.substr(0, opt_filename.find_last_of('.'));
+        opt_filename += ".opt.dot";
+        generate_dot_graph(*oe, opt_filename);
 	}
 
 	// If the main output command-line option was not specified, then don't go any further.

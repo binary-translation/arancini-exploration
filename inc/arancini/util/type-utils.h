@@ -36,5 +36,10 @@ inline bool case_ignore_string_equal(const std::string &a, const std::string &b)
     return std::equal(a.begin(), a.end(), b.begin(), b.end(), case_ignore_char_equal);
 }
 
+template <typename Enum>
+constexpr std::underlying_type_t<Enum> to_underlying(Enum e) noexcept {
+    return static_cast<std::underlying_type_t<Enum>>(e);
+}
+
 } // namespace util
-  
+

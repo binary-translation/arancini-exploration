@@ -221,8 +221,7 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
             util::global_logger.set_output_file(out);
         }
     } else if (util::global_logger.is_enabled()) {
-        std::cerr << "Logger enabled without explicit log level; setting log level to default [info]\n";
-        util::global_logger.set_level(util::global_logging::levels::info);
+        std::cerr << "Logger enabled without explicit log stream; the default log stream will be used [stderr]\n";
     }
 
     util::global_logger.info("arancini: dbt: initialise\n");
