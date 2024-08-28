@@ -15,23 +15,24 @@ void fpu_translator::do_translate()
 		auto fpu_ctrl = read_reg(value_type::u16(), reg_offsets::X87_CTRL);
 		write_operand(0, fpu_ctrl->val());
 		break;
-  }
-
+	}
   case XED_ICLASS_FLDCW: {
     auto src = read_operand(0);
     write_reg(reg_offsets::X87_CTRL, src->val());
     break;
   }
-
   case XED_ICLASS_FNSTSW: {
     auto fpu_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
     write_operand(0, fpu_status->val());
     break;
   }
-
   case XED_ICLASS_FLD: {
     auto dst = read_operand(0); // always st(0)
 	auto val = read_operand(1);
+	if (val->val().type().width() == 32)
+		val = builder().insert_bitcast(value_type::f32(), val->val());
+	else if (val->val().type().width() == 64)
+		val = builder().insert_bitcast(value_type::f64(), val->val());
 
     if (val->val().type().width() != 80) {
       val = builder().insert_convert(value_type::f80(), val->val());
@@ -45,7 +46,6 @@ void fpu_translator::do_translate()
 
     break;
   }
-
   case XED_ICLASS_FILD: {
     // xed encoding: fild st0 memint
     auto val = read_operand(1);
@@ -74,7 +74,6 @@ void fpu_translator::do_translate()
     // TODO FPU flags
     break;
   }
-
   case XED_ICLASS_FST:
   case XED_ICLASS_FSTP: {
     auto target_width = get_operand_width(0);
@@ -92,7 +91,6 @@ void fpu_translator::do_translate()
 
     break;
   }
-
   case XED_ICLASS_FIST:
   case XED_ICLASS_FISTP: {
     auto st0 = fpu_stack_get(0);
@@ -102,12 +100,16 @@ void fpu_translator::do_translate()
     // TODO FPU flags
     break;
   }
-
   case XED_ICLASS_FADD:
   case XED_ICLASS_FADDP: {
     // xed encoding: fadd st(0) st(i)
     auto dst = read_operand(0);
     auto src = read_operand(1);
+	
+	if (src->val().type().width() == 32)
+		src = builder().insert_bitcast(value_type::f32(),src->val());
+	else if (src->val().type().width() == 64)
+		src = builder().insert_bitcast(value_type::f64(), src->val());
 
     if (src->val().type().width() != 80) {
       src = builder().insert_convert(dst->val().type(), src->val());
@@ -120,12 +122,16 @@ void fpu_translator::do_translate()
     // TODO FPU flags
     break;
   }
-
   case XED_ICLASS_FSUB:
   case XED_ICLASS_FSUBP: {
     // xed encoding: fsub st(0) st(i)
     auto dst = read_operand(0);
     auto src = read_operand(1);
+
+	if (src->val().type().width() == 32)
+		src = builder().insert_bitcast(value_type::f32(),src->val());
+	else if (src->val().type().width() == 64)
+		src = builder().insert_bitcast(value_type::f64(), src->val());
 
     if (src->val().type().width() != 80) {
       src = builder().insert_convert(dst->val().type(), src->val());
@@ -138,11 +144,15 @@ void fpu_translator::do_translate()
     // TODO FPU flags
     break;
   }
-
   case XED_ICLASS_FSUBR:
   case XED_ICLASS_FSUBRP: {
     auto dst = read_operand(0);
     auto src = read_operand(1);
+
+	if (src->val().type().width() == 32)
+		src = builder().insert_bitcast(value_type::f32(),src->val());
+	else if (src->val().type().width() == 64)
+		src = builder().insert_bitcast(value_type::f64(), src->val());
 
     if (src->val().type().width() != 80) {
       src = builder().insert_convert(dst->val().type(), src->val());
@@ -155,7 +165,6 @@ void fpu_translator::do_translate()
     // TODO FPU flags
     break;
   }
-
   case XED_ICLASS_FIADD:
   case XED_ICLASS_FISUB: {
     // xed encoding: fisub st(0) memint
@@ -192,6 +201,11 @@ void fpu_translator::do_translate()
     auto dst = read_operand(0);
     auto src = read_operand(1);
 
+	if (src->val().type().width() == 32)
+		src = builder().insert_bitcast(value_type::f32(),src->val());
+	else if (src->val().type().width() == 64)
+		src = builder().insert_bitcast(value_type::f64(), src->val());
+
     if (src->val().type().width() != 80) {
       src = builder().insert_convert(dst->val().type(), src->val());
     }
@@ -209,7 +223,12 @@ void fpu_translator::do_translate()
     auto dst = read_operand(0);
     auto src = read_operand(1);
 
-    if (src->val().type().width() != 80) {
+	if (src->val().type().width() == 32)
+		src = builder().insert_bitcast(value_type::f32(),src->val());
+	else if (src->val().type().width() == 64)
+		src = builder().insert_bitcast(value_type::f64(), src->val());
+
+	if (src->val().type().width() != 80) {
       src = builder().insert_convert(dst->val().type(), src->val());
     }
 
@@ -224,6 +243,11 @@ void fpu_translator::do_translate()
     // xed encoding: fdiv st(i) st(j)
     auto src = read_operand(0);
     auto dst = read_operand(1);
+
+	if (src->val().type().width() == 32)
+		src = builder().insert_bitcast(value_type::f32(),src->val());
+	else if (src->val().type().width() == 64)
+		src = builder().insert_bitcast(value_type::f64(), src->val());
 
     if (src->val().type().width() != 80) {
       src = builder().insert_convert(dst->val().type(), src->val());

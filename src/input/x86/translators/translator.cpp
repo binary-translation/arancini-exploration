@@ -536,7 +536,7 @@ action_node *translator::fpu_stack_top_move(int val)
     // compute the new top index
     new_top = builder_.insert_add(top->val(), builder_.insert_constant_i(top->val().type(), (unsigned int)val)->val());
   } else if (val == -1) { // push
-    new_top = builder_.insert_sub(top->val(), builder_.insert_constant_i(top->val().type(), (unsigned int)(-val))->val());
+    new_top = builder_.insert_sub(top->val(), builder_.insert_constant_i(top->val().type(), 1)->val());
   } else {
     throw std::logic_error("Cannot move the FPU stack by " + std::to_string(val) + ". Must be 1 or -1.");
   }
