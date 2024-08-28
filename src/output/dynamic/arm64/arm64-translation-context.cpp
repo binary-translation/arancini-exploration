@@ -485,6 +485,13 @@ void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
 void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
     const auto &new_pc_vreg = materialise_port(n.value());
 
+	if (n.updates_pc() == br_type::call) {
+		ret_ = 3;
+	}
+	if (n.updates_pc() == br_type::ret) {
+		ret_ = 4;
+	}
+
     builder_.str(new_pc_vreg,
                  guestreg_memory_operand(static_cast<int>(reg_offsets::PC)),
                  "write program counter");
@@ -1523,10 +1530,6 @@ void arm64_translation_context::materialise_vector_extract(const vector_extract_
 
 void arm64_translation_context::materialise_internal_call(const internal_call_node &n) {
     if (n.fn().name() == "handle_syscall") {
-        auto pc_vreg = mov_immediate(this_pc_ + 2, value_type::u64());
-        builder_.str(pc_vreg,
-                     guestreg_memory_operand(static_cast<int>(reg_offsets::PC)),
-                     "update program counter to handle system call");
         ret_ = 1;
     } else if (n.fn().name() == "handle_int") {
         ret_ = 2;
