@@ -24,8 +24,9 @@
 #include <llvm/Passes/PassBuilder.h>
 
 #include <llvm/Support/FileSystem.h>
-#include <llvm/Support/Host.h>
 #include <llvm/Support/TargetSelect.h>
+
+#include <llvm/TargetParser/Host.h>
 
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Target/TargetOptions.h>
@@ -148,5 +149,34 @@ private:
 	::llvm::Value *createLoadFromCPU(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, unsigned long reg_idx);
 	void createStoreToCPU(::llvm::IRBuilder<> &builder, ::llvm::Argument *state_arg, unsigned int ret_idx, ::llvm::Value *ret, unsigned long reg_idx);
 	void debug_dump();
+
+	template <typename T>
+	bool is_stack(T *n) const {
+		return false;
+		/* We keep this because in theory it should work
+		bool is_stack = false;
+
+		// check if RSP or RBP are used to calculate the adress
+		if (n->address().owner()->kind() == ir::node_kinds::read_reg) {
+			auto rrn = (ir::read_reg_node *)n->address().owner();
+			if (rrn->regoff() == (unsigned long)reg_offsets::RSP)
+				is_stack = true;
+		} else if (n->address().owner()->kind() == ir::node_kinds::binary_arith) {
+			auto ban = (ir::binary_arith_node *)n->address().owner();
+			if (ban->lhs().owner()->kind() == ir::node_kinds::read_reg) {
+				auto rrn = (ir::read_reg_node *)ban->lhs().owner();
+				if (rrn->regoff() == (unsigned long)reg_offsets::RSP)
+					is_stack = true;
+			}
+			if (ban->rhs().owner()->kind() == ir::node_kinds::read_reg) {
+				auto rrn = (ir::read_reg_node *)ban->rhs().owner();
+				if (rrn->regoff() == (unsigned long)reg_offsets::RSP)
+					is_stack = true;
+			}
+		}
+
+		return is_stack;
+		*/
+	};
 };
 } // namespace arancini::output::o_static::llvm

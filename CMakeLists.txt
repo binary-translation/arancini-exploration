@@ -58,17 +58,17 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/out/${CMAKE_BUILD
 
 # Get XED (if not found)
 if(NOT DEFINED ENV{FLAKE_BUILD})
-	# Nix takes care of fetching the dependencies, this check will still fail though
-	list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/lib)
-	find_package(XED GLOBAL)
-	if (NOT XED_FOUND)
-	    message("XED not found")
-
-	    # Try to fetch and build XED
-	    include(cmake/getXED.cmake)
-	    get_xed()
-	endif ()
-	include(cmake/fadec.cmake)
+    # Nix takes care of fetching the dependencies, this check will still fail though
+    list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/lib)
+    find_package(XED GLOBAL)
+    if (NOT XED_FOUND)
+        message("XED not found")
+    
+        # Try to fetch and build XED
+        include(cmake/getXED.cmake)
+        get_xed()
+    endif ()
+    include(cmake/fadec.cmake)
 
 find_package(fmt QUIET)
 if (NOT fmt_FOUND)
@@ -123,10 +123,12 @@ endif()
 # NOTE: txlat requires the path because it invokes the compiler internally and must
 # specify for linkage.
 if (DEFINED ENV{FLAKE_BUILD})
-    add_compile_definitions(ARANCINI_LIBPATH="${CMAKE_INSTALL_PREFIX}/lib/$<TARGET_FILE_NAME:arancini-runtime>")
-    add_compile_definitions(ARANCINI_LIBPATH_STATIC="${CMAKE_INSTALL_PREFIX}/lib/$<TARGET_FILE_NAME:arancini-runtime-static>")
-    add_compile_definitions(ARANCINI_LIBDIR="${CMAKE_INSTALL_PREFIX}/lib")
-elseif (NOT DEFINED CROSS_TRANSLATE)
+    if (NOT DEFINED CROSS_TRANSLATE)
+        add_compile_definitions(ARANCINI_LIBPATH="${CMAKE_INSTALL_PREFIX}/lib/$<TARGET_FILE_NAME:arancini-runtime>")
+        add_compile_definitions(ARANCINI_LIBPATH_STATIC="${CMAKE_INSTALL_PREFIX}/lib/$<TARGET_FILE_NAME:arancini-runtime-static>")
+        add_compile_definitions(ARANCINI_LIBDIR="${CMAKE_INSTALL_PREFIX}/lib")
+    endif()
+    if (NOT DEFINED CROSS_TRANSLATE)
     add_compile_definitions(ARANCINI_LIBPATH="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:arancini-runtime>")
     add_compile_definitions(ARANCINI_LIBPATH_STATIC="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:arancini-runtime-static>")
     add_compile_definitions(ARANCINI_LIBDIR="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")

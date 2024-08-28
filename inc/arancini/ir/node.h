@@ -717,7 +717,7 @@ enum class binary_arith_op {
 	cmpeq, cmpne, cmpgt,
 	// floating point stuff
 	cmpoeq, cmpolt, cmpole,
-	cmpune, cmpunlt, cmpunle,
+	cmpueq, cmpult, cmpune, cmpunlt, cmpunle,
 	cmpo, cmpu
 };
 
@@ -729,11 +729,17 @@ public:
 		, lhs_(lhs)
 		, rhs_(rhs)
 	{
-		if (lhs.type() != rhs.type()) {
-			throw ir_exception("incompatible types in binary arith node: lhs={}, rhs={}",
-                               lhs.type(), rhs.type());
+		switch (op) {
+			case binary_arith_op::band:
+			case binary_arith_op::bor:
+			case binary_arith_op::bxor: {
+				if (lhs.type().width() != rhs.type().width()) {
+					throw ir_exception("incompatible types in binary arith node: lhs={}, rhs={}",
+									   lhs.type(), rhs.type());
+				}
+			} break;
+		default: break;
 		}
-
 		op_ = op;
 		lhs_ = lhs;
 		rhs_ = rhs;

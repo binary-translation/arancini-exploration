@@ -30,7 +30,7 @@
 	outputs = { self, nixpkgs, flake-utils, phoenix-src, parsec-src, risotto-pkgs, ... }:
 	flake-utils.lib.eachSystem [ "x86_64-linux" "riscv64-linux" "aarch64-linux" ] (system:
 	let
-		pkgs = import nixpkgs { system = system; crossSystem = { config = system+"-musl"; }; config.allowUnsupportedSystem=true; };
+		pkgs = import nixpkgs { system = system; crossSystem = { config = system+"-musl"; useLLVM = true; linker = "lld"; }; config.allowUnsupportedSystem=true; };
 		native_pkgs = import nixpkgs { inherit system; };
 
 		rv_patch = builtins.fetchurl {
@@ -170,27 +170,34 @@
 			url = "https://github.com/cirosantilli/parsec-benchmark/releases/download/3.0/parsec-3.0-input-sim.tar.gz";
 			sha256 = "1lpyk446dzv2w92g18v90blvh9fv1d9gy83b8wlssz2rv19kd2rp";
 		};
+
 	in
 	{
 	# on x86 we plot, everywhere else we run benchmarks
-	devShell =
-		native_pkgs.mkShell {
+	pkgs = pkgs;
+
+	devShells = {
+
+		default = native_pkgs.mkShell {
 			src = self;
 			packages = [
+				native_pkgs.flamegraph
 			] ++ native_pkgs.lib.optionals (system != "x86_64-linux") [
 				qemu
 				risotto-qemu
 				risotto
 				risotto-nofence
 				risotto-tso
+				native_pkgs.flamegraph
 			] ++ native_pkgs.lib.optionals (system == "x86_64-linux") [
 				(native_pkgs.python3.withPackages (python-pkgs: [
-											python-pkgs.pandas
-											python-pkgs.seaborn
-											python-pkgs.matplotlib
-											python-pkgs.notebook
+				python-pkgs.pandas
+				python-pkgs.seaborn
+				python-pkgs.matplotlib
+				python-pkgs.notebook
 				]))];
 		};
+	};
 	
 	phoenix =
 		pkgs.llvmPackages_15.stdenv.mkDerivation {
@@ -200,7 +207,6 @@
 			src = phoenix-src;
 			nativeBuildInputs = [
 				pkgs.gnumake
-				#pkgs.llvmPackages_15.bintools
 				pkgs.binutils
 			];
 
@@ -220,34 +226,38 @@
 				tar -xzf ${word_count_datafiles};
 			'';
 		};
-	# TODO: use libcxxStdenv and fix the bintools issue
 	parsec =
-		pkgs.llvmPackages_15.stdenv.mkDerivation {
+		pkgs.stdenv.mkDerivation {
 			name = "parsec";
 			hardeningDisable = [ "all" ];
 
 			src = parsec-src;
 			nativeBuildInputs = [
 				native_pkgs.gnumake
-				pkgs.binutils
+				#pkgs.binutils
 				native_pkgs.pkg-config
 				native_pkgs.m4
 				native_pkgs.gettext
 				native_pkgs.wget
 			];
 			buildInputs = [
-				pkgs.llvmPackages_15.openmp.dev
+				#pkgs.clang_15
+				#pkgs.zlib
+				native_pkgs.llvmPackages.openmp.dev
 			];
 
 			configurePhase = "patchShebangs ./bin; patchShebangs .;";
-			buildPhase = "./bin/parsecmgmt -a build -p blackscholes bodytrack ferret fluidanimate freqmine swaptions vips streamcluster";
+			# build the following benchmarks
+			buildPhase = "./bin/parsecmgmt -a build -p blackscholes bodytrack ferret fluidanimate freqmine swaptions streamcluster";
 			installPhase = ''
 				mkdir $out;
-				ln -s ${pkgs.llvmPackages_15.stdenv.cc.libc}/lib/libc.so $out/libc.so;
+				ln -s ${pkgs.stdenv.cc.libc}/lib/libc.so $out/libc.so;
+				ln -s ${pkgs.stdenv.cc.libcxx}/lib/libc++.so.1 $out/libc++.so;
+				ln -s ${pkgs.stdenv.cc.libcxx}/lib/libc++abi.so.1 $out/libc++abi.so;
 
 				tar -xzf ${parsec_datafiles};
 
-				for p in blackscholes bodytrack ferret fluidanimate freqmine swaptions vips; do
+				for p in blackscholes bodytrack ferret fluidanimate freqmine swaptions ; do
 					echo $p;
 					cp pkgs/apps/$p/inst/*/bin/$p $out;
 

@@ -16,6 +16,11 @@ void shifts_translator::do_translate()
 	case XED_ICLASS_SAR:
 	case XED_ICLASS_SHR:
 	case XED_ICLASS_SHL: {
+	if (src->val().type().width() == 64) {
+		amt = builder().insert_and(amt->val(), builder().insert_constant_i(amt->val().type(), 0x3F)->val());
+	} else {
+		amt = builder().insert_and(amt->val(), builder().insert_constant_i(amt->val().type(), 0x1F)->val());
+	}
     if (is_immediate_operand(1)) { // shift amount is an immediate
       auto rot_val = ((constant_node *)amt)->const_val_i();
 

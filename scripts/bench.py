@@ -67,65 +67,129 @@ def do_run(progs, env):
 def to_datafile(pre, name, ver):
     return f"{pre}/{name}_datafiles/{ver}"
 
+def to_arancini_tx(name, sfx):
+    return f'{config["arancini"]["OUT_PREFIX"]}{os.uname().machine}/{name}{sfx}.out'
+
+def to_risotto_tx(path, args):
+    return 
+
+class benchmark:
+    def __init__(self, name, args, t):
+        self.name = name
+        self.args = args
+        self.threads = t
+        self.taskset = [f"taskset -c 0-{t-1}"]
+
+class arancini:
+    def __init__(self, sfx=""):
+        self.em = "arancini"
+        self.tx_cmd = [f"./{config["arancini"]["OUT_PREFIX"]}{os.uname().machine}/{self.name}{sfx}.out"]
+
+class risotto:
+    def __init__(self, sfx=""):
+        self.em = "risotto"
+        extra = ["-nlib", "general.mni"] if sfx == "-nmem" else []
+        self.tx_cmd = ["risotto"]++extra++[self.x86_path]
+
+#TODO #TODO #TODO
+class phoenix (benchmark):
+    @staticmethod
+    def x86_dir(config):
+        return config["phoenix"]["X86_PATH"]
+    def __init__(self, name, args, config, sfx=""):
+        super().__init__(name, args.split(" "))
+        self.x86_path = f"./{config["phoenix"]["X86_PATH"]}/name"
+        if os.uname().machine.startswith("riscv"):
+            native_path = f"./{config["phoenix"]["RISCV64_PATH"]}/name"
+        elif os.uname().machine.startswith("aaarch"):
+            native_path = f"./{config["phoenix"]["AAARCH64_PATH"]}/name"
+        self.native_cmd = [native_path]++self.args
+        if sfx == "":
+            self.tx_cmd = [f"./{config["arancini"]["OUT_PREFIX"]}{os.uname().machine}/{name}.out"]++self.args
+        else:
+            self.tx_cmd = [f"./{config["arancini"]["OUT_PREFIX"]}{os.uname().machine}/{name}-{sfx}.out"]++self.args
+
+        self.qemu_cmd = ["risotto-qemu"]++extra++[self.x86_path]++self.args
+        self.risottonf_cmd = ["risotto-nofence"]++extra++[self.x86_path]++self.args
+
+class parsec (benchmark):
+    @staticmethod
+    def x86_dir(config):
+        return config["parsec"]["X86_PATH"]
+    def __init__(self, name, args, config, sfx=""):
+        super().__init__(name, args.split(" "))
+        self.x86_path = f"./{config["parsec"]["X86_PATH"]}/name"
+        if os.uname().machine.startswith("riscv"):
+            native_path = f"./{config["parsec"]["RISCV64_PATH"]}/name"
+        elif os.uname().machine.startswith("aaarch"):
+            native_path = f"./{config["parsec"]["AAARCH64_PATH"]}/name"
+        self.native_cmd = [native_path]++self.args
+        if sfx == "":
+            self.tx_cmd = [f"./{config["arancini"]["OUT_PREFIX"]}{os.uname().machine}/{name}.out"]++self.args
+        else:
+            self.tx_cmd = [f"./{config["arancini"]["OUT_PREFIX"]}{os.uname().machine}/{name}-{sfx}.out"]++self.args
+
+        extra = ["-nlib", "general.mni"] if sfx == "-nmem" else []
+        self.risotto_cmd = ["risotto"]++extra++[self.x86_path]++self.args
+        self.qemu_cmd = ["risotto-qemu"]++extra++[self.x86_path]++self.args
+        self.risottonf_cmd = ["risotto-nofence"]++extra++[self.x86_path]++self.args
+
+def init_benchmarks(config, threads, sfx):
+
+    ph = [
+        phoenix("histogram", to_datafile(phoenix.x86_dir(config),"histogram","small.bmp"), config, sfx),
+        phoenix("kmeans", "", config, sfx),
+        phoenix("pca", "", config, sfx),
+        phoenix("string_match", to_datafile(phoenix.x86_dir(config),"string_match","key_file_50MB.txt"), config, sfx),
+        phoenix("matrix_multiply", "1024 1024 1", config, sfx),
+        phoenix("word_count", to_datafile(phoenix.x86_dir(config),"word_count","word_10MB.txt"), config, sfx),
+        phoenix("linear_regression", to_datafile(phoenix.x86_dir(config),"linear_regression","key_file_50MB.txt", config, sfx)
+    ]
+    pa = [
+        parsec("blackscholes", f"{threads} {to_datafile(parsec.x86_dir(config),"blackscholes","in_4K.txt")} out.txt", config, sfx),
+    ]
+
+    return ph++pa
+
 def run(csvfile, config): 
-    fieldnames = [ "benchmark", "emulator", "time", "type", "threads"]
+    fieldnames = [ "benchmark", "emulator", "time", "threads"]
     writer = csv.DictWriter(csvfile, fieldnames)
-
-    PHOENIX_DIR_PATH = config['x86']['PHOENIX_X86_PATH']
-    ARANCINI_RESULT_PATH = config['arancini']['ARANCINI_RESULT_PATH'];
-    
-    # literaly too lazy to type
-    p = PHOENIX_DIR_PATH
-    progs = {
-        "histogram":to_datafile(p, "histogram", "small.bmp"),
-        "kmeans":"",
-        "pca":"",
-        "string_match":to_datafile(p, "string_match", "key_file_50MB.txt"),
-        "matrix_multiply":"1024 1024",
-        "word_count":to_datafile(p, "word_count", "word_10MB.txt"),
-        "linear_regression":to_datafile(p, "linear_regression", "key_file_50MB.txt")
-    }
-
-    native = list(map(lambda l: (l,[ f'{config["native"]["PHOENIX_DIR_PATH"]}{l}', progs[l] ]), progs.keys()))
-
-    arancini = list(map(lambda l: (l,[ f'{config["translations"]["ARANCINI_OUT_PATH"]}{l}.out', progs[l] ]), progs.keys()))
-    arancini_dyn = list(map(lambda l: (l,[ f'{config["translations"]["ARANCINI_OUT_PATH"]}{l}-dyn.out', progs[l] ]), progs.keys()))
-    arancini_nmem = list(map(lambda l: (l,[ f'{config["translations"]["ARANCINI_OUT_PATH"]}{l}-nmem.out', progs[l] ]), progs.keys()))
-    arancini_nlock = list(map(lambda l: (l,[ f'{config["translations"]["ARANCINI_OUT_PATH"]}{l}-nlock.out', progs[l] ]), progs.keys()))
-
-    risotto = list(map(lambda l: (l,[ 'risotto', f'{PHOENIX_DIR_PATH}{l}', progs[l] ]), progs.keys()))
-    risotto_qemu = list(map(lambda l: (l,[ 'risotto-qemu', f'{PHOENIX_DIR_PATH}{l}', progs[l] ]), progs.keys()))
-    risotto_nofence = list(map(lambda l: (l,[ 'risotto-nofence', f'{PHOENIX_DIR_PATH}{l}', progs[l] ]), progs.keys()))
-    risotto_nmem = list(map(lambda l: (l,[ 'risotto', '-nlib', 'general.mni', f'{PHOENIX_DIR_PATH}{l}', progs[l] ]), progs.keys()))
-    risotto_nlock = list(map(lambda l: (l,[ 'risotto', '-nlib', 'lock.mni', f'{PHOENIX_DIR_PATH}{l}', progs[l] ]), progs.keys()))
 
     threads = [ 2, 4, 8 ]
 
-    runs = {
-            "native":native,
-            "Arancini":arancini,
-            "Arancini-nmem":arancini_nmem,
-            "Risotto":risotto,
-            "Risotto-QEMU":risotto_qemu,
-            "Risotto-nofence":risotto_nofence,
-            "Risotto-nmem":risotto_nmem,
-        }
-
     # because matrix_multiply wants to be special
-    prog = [config["native"]["PHOENIX_DIR_PATH"]+"matrix_multiply"]
+    if os.unmae().machine.startswith("riscv"):
+        prog = [config["phoenix"]["RISCV64_PATH"]+"/matrix_multiply"]
+    elif os.uname().machine.startswith("aaarch"):
+        prog = [config["phoenix"]["AAARCH64_PATH"]+"/matrix_multiply"]
     sp.run(prog + ["1024 1024 1"], capture_output=True, timeout=1800) 
 
+    benchs = []
     for t in threads:
-        for r in runs.keys():
-            for b, run in runs[r]:
-                for _ in range(5):
-                    env = os.environ
-                    env["LD_LIBRARY_PATH"] = ARANCINI_RESULT_PATH+"lib"
-                    print(f'### {run}')
-                    prog = ["taskset", "-c", f"1-{t}"] + run
-                    dif = do_run(prog, env)
-                    writer.writerow({"benchmark":b, "emulator":r, "time":str(dif), "type":"map-reduce", "threads":f"{t}"})
-                    csvfile.flush()
+        a = init_benchmarks(config, t, "")
+        benchs = benchs++list(map(lambda l: l.native_cmd, a)
+        benchs = benchs++list(map(lambda l: l.tx_cmd, a)
+        benchs = benchs++list(map(lambda l: l.risotto_cmd, a)
+        benchs = benchs++list(map(lambda l: l.qemu_cmd, a)
+        benchs = benchs++list(map(lambda l: l.risottonf_cmd, a)
+
+        a = init_benchmarks(config, t, "nmem")
+        benchs = benchs++list(map(lambda l: l.tx_cmd, a)
+        benchs = benchs++list(map(lambda l: l.risotto_cmd, a)
+        benchs = benchs++list(map(lambda l: l.qemu_cmd, a)
+        benchs = benchs++list(map(lambda l: l.risottonf_cmd, a)
+        
+        a = init_benchmarks(config, t, "dyn")
+        benchs = benchs++list(map(lambda l: l.tx_cmd, a)
+
+    for b in benchs:
+        for _ in range(5):
+            env = os.environ
+            env["LD_LIBRARY_PATH"] = f"{config["arancini"]["RESULT_PREFIX"]}{os.uname().machine}/lib"
+            print(f'### {b} ###')
+            dif = do_run(b, env)
+            writer.writerow({"benchmark":b.name, "emulator":b.em, "time":str(dif), "threads":f"{t}"})
+            csvfile.flush()
 
 def clean(csvfile):
     pass
