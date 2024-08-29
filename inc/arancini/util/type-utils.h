@@ -3,6 +3,7 @@
 #include <tuple>
 #include <string>
 #include <cctype>
+#include <variant>
 #include <algorithm>
 #include <type_traits>
 
@@ -40,6 +41,21 @@ template <typename Enum>
 constexpr std::underlying_type_t<Enum> to_underlying(Enum e) noexcept {
     return static_cast<std::underlying_type_t<Enum>>(e);
 }
+
+template <typename To, typename From>
+To variant_cast(From&& from) {
+    return std::visit(
+        [](auto&& elem) -> To { return To(std::forward<decltype(elem)>(elem)); },
+        std::forward<From>(from));
+}
+
+// helper type for the visitor #4
+template<class... Ts>
+struct overloaded : Ts... { using Ts::operator()...; };
+
+// explicit deduction guide (not needed as of C++20)
+template<class... Ts>
+overloaded(Ts...) -> overloaded<Ts...>;
 
 } // namespace util
 

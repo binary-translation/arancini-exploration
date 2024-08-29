@@ -165,7 +165,7 @@ inline std::string labelify(std::string_view original_label) {
 }
 
 void arm64_translation_context::begin_instruction(off_t address, const std::string &disasm) {
-	instruction_index_to_guest_[builder_.nr_instructions()] = address;
+	instruction_index_to_guest_[builder_.size()] = address;
 
     current_instruction_disasm_ = disasm;
 

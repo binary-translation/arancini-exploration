@@ -257,81 +257,32 @@ private:
     address_mode mode_;
 };
 
-enum class operand_type : std::uint8_t { invalid, reg, mem, imm, shift, label, cond};
+// TODO: add conversion operation to base_type
+template <typename... Types>
+struct operand_variant final {
+    using base_type = std::variant<Types...>;
 
-struct operand {
-    using operand_variant = std::variant<std::monostate,
-                                         register_operand,
-                                         memory_operand,
-                                         immediate_operand,
-                                         shift_operand,
-                                         label_operand,
-                                         cond_operand>;
-
-    operand() = default;
+    operand_variant() = default;
 
     template <typename T>
-    operand(const T &o)
+    operand_variant(const T &o)
           : op_(o)
     { }
 
-    operand_type type() const {
-        return static_cast<operand_type>(op_.index());
+    template <typename... TS>
+    operand_variant(const operand_variant<TS...> &o):
+        op_(util::variant_cast<base_type>(o.get()))
+    { }
+
+    template <typename T>
+    operator T() const {
+        static_assert((std::is_same_v<T, Types> || ...),
+                      "Cannot convert operand variant to types not in variant");
+        return std::get<T>(op_);
     }
 
-    [[nodiscard]]
-	bool is_reg() const { return type() == operand_type::reg; }
-
-    [[nodiscard]]
-	bool is_mem() const { return type() == operand_type::mem; }
-
-    [[nodiscard]]
-	bool is_imm() const { return type() == operand_type::imm; }
-
-    [[nodiscard]]
-    bool is_shift() const { return type() == operand_type::shift; }
-
-    [[nodiscard]]
-    bool is_cond() const { return type() == operand_type::cond; }
-
-    [[nodiscard]]
-    bool is_label() const { return type() == operand_type::label; }
-
-    [[nodiscard]]
-    register_operand &reg() { return std::get<register_operand>(op_); }
-
-    [[nodiscard]]
-    const register_operand &reg() const { return std::get<register_operand>(op_); }
-
-    [[nodiscard]]
-    memory_operand &memory() { return std::get<memory_operand>(op_); }
-
-    [[nodiscard]]
-    const memory_operand &memory() const { return std::get<memory_operand>(op_); }
-
-    [[nodiscard]]
-    immediate_operand &immediate() { return std::get<immediate_operand>(op_); }
-
-    [[nodiscard]]
-    const immediate_operand &immediate() const { return std::get<immediate_operand>(op_); }
-
-    [[nodiscard]]
-    shift_operand &shift() { return std::get<shift_operand>(op_); }
-
-    [[nodiscard]]
-    const shift_operand &shift() const { return std::get<shift_operand>(op_); }
-
-    [[nodiscard]]
-    cond_operand &cond() { return std::get<cond_operand>(op_); }
-
-    [[nodiscard]]
-    const cond_operand &cond() const { return std::get<cond_operand>(op_); }
-
-    [[nodiscard]]
-    label_operand &label() { return std::get<label_operand>(op_); }
-
-    [[nodiscard]]
-    const label_operand &label() const { return std::get<label_operand>(op_); }
+    base_type& get() { return op_; }
+    const base_type& get() const { return op_; }
 
     [[nodiscard]]
 	bool is_use() const { return use_; }
@@ -339,35 +290,37 @@ struct operand {
     [[nodiscard]]
 	bool is_def() const { return def_; }
 
-    [[nodiscard]]
-	bool is_usedef() const { return use_ && def_; }
+    operand_variant& as_use() { use_ = true; return *this; }
 
-    operand& as_use() { use_ = true; return *this; }
-
-    operand& as_def() { def_ = true; return *this; }
+    operand_variant& as_def() { def_ = true; return *this; }
 
 	void allocate(int index, ir::value_type value_type) {
-		if (type() != operand_type::reg && reg().is_virtual())
-			throw backend_exception("trying to allocate non-vreg");
+        if (auto* reg = std::get_if<register_operand>(&op_); !reg || !reg->is_virtual())
+			throw backend_exception("trying to allocate non-virtual register");
 
 		op_ = register_operand(index, value_type);
 	}
 
 	void allocate_base(int index, ir::value_type value_type) {
-		if (type() != operand_type::mem)
+        auto* mem = std::get_if<memory_operand>(&op_);
+		if (!mem)
 			throw backend_exception("trying to allocate non-mem");
 
-        auto &memory = std::get<memory_operand>(op_);
-		if (!memory.is_virtual())
+		if (!mem->is_virtual())
 			throw backend_exception("trying to allocate non-virtual membase ");
 
-        memory.set_base_reg(register_operand(index, value_type));
+        mem->set_base_reg(register_operand(index, value_type));
 	}
 protected:
-    operand_variant op_;
+    base_type op_;
 	bool use_ = false;
     bool def_ = false;
 };
+
+using operand = operand_variant<std::monostate, register_operand,
+                                memory_operand, immediate_operand,
+                                shift_operand, label_operand,
+                                cond_operand>;
 
 template <typename T>
 operand def(const T& o) {
@@ -460,7 +413,7 @@ struct fmt::formatter<arancini::output::dynamic::arm64::register_operand> {
     constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
 
     template <typename FormatContext>
-    auto format(arancini::output::dynamic::arm64::register_operand op, FormatContext& ctx) const {
+    auto format(const arancini::output::dynamic::arm64::register_operand& op, FormatContext& ctx) const {
         using namespace arancini::output::dynamic::arm64;
 
         static const char* name64[] = {
@@ -585,6 +538,52 @@ struct fmt::formatter<arancini::output::dynamic::arm64::memory_operand> {
     }
 };
 
+template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::immediate_operand> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(arancini::output::dynamic::arm64::immediate_operand imm, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "#{:#x}", imm.value());
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::shift_operand> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(arancini::output::dynamic::arm64::shift_operand shift, FormatContext& ctx) const {
+        if (!shift.modifier().empty())
+            fmt::format_to(ctx.out(), "{} ", shift.modifier());
+        return fmt::format_to(ctx.out(), "#{:#x}", shift.value());
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::cond_operand> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(arancini::output::dynamic::arm64::cond_operand shift, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", shift.condition());
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::label_operand> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(arancini::output::dynamic::arm64::label_operand label, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", label.name());
+    }
+};
+
 // TODO: maybe this should inherit from the formatter for std::string_view (to get formatting)?
 template <>
 struct fmt::formatter<arancini::output::dynamic::arm64::operand> {
@@ -592,30 +591,18 @@ struct fmt::formatter<arancini::output::dynamic::arm64::operand> {
     constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
 
     template <typename FormatContext>
-    auto format(arancini::output::dynamic::arm64::operand op, FormatContext& ctx) const {
+    auto format(const arancini::output::dynamic::arm64::operand& op, FormatContext& ctx) const {
         using namespace arancini::output::dynamic::arm64;
 
-        // TODO: should just be an std::visit() call
-        switch (op.type()) {
-        case operand_type::cond:
-            // TODO: rename
-            return fmt::format_to(ctx.out(), "{}", op.cond().condition());
-        case operand_type::label:
-            return fmt::format_to(ctx.out(), "{}", op.label().name());
-        case operand_type::shift:
-            if (!op.shift().modifier().empty())
-                fmt::format_to(ctx.out(), "{} ", op.shift().modifier());
-            return fmt::format_to(ctx.out(), "#{:#x}", op.shift().value());
-        case operand_type::imm:
-            return fmt::format_to(ctx.out(), "#{:#x}", op.immediate().value());
-        case operand_type::mem:
-            return fmt::format_to(ctx.out(), "{}", op.memory());
-        case operand_type::reg:
-            return fmt::format_to(ctx.out(), "{}", op.reg());
-        default:
-            throw backend_exception("attempting to format unknown operand type with index {}",
-                                    util::to_underlying(op.type()));
-        }
+        // TODO: provide separate formatters for each and just do auto&& for calling them
+        std::visit(util::overloaded{
+            [&](auto&& op) { return fmt::format_to(ctx.out(), "{}", op); },
+            [&](const std::monostate&) {
+                return fmt::format_to(ctx.out(), "invalid operand type");
+            }
+        }, op.get());
+
+        return ctx.out();
     }
 };
 
@@ -625,7 +612,7 @@ struct fmt::formatter<arancini::output::dynamic::arm64::instruction> {
     constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
 
     template <typename FormatContext>
-    auto format(arancini::output::dynamic::arm64::instruction instr, FormatContext& ctx) const {
+    auto format(const arancini::output::dynamic::arm64::instruction& instr, FormatContext& ctx) const {
         if (instr.is_dead())
             fmt::format_to(ctx.out(), "// Dead instruction: {}", instr.opcode());
         else
