@@ -13,8 +13,11 @@ void instruction_builder::spill() {
 
 [[nodiscard]]
 inline bool is_virtual(const operand& op) {
-    return (op.type() == operand_type::reg && op.reg().is_virtual()) ||
-           (op.type() == operand_type::mem && op.memory().is_virtual());
+    if (auto* reg = std::get_if<register_operand>(&op.get()); reg)
+        return reg->is_virtual();
+    if (auto* mem = std::get_if<memory_operand>(&op.get()); mem)
+        return mem->is_virtual();
+    return false;
 }
 
 void instruction_builder::emit(machine_code_writer &writer) {
@@ -28,7 +31,7 @@ void instruction_builder::emit(machine_code_writer &writer) {
 
         for (std::size_t i = 0; i < instr.operand_count(); ++i) {
             const auto &op = operands[i];
-            if (op.type() == operand_type::invalid || is_virtual(op)) {
+            if (std::holds_alternative<std::monostate>(op.get()) || is_virtual(op)) {
                 throw backend_exception("Virtual register after register allocation: {}", instr);
             }
         }
@@ -79,11 +82,11 @@ void instruction_builder::allocate() {
         {
                 unsigned int vri;
                 ir::value_type type;
-                if (o.is_reg() && o.reg().is_virtual()) {
-                    vri = o.reg().index();
-                    type = o.reg().type();
-                } else if (o.is_mem() && o.memory().is_virtual()) {
-                    auto vreg = o.memory().base_register();
+                if (auto* reg = std::get_if<register_operand>(&o.get()); reg && reg->is_virtual()) {
+                    vri = reg->index();
+                    type = reg->type();
+                } else if (auto* mem = std::get_if<memory_operand>(&o.get()); mem && mem->is_virtual()) {
+                    auto vreg = mem->base_register();
                     vri = vreg.index();
                     type = vreg.type();
                 } else {
@@ -102,7 +105,7 @@ void instruction_builder::allocate() {
                 // TODO: register spilling
                 vreg_to_preg[vri] = allocation;
 
-                if (o.is_mem())
+                if (std::holds_alternative<memory_operand>(o.get()))
                     o.allocate_base(allocation, type);
                 else
                     o.allocate(allocation, type);
@@ -115,11 +118,11 @@ void instruction_builder::allocate() {
 			auto &o = instr.operands()[i];
 
 			// Only regs can be /real/ defs
-			if (o.is_def() && o.is_reg() && o.reg().is_virtual() && !o.is_use()) {
+			if (auto* reg = std::get_if<register_operand>(&o.get()); o.is_def() && !o.is_use() && reg && reg->is_virtual()) {
                 logger.debug("Defining register {}\n", o);
 
-                auto type = o.reg().type();
-				unsigned int vri = o.reg().index();
+                auto type = reg->type();
+				unsigned int vri = reg->index();
 
 				auto alloc = vreg_to_preg.find(vri);
 
@@ -157,11 +160,11 @@ void instruction_builder::allocate() {
 			auto &o = instr.operands()[i];
 
 			// We only care about REG uses - but we also need to consider REGs used in MEM expressions
-			if (o.is_use() && o.is_reg() && o.reg().is_virtual()) {
+			if (auto* reg = std::get_if<register_operand>(&o.get()); o.is_use() && reg && reg->is_virtual()) {
                 logger.debug("Allocating register {}\n", o);
 
-                auto type = o.reg().type();
-                unsigned int vri = o.reg().index();
+                auto type = reg->type();
+                unsigned int vri = reg->index();
 				if (!vreg_to_preg.count(vri)) {
                     allocate(o, i);
                     logger.debug("Allocating register to {}\n", o);
@@ -169,17 +172,17 @@ void instruction_builder::allocate() {
 					o.allocate(vreg_to_preg.at(vri), type);
 				}
 
-			} else if (o.is_mem()) {
+			} else if (auto* mem = std::get_if<memory_operand>(&o.get()); mem) {
                 logger.debug("Allocating base register used as part of memory reference {}\n", o);
 
-				if (o.memory().is_virtual()) {
-                    unsigned int vri = o.memory().base_register().index();
+				if (mem->is_virtual()) {
+                    unsigned int vri = mem->base_register().index();
 
 					if (!vreg_to_preg.count(vri)) {
                         allocate(o, i);
                         logger.debug("Allocating base register to {}\n", o);
 					} else {
-                        auto type = o.memory().base_register().type();
+                        auto type = mem->base_register().type();
 						o.allocate_base(vreg_to_preg.at(vri), type);
 					}
 				}
@@ -203,8 +206,10 @@ void instruction_builder::allocate() {
             operand op1 = instr.operands()[0];
             operand op2 = instr.operands()[1];
 
-            if (op1.is_reg() && op2.is_reg()) {
-                if (op1.reg().index() == op2.reg().index()) {
+            if (auto* reg1 = std::get_if<register_operand>(&op1.get()), *reg2 = std::get_if<register_operand>(&op2.get());
+                    reg1 && reg2)
+            {
+                if (reg1->index() == reg2->index()) {
                     logger.debug("Killing instruction {} as part of copy optimization\n", instr);
 
                     instr.kill();
