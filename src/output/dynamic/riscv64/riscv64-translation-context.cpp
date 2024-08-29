@@ -565,7 +565,7 @@ TypedRegister &riscv64_translation_context::materialise_ternary_atomic(const ter
 			}
 
 			// Write back updated acc value
-			builder_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node *>(n.rhs().owner())->regidx()), out_reg);
+			builder_.mv(get_or_assign_mapped_register(reinterpret_cast<const read_reg_node *>(n.rhs().owner())->regidx()), out_reg);
 
 			builder_.Bind(end);
 		} break;
