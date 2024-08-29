@@ -128,11 +128,11 @@ if (DEFINED ENV{FLAKE_BUILD})
         add_compile_definitions(ARANCINI_LIBPATH_STATIC="${CMAKE_INSTALL_PREFIX}/lib/$<TARGET_FILE_NAME:arancini-runtime-static>")
         add_compile_definitions(ARANCINI_LIBDIR="${CMAKE_INSTALL_PREFIX}/lib")
     endif()
-    if (NOT DEFINED CROSS_TRANSLATE)
+else (NOT DEFINED CROSS_TRANSLATE)
     add_compile_definitions(ARANCINI_LIBPATH="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:arancini-runtime>")
     add_compile_definitions(ARANCINI_LIBPATH_STATIC="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<TARGET_FILE_NAME:arancini-runtime-static>")
     add_compile_definitions(ARANCINI_LIBDIR="${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
-endif ()
+endif()
 
 add_subdirectory(src/txlat)
 

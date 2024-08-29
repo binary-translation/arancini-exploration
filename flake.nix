@@ -66,28 +66,21 @@
 		native_pkgs = import nixpkgs { system = system; };
 	in
 	{
-		defaultPackage = native_pkgs.callPackage(
-		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2, llvmPackages_18,
-		 lib, gcc, fmt, pkgsCross, m4, keystone, flex, bison}:
-			stdenv.mkDerivation {
+		defaultPackage = native_pkgs.stdenv.mkDerivation {
 				name = "arancini";
 				pname = "txlat";
 				src = self;
-				nativeBuildInputs = [
-					#graphviz
+				nativeBuildInputs = with native_pkgs; [
 					gdb
 					python3
-					#valgrind
-					git
 					cmake
 					pkg-config
-					clang
 					gcc
 					m4
                     flex
                     bison
 				];
-				buildInputs = [
+				buildInputs = with native_pkgs; [
                     fmt
 					zlib
 					boost
@@ -99,16 +92,15 @@
 					llvmPackages_18.bintools
 					llvmPackages_18.lld
 					flex
-				] ++ lib.optionals ( system == "aarch64-linux" ) [ keystone ];
-				depsTargetTarget = [ gcc ];
+				] ++ native_pkgs.lib.optionals ( system == "aarch64-linux" ) [ native_pkgs.keystone ];
+				depsTargetTarget = [ native_pkgs.gcc ];
 				configurePhase = ''
 					export FLAKE_BUILD=1
 					export NDEBUG=1
 					cmakeConfigurePhase
 				'';
 				cmakeFlags = [ "-DBUILD_TESTS=1" ];
-			}
-		) {};
+			};
 	}) //
 	flake-utils.lib.eachSystem [ "aarch64-linux" "riscv64-linux" ] (system:
 	let
@@ -145,44 +137,37 @@
 					nativeBuildInputs = [ meson ninja ];
 				}){};
 			native_pkgs = import nixpkgs { system = "x86_64-linux"; };
-			remote_pkgs = import nixpkgs { system = system; };
+			remote_pkgs = import nixpkgs { system = "x86_64-linux"; crossSystem = system; };
 		in
 		{
-		crossPackage = native_pkgs.callPackage(
-		{stdenv, graphviz, gdb, python3, valgrind, git, cmake, pkg-config, clang, zlib, boost, libffi, libxml2, llvmPackages_18,
-			lib, gcc, fmt, pkgsCross, m4, keystone, flex, bison}:
-			stdenv.mkDerivation {
+		crossPackage = native_pkgs.stdenv.mkDerivation {
 				name = "arancini";
 				pname = "txlat";
 				src = self;
 				nativeBuildInputs = [
-					#graphviz
-					gdb
-					python3
-					#valgrind
-					git
-					cmake
-					pkg-config
-					clang
-					pkgsCross.riscv64.buildPackages.gcc
-					m4
-                    flex
-                    bison
+					native_pkgs.gdb
+					native_pkgs.python3
+					native_pkgs.cmake
+					native_pkgs.pkg-config
+					native_pkgs.m4
+                    native_pkgs.flex
+                    native_pkgs.bison
+					native_pkgs.gcc
 				];
 				buildInputs = [
-                    fmt
-					zlib
-					boost
+                    native_pkgs.fmt
+					native_pkgs.zlib
+					native_pkgs.boost
 					patched-xed
-					libffi
+					native_pkgs.libffi
 					fadec
-					libxml2
-					llvmPackages_18.llvm.dev
-					llvmPackages_18.bintools
-					llvmPackages_18.lld
-                    flex
-				] ++ lib.optionals ( system == "aarch64-linux" ) [ keystone ];
-				depsTargetTarget = [ gcc ];
+					native_pkgs.libxml2
+					native_pkgs.llvmPackages_18.llvm.dev
+					native_pkgs.llvmPackages_18.bintools
+					native_pkgs.llvmPackages_18.lld
+                    native_pkgs.flex
+				] ++ native_pkgs.lib.optionals ( system == "aarch64-linux" ) [ native_pkgs.keystone ];
+				depsTargetTarget = [ remote_pkgs.gcc ];
 				configurePhase = ''
 					export FLAKE_BUILD=1
 					export NDEBUG=1
@@ -191,15 +176,14 @@
 				cmakeFlags = [
 					"-DBUILD_TESTS=1"
 					"-DCMAKE_BUILD_TYPE=Release"
-				] ++ lib.optionals (system == "riscv64-linux") [
+				] ++ native_pkgs.lib.optionals (system == "riscv64-linux") [
 					"-DDBT_ARCH=RISCV64"
-				] ++ lib.optionals (system == "aarch64-linux") [
+				] ++ native_pkgs.lib.optionals (system == "aarch64-linux") [
 					"-DDBT_ARCH=AARCH64"
 				];
 				fixupPhase = ''
 					ln -s ${remote_pkgs.gcc.outPath}/bin/g++ $out/cross-g++;
 				'';
-			}
-		) {};
+			};
 	});
 }
