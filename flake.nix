@@ -167,7 +167,7 @@
 					native_pkgs.llvmPackages_18.lld
                     native_pkgs.flex
 				] ++ native_pkgs.lib.optionals ( system == "aarch64-linux" ) [ native_pkgs.keystone ];
-				depsTargetTarget = [ remote_pkgs.gcc ];
+                depsTargetTarget = [ remote_pkgs.gcc ];
 				configurePhase = ''
 					export FLAKE_BUILD=1
 					export NDEBUG=1
@@ -182,7 +182,7 @@
 					"-DDBT_ARCH=AARCH64"
 				];
 				fixupPhase = ''
-					ln -s ${remote_pkgs.gcc.outPath}/bin/g++ $out/cross-g++;
+					ln -s ${remote_pkgs.pkgsBuildTarget.gcc.outPath}/bin/${remote_pkgs.pkgsBuildTarget.gcc.targetPrefix}g++ $out/cross-g++;
 				'';
 			};
 	});
