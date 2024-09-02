@@ -6,7 +6,7 @@ project(arancini LANGUAGES C CXX)
 # Compile flags
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS "-Wall -Wextra -std=c++17")
+set(CMAKE_CXX_FLAGS "-Wall -std=c++17 -Wno-unused-function")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 
 # Generate the compile commands for development

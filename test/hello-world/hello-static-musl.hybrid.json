@@ -3,6 +3,6 @@
         "ARANCINI_LOG_LEVEL": "debug",
         "ARANCINI_ENABLE_LOG": "true"
     },
-    "expected_stdout": ["Hello World!"]
+    "expected_stdout": ["Hello World!\n"]
 }
 

@@ -9,37 +9,23 @@
 
 namespace arancini::output::dynamic::arm64 {
 
-template <typename T, typename A, typename B>
-using is_one_of = std::disjunction<std::is_same<T, A>, std::is_same<T, B>>;
-
-template <typename T>
-using is_imm = std::enable_if_t<std::is_same<T, immediate_operand>::value, int>;
-
-// TODO: revise this
-template <typename T>
-using is_reg_or_immediate = std::enable_if_t<std::disjunction<std::is_same<T, register_operand>,
-                                                              std::is_same<T, immediate_operand>>::value,
-                                                              int>;
+using reg_or_imm = operand_variant<register_operand, immediate_operand>;
 
 class instruction_builder {
 public:
 
 #define ARITH_OP_BASIC(name) \
-    template <typename T, \
-              is_reg_or_immediate<T> = 0> \
 	void name(const register_operand &dst, \
               const register_operand &src1, \
-              const T &src2, \
+              const reg_or_imm &src2, \
               const std::string &comment = "") { \
         append(instruction(#name, def(dst), use(src1), use(src2)).as_keep().add_comment(comment)); \
     }
 
 #define ARITH_OP_SHIFT(name) \
-    template <typename T, \
-              is_reg_or_immediate<T> = 0> \
     void name(const register_operand &dst, \
               const register_operand &src1, \
-              const T &src2, \
+              const reg_or_imm &src2, \
               const shift_operand &shift) { \
         append(instruction(#name, def(dst), use(src1), use(src2), use(shift)).as_keep()); \
     }
@@ -67,36 +53,31 @@ public:
     // SBCS
     ARITH_OP(sbcs);
 
-    template <typename T, is_reg_or_immediate<T> = 0>
     void orr_(const register_operand &dst,
               const register_operand &src1,
-              const T &src2, const std::string &comment = "") {
+              const reg_or_imm &src2, const std::string &comment = "") {
         append(instruction("orr", def(dst), use(src1), use(src2)).add_comment(comment));
     }
 
-    template <typename T, is_reg_or_immediate<T> = 0>
     void and_(const register_operand &dst,
               const register_operand &src1,
-              const T &src2, const std::string &comment = "") {
+              const reg_or_imm &src2, const std::string &comment = "") {
         append(instruction("and", def(dst), use(src1), use(src2)).add_comment(comment));
     }
 
-    template <typename T, is_reg_or_immediate<T> = 0>
     void ands(const register_operand &dst,
               const register_operand &src1,
-              const T &src2, const std::string &comment = "") {
+              const reg_or_imm &src2, const std::string &comment = "") {
         append(instruction("ands", def(dst), use(src1), use(src2)).as_keep().add_comment(comment));
     }
 
-    template <typename T, is_reg_or_immediate<T> = 0>
     void eor_(const register_operand &dst,
               const register_operand &src1,
-              const T &src2, const std::string &comment = "") {
+              const reg_or_imm &src2, const std::string &comment = "") {
         append(instruction("eor", def(dst), use(src1), use(src2)).add_comment(comment));
     }
 
-    template <typename T, is_reg_or_immediate<T> = 0>
-    void not_(const register_operand &dst, const T &src, const std::string &comment = "") {
+    void not_(const register_operand &dst, const reg_or_imm &src, const std::string &comment = "") {
         append(instruction("mvn", def(dst), use(src)).add_comment(comment));
     }
 
@@ -122,9 +103,7 @@ public:
         append(instruction("movk", use(def(dst)), use(src), use(shift)).add_comment(comment));
     }
 
-    template <typename T,
-              is_reg_or_immediate<T> = 0>
-    void mov(const register_operand &dst, const T &src, const std::string &comment = "") {
+    void mov(const register_operand &dst, const reg_or_imm &src, const std::string &comment = "") {
         append(instruction("mov", def(dst), use(src)).add_comment(comment));
     }
 
@@ -154,42 +133,36 @@ public:
     }
 
     // TODO: handle register_set
-    template <typename T, is_reg_or_immediate<T> = 0>
     void cmn(const register_operand &dst,
-             const T &src, const std::string &comment = "") {
+             const reg_or_imm &src, const std::string &comment = "") {
         append(instruction("cmn", use(def(dst)), use(src)).add_comment(comment));
     }
 
-    template <typename T, is_reg_or_immediate<T> = 0>
     void cmp(const register_operand &dst,
-             const T &src, const std::string &comment = "") {
+             const reg_or_imm &src, const std::string &comment = "") {
         append(instruction("cmp", use(def(dst)), use(src)).add_comment(comment));
     }
 
-    template <typename T, is_reg_or_immediate<T> = 0>
     void tst(const register_operand &dst,
-             const T &src, const std::string &comment = "") {
+             const reg_or_imm &src, const std::string &comment = "") {
         append(instruction("tst", use(def(dst)), use(src)).add_comment(comment));
     }
 
-    template <typename T, is_reg_or_immediate<T> = 0>
     void lsl(const register_operand &dst,
              const register_operand &src1,
-             const T &src2, const std::string &comment = "") {
+             const reg_or_imm &src2, const std::string &comment = "") {
         append(instruction("lsl", def(dst), use(src1), use(src2)).add_comment(comment));
     }
 
-    template <typename T, is_reg_or_immediate<T> = 0>
     void lsr(const register_operand &dst,
              const register_operand &src1,
-             const T &src2, const std::string &comment = "") {
+             const reg_or_imm &src2, const std::string &comment = "") {
         append(instruction("lsr", def(dst), use(src1), use(src2)).add_comment(comment));
     }
 
-    template <typename T, is_reg_or_immediate<T> = 0>
     void asr(const register_operand &dst,
              const register_operand &src1,
-             const T &src2, const std::string &comment = "") {
+             const reg_or_imm &src2, const std::string &comment = "") {
         append(instruction("asr", def(dst), use(src1), use(src2)).add_comment(comment));
     }
 
@@ -228,7 +201,7 @@ public:
 
 #define STR_VARIANTS(name) \
     void name(const register_operand &src, \
-             const memory_operand &base, const std::string &comment = "") { \
+              const memory_operand &base, const std::string &comment = "") { \
         append(instruction(#name, use(src), use(base)).add_comment(comment)); \
     } \
 
@@ -572,19 +545,29 @@ public:
 
 	void dump(std::ostream &os) const;
 
-	size_t nr_instructions() const { return instructions_.size(); }
+    std::size_t size() const { return instructions_.size(); }
 
     using instruction_stream = std::vector<instruction>;
 
     using instruction_stream_iterator = instruction_stream::iterator;
     using const_instruction_stream_iterator = instruction_stream::const_iterator;
 
+    [[nodiscard]]
     instruction_stream_iterator instruction_begin() { return instructions_.begin(); }
+
+    [[nodiscard]]
     const_instruction_stream_iterator instruction_begin() const { return instructions_.begin(); }
+
+    [[nodiscard]]
     const_instruction_stream_iterator instruction_cbegin() const { return instructions_.cbegin(); }
 
+    [[nodiscard]]
     instruction_stream_iterator instruction_end() { return instructions_.end(); }
+
+    [[nodiscard]]
     const_instruction_stream_iterator instruction_end() const { return instructions_.end(); }
+
+    [[nodiscard]]
     const_instruction_stream_iterator instruction_cend() const { return instructions_.cend(); }
 private:
 	std::vector<instruction> instructions_;

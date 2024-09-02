@@ -82,16 +82,25 @@ register_operand arm64_translation_context::cast(const register_operand &op, val
 
 template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int>>
 register_operand arm64_translation_context::mov_immediate(T imm, ir::value_type type) {
-    // TODO: this is wrong (casting to larger value than actual value)
-    auto actual_size = base_type().element_width() - __builtin_clzll(reinterpret_cast<unsigned long long&>(imm)|1);
-    actual_size = std::min(actual_size, type.element_width());
+    // Sanity check
+    static_assert (sizeof(T) <= sizeof(unsigned long long),
+                   "Attempting to move immediate larger than unsigned long long into register");
+    unsigned long long immediate = imm;
 
-    std::size_t move_count = static_cast<std::size_t>(std::ceil(actual_size / 16.0));
+    // NOTE: __builtin_clzll may never exceed sizeof(unsigned long long), usually 64
+    auto actual_size = base_type().element_width() - __builtin_clzll(immediate|1);
+    if (actual_size > type.element_width()) {
+        logger.warn("Converting value of size {} to size {} by truncation\n",
+                    actual_size, type.element_width());
+        actual_size = type.element_width();
+    }
 
-    auto immediate = reinterpret_cast<unsigned long long&>(imm);
+    // Determine how many 16-bit chunks we need to move
+    std::size_t move_count = actual_size / 16 + (actual_size % 16 != 0);
+    logger.debug("Moving value {:#x} requires {} 16-bit moves\n", immediate, move_count);
 
     if (actual_size < 16) {
-        builder_.insert_comment("Move immediate directly as < 16-bits");
+        builder_.insert_comment("Move immediate {:#x} directly as < 16-bits", immediate);
         auto reg = vreg_alloc_.allocate(type);
         builder_.mov(reg, immediate_operand(immediate & 0xFFFF, value_type::u16()));
         return reg;
@@ -99,36 +108,32 @@ register_operand arm64_translation_context::mov_immediate(T imm, ir::value_type 
 
     auto reg = vreg_alloc_.allocate(type);
     if (actual_size <= base_type().element_width()) {
-        builder_.insert_comment("Move immediate directly as > 16-bits");
+        builder_.insert_comment("Move immediate {:#x} directly as > 16-bits", immediate);
         builder_.movz(reg,
                       immediate_operand(immediate & 0xFFFF, value_type::u16()),
-                      shift_operand("LSL", immediate_operand(0, value_type::u1())));
+                      shift_operand("LSL", {0, value_type::u1()}));
         for (std::size_t i = 1; i < move_count; ++i) {
             builder_.movk(reg,
                           immediate_operand(immediate >> (i * 16) & 0xFFFF, value_type::u16()),
-                          shift_operand("LSL", immediate_operand(i * 16, value_type::u16())));
+                          shift_operand("LSL", {i * 16, value_type::u16()}));
         }
 
         return reg;
     }
 
-    throw backend_exception("Too large immediate: {}", imm);
+    throw backend_exception("Immediate {} is too large", imm);
 }
 
 memory_operand
-arm64_translation_context::guestreg_memory_operand(int regoff, memory_operand::address_mode mode)
-{
-    memory_operand mem;
+arm64_translation_context::guestreg_memory_operand(int regoff, memory_operand::address_mode mode) {
     if (regoff > 255 || regoff < -256) {
         const register_operand& base_vreg = vreg_alloc_.allocate(addr_type());
         builder_.mov(base_vreg, immediate_operand(regoff, value_type::u32()));
         builder_.add(base_vreg, context_block_reg, base_vreg);
-        mem = memory_operand(base_vreg, immediate_operand(0, u12()), mode);
+        return memory_operand(base_vreg, immediate_operand(0, u12()), mode);
     } else {
-        mem = memory_operand(context_block_reg, immediate_operand(regoff, u12()), mode);
+        return memory_operand(context_block_reg, immediate_operand(regoff, u12()), mode);
     }
-
-	return mem;
 }
 
 register_operand arm64_translation_context::add_membase(const register_operand &addr, const value_type &type) {
@@ -160,7 +165,7 @@ inline std::string labelify(std::string_view original_label) {
 }
 
 void arm64_translation_context::begin_instruction(off_t address, const std::string &disasm) {
-	instruction_index_to_guest_[builder_.nr_instructions()] = address;
+	instruction_index_to_guest_[builder_.size()] = address;
 
     current_instruction_disasm_ = disasm;
 
@@ -484,6 +489,13 @@ void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
 
 void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
     const auto &new_pc_vreg = materialise_port(n.value());
+
+	if (n.updates_pc() == br_type::call) {
+		ret_ = 3;
+	}
+	if (n.updates_pc() == br_type::ret) {
+		ret_ = 4;
+	}
 
     builder_.str(new_pc_vreg,
                  guestreg_memory_operand(static_cast<int>(reg_offsets::PC)),
@@ -1103,7 +1115,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
     const auto &src_vreg = src_vregs[0];
     const auto &dest_vreg = dest_vregs[0];
 
-    logger.debug("Materializing cast operation: {}", n.op());
+    logger.debug("Materializing cast operation: {}\n", n.op());
 	switch (n.op()) {
 	case cast_op::sx:
         // Sanity check
@@ -1523,10 +1535,6 @@ void arm64_translation_context::materialise_vector_extract(const vector_extract_
 
 void arm64_translation_context::materialise_internal_call(const internal_call_node &n) {
     if (n.fn().name() == "handle_syscall") {
-        auto pc_vreg = mov_immediate(this_pc_ + 2, value_type::u64());
-        builder_.str(pc_vreg,
-                     guestreg_memory_operand(static_cast<int>(reg_offsets::PC)),
-                     "update program counter to handle system call");
         ret_ = 1;
     } else if (n.fn().name() == "handle_int") {
         ret_ = 2;
