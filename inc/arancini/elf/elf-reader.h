@@ -194,6 +194,22 @@ public:
 		case R_X86_64_RELATIVE:
 			return R_RISCV_RELATIVE;
 		}
+#elif defined(ARCH_AARCH64)
+        switch (type_) {
+        case R_X86_64_NONE:
+            return R_AARCH64_NONE;
+        case R_X86_64_64:
+            return R_AARCH64_ABS64;
+        case R_X86_64_PC32:
+            return R_AARCH64_PREL32;
+        case R_X86_64_COPY:
+            return R_AARCH64_COPY;
+        case R_X86_64_GLOB_DAT:
+        case R_X86_64_JUMP_SLOT:
+            return R_AARCH64_ABS64;
+        case R_X86_64_RELATIVE:
+            return R_AARCH64_RELATIVE;
+        }
 #endif
 		return 0x1111;
 	};

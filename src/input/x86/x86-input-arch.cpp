@@ -320,7 +320,6 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_FCHS:
   case XED_ICLASS_FABS:
   case XED_ICLASS_FXCH:
-  case XED_ICLASS_FXAM:
   case XED_ICLASS_FCOMI:
   case XED_ICLASS_FCOMIP:
   case XED_ICLASS_FUCOMI:

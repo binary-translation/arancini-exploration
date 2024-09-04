@@ -15,7 +15,7 @@ std::shared_ptr<basefile> tempfile_manager::create_file(const std::string& prefi
 		return t;
 	}
 	char n[5];
-	sprintf(n, "P-%d", rand()%1000);
+	sprintf(n, "P-%d", rand()%100);
 	auto t = std::make_shared<persfile>(prefix + std::string(n) + suffix);
 	tempfiles_.push_back(t);
 

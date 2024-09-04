@@ -264,7 +264,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -no-pie -latomic " + intermediate_file->name() + " -l arancini-runtime -L "
 				+ arancini_runtime_lib_dir + " -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info + verbose_link);
 		} else if (elf.type() == elf::elf_type::dyn) {
-			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -shared " + intermediate_file->name() + "-L "
+			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -shared " + intermediate_file->name() + " -L "
 				+ arancini_runtime_lib_dir + " -l arancini-runtime -Wl,-rpath=" + arancini_runtime_lib_dir + debug_info + verbose_link);
 		}
 		return;
