@@ -185,6 +185,8 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
   case XED_ICLASS_SAR:
   case XED_ICLASS_SHR:
   case XED_ICLASS_SHL:
+  case XED_ICLASS_SHRD:
+  case XED_ICLASS_SHLD:
   case XED_ICLASS_ROR:
   case XED_ICLASS_ROL:
   case XED_ICLASS_PSRLW:
@@ -269,6 +271,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder, xed_iclas
 		return std::make_unique<fpvec_translator>(builder);
 
 	case XED_ICLASS_PSHUFD:
+    case XED_ICLASS_SHUFPS:
 	case XED_ICLASS_SHUFPD:
 	case XED_ICLASS_PSHUFLW:
 	case XED_ICLASS_PSHUFHW:

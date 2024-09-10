@@ -60,22 +60,30 @@ void shuffle_translator::do_translate()
     break;
   }
 
+  case XED_ICLASS_SHUFPS:
   case XED_ICLASS_SHUFPD: {
     auto dst = read_operand(0);
-    auto src1 = auto_cast(value_type::vector(value_type::f64(), 2), read_operand(0));
-    auto src2 = auto_cast(value_type::vector(value_type::f64(), 2), read_operand(1));
+    value_type vec_ty = value_type::v();
+    unsigned long mask;
+    unsigned bits;
+    if (xed_decoded_inst_get_iclass(xed_inst()) == XED_ICLASS_SHUFPS) {
+      vec_ty = value_type::vector(value_type::f32(), 4);
+      mask = 3;
+      bits = 2;
+    } else {
+      vec_ty = value_type::vector(value_type::f64(), 2);
+      mask = 1;
+      bits = 1;
+    }
+    auto src1 = auto_cast(vec_ty, read_operand(0));
+    auto src2 = auto_cast(vec_ty, read_operand(1));
     auto slct = ((constant_node *)read_operand(2))->const_val_i();
 
-    if (slct & 1) {
-      dst = builder().insert_vector_insert(dst->val(), 0, builder().insert_vector_extract(src1->val(), 1)->val());
-    } else {
-      dst = builder().insert_vector_insert(dst->val(), 0, builder().insert_vector_extract(src1->val(), 0)->val());
-    }
-
-    if (slct & 2) {
-      dst = builder().insert_vector_insert(dst->val(), 1, builder().insert_vector_extract(src2->val(), 1)->val());
-    } else {
-      dst = builder().insert_vector_insert(dst->val(), 1, builder().insert_vector_extract(src2->val(), 0)->val());
+    for (unsigned i = 0; i < vec_ty.nr_elements(); i++) {
+        auto idx = (slct >> (bits * i)) & mask;
+        auto from = (idx < vec_ty.nr_elements()/2) ? src1 : src2;
+        auto val = builder().insert_vector_extract(from->val(), idx);
+        dst = builder().insert_vector_insert(dst->val(), i, val->val());
     }
 
     write_operand(0, dst->val());
