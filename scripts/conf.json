@@ -1,0 +1,107 @@
+{
+    "machines": [
+        {
+            "url": "graham",
+            "arch": "x86_64",
+            "user": "$USER",
+            "arancini_root": "$HOME/arancini-exploration"
+        },
+        {
+            "url": "yasmin",
+            "arch": "aarch64",
+            "user": "$USER",
+            "arancini_root": "$HOME/arancini-exploration"
+        },
+        {
+            "url": "tegan",
+            "arch": "riscv64",
+            "user": "$USER",
+            "arancini_root": "$HOME/arancini-exploration"
+        }
+    ],
+    "prefixes": {
+            "results": "result-",
+            "translations": "txlat-"
+    },
+    "benchmarks": {
+        "phoenix": {
+            "bins": [
+                {
+                    "name": "histogram",
+                    "args": [
+                        { "name": "small.bmp", "type": "datafile" }
+                    ]
+                },
+                {
+                    "name": "kmeans",
+                    "args": []
+                },
+                {
+                    "name": "linear_regression",
+                    "args": [
+                        { "name": "key_file_50MB.txt", "type": "datafile" }
+                    ]
+                },
+                {
+                    "name": "matrix_multiply",
+                    "args": [
+                        { "name": "1024 1024 0", "type": "literal" }
+                    ]
+                },
+                {
+                    "name": "pca",
+                    "args": []
+                },
+                {
+                    "name": "string_match",
+                    "args": [
+                        { "name": "key_file_50MB.txt", "type": "datafile" }
+                    ]
+                },
+                {
+                    "name": "word_count",
+                    "args": [
+                        { "name": "word_10MB.txt", "type": "datafile" }
+                    ]
+                }
+            ],
+            "x86_64": "phoenix-x86_64",
+            "aarch64": "phoenix-aarch64",
+            "riscv64": "phoenix-riscv64"
+        },
+        "parsec": {
+            "bins": [
+            ],
+            "x86_64": "parsec-x86_64",
+            "aarch64": "parsec-aarch64",
+            "riscv64": "parsec-riscv64"
+        }
+    },
+    "emulators": [
+        {
+        "name": "native",
+        "what": "native",
+        "bin": ""
+        },
+        {
+        "name": "arancini",
+        "what": "static",
+        "tx": "translations"
+        },
+        {
+        "name": "qemu",
+        "what": "dynamic",
+        "bin": "risotto-qemu"
+        },
+        {
+        "name": "risotto",
+        "what": "dynamic",
+        "bin": "risotto"
+        },
+        {
+        "name": "risotto-nofence",
+        "what": "dynamic",
+        "bin": "risotto-nofence"
+        }
+    ]
+}
