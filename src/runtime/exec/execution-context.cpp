@@ -9,11 +9,12 @@
 #include <cstring>
 #include <ostream>
 #include <pthread.h>
+#include <sched.h>
 #include <utility>
 
+#include <sys/syscall.h>
 #if defined(ARCH_X86_64)
 #include <asm/prctl.h>
-#include <sys/syscall.h>
 #include <unistd.h>
 #define GM_BASE (void *)0x600000000000ull
 #else
@@ -25,6 +26,7 @@
 #include <csignal>
 #include <iostream>
 #include <linux/fcntl.h>
+#include <linux/futex.h>
 #include <stdexcept>
 #include <sys/mman.h>
 #include <sys/uio.h>
@@ -45,16 +47,27 @@ void *MainLoopWrapper(void *args) {
 	auto largs = (loop_args *)args;
 	auto x86_state = (x86::x86_cpu_state *)largs->new_state;
 	auto parent_state = (x86::x86_cpu_state *)largs->parent_state;
+    auto flags = parent_state->RDI;
 
 	pthread_mutex_lock(largs->lock);
     util::global_logger.info("Thread: {}\nState:\n\t{}", util::lazy_eval<>(gettid), *x86_state);
 	parent_state->RAX = gettid();
 	x86_state->RSP = x86_state->RSI;
 	x86_state->FS = x86_state->R8;
+
+    int *ctid = (int *)parent_state->R10;
+    if (flags & CLONE_PARENT_SETTID) {
+        *(int *)parent_state->RDX = gettid();
+    }
+    if (flags & CLONE_CHILD_CLEARTID) {
+        syscall(SYS_set_tid_address, ctid);
+    }
+
 	pthread_cond_signal(largs->cond);
 	pthread_mutex_unlock(largs->lock);
 
 	MainLoop(x86_state);
+    syscall(SYS_futex, ctid, FUTEX_WAKE, 1, NULL, NULL, 0);
 	return NULL;
 };
 
@@ -467,7 +480,7 @@ int execution_context::internal_call(void *cpu_state, int call) {
 			pthread_mutex_unlock(&rax_lock);
 			pthread_mutex_destroy(&rax_lock);
 			pthread_cond_destroy(&rax_cond);
-			pthread_detach(child);
+			//pthread_detach(child);
 			break;
         }
 		case 77: // ftruncate

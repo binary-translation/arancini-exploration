@@ -137,6 +137,8 @@ void rep_translator::do_translate()
 		auto loop_start = builder().insert_label("while");
 		auto rcx = read_reg(value_type::u64(), reg_offsets::RCX);
 		auto rcx_test = builder().insert_cmpeq(rcx->val(), cst_0->val());
+		auto df = read_reg(value_type::u1(), reg_offsets::DF);
+		auto df_test = builder().insert_cmpne(df->val(), builder().insert_constant_i(value_type::u1(), 0)->val());
 		cond_br_node *br_loop = (cond_br_node *)builder().insert_cond_br(rcx_test->val(), nullptr);
 
     // movsq [rdi], [rsi]
@@ -147,8 +149,7 @@ void rep_translator::do_translate()
 		builder().insert_write_mem(rdi->val(), rsi_val->val());
 
     // update rdi and rsi according to DF register (0: inc, 1: dec)
-		auto df = read_reg(value_type::u1(), reg_offsets::DF);
-		auto df_test = builder().insert_cmpne(df->val(), builder().insert_constant_i(value_type::u1(), 0)->val());
+    /*
 		cond_br_node *br_df = (cond_br_node *)builder().insert_cond_br(df_test->val(), nullptr);
 
 		write_reg(reg_offsets::RDI, builder().insert_add(rdi->val(), cst_align->val())->val());
@@ -164,6 +165,15 @@ void rep_translator::do_translate()
 		auto endif_label = builder().insert_label("endif");
 		br_then->add_br_target(endif_label);
 
+    */
+        auto sub_rsi = builder().insert_sub(rsi->val(), cst_align->val());
+        auto sub_rdi = builder().insert_sub(rdi->val(), cst_align->val());
+
+        auto add_rsi = builder().insert_add(rsi->val(), cst_align->val());
+        auto add_rdi = builder().insert_add(rdi->val(), cst_align->val());
+
+		write_reg(reg_offsets::RDI, builder().insert_csel(df_test->val(), sub_rdi->val(), add_rdi->val())->val());
+		write_reg(reg_offsets::RSI, builder().insert_csel(df_test->val(), sub_rsi->val(), add_rsi->val())->val());
     // rcx--
 		write_reg(reg_offsets::RCX, builder().insert_sub(rcx->val(), cst_1->val())->val());
 		builder().insert_br(loop_start);

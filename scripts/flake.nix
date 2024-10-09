@@ -9,6 +9,13 @@
 			ref = "musl";
 			flake = false;
 		};
+		phoenix-16 = {
+			type = "github";
+			owner = "ReimersS";
+			repo = "phoenix";
+            rev = "66c4c3904133b559a6c8787b8cd445d32b2343f5";
+			flake = false;
+		};
 		parsec-src = {
 			type = "github";
 			owner = "ReimersS";
@@ -27,11 +34,12 @@
 	nixConfig.extra-substituters = [ "https://musl-toolchains.cachix.org" ];
 	nixConfig.extra-trusted-public-keys = [ "musl-toolchains.cachix.org-1:g9L50mmWHHMzAVIfgLVQjhoBsjT66n3LDa0f8xeigpI=" ];
 
-	outputs = { self, nixpkgs, flake-utils, phoenix-src, parsec-src, risotto-pkgs, ... }:
+	outputs = { self, nixpkgs, flake-utils, phoenix-src, phoenix-16, parsec-src, risotto-pkgs, ... }:
 	flake-utils.lib.eachSystem [ "x86_64-linux" "riscv64-linux" "aarch64-linux" ] (system:
 	let
-		pkgs = import nixpkgs { system = system; crossSystem = { config = system+"-musl"; useLLVM = true; linker = "lld"; }; config.allowUnsupportedSystem=true; };
+		pkgs = import nixpkgs { system = system; crossSystem = { config = system+"-musl"; useLLVM = true; linker = "lld"; }; };
 		native_pkgs = import nixpkgs { inherit system; };
+		risotto_pkgs = import risotto-pkgs { inherit system; };
 
 		rv_patch = builtins.fetchurl {
 			url = "https://gist.githubusercontent.com/ReimersS/81e6d9b7ba90b42800be1f8d7443689c/raw/06e2ce53033b5eb568638de1171c88ad677f1777/riscv-fpargs.patch";
@@ -218,6 +226,7 @@
 					if [[ -x $p ]]; then cp $p $out/; fi;
 				done;
 				ln -s ${pkgs.llvmPackages_15.stdenv.cc.libc}/lib/libc.so $out/libc.so;
+                ln -s ${toString ((builtins.elemAt (builtins.filter (x: x.pname=="libunwind") pkgs.llvmPackages_15.stdenv.cc.depsTargetTargetPropagated) 0).out.outPath)}/lib/libunwind.so $out/libunwind.so;
 				cd $out;
 				tar -xzf ${histogram_datafiles};
 				tar -xzf ${linear_regression_datafiles};
@@ -226,6 +235,16 @@
 				tar -xzf ${word_count_datafiles};
 			'';
 		};
+    phoenix_src =
+        pkgs.stdenv.mkDerivation {
+            name = "phoenix-16";
+            src = phoenix-16;
+            phases = [ "unpackPhase" "installPhase" ];
+            installPhase = ''
+                mkdir -p $out;
+                cp -r $src/* $out;
+            '';
+        };
 	parsec =
 		pkgs.stdenv.mkDerivation {
 			name = "parsec";
