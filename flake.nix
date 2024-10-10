@@ -23,15 +23,18 @@
 		"https://cache.garnix.io"
 		"https://tum-dse.cachix.org"
 	];
+
 	nixConfig.extra-trusted-public-keys = [
 		"cache.garnix.io:CTFPyKSLcx5RMJKfLo5EEPUObbA78b0YQ2DTCJXqr9g="
 	];
+
+	nixConfig.extra-platforms = [ "x86_64-linux" "aarch64-linux" "riscv64-linux" ];
 
 	# output format guide https://nixos.wiki/wiki/Flakes#Output_schema
 	outputs = { self, nixpkgs, flake-utils, xed-src, mbuild-src, fadec-src, ... }:
 	flake-utils.lib.eachSystem ["x86_64-linux" "aarch64-linux" "riscv64-linux" ] (system:
 	let
-		my-mbuild = 
+		my-mbuild =
 			native_pkgs.python3Packages.buildPythonPackage {
 				pname = "mbuild";
 				version = "2022.07.28";
