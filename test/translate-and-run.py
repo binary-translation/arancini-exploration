@@ -44,10 +44,14 @@ class ExecutionError(Exception):
         return self.message
 
 class Tester:
-    def __init__(self, txlat_path, input_bin, config = ""):
+    def __init__(self, txlat_path, input_bin, output_bin, config = ""):
         self.artifacts = []
         self.txlat_path = txlat_path
         self.input_bin = input_bin
+
+        self.output_bin = output_bin
+        if output_bin == "" or output_bin is None:
+            self.output_bin = f'{self.input_bin}.out'
 
         if not os.path.isfile(self.txlat_path):
             raise ValueError(f"txlat does not exist at path: {self.txlat_path}")
@@ -70,19 +74,26 @@ class Tester:
             'produced_artifacts': []
         }
 
-        if not os.path.isfile(config):
+        if config == "" or config is None:
+            logger.warning("Config file option not passed; executing test in default configuration")
+        elif not os.path.isfile(config):
             logger.warning(f"Config file does not exist at path \"{config}\"; "
                             "executing test in default configuration")
         else:
             self.parse_config(config)
-            term_size_tuple = shutil.get_terminal_size(fallback=(200, 100))
-            term_width = term_size_tuple[0]
-            if term_width > 5:
-                term_width -= 5
+
+        # Terminal output config
+        term_size_tuple = shutil.get_terminal_size(fallback=(200, 100))
+        term_width = term_size_tuple[0]
+        if term_width > 5:
+            term_width -= 5
 
         for extra in extra_runtime_env:
             key, value = extra.split('=')
             self.config['runtime_environment'][key] = value
+
+        for extra in extra_compile_flags:
+            self.config['compile_flags'].append(f'--{extra}')
 
         logger.info(f"Executing test with config:\n{pprint.pformat(self.config, width=term_width)}")
 
@@ -128,15 +139,14 @@ class Tester:
                 os.remove(output_file)
 
     def compile(self):
-        output_file = self.input_bin + ".out"
-        compile_command = [self.txlat_path, "--input", self.input_bin, "--output", output_file,
+        compile_command = [self.txlat_path, "--input", self.input_bin, "--output", self.output_bin,
                            *self.config["compile_flags"]]
         proc = subprocess.run(compile_command, env=self.config['compile_environment'],
                               capture_output=True, text=True, errors="ignore")
         if proc.returncode != 0:
             raise ExecutionError(compile_command, proc.stdout, proc.stderr)
 
-        return output_file
+        return self.output_bin
 
     def execute(self, binary):
         # TODO: include runtime environment
@@ -196,6 +206,10 @@ def parse_arguments():
                         required=True,
                         help='Path to input x86 binary to translate and then execute')
 
+    parser.add_argument('-o', '--output',
+                        required=True,
+                        help='Path to output translated binary that will be created')
+
     parser.add_argument('-t', '--txlat', '--translator',
                         required=True,
                         help='Path to translator (txlat) program')
@@ -234,7 +248,13 @@ def parse_arguments():
                         required=False,
                         default=False,
                         action='store_true',
-                        help='Invoke translator for input binary and exit (can be combined with --keep-artifacts to get the translator output')
+                        help='Invoke translator for input binary and exit (can be combined with --keep-artifacts to get the translator output)')
+
+    parser.add_argument('--extra-compile-flags',
+                        required=False,
+                        default='',
+                        nargs='+',
+                        help='Invoke translator with extra compilation flags (overrides those in configs)')
 
     args = parser.parse_args()
 
@@ -247,6 +267,9 @@ def parse_arguments():
 
     global extra_runtime_env
     extra_runtime_env = args.extra_runtime_env
+
+    global extra_compile_flags
+    extra_compile_flags = args.extra_compile_flags
 
     global translate_only
     translate_only = args.translate_only
@@ -262,7 +285,7 @@ if __name__ == "__main__":
                         format="[%(name)s][%(levelname)s] %(message)s")
 
     try:
-        tester = Tester(args.txlat, args.input, args.config)
+        tester = Tester(args.txlat, args.input, args.output, args.config)
         tester.run()
     except ExecutionError as e:
         # Disable traceback
