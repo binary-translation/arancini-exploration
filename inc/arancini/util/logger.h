@@ -8,6 +8,7 @@
 
 #include <mutex>
 #include <tuple>
+#include <filesystem>
 #include <functional>
 
 namespace util {
@@ -315,9 +316,17 @@ inline std::string logging_separator(char separator_character = '=', std::size_t
 } // namespace util
 
 template <typename R>
-struct fmt::formatter<std::function<R()>> : fmt::formatter<R> {
-    format_context::iterator  format(const std::function<R()> &binding, format_context &format_ctx) const {
-        return format_to(format_ctx.out(), "{}", binding());
+struct fmt::formatter<std::function<R()>> final : public fmt::formatter<R> {
+    format_context::iterator format(const std::function<R()> &binding, format_context &format_ctx) const {
+        return fmt::formatter<R>::format(binding(), format_ctx);
+    }
+};
+
+// Formatter for std::filesystem::path
+template <>
+struct fmt::formatter<std::filesystem::path> final : public fmt::formatter<std::string_view> {
+    format_context::iterator format(const std::filesystem::path &path, format_context &format_ctx) const {
+        return fmt::formatter<std::string_view>::format(path.string(), format_ctx);
     }
 };
 

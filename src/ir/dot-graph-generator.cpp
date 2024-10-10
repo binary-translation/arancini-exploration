@@ -9,18 +9,17 @@
 
 using namespace arancini::ir;
 
-void dot_graph_generator::visit_chunk(chunk &c)
-{
-	os_ << "digraph chunk {" << std::endl;
+void dot_graph_generator::visit_chunk(chunk &c) {
+    fmt::println(out_, "digraph chunk {{");
 	default_visitor::visit_chunk(c);
-	os_ << " }" << std::endl;
+    fmt::println(out_, "}}");
+
 	current_packet_ = nullptr;
 }
 
-void dot_graph_generator::visit_packet(packet &p)
-{
-	os_ << "subgraph cluster_" << std::hex << &p << " {" << std::endl;
-	os_ << "label = \"@0x" << std::hex << p.address() << ": " << p.disassembly() << "\";" << std::endl;
+void dot_graph_generator::visit_packet(packet &p) {
+    fmt::println(out_, "subgraph cluster_{} {{", fmt::ptr(&p));
+    fmt::println(out_, "label = \"{:#x}: {}\";", static_cast<std::uint64_t>(p.address()), p.disassembly());
 
 	if (current_packet_ && !current_packet_->actions().empty() && !p.actions().empty()) {
 		add_edge(current_packet_->actions().back().get(), p.actions().front().get(), "blue2");
@@ -31,19 +30,17 @@ void dot_graph_generator::visit_packet(packet &p)
 
 	default_visitor::visit_packet(p);
 
-	os_ << "}" << std::endl;
+    fmt::println(out_, "}}");
 }
 
-void dot_graph_generator::visit_node(node &n)
-{
+void dot_graph_generator::visit_node(node &n) {
 	cur_node_ = &n;
 	seen_.insert(&n);
 
 	default_visitor::visit_node(n);
 }
 
-void dot_graph_generator::visit_action_node(action_node &n)
-{
+void dot_graph_generator::visit_action_node(action_node &n) {
 	// If there was a "last action", then connect the "last action" to this action node
 	// with a control-flow edge.
 	if (last_action_) {
@@ -56,80 +53,60 @@ void dot_graph_generator::visit_action_node(action_node &n)
 	default_visitor::visit_action_node(n);
 }
 
-void dot_graph_generator::visit_label_node(label_node &n)
-{
-	std::stringstream s;
-	s << "label [" << n.name() << "]";
-	add_node(&n, s.str());
+void dot_graph_generator::visit_label_node(label_node &n) {
+    auto label_node = fmt::format("label [{}]", n.name());
+	add_node(&n, label_node);
 	default_visitor::visit_label_node(n);
 }
 
-void dot_graph_generator::visit_br_node(br_node &n)
-{
+void dot_graph_generator::visit_br_node(br_node &n) {
 	add_node(&n, "br");
 	add_control_edge(&n, n.target());
 	default_visitor::visit_br_node(n);
 }
 
-void dot_graph_generator::visit_cond_br_node(cond_br_node &n)
-{
+void dot_graph_generator::visit_cond_br_node(cond_br_node &n) {
 	add_node(&n, "cond-br");
 	add_control_edge(&n, n.target());
 	add_port_edge(&n.cond(), &n, "cond");
 	default_visitor::visit_cond_br_node(n);
 }
 
-void dot_graph_generator::visit_read_pc_node(read_pc_node &n)
-{
+void dot_graph_generator::visit_read_pc_node(read_pc_node &n) {
 	add_node(&n, "read-pc");
 	default_visitor::visit_read_pc_node(n);
 }
 
-void dot_graph_generator::visit_write_pc_node(write_pc_node &n)
-{
+void dot_graph_generator::visit_write_pc_node(write_pc_node &n) {
 	add_node(&n, "write-pc");
 	add_port_edge(&n.value(), &n);
 	default_visitor::visit_write_pc_node(n);
 }
 
-void dot_graph_generator::visit_constant_node(constant_node &n)
-{
-	std::stringstream s;
-	s << "constant 0x" << std::hex << n.const_val_i();
-
-	add_node(&n, s.str());
+void dot_graph_generator::visit_constant_node(constant_node &n) {
+	add_node(&n, fmt::format("constant {:#x}", n.const_val_i()));
 	default_visitor::visit_constant_node(n);
 }
 
-void dot_graph_generator::visit_read_reg_node(read_reg_node &n)
-{
-	std::stringstream s;
-	s << "read-reg " << n.regname();
-
-	add_node(&n, s.str());
+void dot_graph_generator::visit_read_reg_node(read_reg_node &n) {
+	add_node(&n, fmt::format("read-reg {}", n.regname()));
 	default_visitor::visit_read_reg_node(n);
 }
 
-void dot_graph_generator::visit_read_mem_node(read_mem_node &n)
-{
+void dot_graph_generator::visit_read_mem_node(read_mem_node &n) {
 	add_node(&n, "read-mem");
 	add_port_edge(&n.address(), &n);
 	default_visitor::visit_read_mem_node(n);
 }
 
-void dot_graph_generator::visit_write_reg_node(write_reg_node &n)
-{
-	std::stringstream s;
-	s << "write-reg " << n.regname();
-
-	add_node(&n, s.str());
+void dot_graph_generator::visit_write_reg_node(write_reg_node &n) {
+	add_node(&n, fmt::format("write-reg {}", n.regname()));
 	add_port_edge(&n.value(), &n);
 
 	default_visitor::visit_write_reg_node(n);
 }
 
-void dot_graph_generator::visit_write_mem_node(write_mem_node &n)
-{
+void dot_graph_generator::visit_write_mem_node(write_mem_node &n) {
 	add_node(&n, "{{<addr>addr|<val>val}|write-mem}");
 	add_port_edge(&n.address(), &n, "addr");
 	add_port_edge(&n.value(), &n, "val");
@@ -137,8 +114,7 @@ void dot_graph_generator::visit_write_mem_node(write_mem_node &n)
 	default_visitor::visit_write_mem_node(n);
 }
 
-void dot_graph_generator::visit_cast_node(cast_node &n)
-{
+void dot_graph_generator::visit_cast_node(cast_node &n) {
 	std::stringstream s;
 
 	switch (n.op()) {
@@ -472,36 +448,21 @@ void dot_graph_generator::visit_vector_insert_node(vector_insert_node &n)
 	default_visitor::visit_vector_insert_node(n);
 }
 
-void dot_graph_generator::visit_read_local_node(read_local_node &n)
-{
-	std::stringstream s;
-
-	s << "read-local " << std::hex << (uintptr_t)n.local();
-
-	add_node(&n, s.str());
+void dot_graph_generator::visit_read_local_node(read_local_node &n) {
+	add_node(&n, fmt::format("read-local {}", fmt::ptr(n.local())));
 
 	default_visitor::visit_read_local_node(n);
 }
 
-void dot_graph_generator::visit_write_local_node(write_local_node &n)
-{
-	std::stringstream s;
-
-	s << "write-local " << std::hex << (uintptr_t)n.local();
-
-	add_node(&n, s.str());
+void dot_graph_generator::visit_write_local_node(write_local_node &n) {
+	add_node(&n, fmt::format("{}", fmt::ptr(n.local())));
 	add_port_edge(&n.write_value(), &n);
 
 	default_visitor::visit_write_local_node(n);
 }
 
-void dot_graph_generator::visit_internal_call_node(internal_call_node &n)
-{
-	std::stringstream s;
-
-	s << "i-call " << n.fn().name();
-
-	add_node(&n, s.str());
+void dot_graph_generator::visit_internal_call_node(internal_call_node &n) {
+	add_node(&n, fmt::format("i-call {}", n.fn().name()));
 
 	for (const auto *p : n.args()) {
 		add_port_edge(p, &n);

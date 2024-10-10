@@ -10,8 +10,8 @@ namespace arancini::ir {
 
 class dot_graph_generator : public default_visitor {
 public:
-	dot_graph_generator(std::ostream &os)
-		: os_(os)
+	dot_graph_generator(FILE* out)
+		: out_(out)
 		, current_packet_(nullptr)
 		, last_action_(nullptr)
 		, cur_node_(nullptr)
@@ -50,14 +50,14 @@ public:
 	virtual void visit_internal_call_node(internal_call_node &n) override;
 
 private:
-	std::ostream &os_;
+    FILE* out_;
 	packet *current_packet_;
 	action_node *last_action_;
 	node *cur_node_;
 	std::set<node *> seen_;
 
 	void add_node(const node *n, const std::string &label) {
-        fmt::println("N{} [shape=Mrecord, label=\"{}\"", fmt::ptr(n), label);
+        fmt::println(out_, "N{} [shape=Mrecord, label=\"{}\"]", fmt::ptr(n), label);
     }
 
     [[nodiscard]]
@@ -102,17 +102,17 @@ private:
 	void add_edge(const node *from, const node *to, const std::string &colour = "black",
                   const std::string &label = "", const std::string &link = "")
 	{
-        fmt::print("N{} -> N{}", fmt::ptr(from), fmt::ptr(to));
+        fmt::print(out_, "N{} -> N{}", fmt::ptr(from), fmt::ptr(to));
 
 		if (!link.empty())
-            fmt::print(":{}", link);
+            fmt::print(out_, ":{}", link);
 
-        fmt::print(" [color={}", colour);
+        fmt::print(out_, " [color={}", colour);
 
 		if (!label.empty())
-            fmt::print(", label=\"{}\"", label);
+            fmt::print(out_, ", label=\"{}\"", label);
 
-        fmt::println("]");
+        fmt::println(out_, "]");
 	}
 };
 
