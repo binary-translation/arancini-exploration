@@ -1,8 +1,10 @@
 #include <arancini/txlat/txlat-engine.h>
 #include <arancini/util/logger.h>
 #include <boost/program_options.hpp>
+
 #include <iostream>
 #include <optional>
+#include <filesystem>
 
 using namespace arancini::txlat;
 namespace po = boost::program_options;
@@ -46,10 +48,10 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 			"Translated versions of the libraries this binary depends on (relative or absolute path including filename)") //
 		("syntax", po::value<std::string>()->default_value("intel"),
 			"Specify the syntax to use when disassembling host instructions (x86 input only: att or intel)") //
-		("graph", po::value<std::string>(), "Creates a DOT graph file representing the input ELF translation") //
+		("graph", po::value<std::filesystem::path>(), "Creates a DOT graph file representing the input ELF translation") //
 		("no-static", "Do not do any static translation") //
 #ifndef CROSS_TRANSLATE
-		("runtime-lib-path", po::value<std::string>()->default_value(ARANCINI_LIBPATH), "Path to arancini libraries (defaults specified by build system)") //
+		("runtime-lib-path", po::value<std::filesystem::path>()->default_value(ARANCINI_LIBPATH), "Path to arancini libraries (defaults specified by build system)") //
 		("static-binary", po::value<std::string>()->implicit_value(ARANCINI_LIBDIR)->zero_tokens(),
 			"Link the generated binary statically to the arancini libraries inside this path. Requires to have built the arancini-runtime-static target. "
 			"Default specified by build system.") //

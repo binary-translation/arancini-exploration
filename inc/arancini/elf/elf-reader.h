@@ -1,14 +1,13 @@
 #pragma once
 
+#include <elf.h>
+
 #include <cstdint>
-#include <fstream>
 #include <memory>
-#include <stdexcept>
 #include <string>
 #include <vector>
-#include <set>
 
-#include <elf.h>
+#include <fmt/core.h>
 
 namespace arancini::elf {
 enum class section_type {
@@ -374,3 +373,30 @@ private:
 	std::string readstr(off_t offset) const { return std::string((const char *)get_data_ptr(offset)); }
 };
 } // namespace arancini::elf
+
+// enum class elf_type { none, rel, exec, dyn, core };
+
+template <>
+struct fmt::formatter<arancini::elf::elf_type> : public fmt::formatter<std::string> {
+    template <typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(arancini::elf::elf_type type, FormatContext& ctx) const {
+        switch (type) {
+        case arancini::elf::elf_type::none:
+            return fmt::format_to(ctx.out(), "Unknown ELF type");
+        case arancini::elf::elf_type::rel:
+            return fmt::format_to(ctx.out(), "Relocatable ELF file (ET_REL)");
+        case arancini::elf::elf_type::exec:
+            return fmt::format_to(ctx.out(), "Executable ELF file (ET_EXEC)");
+        case arancini::elf::elf_type::dyn:
+            return fmt::format_to(ctx.out(), "Dynamic ELF file (ET_DYN)");
+        case arancini::elf::elf_type::core:
+            return fmt::format_to(ctx.out(), "ELF Core dump (ET_CORE)");
+        default:
+            return fmt::format_to(ctx.out(), "Unknown ELF type");
+        }
+    }
+};
+

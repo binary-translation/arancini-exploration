@@ -16,17 +16,23 @@ endif () #NIX
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(INCLUDE_PATH ../../../inc)
-add_library(arancini-output-arm64
-            arm64-dynamic-output-engine.cpp
-			arm64-instruction.cpp
-			arm64-instruction-builder.cpp
-			arm64-translation-context.cpp)
+function(generate_arm64_lib target type)
+    add_library(${target}
+                ${type}
+                arm64-dynamic-output-engine.cpp
+                arm64-instruction.cpp
+                arm64-instruction-builder.cpp
+                arm64-translation-context.cpp)
 
-target_include_directories(arancini-output-arm64
-                           PUBLIC
-                           ${INCLUDE_PATH}
-                           ${Keystone_INCLUDE_PATH})
+    target_include_directories(${target}
+                               PUBLIC
+                               ${INCLUDE_PATH}
+                               ${Keystone_INCLUDE_PATH})
 
-target_link_libraries(arancini-output-arm64 PRIVATE arancini-ir keystone)
-target_compile_definitions(arancini-output-arm64 PUBLIC ARCH_AARCH64)
+    target_link_libraries(${target} PRIVATE arancini-ir keystone)
+    target_compile_definitions(${target} PUBLIC ARCH_AARCH64)
+endfunction()
+
+generate_arm64_lib(arancini-output-arm64 SHARED)
+generate_arm64_lib(arancini-output-arm64-static STATIC)
 
