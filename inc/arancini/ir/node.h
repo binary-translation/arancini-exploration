@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <vector>
+#include <cstdint>
 #include <unordered_map>
 
 namespace arancini::ir {
@@ -711,7 +712,7 @@ private:
 	port &lhs_;
 };
 
-enum class binary_arith_op {
+enum class binary_arith_op : std::uint8_t {
 	add, sub, mul, div, mod,
 	band, bor, bxor,
 	cmpeq, cmpne, cmpgt,

@@ -24,20 +24,24 @@ register_operand dbt_retval_register(register_operand::x0);
 // TODO: handle as part of capabilities code
 static constexpr bool supports_lse = false;
 
-// TODO: these should not be hardcoded
-const register_operand ZF(register_operand::x10);
-const register_operand CF(register_operand::x11);
-const register_operand OF(register_operand::x12);
-const register_operand SF(register_operand::x13);
-
 using arancini::input::x86::reg_offsets;
 
-static std::unordered_map<unsigned long, register_operand> flag_map {
-	{ (unsigned long)reg_offsets::ZF, {} },
-	{ (unsigned long)reg_offsets::CF, {} },
-	{ (unsigned long)reg_offsets::OF, {} },
-	{ (unsigned long)reg_offsets::SF, {} },
+// TODO: should be replaced with static_map data structure
+using flag_map_type = std::unordered_map<reg_offsets, register_operand>;
+static flag_map_type flag_map {
+	{ reg_offsets::ZF, {} },
+	{ reg_offsets::CF, {} },
+	{ reg_offsets::OF, {} },
+	{ reg_offsets::SF, {} },
 };
+
+template <typename NodeType>
+void allocate_flags(virtual_register_allocator& allocator, flag_map_type& flag_map, const NodeType& n) {
+    flag_map[reg_offsets::ZF] = allocator.allocate(n.zero(), value_type::u1());
+    flag_map[reg_offsets::SF] = allocator.allocate(n.negative(), value_type::u1());
+    flag_map[reg_offsets::OF] = allocator.allocate(n.overflow(), value_type::u1());
+    flag_map[reg_offsets::CF] = allocator.allocate(n.carry(), value_type::u1());
+}
 
 register_sequence& virtual_register_allocator::allocate_sequence(const ir::port &p) {
     std::size_t reg_count = p.type().nr_elements();
@@ -191,10 +195,11 @@ void arm64_translation_context::end_instruction() {
             materialise(node);
     } catch (std::exception &e) {
         logger.error("{}\n", util::logging_separator());
-        logger.error("Instruction translation failed for instruction {} with translation:\n{}\n",
+        logger.error("Instruction translation failed for guest instruction {} with translation:\n{}\n",
                      current_instruction_disasm_,
                      fmt::format("{}", fmt::join(builder_.instruction_begin(), builder_.instruction_end(), "\n")));
         logger.error("{}\n", util::logging_separator());
+        fflush(logger.get_output_file());
         throw backend_exception("Instruction translation failed: {}", e.what());
     }
 }
@@ -212,7 +217,7 @@ void arm64_translation_context::end_block() {
     } catch (std::exception &e) {
         // TODO: views as lvalues
         logger.error("{}\n", util::logging_separator());
-        logger.error("Register allocation failed for instruction {} with translation:\n{}\n",
+        logger.error("Register allocation failed for guest instruction {} with translation:\n{}\n",
                      current_instruction_disasm_,
                      fmt::format("{}", fmt::join(builder_.instruction_begin(), builder_.instruction_end(), "\n")));
         logger.error("{}\n", util::logging_separator());
@@ -373,7 +378,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
 
     auto &src_vregs = materialise_port(n.value());
     if (is_flag_port(n.value())) {
-        const auto &src_vreg = flag_map.at(n.regoff());
+        const auto &src_vreg = flag_map.at(static_cast<reg_offsets>(n.regoff()));
         auto addr = guestreg_memory_operand(n.regoff());
         builder_.strb(src_vreg, addr, fmt::format("write flag: {}", n.regname()));
         return;
@@ -520,7 +525,6 @@ void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
     builder_.beq(n.target()->name());
 }
 
-// TODO: refactor this; we can just use move_immediate
 void arm64_translation_context::materialise_constant(const constant_node &n) {
 	const auto &dest_vreg = vreg_alloc_.allocate(n.val());
 
@@ -533,47 +537,32 @@ void arm64_translation_context::materialise_constant(const constant_node &n) {
     }
 }
 
-void arm64_translation_context::materialise_binary_arith(const binary_arith_node &n) {
-    const auto &lhs_vregs = materialise_port(n.lhs());
-    const auto &rhs_vregs = materialise_port(n.rhs());
+[[nodiscard]]
+inline shift_operand binop_modifier(const arancini::ir::value_type& type) {
+    const char* mod = "LSL";
 
-    if (lhs_vregs.size() != rhs_vregs.size()) {
-        throw backend_exception("Binary operations not supported with different sized operands");
+    switch (type.element_width()) {
+    case 8:
+        if (type.type_class() == value_type_class::signed_integer)
+            mod = "SXTB";
+        else
+            mod = "UXTB";
+        break;
+    case 16:
+        if (type.type_class() == value_type_class::signed_integer)
+            mod = "SXTH";
+        else
+            mod = "UXTH";
+        break;
     }
 
-	const auto &dest_vregs = vreg_alloc_.allocate(n.val());
-    std::size_t dest_width = n.val().type().element_width();
+    return shift_operand(mod, immediate_operand(0, value_types::u6));
+}
 
-    const auto &lhs_vreg = lhs_vregs[0];
-    const auto &rhs_vreg = rhs_vregs[0];
-    const auto &dest_vreg = dest_vregs[0];
-
-    flag_map[(unsigned long)reg_offsets::ZF] = vreg_alloc_.allocate(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = vreg_alloc_.allocate(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = vreg_alloc_.allocate(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = vreg_alloc_.allocate(n.carry(), value_type::u1());
-
-    // TODO: check
-    const char* mod = nullptr;
-    if (n.op() == binary_arith_op::add || n.op() == binary_arith_op::sub) {
-        switch (n.val().type().element_width()) {
-        case 8:
-            if (n.val().type().type_class() == value_type_class::signed_integer)
-                mod = "SXTB";
-            else
-                mod = "UXTB";
-            break;
-        case 16:
-            if (n.val().type().type_class() == value_type_class::signed_integer)
-                mod = "SXTH";
-            else
-                mod = "UXTH";
-            break;
-        }
-    }
-
+[[nodiscard]]
+inline cond_operand get_cset_type(binary_arith_op op) {
     const char *cset_type = nullptr;
-    switch(n.op()) {
+    switch(op) {
     case binary_arith_op::cmpeq:
         cset_type = "eq";
         break;
@@ -584,60 +573,97 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         cset_type = "gt";
         break;
     default:
-        break;
+        throw backend_exception("Unknown binary operation comparison operation type {}",
+                                util::to_underlying(op));
     }
+
+    return cond_operand(cset_type);
+}
+
+void arm64_translation_context::materialise_binary_arith(const binary_arith_node &n) {
+    const auto &lhs_vregs = materialise_port(n.lhs());
+    const auto &rhs_vregs = materialise_port(n.rhs());
+
+    // Sanity checks
+    // Types must fully match
+    [[unlikely]]
+    if (n.lhs().type() != n.rhs().type() && n.lhs().type() != n.val().type()) {
+        throw backend_exception("Binary operations not supported between types {} = {} op {}",
+                                n.val().type(), n.lhs().type(), n.rhs().type());
+    }
+
+    bool sets_flags = true;
+    const bool is_vector_op = n.val().type().is_vector();
+	const auto &dest_vregs = vreg_alloc_.allocate(n.val());
 
 	switch (n.op()) {
 	case binary_arith_op::add:
-        if (n.val().type().is_vector()) {
+        // Vector addition
+        if (is_vector_op) {
+            sets_flags = false;
             for (std::size_t i = 0; i < dest_vregs.size(); ++i)
-                builder_.adds(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
+                builder_.add(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
             break;
         }
 
-        if (mod == nullptr)
-            builder_.adds(dest_vreg, lhs_vreg, rhs_vreg);
-        else
-            builder_.adds(dest_vreg, lhs_vreg, rhs_vreg, shift_operand(mod, immediate_operand(0, value_type::u16())));
+        // Scalar addition (including > 64-bits)
+        builder_.adds(dest_vregs[0], lhs_vregs[0], rhs_vregs[0], binop_modifier(n.val().type()));
+
+        // Addition for > 64-bits
         for (std::size_t i = 1; i < dest_vregs.size(); ++i)
             builder_.adcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
         break;
 	case binary_arith_op::sub:
-        if (mod == nullptr)
-            builder_.subs(dest_vreg, lhs_vreg, rhs_vreg);
-        else
-            builder_.subs(dest_vreg, lhs_vreg, rhs_vreg, shift_operand(mod, immediate_operand(0, value_type::u16())));
+        // Vector subtraction
+        if (is_vector_op) {
+            sets_flags = false;
+            for (std::size_t i = 0; i < dest_vregs.size(); ++i)
+                builder_.sub(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
+            break;
+        }
+
+        // Scalar subtraction (including > 64-bits)
+        // TODO: how are flags computed here?
+        builder_.subs(dest_vregs[0], lhs_vregs[0], rhs_vregs[0], binop_modifier(n.val().type()));
+
+        // Subtraction for > 64-bits
         for (std::size_t i = 1; i < dest_vregs.size(); ++i)
             builder_.sbcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
-        builder_.setcc(flag_map[(unsigned long)reg_offsets::CF], "compute flag: CF");
+
+        // TODO: fix flag hack
+        builder_.setcc(flag_map[reg_offsets::CF], "compute flag: CF");
         break;
 	case binary_arith_op::mul:
-        switch (dest_width) {
-        case 8:
-        case 16:
+        // Vector multiplication
+        if (n.val().type().is_vector()) {
+            sets_flags = false;
+            for (std::size_t i = 0; i < dest_vregs.size(); ++i)
+                builder_.mul(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
+            break;
+        }
+
+        switch (n.val().type().element_width()) {
         case 32:
-            // TODO: replace this with NEON
             switch (n.val().type().type_class()) {
             case ir::value_type_class::signed_integer:
-                builder_.smulh(dest_vreg, lhs_vreg, rhs_vreg);
+                builder_.smull(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
                 break;
             case ir::value_type_class::unsigned_integer:
-                builder_.umulh(dest_vreg, lhs_vreg, rhs_vreg);
+                builder_.umull(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
                 break;
-            case ir::value_type_class::floating_point:
-                builder_.fmul(dest_vreg, lhs_vreg, rhs_vreg);
+            case ir::value_type_class::floating_point: // TODO: this is likely incorrect
+                builder_.fmul(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
                 break;
-            case ir::value_type_class::none:
             default:
-                // TODO: note which
-                throw backend_exception("Encounted unknown type class for multiplication");
+                throw backend_exception("Encounted unknown type class {} for multiplication",
+                                        util::to_underlying(n.val().type().type_class()));
             }
             break;
         case 64:
-            builder_.mul(dest_vreg, lhs_vreg, rhs_vreg);
+            builder_.mul(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
             break;
         case 128:
-            builder_.mul(dest_vreg, lhs_vreg, rhs_vreg);
+            builder_.mul(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
             switch (n.val().type().type_class()) {
             case ir::value_type_class::signed_integer:
                 builder_.smulh(dest_vregs[1], lhs_vregs[0], rhs_vregs[0]);
@@ -645,19 +671,17 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             case ir::value_type_class::unsigned_integer:
                 builder_.umulh(dest_vregs[1], lhs_vregs[0], rhs_vregs[0]);
                 break;
-            case ir::value_type_class::floating_point:
+            case ir::value_type_class::floating_point: // NOTE: this is incorrect
                 builder_.fmul(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
                 break;
-            case ir::value_type_class::none:
             default:
-                // TODO: note which
-                throw backend_exception("Encounted unknown type class for multiplication");
+                throw backend_exception("Encounted unknown type class {} for multiplication",
+                                        util::to_underlying(n.val().type().type_class()));
             }
             break;
-        case 256:
-        case 512:
         default:
-            throw backend_exception("Multiplication not support for size {}", dest_width);
+            throw backend_exception("Multiplication not supported between {}x{}",
+                                    n.lhs().type(), n.rhs().type());
         }
 
         // *MUL* do not set flags, they must be set here manually
@@ -673,62 +697,66 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         // by looking at sources, does x86 even care about it then?)
         //
         // FIXME: this applies to others too
-		builder_.cmp(dest_vreg,
+		builder_.cmp(dest_vregs[0],
                      immediate_operand(0, value_type::u8()));
         break;
 	case binary_arith_op::div:
         //FIXME: implement
-        builder_.sdiv(dest_vreg, lhs_vreg, rhs_vreg);
+        builder_.sdiv(dest_vregs, lhs_vregs, rhs_vregs);
         /* throw backend_exception("Not implemented: binary_arith_op::div"); */
 		break;
 	case binary_arith_op::mod:
         //FIXME: implement
-        builder_.and_(dest_vreg, lhs_vreg, rhs_vreg);
+        builder_.and_(dest_vregs, lhs_vregs, rhs_vregs);
         /* throw backend_exception("Not implemented: binary_arith_op::mov"); */
 		break;
 	case binary_arith_op::bor:
-        builder_.orr_(dest_vreg, lhs_vreg, rhs_vreg);
+        builder_.orr_(dest_vregs, lhs_vregs, rhs_vregs);
 		break;
 	case binary_arith_op::band:
-        builder_.ands(dest_vreg, lhs_vreg, rhs_vreg);
+        builder_.ands(dest_vregs, lhs_vregs, rhs_vregs);
 		break;
 	case binary_arith_op::bxor:
-        builder_.eor_(dest_vreg, lhs_vreg, rhs_vreg);
+        builder_.eor_(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
         for (std::size_t i = 1; i < dest_vregs.size(); ++i)
             builder_.eor_(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
         // EOR does not set flags
         // CMP is used to set the flags
         // TODO: find a way to set flags
-		builder_.cmp(dest_vreg,
+		builder_.cmp(dest_vregs[0],
                      immediate_operand(0, value_type::u8()));
 		break;
 	case binary_arith_op::cmpeq:
 	case binary_arith_op::cmpne:
 	case binary_arith_op::cmpgt:
-        builder_.cmp(lhs_vreg, rhs_vreg, "compare LHS and RHS to generate condition for conditional set");
-        builder_.cset(dest_vreg, cond_operand(cset_type), "set to 1 if condition is true (based flags from the previous compare)");
+        builder_.cmp(lhs_vregs[0], rhs_vregs[0], "compare LHS and RHS to generate condition for conditional set");
+        builder_.cset(dest_vregs[0], get_cset_type(n.op()), "set to 1 if condition is true (based flags from the previous compare)");
         for (std::size_t i = 1; i < dest_vregs.size(); ++i) {
-            builder_.cset(dest_vregs[i], cond_operand(cset_type));
+            builder_.cset(dest_vregs[i], get_cset_type(n.op()));
         }
 		break;
 	default:
 		throw backend_exception("Unsupported binary arithmetic operation with index {}", util::to_underlying(n.op()));
 	}
 
-    // FIXME Another write-reg node generated?
-	builder_.setz(flag_map[(unsigned long)reg_offsets::ZF], "compute flag: ZF");
-	builder_.sets(flag_map[(unsigned long)reg_offsets::SF], "compute flag: SF");
-	builder_.seto(flag_map[(unsigned long)reg_offsets::OF], "compute flag: OF");
+    // Flags are set by most arithmetic operations
+    // But not operations on vectors
+    [[likely]]
+    if (sets_flags) {
+        allocate_flags(vreg_alloc_, flag_map, n);
 
-    if (n.op() != binary_arith_op::sub)
-        builder_.setc(flag_map[(unsigned long)reg_offsets::CF], "compute flag: CF");
+        // TODO: repetitive; should have single function that sets flags
+        builder_.setz(flag_map[reg_offsets::ZF], "compute flag: ZF");
+        builder_.sets(flag_map[reg_offsets::SF], "compute flag: SF");
+        builder_.seto(flag_map[reg_offsets::OF], "compute flag: OF");
+
+        if (n.op() != binary_arith_op::sub)
+            builder_.setc(flag_map[reg_offsets::CF], "compute flag: CF");
+    }
 }
 
 void arm64_translation_context::materialise_ternary_arith(const ternary_arith_node &n) {
-    flag_map[(unsigned long)reg_offsets::ZF] = vreg_alloc_.allocate(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = vreg_alloc_.allocate(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = vreg_alloc_.allocate(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = vreg_alloc_.allocate(n.carry(), value_type::u1());
+    allocate_flags(vreg_alloc_, flag_map, n);
 
 	const auto &dest_vregs = vreg_alloc_.allocate(n.val());
     const auto &lhs_vregs = materialise_port(n.lhs());
@@ -786,10 +814,10 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
         }
     }
 
-	builder_.setz(flag_map[(unsigned long)reg_offsets::ZF], "compute flag: ZF");
-	builder_.sets(flag_map[(unsigned long)reg_offsets::SF], "compute flag: SF");
-	builder_.seto(flag_map[(unsigned long)reg_offsets::OF], "compute flag: OF");
-    builder_.setc(flag_map[(unsigned long)reg_offsets::CF], "compute flag: CF");
+	builder_.setz(flag_map[reg_offsets::ZF], "compute flag: ZF");
+	builder_.sets(flag_map[reg_offsets::SF], "compute flag: SF");
+	builder_.seto(flag_map[reg_offsets::OF], "compute flag: OF");
+    builder_.setc(flag_map[reg_offsets::CF], "compute flag: CF");
 }
 
 void arm64_translation_context::materialise_binary_atomic(const binary_atomic_node &n) {
@@ -806,10 +834,10 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
     const auto &dest_vreg = dest_vregs[0];
 
     // No need to handle flags: they are not visible to other PEs
-    flag_map[(unsigned long)reg_offsets::ZF] = vreg_alloc_.allocate(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = vreg_alloc_.allocate(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = vreg_alloc_.allocate(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = vreg_alloc_.allocate(n.carry(), value_type::u1());
+    flag_map[reg_offsets::ZF] = vreg_alloc_.allocate(n.zero(), value_type::u1());
+    flag_map[reg_offsets::SF] = vreg_alloc_.allocate(n.negative(), value_type::u1());
+    flag_map[reg_offsets::OF] = vreg_alloc_.allocate(n.overflow(), value_type::u1());
+    flag_map[reg_offsets::CF] = vreg_alloc_.allocate(n.carry(), value_type::u1());
 
     memory_operand mem_addr(addr_regs[0]);
 
@@ -839,7 +867,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             throw backend_exception("Atomic LDADD cannot handle sizes > 64-bit");
         }
         if (n.op() == binary_atomic_op::sub)
-            builder_.setcc(flag_map[(unsigned long)reg_offsets::CF]);
+            builder_.setcc(flag_map[reg_offsets::CF]);
         break;
 	case binary_atomic_op::bor:
         switch (n.val().type().element_width()) {
@@ -1015,12 +1043,12 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
 		throw backend_exception("unsupported binary atomic operation {}", util::to_underlying(n.op()));
 	}
 
-	builder_.setz(flag_map[(unsigned long)reg_offsets::ZF], "write flag: ZF");
-	builder_.sets(flag_map[(unsigned long)reg_offsets::SF], "write flag: SF");
-	builder_.seto(flag_map[(unsigned long)reg_offsets::OF], "write flag: OF");
+	builder_.setz(flag_map[reg_offsets::ZF], "write flag: ZF");
+	builder_.sets(flag_map[reg_offsets::SF], "write flag: SF");
+	builder_.seto(flag_map[reg_offsets::OF], "write flag: OF");
 
     if (n.op() != binary_atomic_op::sub)
-        builder_.setc(flag_map[(unsigned long)reg_offsets::CF], "write flag: CF");
+        builder_.setc(flag_map[reg_offsets::CF], "write flag: CF");
 }
 
 void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_node &n) {
@@ -1031,10 +1059,10 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
     const register_operand &src_vreg = materialise_port(n.top());
     const register_operand &addr_vreg = materialise_port(n.address());
 
-    flag_map[(unsigned long)reg_offsets::ZF] = vreg_alloc_.allocate(n.zero(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::SF] = vreg_alloc_.allocate(n.negative(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::OF] = vreg_alloc_.allocate(n.overflow(), value_type::u1());
-    flag_map[(unsigned long)reg_offsets::CF] = vreg_alloc_.allocate(n.carry(), value_type::u1());
+    flag_map[reg_offsets::ZF] = vreg_alloc_.allocate(n.zero(), value_type::u1());
+    flag_map[reg_offsets::SF] = vreg_alloc_.allocate(n.negative(), value_type::u1());
+    flag_map[reg_offsets::OF] = vreg_alloc_.allocate(n.overflow(), value_type::u1());
+    flag_map[reg_offsets::CF] = vreg_alloc_.allocate(n.carry(), value_type::u1());
 
     auto mem_addr = memory_operand(addr_vreg);
 
