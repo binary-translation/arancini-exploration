@@ -169,10 +169,11 @@ private:
     void materialise_read_local(const ir::read_local_node &n);
     void materialise_write_local(const ir::write_local_node &n);
 
-    register_operand add_membase(const register_operand &addr, const ir::value_type &t = ir::value_type::u64());
+    template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
+    reg_or_imm move_immediate(T imm, ir::value_type imm_type, ir::value_type reg_type);
 
     template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
-    register_operand mov_immediate(T imm, ir::value_type type);
+    register_operand move_to_register(T imm, ir::value_type type);
 
     register_operand cast(const register_operand &op, ir::value_type type);
 };

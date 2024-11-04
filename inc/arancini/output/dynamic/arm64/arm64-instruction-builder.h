@@ -9,8 +9,6 @@
 
 namespace arancini::output::dynamic::arm64 {
 
-using reg_or_imm = operand_variant<register_operand, immediate_operand>;
-
 class instruction_builder {
 public:
 

@@ -60,12 +60,10 @@ void instruction_builder::allocate() {
 	std::unordered_map<unsigned int, unsigned int> vreg_to_preg;
 
     // All registers can be used except:
-    // SP (x31),
-    // FP (x29),
-    // zero (x31)
+    // SP/zero - ARM64 limitation (x31),
     // Return to trampoline (x30)
-    // Memory base (x18)
-	std::bitset<32> avail_physregs = 0x1FFBFFFFF;
+    // Frame Pointer - points to guest registers (x29)
+	std::bitset<32> avail_physregs = 0x11FFFFFFF;
 	std::bitset<32> avail_float_physregs = 0xFFFFFFFFF;
 
 	for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {

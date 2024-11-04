@@ -42,6 +42,11 @@ static ir::value_type u12() {
     return type;
 }
 
+static ir::value_type u6() {
+    static ir::value_type type(ir::value_type_class::unsigned_integer, 6, 1);
+    return type;
+}
+
 class register_operand {
 public:
     enum regname64 : std::uint8_t {
@@ -321,6 +326,8 @@ using operand = operand_variant<std::monostate, register_operand,
                                 memory_operand, immediate_operand,
                                 shift_operand, label_operand,
                                 cond_operand>;
+
+using reg_or_imm = operand_variant<register_operand, immediate_operand>;
 
 template <typename T>
 operand def(const T& o) {
