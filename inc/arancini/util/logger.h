@@ -72,6 +72,8 @@ public:
 
     void set_output_file(FILE* out) { out_ = out; }
 
+    FILE* get_output_file() const { return out_; }
+
     template<typename... Args>
     T &debug(Args&&... args) {
         if (level_ <= levels::debug)

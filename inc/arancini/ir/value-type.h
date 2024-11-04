@@ -3,9 +3,10 @@
 #include <fmt/core.h>
 
 #include <vector>
+#include <cstdint>
 
 namespace arancini::ir {
-enum class value_type_class { none, signed_integer, unsigned_integer, floating_point };
+enum class value_type_class : std::uint8_t { none, signed_integer, unsigned_integer, floating_point };
 
 class value_type {
 public:
