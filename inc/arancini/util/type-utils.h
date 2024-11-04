@@ -3,6 +3,7 @@
 #include <tuple>
 #include <string>
 #include <cctype>
+#include <cstring>
 #include <variant>
 #include <algorithm>
 #include <type_traits>
@@ -56,6 +57,18 @@ struct overloaded : Ts... { using Ts::operator()...; };
 // explicit deduction guide (not needed as of C++20)
 template<class... Ts>
 overloaded(Ts...) -> overloaded<Ts...>;
+
+// Based on: https://github.com/jfbastien/bit_cast
+template<typename To, typename From>
+inline constexpr To bit_cast(const From& from) noexcept {
+  typename std::aligned_storage<sizeof(To), alignof(To)>::type storage;
+  std::memcpy(&storage, &from, sizeof(To));  // Above `constexpr` is optimistic, fails here.
+  return reinterpret_cast<To&>(storage);
+  // More common implementation:
+  // std::remove_const_t<To> to{};
+  // std::memcpy(&to, &from, sizeof(To));  // Above `constexpr` is optimistic, fails here.
+  // return to;
+}
 
 } // namespace util
 
