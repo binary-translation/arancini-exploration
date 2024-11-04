@@ -37,16 +37,6 @@ private:
 
 static assembler asm_;
 
-static ir::value_type u12() {
-    static ir::value_type type(ir::value_type_class::unsigned_integer, 12, 1);
-    return type;
-}
-
-static ir::value_type u6() {
-    static ir::value_type type(ir::value_type_class::unsigned_integer, 6, 1);
-    return type;
-}
-
 class register_operand {
 public:
     enum regname64 : std::uint8_t {
@@ -227,7 +217,7 @@ public:
 
     template<typename T>
 	memory_operand(const T &base,
-                   immediate_operand offset = immediate_operand(0, u12()),
+                   immediate_operand offset = immediate_operand(0, value_types::u12),
                    address_mode mode = address_mode::direct)
         : reg_base_(base)
 		, offset_(offset)
@@ -257,7 +247,7 @@ public:
 private:
     register_operand reg_base_;
 
-	immediate_operand offset_ = immediate_operand(0, u12());
+	immediate_operand offset_ = immediate_operand(0, value_types::u12);
 
     address_mode mode_;
 };
