@@ -63,6 +63,7 @@ public:
         append(instruction("and", def(dst), use(src1), use(src2)).add_comment(comment));
     }
 
+    // TODO: refactor this; there should be only a single version and the comment should be removed
     void ands(const register_operand &dst,
               const register_operand &src1,
               const reg_or_imm &src2, const std::string &comment = "") {
@@ -251,6 +252,12 @@ public:
               const register_operand &src1,
               const register_operand &src2, const std::string &comment = "") {
         append(instruction("sdiv", def(dest), use(src1), use(src2)).add_comment(comment));
+    }
+
+    void udiv(const register_operand &dest,
+              const register_operand &src1,
+              const register_operand &src2, const std::string &comment = "") {
+        append(instruction("udiv", def(dest), use(src1), use(src2)).add_comment(comment));
     }
 
     void fcvtzs(const register_operand &dest,

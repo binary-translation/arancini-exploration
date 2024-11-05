@@ -43,7 +43,7 @@ void instruction_builder::emit(machine_code_writer &writer) {
     std::uint8_t* encode;
     size = asm_.assemble(instruction_stream.c_str(), &encode);
 
-    logger.debug("Translation:\n{}\n", instruction_stream);
+    logger.debug("Translation (after register allocation):\n{}\n", instruction_stream);
 
     // TODO: write directly
     writer.copy_in(encode, size);
@@ -66,6 +66,8 @@ void instruction_builder::allocate() {
 	std::bitset<32> avail_physregs = 0x11FFFFFFF;
 	std::bitset<32> avail_float_physregs = 0xFFFFFFFFF;
 
+    auto instruction_stream = fmt::format("{}", fmt::join(instruction_begin(), instruction_end(), "\n"));
+    logger.debug("Translation (before register allocation):\n{}\n", instruction_stream);
 	for (auto RI = instructions_.rbegin(), RE = instructions_.rend(); RI != RE; RI++) {
 		auto &instr = *RI;
 
@@ -136,16 +138,18 @@ void instruction_builder::allocate() {
 					o.allocate(pri, type);
 
                     logger.debug("Allocated to {} -- releasing\n", o);
+                    vreg_to_preg.erase(alloc);
+                    break;
                 } else if (instr.is_keep()) {
                     has_unused_keep = true;
 
                     allocate(o, i);
+                    break;
 				} else {
                     logger.debug("Register not allocated - killing instruction\n", o);
 					instr.kill();
 					break;
 				}
-
 			}
 		}
 
