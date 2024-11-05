@@ -214,7 +214,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	}
 
 	// Generate decls for external functions found in the relocation table
-	if (!cmdline.count("no-static")) {
+	if (!cmdline.count("no-static") && plt_tab && dyn_sym) {
 		for (const auto &rs : relocations) {
 			for (auto r : rs->relocations()) {
 				auto sym_idx = r.symbol();
