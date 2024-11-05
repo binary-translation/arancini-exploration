@@ -511,19 +511,22 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
 }
 
 void arm64_translation_context::materialise_label(const label_node &n) {
-    if (!builder_.has_label(n.name()))
-        builder_.label(n.name());
+    auto label_name = fmt::format("{}_{}", n.name(), instr_cnt_);
+    if (!builder_.has_label(label_name))
+        builder_.label(label_name);
 }
 
 void arm64_translation_context::materialise_br(const br_node &n) {
-    builder_.b(n.target()->name());
+    auto label_name = fmt::format("{}_{}", n.target()->name(), instr_cnt_);
+    builder_.b(label_name);
 }
 
 void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
     const auto &cond_vregs = materialise_port(n.cond());
 
     builder_.cmp(cond_vregs, immediate_operand(1, value_type::u8()));
-    builder_.beq(n.target()->name());
+    auto label_name = fmt::format("{}_{}", n.target()->name(), instr_cnt_);
+    builder_.beq(label_name);
 }
 
 void arm64_translation_context::materialise_constant(const constant_node &n) {
@@ -538,6 +541,7 @@ void arm64_translation_context::materialise_constant(const constant_node &n) {
     }
 }
 
+// TODO: rename
 [[nodiscard]]
 inline shift_operand binop_modifier(const arancini::ir::value_type& type) {
     const char* mod = "LSL";
@@ -582,8 +586,9 @@ inline cond_operand get_cset_type(binary_arith_op op) {
 }
 
 void arm64_translation_context::materialise_binary_arith(const binary_arith_node &n) {
-    const auto &lhs_vregs = materialise_port(n.lhs());
-    const auto &rhs_vregs = materialise_port(n.rhs());
+    const auto &lhs_regset = materialise_port(n.lhs());
+    const auto &rhs_regset = materialise_port(n.rhs());
+	const auto &dest_regset = vreg_alloc_.allocate(n.val());
 
     // Sanity check
     // Binary operations are defined in the IR with same size inputs and output
@@ -593,10 +598,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                                 n.val().type(), n.lhs().type(), n.rhs().type());
     }
 
-	const auto &dest_vregs = vreg_alloc_.allocate(n.val());
-
     [[unlikely]]
-    if (lhs_vregs.size() != rhs_vregs.size() || lhs_vregs.size() != dest_vregs.size()) {
+    if (lhs_regset.size() != rhs_regset.size() || lhs_regset.size() != dest_regset.size()) {
         throw backend_exception("Binary operations not supported between types {} = {} op {}",
                                 n.val().type(), n.lhs().type(), n.rhs().type());
     }
@@ -607,50 +610,17 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
     // TODO: Somehow avoid allocating this
     allocate_flags(vreg_alloc_, flag_map, n);
 
-	switch (n.op()) {
-	case binary_arith_op::add:
-        // Vector addition
-        if (is_vector_op) {
-            sets_flags = false;
-            for (std::size_t i = 0; i < dest_vregs.size(); ++i)
-                builder_.add(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
-            break;
-        }
-
-        // Scalar addition (including > 64-bits)
-        builder_.adds(dest_vregs[0], lhs_vregs[0], rhs_vregs[0], binop_modifier(n.val().type()));
-
-        // Addition for > 64-bits
-        for (std::size_t i = 1; i < dest_vregs.size(); ++i)
-            builder_.adcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
-        break;
-	case binary_arith_op::sub:
-        // Vector subtraction
-        if (is_vector_op) {
-            sets_flags = false;
-            for (std::size_t i = 0; i < dest_vregs.size(); ++i)
-                builder_.sub(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
-            break;
-        }
-
-        // Scalar subtraction (including > 64-bits)
-        // TODO: how are flags computed here?
-        builder_.subs(dest_vregs[0], lhs_vregs[0], rhs_vregs[0], binop_modifier(n.val().type()));
-
-        // Subtraction for > 64-bits
-        for (std::size_t i = 1; i < dest_vregs.size(); ++i)
-            builder_.sbcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
-
-        // TODO: fix flag hack
-        builder_.setcc(flag_map[reg_offsets::CF], "compute flag: CF");
-        break;
-	case binary_arith_op::mul:
+    auto mul_impl = [&](const register_sequence& dest_regset,
+                        const register_sequence& lhs_regset,
+                        const register_sequence& rhs_regset)
+    {
         // Vector multiplication
+        // TODO: replace by efficient vectorized version
         if (n.val().type().is_vector()) {
             sets_flags = false;
-            for (std::size_t i = 0; i < dest_vregs.size(); ++i)
-                builder_.mul(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
-            break;
+            for (std::size_t i = 0; i < dest_regset.size(); ++i)
+                builder_.mul(dest_regset[i], lhs_regset[i], rhs_regset[i]);
+            return;
         }
 
         // The input and the output have the same size:
@@ -661,21 +631,21 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         case 64: // this must perform 32-bit multiplication actually
             switch (n.val().type().type_class()) {
             case ir::value_type_class::signed_integer:
-                builder_.smull(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
+                builder_.smull(dest_regset, lhs_regset, rhs_regset);
                 break;
             case ir::value_type_class::unsigned_integer:
-                builder_.umull(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
+                builder_.umull(dest_regset, lhs_regset, rhs_regset);
                 break;
             case ir::value_type_class::floating_point:
                 // The same fmul is used in both 32-bit and 64-bit multiplication
                 // The actual operation depends on the type of its registers
-                builder_.fmul(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
+                builder_.fmul(dest_regset, lhs_regset, rhs_regset);
                 break;
             default:
                 throw backend_exception("Encounted unknown type class {} for multiplication",
                                         util::to_underlying(n.val().type().type_class()));
             }
-            builder_.cmp(dest_vregs[1],
+            builder_.cmp(dest_regset[1],
                          immediate_operand(0, value_type::u8()));
             break;
         case 128: // this must perform 64-bit multiplication
@@ -683,77 +653,249 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             [[likely]]
             if (n.val().type().type_class() != ir::value_type_class::floating_point) {
                 // Get lower 64 bits
-                builder_.mul(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
+                builder_.mul(dest_regset[0], lhs_regset[0], rhs_regset[0]);
 
                 // Get upper 64 bits
                 switch (n.val().type().type_class()) {
                 case ir::value_type_class::signed_integer:
-                    builder_.smulh(dest_vregs[1], lhs_vregs[0], rhs_vregs[0]);
+                    builder_.smulh(dest_regset[1], lhs_regset[0], rhs_regset[0]);
                     break;
                 case ir::value_type_class::unsigned_integer:
-                    builder_.umulh(dest_vregs[1], lhs_vregs[0], rhs_vregs[0]);
+                    builder_.umulh(dest_regset[1], lhs_regset[0], rhs_regset[0]);
                     break;
                 default:
                     throw backend_exception("Encounted unknown type class {} for multiplication",
                                             util::to_underlying(n.val().type().type_class()));
                 }
-                builder_.cmp(dest_vregs[1],
+                builder_.cmp(dest_regset[1],
                              immediate_operand(0, value_type::u8()));
                 break;
             } else {
-                // TODO: this is incorrect; the entire register set should be in dest_vregs
+                // TODO: this is incorrect; the entire register set should be in dest_regset
                 // Register allocation must then map this accordingly
-                // builder_.fmul(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
+                // builder_.fmul(dest_regset[0], lhs_regset[0], rhs_regset[0]);
                 throw backend_exception("Float multiplication not handled");
                 break;
             }
             break;
         default:
-            throw backend_exception("Multiplication not supported between {}x{}",
+            throw backend_exception("Multiplication not supported between {} x {}",
                                     n.lhs().type(), n.rhs().type());
         }
+        return;
+    };
+
+    auto div_impl = [&](const register_sequence& dest_regset,
+                        const register_sequence& lhs_regset,
+                        const register_sequence& rhs_regset)
+    {
+        // Vector division
+        // TODO: replace this by efficient vectorized version
+        if (n.val().type().is_vector()) {
+            sets_flags = false;
+            if (n.val().type().type_class() == ir::value_type_class::signed_integer) {
+                for (std::size_t i = 0; i < dest_regset.size(); ++i)
+                    builder_.sdiv(dest_regset[i], lhs_regset[i], rhs_regset[i]);
+            } else if (n.val().type().type_class() == ir::value_type_class::unsigned_integer) {
+                for (std::size_t i = 0; i < dest_regset.size(); ++i)
+                    builder_.sdiv(dest_regset[i], lhs_regset[i], rhs_regset[i]);
+            } else {
+                // TODO: support it
+                throw backend_exception("Vector division for floating point numbers not supported");
+            }
+            return;
+        }
+
+        // The input and the output have the same size:
+        // For 64-bit division: 64-bit input dividend/divisor and 64-bit output but 32-bit division
+        // For 128-bit multiplication: 128-bit input dividend/divisor and 128-bit output but 64-bit division
+        // NOTE: this is very unfortunate
+        // NOTE: we'll need to handle separetely floats
+        switch (n.val().type().element_width()) {
+        case 64: // this must perform 32-bit division
+        case 128: // this must perform 64-bit division
+            switch (n.val().type().type_class()) {
+            case ir::value_type_class::signed_integer:
+                builder_.sdiv(dest_regset[0], lhs_regset[0], rhs_regset[0]);
+                break;
+            case ir::value_type_class::unsigned_integer:
+                builder_.udiv(dest_regset[0], lhs_regset[0], rhs_regset[0]);
+                break;
+            default:
+                throw backend_exception("Encounted unknown type class {} for division",
+                                        util::to_underlying(n.val().type().type_class()));
+            }
+            // SDIV and UDIV do not affect the condition flags
+            // We must set them explicitly with a comparison
+            builder_.cmp(dest_regset[0],
+                         immediate_operand(0, value_type::u8()));
+            break;
+        default:
+            throw backend_exception("Multiplication not supported between {} x {}",
+                                    n.lhs().type(), n.rhs().type());
+        }
+		return;
+    };
+
+	switch (n.op()) {
+	case binary_arith_op::add:
+        // Vector addition
+        if (is_vector_op) {
+            sets_flags = false;
+            for (std::size_t i = 0; i < dest_regset.size(); ++i)
+                builder_.add(dest_regset[i], lhs_regset[i], rhs_regset[i]);
+            break;
+        }
+
+        // Scalar addition (including > 64-bits)
+        builder_.adds(dest_regset[0], lhs_regset[0], rhs_regset[0], binop_modifier(n.val().type()));
+
+        // Addition for > 64-bits
+        for (std::size_t i = 1; i < dest_regset.size(); ++i)
+            builder_.adcs(dest_regset[i], lhs_regset[i], rhs_regset[i]);
+        break;
+	case binary_arith_op::sub:
+        // Vector subtraction
+        if (is_vector_op) {
+            sets_flags = false;
+            for (std::size_t i = 0; i < dest_regset.size(); ++i)
+                builder_.sub(dest_regset[i], lhs_regset[i], rhs_regset[i]);
+            break;
+        }
+
+        // Scalar subtraction (including > 64-bits)
+        // TODO: how are flags computed here?
+        builder_.subs(dest_regset[0], lhs_regset[0], rhs_regset[0], binop_modifier(n.val().type()));
+
+        // Subtraction for > 64-bits
+        for (std::size_t i = 1; i < dest_regset.size(); ++i)
+            builder_.sbcs(dest_regset[i], lhs_regset[i], rhs_regset[i]);
+
+        // TODO: fix flag hack
+        builder_.setcc(flag_map[reg_offsets::CF], "compute flag: CF");
+        break;
+	case binary_arith_op::mul:
+        mul_impl(dest_regset, lhs_regset, rhs_regset);
         break;
 	case binary_arith_op::div:
-        builder_.sdiv(dest_vregs, lhs_vregs, rhs_vregs);
+        div_impl(dest_regset, lhs_regset, rhs_regset);
 		break;
 	case binary_arith_op::mod:
-        builder_.and_(dest_vregs, lhs_vregs, rhs_vregs);
+        // TODO: this is partially incorrect
+        // modulo can be expressed by AND when rhs is 2
+        // modulo lhs % rhs is equiv. to lhs % (rhs-1) wheh rhs is a power of 2
+        {
+            auto temp1_regset = vreg_alloc_.allocate(n.val().type());
+            auto temp2_regset = vreg_alloc_.allocate(n.val().type());
+            div_impl(temp1_regset, lhs_regset, rhs_regset);
+            mul_impl(temp2_regset, temp1_regset, rhs_regset);
+
+            builder_.sub(dest_regset[0], lhs_regset[0], rhs_regset[0], binop_modifier(n.val().type()));
+        }
 		break;
 	case binary_arith_op::bor:
-        [[unlikely]]
-        if (n.val().type().width() != 32 && n.val().type().width() != 64)
-            throw backend_exception("Unsupported OR operation between {}x{}",
-                                    n.lhs().type(), n.rhs().type());
+        if (is_vector_op) {
+            for (std::size_t i = 0; i < dest_regset.size(); ++i) {
+                builder_.orr_(dest_regset[i], lhs_regset[i], rhs_regset[i]);
+            }
+            sets_flags = false;
+            break;
+        }
 
-        builder_.orr_(dest_vregs, lhs_vregs, rhs_vregs);
+        switch (n.val().type().element_width()) {
+        case 1:
+            builder_.lsl(lhs_regset[0], lhs_regset[0], immediate_operand(7, value_type::u8()),
+                         "shift left LSB to set sign bit of byte");
+            builder_.asr(lhs_regset[0], lhs_regset[0], immediate_operand(7, value_type::u8()),
+                         "shift right to fill LSB with sign bit (except for least-significant bit)");
+            builder_.lsl(rhs_regset[0], rhs_regset[0], immediate_operand(7, value_type::u8()),
+                         "shift left LSB to set sign bit of byte");
+            builder_.asr(rhs_regset[0], rhs_regset[0], immediate_operand(7, value_type::u8()),
+                         "shift right to fill LSB with sign bit (except for least-significant bit)");
+            builder_.orr_(dest_regset[0], lhs_regset[0], rhs_regset[0]);
+        case 8:
+            if (n.lhs().type().type_class() == ir::value_type_class::signed_integer)
+                builder_.sxtb(lhs_regset[0], lhs_regset[0]);
+            if (n.lhs().type().type_class() == ir::value_type_class::unsigned_integer)
+                builder_.uxtb(lhs_regset[0], lhs_regset[0]);
+        case 16:
+            if (n.lhs().type().type_class() == ir::value_type_class::signed_integer)
+                builder_.sxth(lhs_regset[0], lhs_regset[0]);
+            if (n.lhs().type().type_class() == ir::value_type_class::unsigned_integer)
+                builder_.uxth(lhs_regset[0], lhs_regset[0]);
+        case 32:
+        case 64:
+            builder_.orr_(dest_regset, lhs_regset, rhs_regset);
+            break;
+        default:
+            throw backend_exception("Unsupported AND operation between {} x {}",
+                                    n.lhs().type(), n.rhs().type());
+        }
 		break;
 	case binary_arith_op::band:
-        [[unlikely]]
-        if (n.val().type().width() != 32 && n.val().type().width() != 64)
-            throw backend_exception("Unsupported AND operation between {}x{}",
-                                    n.lhs().type(), n.rhs().type());
+        if (is_vector_op) {
+            for (std::size_t i = 0; i < dest_regset.size(); ++i) {
+                builder_.ands(dest_regset[i], lhs_regset[i], rhs_regset[i]);
+            }
+            sets_flags = false;
+            break;
+        }
 
-        builder_.ands(dest_vregs, lhs_vregs, rhs_vregs);
+        switch (n.val().type().element_width()) {
+        case 1:
+            builder_.lsl(lhs_regset[0], lhs_regset[0], immediate_operand(7, value_type::u8()),
+                         "shift left LSB to set sign bit of byte");
+            builder_.asr(lhs_regset[0], lhs_regset[0], immediate_operand(7, value_type::u8()),
+                         "shift right to fill LSB with sign bit (except for least-significant bit)");
+            builder_.lsl(rhs_regset[0], rhs_regset[0], immediate_operand(7, value_type::u8()),
+                         "shift left LSB to set sign bit of byte");
+            builder_.asr(rhs_regset[0], rhs_regset[0], immediate_operand(7, value_type::u8()),
+                         "shift right to fill LSB with sign bit (except for least-significant bit)");
+            builder_.ands(dest_regset[0], lhs_regset[0], rhs_regset[0]);
+        case 8:
+            if (n.lhs().type().type_class() == ir::value_type_class::signed_integer)
+                builder_.sxtb(lhs_regset[0], lhs_regset[0]);
+            if (n.lhs().type().type_class() == ir::value_type_class::unsigned_integer)
+                builder_.uxtb(lhs_regset[0], lhs_regset[0]);
+        case 16:
+            if (n.lhs().type().type_class() == ir::value_type_class::signed_integer)
+                builder_.sxth(lhs_regset[0], lhs_regset[0]);
+            if (n.lhs().type().type_class() == ir::value_type_class::unsigned_integer)
+                builder_.uxth(lhs_regset[0], lhs_regset[0]);
+        case 32:
+        case 64:
+            builder_.ands(dest_regset, lhs_regset, rhs_regset);
+            break;
+        default:
+            throw backend_exception("Unsupported AND operation between {} x {}",
+                                    n.lhs().type(), n.rhs().type());
+        }
 		break;
 	case binary_arith_op::bxor:
-        builder_.eor_(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
-        for (std::size_t i = 1; i < dest_vregs.size(); ++i)
-            builder_.eor_(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
-        // EOR does not set flags
-        // CMP is used to set the flags
-		builder_.cmp(dest_vregs.back(),
-                     immediate_operand(0, value_type::u8()));
-		break;
+        {
+            builder_.eor_(dest_regset[0], lhs_regset[0], rhs_regset[0]);
+            std::size_t i = 1;
+            for (; i < dest_regset.size(); ++i)
+                builder_.eor_(dest_regset[i], lhs_regset[i], rhs_regset[i]);
+
+            // EOR does not set flags
+            // CMP is used to set the flags
+            if (!is_vector_op)
+                builder_.cmp(dest_regset[i-1], immediate_operand(0, value_type::u8()));
+            else
+                sets_flags = false;
+        }
+        break;
 	case binary_arith_op::cmpeq:
 	case binary_arith_op::cmpne:
 	case binary_arith_op::cmpgt:
         // TODO: this looks wrong
-        if (is_vector_op || dest_vregs.size() > 1)
-            throw backend_exception("Unsupported comparison between {}x{}",
+        if (is_vector_op || dest_regset.size() > 1)
+            throw backend_exception("Unsupported comparison between {} x {}",
                                     n.lhs().type(), n.rhs().type());
 
-        builder_.cmp(lhs_vregs[0], rhs_vregs[0], "compare LHS and RHS to generate condition for conditional set");
-        builder_.cset(dest_vregs[0], get_cset_type(n.op()), "set to 1 if condition is true (based flags from the previous compare)");
+        builder_.cmp(lhs_regset[0], rhs_regset[0], "compare LHS and RHS to generate condition for conditional set");
+        builder_.cset(dest_regset[0], get_cset_type(n.op()), "set to 1 if condition is true (based flags from the previous compare)");
 		break;
 	default:
 		throw backend_exception("Unsupported binary arithmetic operation with index {}", util::to_underlying(n.op()));
@@ -1072,14 +1214,15 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
     flag_map[reg_offsets::OF] = vreg_alloc_.allocate(n.overflow(), value_type::u1());
     flag_map[reg_offsets::CF] = vreg_alloc_.allocate(n.carry(), value_type::u1());
 
-    auto mem_addr = memory_operand(addr_vreg);
-
     // CMPXCHG:
-    // dest_vreg = mem(mem_base + addr);
-    // if (dest_vreg != acc_vregs) acc_vregs = dest_vregs;
-    // else try_write(mem_base + addr) = src_vreg;
-    //      if (retry) goto beginning
+    // dest_reg = mem[addr];
+    // if (dest_reg != acc_reg) acc_reg = dest_reg;
+    // else try mem[addr] = src_vreg;
+    //      if (failed) goto beginning
     // end
+    // String match fails here because dest_vregs is a 64-bit register; but it can only be 32-bit
+    // TODO: recheck
+    auto mem_addr = memory_operand(addr_vreg);
     switch (n.op()) {
     case ternary_atomic_op::cmpxchg:
         if constexpr (supports_lse) {
@@ -1164,7 +1307,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
                                     n.source_value().type().element_width());
         }
 
-        builder_.insert_comment("sign-extend from {}x{} to {}x{}",
+        builder_.insert_comment("sign-extend from {} x {} to {} x {}",
                                 n.source_value().type().nr_elements(), n.source_value().type().element_width(),
                                 n.val().type().nr_elements(), n.val().type().element_width());
 
@@ -1177,6 +1320,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             // 1 -> N
             // sign-extend to 1 byte
             // sign-extend the rest
+            // TODO: this is likely wrong
             builder_.lsl(dest_vreg, src_vreg, immediate_operand(7, value_type::u8()),
                          "shift left LSB to set sign bit of byte");
             builder_.sxtb(dest_vreg, dest_vreg, "sign-extend");
@@ -1225,7 +1369,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         // value of src_vreg
         // A simple mov is sufficient (eliminated anyway by the register
         // allocator)
-        builder_.insert_comment("Bitcast from {}x{} to {}x{}",
+        builder_.insert_comment("Bitcast from {} x {} to {} x {}",
                                 n.source_value().type().nr_elements(), n.source_value().type().element_width(),
                                 n.val().type().nr_elements(), n.val().type().element_width());
 
@@ -1268,7 +1412,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
                                     n.source_value().type().element_width());
         }
 
-        builder_.insert_comment("zero-extend from {}x{} to {}x{}",
+        builder_.insert_comment("zero-extend from {} x {} to {} x {}",
                                  n.val().type().nr_elements(), n.val().type().element_width(),
                                 n.source_value().type().nr_elements(), n.source_value().type().element_width());
 
