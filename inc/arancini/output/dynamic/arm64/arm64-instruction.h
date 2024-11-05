@@ -513,8 +513,8 @@ struct fmt::formatter<arancini::output::dynamic::arm64::memory_operand> {
 
         if (mem.is_virtual())
             fmt::format_to(ctx.out(), "[%V{}_{}",
-                           mem.base_register().type().element_width(),
-                           mem.base_register().index());
+                           mem.base_register().index(),
+                           mem.base_register().type().element_width());
         else
             fmt::format_to(ctx.out(), "[{}", mem.base_register());
 
