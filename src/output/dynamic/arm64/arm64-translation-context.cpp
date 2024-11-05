@@ -584,8 +584,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
     const auto &lhs_vregs = materialise_port(n.lhs());
     const auto &rhs_vregs = materialise_port(n.rhs());
 
-    // Sanity checks
-    // Types must fully match
+    // Sanity check
+    // Binary operations are defined in the IR with same size inputs and output
     [[unlikely]]
     if (n.lhs().type() != n.rhs().type() && n.lhs().type() != n.val().type()) {
         throw backend_exception("Binary operations not supported between types {} = {} op {}",
@@ -645,8 +645,12 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             break;
         }
 
+        // The input and the output have the same size:
+        // For 32-bit multiplication: 64-bit output and signed-extended 32-bit values to 64-bit inputs
+        // For 64-bit multiplication: 64-bit output and signed-extended 64-bit values to 128-bit inputs
+        // NOTE: this is very unfortunate
         switch (n.val().type().element_width()) {
-        case 32:
+        case 64: // this must perform 32-bit multiplication actually
             switch (n.val().type().type_class()) {
             case ir::value_type_class::signed_integer:
                 builder_.smull(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
@@ -654,64 +658,58 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             case ir::value_type_class::unsigned_integer:
                 builder_.umull(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
                 break;
-            case ir::value_type_class::floating_point: // TODO: this is likely incorrect
+            case ir::value_type_class::floating_point:
+                // The same fmul is used in both 32-bit and 64-bit multiplication
+                // The actual operation depends on the type of its registers
                 builder_.fmul(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
                 break;
             default:
                 throw backend_exception("Encounted unknown type class {} for multiplication",
                                         util::to_underlying(n.val().type().type_class()));
             }
+            builder_.cmp(dest_vregs[1],
+                         immediate_operand(0, value_type::u8()));
             break;
-        case 64:
-            builder_.mul(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
-            break;
-        case 128:
-            builder_.mul(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
-            switch (n.val().type().type_class()) {
-            case ir::value_type_class::signed_integer:
-                builder_.smulh(dest_vregs[1], lhs_vregs[0], rhs_vregs[0]);
+        case 128: // this must perform 64-bit multiplication
+            // Integers handled differently than floats
+            [[likely]]
+            if (n.val().type().type_class() != ir::value_type_class::floating_point) {
+                // Get lower 64 bits
+                builder_.mul(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
+
+                // Get upper 64 bits
+                switch (n.val().type().type_class()) {
+                case ir::value_type_class::signed_integer:
+                    builder_.smulh(dest_vregs[1], lhs_vregs[0], rhs_vregs[0]);
+                    break;
+                case ir::value_type_class::unsigned_integer:
+                    builder_.umulh(dest_vregs[1], lhs_vregs[0], rhs_vregs[0]);
+                    break;
+                default:
+                    throw backend_exception("Encounted unknown type class {} for multiplication",
+                                            util::to_underlying(n.val().type().type_class()));
+                }
+                builder_.cmp(dest_vregs[1],
+                             immediate_operand(0, value_type::u8()));
                 break;
-            case ir::value_type_class::unsigned_integer:
-                builder_.umulh(dest_vregs[1], lhs_vregs[0], rhs_vregs[0]);
+            } else {
+                // TODO: this is incorrect; the entire register set should be in dest_vregs
+                // Register allocation must then map this accordingly
+                // builder_.fmul(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
+                throw backend_exception("Float multiplication not handled");
                 break;
-            case ir::value_type_class::floating_point: // NOTE: this is incorrect
-                builder_.fmul(dest_vregs[0], lhs_vregs[0], rhs_vregs[0]);
-                break;
-            default:
-                throw backend_exception("Encounted unknown type class {} for multiplication",
-                                        util::to_underlying(n.val().type().type_class()));
             }
             break;
         default:
             throw backend_exception("Multiplication not supported between {}x{}",
                                     n.lhs().type(), n.rhs().type());
         }
-
-        // *MUL* do not set flags, they must be set here manually
-        //
-        // FIXME: check correctness for up to 64-bit results
-        // FIXME: this is not fully correct for > 64-bit:
-        //
-        // 1. zero flag must be logically AND-ed between all result registers
-        // 2. negative flag must only be considered for the most significant
-        // register
-        // 3. overflow flag - do we even care?
-        // 4. carry flag - how to even determine that for > 64-bit (probably
-        // by looking at sources, does x86 even care about it then?)
-        //
-        // FIXME: this applies to others too
-		builder_.cmp(dest_vregs[0],
-                     immediate_operand(0, value_type::u8()));
         break;
 	case binary_arith_op::div:
-        //FIXME: implement
         builder_.sdiv(dest_vregs, lhs_vregs, rhs_vregs);
-        /* throw backend_exception("Not implemented: binary_arith_op::div"); */
 		break;
 	case binary_arith_op::mod:
-        //FIXME: implement
         builder_.and_(dest_vregs, lhs_vregs, rhs_vregs);
-        /* throw backend_exception("Not implemented: binary_arith_op::mov"); */
 		break;
 	case binary_arith_op::bor:
         builder_.orr_(dest_vregs, lhs_vregs, rhs_vregs);
