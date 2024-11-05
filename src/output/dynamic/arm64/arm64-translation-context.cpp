@@ -596,6 +596,9 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
     const bool is_vector_op = n.val().type().is_vector();
 	const auto &dest_vregs = vreg_alloc_.allocate(n.val());
 
+    // TODO: Somehow avoid allocating this
+    allocate_flags(vreg_alloc_, flag_map, n);
+
 	switch (n.op()) {
 	case binary_arith_op::add:
         // Vector addition
@@ -743,8 +746,6 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
     // But not operations on vectors
     [[likely]]
     if (sets_flags) {
-        allocate_flags(vreg_alloc_, flag_map, n);
-
         // TODO: repetitive; should have single function that sets flags
         builder_.setz(flag_map[reg_offsets::ZF], "compute flag: ZF");
         builder_.sets(flag_map[reg_offsets::SF], "compute flag: SF");
