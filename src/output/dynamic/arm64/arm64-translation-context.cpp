@@ -221,6 +221,7 @@ void arm64_translation_context::end_block() {
                      current_instruction_disasm_,
                      fmt::format("{}", fmt::join(builder_.instruction_begin(), builder_.instruction_end(), "\n")));
         logger.error("{}\n", util::logging_separator());
+        fflush(stderr);
         throw backend_exception("Register allocation failed: {}", e.what());
     }
 
@@ -587,14 +588,21 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
     // Sanity check
     // Binary operations are defined in the IR with same size inputs and output
     [[unlikely]]
-    if (n.lhs().type() != n.rhs().type() && n.lhs().type() != n.val().type()) {
+    if (n.lhs().type() != n.rhs().type() || n.lhs().type() != n.val().type()) {
+        throw backend_exception("Binary operations not supported between types {} = {} op {}",
+                                n.val().type(), n.lhs().type(), n.rhs().type());
+    }
+
+	const auto &dest_vregs = vreg_alloc_.allocate(n.val());
+
+    [[unlikely]]
+    if (lhs_vregs.size() != rhs_vregs.size() || lhs_vregs.size() != dest_vregs.size()) {
         throw backend_exception("Binary operations not supported between types {} = {} op {}",
                                 n.val().type(), n.lhs().type(), n.rhs().type());
     }
 
     bool sets_flags = true;
     const bool is_vector_op = n.val().type().is_vector();
-	const auto &dest_vregs = vreg_alloc_.allocate(n.val());
 
     // TODO: Somehow avoid allocating this
     allocate_flags(vreg_alloc_, flag_map, n);
@@ -712,9 +720,19 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         builder_.and_(dest_vregs, lhs_vregs, rhs_vregs);
 		break;
 	case binary_arith_op::bor:
+        [[unlikely]]
+        if (n.val().type().width() != 32 && n.val().type().width() != 64)
+            throw backend_exception("Unsupported OR operation between {}x{}",
+                                    n.lhs().type(), n.rhs().type());
+
         builder_.orr_(dest_vregs, lhs_vregs, rhs_vregs);
 		break;
 	case binary_arith_op::band:
+        [[unlikely]]
+        if (n.val().type().width() != 32 && n.val().type().width() != 64)
+            throw backend_exception("Unsupported AND operation between {}x{}",
+                                    n.lhs().type(), n.rhs().type());
+
         builder_.ands(dest_vregs, lhs_vregs, rhs_vregs);
 		break;
 	case binary_arith_op::bxor:
@@ -723,18 +741,19 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             builder_.eor_(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
         // EOR does not set flags
         // CMP is used to set the flags
-        // TODO: find a way to set flags
-		builder_.cmp(dest_vregs[0],
+		builder_.cmp(dest_vregs.back(),
                      immediate_operand(0, value_type::u8()));
 		break;
 	case binary_arith_op::cmpeq:
 	case binary_arith_op::cmpne:
 	case binary_arith_op::cmpgt:
+        // TODO: this looks wrong
+        if (is_vector_op || dest_vregs.size() > 1)
+            throw backend_exception("Unsupported comparison between {}x{}",
+                                    n.lhs().type(), n.rhs().type());
+
         builder_.cmp(lhs_vregs[0], rhs_vregs[0], "compare LHS and RHS to generate condition for conditional set");
         builder_.cset(dest_vregs[0], get_cset_type(n.op()), "set to 1 if condition is true (based flags from the previous compare)");
-        for (std::size_t i = 1; i < dest_vregs.size(); ++i) {
-            builder_.cset(dest_vregs[i], get_cset_type(n.op()));
-        }
 		break;
 	default:
 		throw backend_exception("Unsupported binary arithmetic operation with index {}", util::to_underlying(n.op()));
@@ -757,56 +776,46 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 void arm64_translation_context::materialise_ternary_arith(const ternary_arith_node &n) {
     allocate_flags(vreg_alloc_, flag_map, n);
 
-	const auto &dest_vregs = vreg_alloc_.allocate(n.val());
-    const auto &lhs_vregs = materialise_port(n.lhs());
-    const auto &rhs_vregs = materialise_port(n.rhs());
-    auto &top_vregs = materialise_port(n.top());
+	const auto &dest_regs = vreg_alloc_.allocate(n.val());
+    const auto &lhs_regs = materialise_port(n.lhs());
+    const auto &rhs_regs = materialise_port(n.rhs());
+    auto &top_regs = materialise_port(n.top());
 
-    if (dest_vregs.size() != lhs_vregs.size() ||
-        dest_vregs.size() != rhs_vregs.size() ||
-        dest_vregs.size() != top_vregs.size()) {
-        throw backend_exception("Ternary arithmetic node mismatch between types");
+    // Sanity check
+    // Binary operations are defined in the IR with same size inputs and output
+    [[unlikely]]
+    if (n.lhs().type() != n.rhs().type() || n.lhs().type() != n.val().type()
+                                         || n.lhs().type() != n.top().type())
+    {
+        throw backend_exception("Binary operations not supported between types {} = {} op {}",
+                                n.val().type(), n.lhs().type(), n.rhs().type());
     }
 
-    const char* mod = nullptr;
-    switch (n.val().type().element_width()) {
-    case 8:
-        if (n.val().type().type_class() == value_type_class::signed_integer)
-            mod = "SXTB";
-        else
-            mod = "UXTB";
-        break;
-    case 16:
-        if (n.val().type().type_class() == value_type_class::signed_integer)
-            mod = "SXTB";
-        else
-            mod = "UXTB";
-        break;
+    [[unlikely]]
+    if (lhs_regs.size() != rhs_regs.size() || lhs_regs.size() != dest_regs.size()
+                                           || lhs_regs.size() != top_regs.size())
+    {
+        throw backend_exception("Binary operations not supported between types {} = {} op {}",
+                                n.val().type(), n.lhs().type(), n.rhs().type());
     }
 
     const register_operand& pstate = vreg_alloc_.allocate(register_operand(register_operand::nzcv).type());
-    for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
+    for (std::size_t i = 0; i < dest_regs.size(); ++i) {
         // Set carry flag
         builder_.mrs(pstate, register_operand(register_operand::nzcv));
-        builder_.lsl(top_vregs[i], top_vregs[i], immediate_operand(0x3, value_type::u8()));
+        builder_.lsl(top_regs[i], top_regs[i], immediate_operand(0x3, value_type::u8()));
 
-        cast(top_vregs[i], pstate.type());
+        cast(top_regs[i], pstate.type());
 
-        builder_.orr_(pstate, pstate, top_vregs[i]);
+        builder_.orr_(pstate, pstate, top_regs[i]);
         builder_.msr(register_operand(register_operand::nzcv), pstate);
 
         switch (n.op()) {
         case ternary_arith_op::adc:
-            if (mod)
-                builder_.adcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i], shift_operand(mod, {0, value_type::u16()}));
-            else
-                builder_.adcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
+            builder_.adcs(dest_regs[i], lhs_regs[i], rhs_regs[i], binop_modifier(n.val().type()));
             break;
         case ternary_arith_op::sbb:
-            if (mod)
-                builder_.sbcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i], shift_operand(mod, {0, value_type::u16()}));
-            else
-                builder_.sbcs(dest_vregs[i], lhs_vregs[i], rhs_vregs[i]);
+            builder_.sbcs(dest_regs[i], lhs_regs[i], rhs_regs[i], binop_modifier(n.val().type()));
             break;
         default:
             throw backend_exception("Unsupported ternary arithmetic operation {}", util::to_underlying(n.op()));
