@@ -48,6 +48,9 @@ public:
     // SUBS
     ARITH_OP(subs);
 
+    // SBC
+    ARITH_OP(sbc);
+
     // SBCS
     ARITH_OP(sbcs);
 

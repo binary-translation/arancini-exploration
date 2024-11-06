@@ -43,25 +43,23 @@ void allocate_flags(virtual_register_allocator& allocator, flag_map_type& flag_m
     flag_map[reg_offsets::CF] = allocator.allocate(n.carry(), value_type::u1());
 }
 
-register_sequence& virtual_register_allocator::allocate_sequence(const ir::port &p) {
-    std::size_t reg_count = p.type().nr_elements();
-    auto element_width = p.type().width();
+register_sequence virtual_register_allocator::allocate(ir::value_type type) {
+    std::size_t reg_count = type.nr_elements();
+    auto element_width = type.width();
     if (element_width > value_types::base_type.width()) {
         element_width = value_types::base_type.width();
-        reg_count = p.type().width() / element_width;
+        reg_count = type.width() / element_width;
     }
 
-    auto type = ir::value_type(p.type().type_class(), element_width, 1);
+    auto reg_type = ir::value_type(type.type_class(), element_width, 1);
 
-    std::vector<register_operand> regset;
+    register_sequence regset;
     for (std::size_t i = 0; i < reg_count; ++i) {
-        auto reg = allocate(type);
+        auto reg = register_sequence{register_operand(next_vreg_++, reg_type)};
         regset.push_back(reg);
     }
 
-    port_to_vreg_.emplace(&p, register_sequence(regset.begin(), regset.end()));
-
-    return port_to_vreg_[&p];
+    return regset;
 }
 
 register_operand arm64_translation_context::cast(const register_operand &op, value_type type) {
@@ -573,8 +571,8 @@ inline cond_operand get_cset_type(binary_arith_op op) {
 }
 
 void arm64_translation_context::materialise_binary_arith(const binary_arith_node &n) {
-    const auto &lhs_regset = materialise_port(n.lhs());
-    const auto &rhs_regset = materialise_port(n.rhs());
+    auto &lhs_regset = materialise_port(n.lhs());
+    auto &rhs_regset = materialise_port(n.rhs());
 	const auto &dest_regset = vreg_alloc_.allocate(n.val());
 
     // Sanity check
@@ -598,8 +596,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
     allocate_flags(vreg_alloc_, flag_map, n);
 
     auto mul_impl = [&](const register_sequence& dest_regset,
-                        const register_sequence& lhs_regset,
-                        const register_sequence& rhs_regset)
+                        register_sequence& lhs_regset,
+                        register_sequence& rhs_regset)
     {
         // Vector multiplication
         // TODO: replace by efficient vectorized version
@@ -616,6 +614,12 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         // NOTE: this is very unfortunate
         switch (n.val().type().element_width()) {
         case 64: // this must perform 32-bit multiplication actually
+            // Cast LHS and RHS to 32-bits
+            // NOTE: this is guaranteed to yield the same value because we're doing 32-bit
+            //       multiplication
+            lhs_regset[0].cast(ir::value_type(lhs_regset[0].type().type_class(), 32, 1));
+            rhs_regset[0].cast(ir::value_type(rhs_regset[0].type().type_class(), 32, 1));
+
             switch (n.val().type().type_class()) {
             case ir::value_type_class::signed_integer:
                 builder_.smull(dest_regset, lhs_regset, rhs_regset);
@@ -771,13 +775,19 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         // TODO: this is partially incorrect
         // modulo can be expressed by AND when rhs is 2
         // modulo lhs % rhs is equiv. to lhs % (rhs-1) wheh rhs is a power of 2
+        // Generic implementation:
+        // lhs % rhs = lhs - (rhs * floor(lhs/rhs))
         {
             auto temp1_regset = vreg_alloc_.allocate(n.val().type());
             auto temp2_regset = vreg_alloc_.allocate(n.val().type());
             div_impl(temp1_regset, lhs_regset, rhs_regset);
-            mul_impl(temp2_regset, temp1_regset, rhs_regset);
+            mul_impl(temp2_regset, rhs_regset, temp1_regset);
 
-            builder_.sub(dest_regset[0], lhs_regset[0], rhs_regset[0], binop_modifier(n.val().type()));
+            builder_.subs(dest_regset[0], lhs_regset[0], temp2_regset[0], binop_modifier(n.val().type()));
+            // for (std::size_t i = 1; i < dest_regset.size(); ++i) {
+            //     builder_.sbcs(dest_regset[i], lhs_regset[i], temp2_regset[i], binop_modifier(n.val().type()));
+            // }
+
             sets_flags = false;
         }
 		break;
@@ -1292,14 +1302,14 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
     // However, for extension operations 1 => 2
 
     // Multiple source registers for element_width > 64-bits
-    const auto &src_vregs = materialise_port(n.source_value());
+    auto &src_vregs = materialise_port(n.source_value());
 
     // Allocate as many destination registers as necessary
     // TODO: this is not exactly correct, since we need to create different
     // registers of the base type in such cases
     const auto &dest_vregs = vreg_alloc_.allocate(n.val());
 
-    const auto &src_vreg = src_vregs[0];
+    auto &src_vreg = src_vregs[0];
     const auto &dest_vreg = dest_vregs[0];
 
     logger.debug("Materializing cast operation: {}\n", n.op());
@@ -1364,7 +1374,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             builder_.insert_comment("Determine sign and write to upper registers");
             for (std::size_t i = src_vregs.size(); i < dest_vregs.size(); ++i) {
                 builder_.mov(dest_vregs[i], src_vregs[src_vregs.size()-1]);
-                builder_.asr(dest_vregs[i], dest_vregs[i], immediate_operand(64, value_type::u8()));
+                builder_.asr(dest_vregs[i], dest_vregs[i], move_to_register(64, value_type::u8()));
             }
         }
         break;
@@ -1485,7 +1495,9 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         } else if (src_vregs.size() == 1) {
             // TODO: again register reallocation problems, this should be clearly
             // specified as a smaller size
-            auto immediate = move_immediate(64 - dest_vreg.type().element_width(), value_types::u12, value_type::u64());
+            auto immediate = move_immediate(64 - dest_vreg.type().element_width(), value_types::u6);
+            if (src_vreg.type().element_width() > dest_vreg.type().element_width())
+                src_vreg.cast(dest_vreg.type());
             builder_.lsl(dest_vreg, src_vreg, immediate);
             builder_.asr(dest_vreg, dest_vreg, immediate);
         }
