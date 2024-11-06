@@ -810,12 +810,15 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                          "shift left LSB to set sign bit of byte");
             builder_.asr(rhs_regset[0], rhs_regset[0], immediate_operand(7, value_type::u8()),
                          "shift right to fill LSB with sign bit (except for least-significant bit)");
-            builder_.orr_(dest_regset[0], lhs_regset[0], rhs_regset[0]);
+            builder_.orr_(dest_regset, lhs_regset, rhs_regset);
+            break;
         case 8:
             if (n.lhs().type().type_class() == ir::value_type_class::signed_integer)
                 builder_.sxtb(lhs_regset[0], lhs_regset[0]);
             if (n.lhs().type().type_class() == ir::value_type_class::unsigned_integer)
                 builder_.uxtb(lhs_regset[0], lhs_regset[0]);
+            builder_.orr_(dest_regset, lhs_regset, rhs_regset);
+            break;
         case 16:
             if (n.lhs().type().type_class() == ir::value_type_class::signed_integer)
                 builder_.sxth(lhs_regset[0], lhs_regset[0]);
@@ -829,6 +832,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             throw backend_exception("Unsupported AND operation between {} x {}",
                                     n.lhs().type(), n.rhs().type());
         }
+        builder_.cmp(dest_regset, immediate_operand(0, ir::value_type::u8()));
 		break;
 	case binary_arith_op::band:
         if (is_vector_op) {
@@ -850,11 +854,14 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             builder_.asr(rhs_regset[0], rhs_regset[0], immediate_operand(7, value_type::u8()),
                          "shift right to fill LSB with sign bit (except for least-significant bit)");
             builder_.ands(dest_regset[0], lhs_regset[0], rhs_regset[0]);
+            break;
         case 8:
             if (n.lhs().type().type_class() == ir::value_type_class::signed_integer)
                 builder_.sxtb(lhs_regset[0], lhs_regset[0]);
             if (n.lhs().type().type_class() == ir::value_type_class::unsigned_integer)
                 builder_.uxtb(lhs_regset[0], lhs_regset[0]);
+            builder_.ands(dest_regset, lhs_regset, rhs_regset);
+            break;
         case 16:
             if (n.lhs().type().type_class() == ir::value_type_class::signed_integer)
                 builder_.sxth(lhs_regset[0], lhs_regset[0]);
@@ -982,10 +989,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
     const auto &dest_vreg = dest_vregs[0];
 
     // No need to handle flags: they are not visible to other PEs
-    flag_map[reg_offsets::ZF] = vreg_alloc_.allocate(n.zero(), value_type::u1());
-    flag_map[reg_offsets::SF] = vreg_alloc_.allocate(n.negative(), value_type::u1());
-    flag_map[reg_offsets::OF] = vreg_alloc_.allocate(n.overflow(), value_type::u1());
-    flag_map[reg_offsets::CF] = vreg_alloc_.allocate(n.carry(), value_type::u1());
+    allocate_flags(vreg_alloc_, flag_map, n);
 
     memory_operand mem_addr(addr_regs[0]);
 
