@@ -1215,17 +1215,16 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
 }
 
 void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_node &n) {
-    // TODO: this is completely wrong
-    // FIXME
-    const register_operand &dest_vreg = vreg_alloc_.allocate(n.val());
+    // Destination register only used for storing return code of STXR (a 32-bit value)
+    // Since STXR expects a 32-bit register; we directly allocate a 32-bit one
+    // NOTE: we're only going to use it afterwards for a comparison and an increment
+    const register_operand &dest_vreg = vreg_alloc_.allocate(n.val(), ir::value_type::u32());
+
     const register_operand &acc_vreg = materialise_port(n.rhs());
     const register_operand &src_vreg = materialise_port(n.top());
     const register_operand &addr_vreg = materialise_port(n.address());
 
-    flag_map[reg_offsets::ZF] = vreg_alloc_.allocate(n.zero(), value_type::u1());
-    flag_map[reg_offsets::SF] = vreg_alloc_.allocate(n.negative(), value_type::u1());
-    flag_map[reg_offsets::OF] = vreg_alloc_.allocate(n.overflow(), value_type::u1());
-    flag_map[reg_offsets::CF] = vreg_alloc_.allocate(n.carry(), value_type::u1());
+    allocate_flags(vreg_alloc_, flag_map, n);
 
     // CMPXCHG:
     // dest_reg = mem[addr];
@@ -1243,6 +1242,7 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
             builder_.cas(acc_vreg, src_vreg, memory_operand(mem_addr),
                           "write source to memory if source == accumulator, accumulator = source");
             builder_.mov(acc_vreg, dest_vreg, "move result of accumulator into destination register");
+            builder_.cmp(dest_vreg, immediate_operand(0, value_types::u6));
         } else {
             auto loop_label = fmt::format("loop_{}", instr_cnt_);
             auto failure_label = fmt::format("failure_{}", instr_cnt_);
@@ -1254,7 +1254,9 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
             builder_.cmp(dest_vreg, acc_vreg, "compare with accumulator");
             builder_.bne(failure_label, "if loaded value != accumulator branch to failure");
             builder_.stxr(dest_vreg, src_vreg, memory_operand(mem_addr), "store if not failure");
-            builder_.cbz(dest_vreg, success_label, "!= 0 represents success storing");
+            // Compare and also set flags for later
+            builder_.cmp(dest_vreg, immediate_operand(0, ir::value_type::u1()));
+            builder_.beq(success_label, "== 0 represents success storing");
             builder_.label(failure_label);
             builder_.add(acc_vreg, dest_vreg, immediate_operand(0, acc_vreg.type()));
             builder_.b(loop_label, "loop until failure or success");
@@ -1264,6 +1266,11 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
     default:
 		throw backend_exception("unsupported binary atomic operation {}", util::to_underlying(n.op()));
     }
+
+    builder_.setz(flag_map[reg_offsets::ZF], "compute flag: ZF");
+    builder_.sets(flag_map[reg_offsets::SF], "compute flag: SF");
+    builder_.seto(flag_map[reg_offsets::OF], "compute flag: OF");
+    builder_.setc(flag_map[reg_offsets::CF], "compute flag: CF");
 }
 
 void arm64_translation_context::materialise_unary_arith(const unary_arith_node &n) {
