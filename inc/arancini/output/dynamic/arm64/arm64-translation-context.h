@@ -64,6 +64,10 @@ public:
 
     [[nodiscard]]
     std::size_t size() const { return regs_.size(); }
+
+    void push_back(const register_operand& reg) { regs_.push_back(reg); }
+
+    void push_back(register_operand&& reg) { regs_.push_back(std::move(reg)); }
 private:
     std::vector<register_operand> regs_;
 };
@@ -71,14 +75,11 @@ private:
 class virtual_register_allocator {
 public:
     [[nodiscard]]
-	register_sequence allocate(ir::value_type type) {
-        return register_sequence{register_operand(next_vreg_++, type)};
-    }
+    register_sequence allocate(ir::value_type type);
 
     register_sequence& allocate(const ir::port& p) {
-        if (base_representable(p.type()))
-            return allocate(p, p.type());
-        return allocate_sequence(p);
+        port_to_vreg_[&p] = allocate(p.type());
+        return port_to_vreg_[&p];
     }
 
 	register_sequence &allocate(const ir::port &p, ir::value_type type) {
@@ -94,8 +95,6 @@ public:
 private:
     std::size_t next_vreg_ = 33; // TODO: formalize this
 	std::unordered_map<const ir::port *, register_sequence> port_to_vreg_;
-
-    register_sequence& allocate_sequence(const ir::port& p);
 
     bool base_representable(const ir::value_type& type) {
         return type.width() <= 64; // TODO: formalize this
@@ -171,6 +170,11 @@ private:
 
     template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
     reg_or_imm move_immediate(T imm, ir::value_type imm_type, ir::value_type reg_type);
+
+    template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
+    reg_or_imm move_immediate(T imm, ir::value_type imm_type) {
+        return move_immediate(imm, imm_type, imm_type);
+    }
 
     template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
     register_operand move_to_register(T imm, ir::value_type type);
