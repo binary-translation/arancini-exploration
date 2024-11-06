@@ -160,20 +160,6 @@ void arm64_translation_context::begin_block() {
     materialised_nodes_.clear();
 }
 
-[[nodiscard]]
-inline std::string labelify(std::string_view original_label) {
-    std::string label(original_label.size(), 'a');
-
-    std::transform(original_label.begin(), original_label.end(),
-                   label.begin(), [](const auto& c) {
-                        if (std::ispunct(c) || std::isspace(c))
-                            return '_';
-                        return c;
-                   });
-
-    return label;
-}
-
 void arm64_translation_context::begin_instruction(off_t address, const std::string &disasm) {
 	instruction_index_to_guest_[builder_.size()] = address;
 
@@ -182,8 +168,9 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
 	this_pc_ = address;
     logger.debug("Translating instruction {} at address {:#x}\n", disasm, address);
 
-    // This should be done optionally
     instr_cnt_++;
+
+    // TODO: these separators should be inserted only in debug builds
     builder_.insert_separator(fmt::format("instruction_{}", instr_cnt_), disasm);
 
     nodes_.clear();
@@ -512,7 +499,7 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
 
 void arm64_translation_context::materialise_label(const label_node &n) {
     auto label_name = fmt::format("{}_{}", n.name(), instr_cnt_);
-    if (!builder_.has_label(label_name))
+    if (!builder_.has_label("{}_{}", n.name(), instr_cnt_))
         builder_.label(label_name);
 }
 
@@ -645,7 +632,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 throw backend_exception("Encounted unknown type class {} for multiplication",
                                         util::to_underlying(n.val().type().type_class()));
             }
-            builder_.cmp(dest_regset[1],
+            builder_.cmp(dest_regset,
                          immediate_operand(0, value_type::u8()));
             break;
         case 128: // this must perform 64-bit multiplication
@@ -726,9 +713,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                                         util::to_underlying(n.val().type().type_class()));
             }
             // SDIV and UDIV do not affect the condition flags
-            // We must set them explicitly with a comparison
-            builder_.cmp(dest_regset[0],
-                         immediate_operand(0, value_type::u8()));
+            // However, div does not set condition flags for the guest either
+            // So we don't need to generate them
             break;
         default:
             throw backend_exception("Multiplication not supported between {} x {}",
@@ -779,6 +765,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         break;
 	case binary_arith_op::div:
         div_impl(dest_regset, lhs_regset, rhs_regset);
+        sets_flags = false;
 		break;
 	case binary_arith_op::mod:
         // TODO: this is partially incorrect
@@ -791,6 +778,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             mul_impl(temp2_regset, temp1_regset, rhs_regset);
 
             builder_.sub(dest_regset[0], lhs_regset[0], rhs_regset[0], binop_modifier(n.val().type()));
+            sets_flags = false;
         }
 		break;
 	case binary_arith_op::bor:
@@ -1141,7 +1129,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             // TODO: must find a way to make this unique
             builder_.insert_comment("Atomic addition (load atomically, add and retry if failed)");
 
-            std::string restart_label = "restart";
+            auto restart_label = fmt::format("restart_{}", instr_cnt_);
             builder_.label(restart_label, "set label for jump (needed in case of restarting operation)");
             switch(n.val().type().element_width()) {
             case 1:
@@ -1246,21 +1234,23 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
                           "write source to memory if source == accumulator, accumulator = source");
             builder_.mov(acc_vreg, dest_vreg, "move result of accumulator into destination register");
         } else {
+            auto loop_label = fmt::format("loop_{}", instr_cnt_);
+            auto failure_label = fmt::format("failure_{}", instr_cnt_);
+            auto success_label = fmt::format("success_{}", instr_cnt_);
+
             builder_.insert_comment("Atomic CMPXCHG without CAS");
-            builder_.label("loop");
+            builder_.label(loop_label);
             builder_.ldxr(dest_vreg, memory_operand(mem_addr), "load atomically");
             builder_.cmp(dest_vreg, acc_vreg, "compare with accumulator");
-            builder_.bne(label_operand("failure"), "if loaded value != accumulator branch to failure");
+            builder_.bne(failure_label, "if loaded value != accumulator branch to failure");
             builder_.stxr(dest_vreg, src_vreg, memory_operand(mem_addr), "store if not failure");
-            builder_.cbz(dest_vreg, label_operand("success"), "!= 0 represents success storing");
-            builder_.label("failure");
+            builder_.cbz(dest_vreg, success_label, "!= 0 represents success storing");
+            builder_.label(failure_label);
             builder_.add(acc_vreg, dest_vreg, immediate_operand(0, acc_vreg.type()));
-            builder_.b(label_operand("loop"), "loop until failure or success");
-            builder_.label("success");
+            builder_.b(loop_label, "loop until failure or success");
+            builder_.label(success_label);
         }
         break;
-    case ternary_atomic_op::adc:
-    case ternary_atomic_op::sbb:
     default:
 		throw backend_exception("unsupported binary atomic operation {}", util::to_underlying(n.op()));
     }
