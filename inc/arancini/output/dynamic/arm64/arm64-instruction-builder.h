@@ -125,8 +125,11 @@ public:
         append(instruction("bne", use(dest)).add_comment(comment).as_branch());
     }
 
-    void cbz(const register_operand &dest, const label_operand &label, const std::string &comment = "") {
-        append(instruction("cbz", def(dest), use(label)).as_branch().add_comment(comment));
+    // Check reg == 0 and jump if true
+    // Otherwise, continue to the next instruction
+    // Does not affect condition flags (can be used to compare-and-branch with 1 instruction)
+    void cbz(const register_operand &reg, const label_operand &label, const std::string &comment = "") {
+        append(instruction("cbz", use(reg), use(label)).as_branch().add_comment(comment));
     }
 
     // TODO: check if this allocated correctly
