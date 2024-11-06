@@ -535,12 +535,13 @@ public:
         append(instruction(fmt::format("// {}", fmt::format(format, std::forward<Args>(args)...))));
     }
 
-    bool has_label(const std::string &label) {
-        auto label_str = fmt::format(label, ":");
-        auto instr = instructions_;
-        return std::any_of(instr.rbegin(), instr.rend(),
-                            [&](const instruction &i) {
-                                return i.opcode() == label_str;
+    // TODO: maybe broken
+    template <typename... Args>
+    bool has_label(const std::string& format, Args&&... args) {
+        auto label = fmt::format(fmt::format("{}:", format), std::forward<Args>(args)...);
+        return std::any_of(instructions_.rbegin(), instructions_.rend(),
+                            [&](const instruction &inst) {
+                                return inst.opcode() == label;
                             });
     }
 
