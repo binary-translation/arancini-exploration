@@ -107,6 +107,9 @@ public:
 
     [[nodiscard]]
     register_index_type index() const { return index_; }
+
+    // TODO: make sure this is always possible
+    void cast(ir::value_type type) { type_ = type; }
 private:
     bool special_ = false;
 
@@ -468,8 +471,12 @@ struct fmt::formatter<arancini::output::dynamic::arm64::register_operand> {
             "p11", "p12", "p13", "p14", "p15"
         };
 
-        if (op.is_virtual())
-            return fmt::format_to(ctx.out(), "%V{}_{}", op.index(), op.type().element_width());
+        if (op.is_virtual()) {
+            return fmt::format_to(ctx.out(), "%V{}_{}{}",
+                                  op.index(),
+                                  op.type().element_width(),
+                                  op.is_special() ? "_s" : "");
+        }
 
         if (op.is_special())
             return fmt::format_to(ctx.out(), "{}", name_special[op.index()]);
