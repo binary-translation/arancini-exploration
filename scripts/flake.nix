@@ -31,7 +31,7 @@
 		};
 		risotto-bench = {
 			type = "github";
-			owner = "binary-translation";
+			owner = "taugoust";
 			repo = "risotto-artifact-asplos23";
 			ref = "main";
 			flake = false;
