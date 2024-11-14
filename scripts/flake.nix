@@ -29,12 +29,19 @@
 			repo = "nixpkgs";
 			rev = "80b3160c21977e627ae99f0c87404cdcd85646ad";
 		};
+		risotto-bench = {
+			type = "github";
+			owner = "binary-translation";
+			repo = "risotto-artifact-asplos23";
+			ref = "main";
+		};
 	};
 
 	nixConfig.extra-substituters = [ "https://musl-toolchains.cachix.org" ];
 	nixConfig.extra-trusted-public-keys = [ "musl-toolchains.cachix.org-1:g9L50mmWHHMzAVIfgLVQjhoBsjT66n3LDa0f8xeigpI=" ];
 
-	outputs = { self, nixpkgs, flake-utils, phoenix-src, phoenix-16, parsec-src, risotto-pkgs, ... }:
+	outputs = { self, nixpkgs, flake-utils, phoenix-src, phoenix-16, parsec-src, risotto-pkgs,
+    risotto-bench, ... }:
 	flake-utils.lib.eachSystem [ "x86_64-linux" "riscv64-linux" "aarch64-linux" ] (system:
 	let
 		pkgs = import nixpkgs { system = system; crossSystem = { config = system+"-musl"; useLLVM = true; linker = "lld"; }; };
@@ -45,7 +52,11 @@
 			url = "https://gist.githubusercontent.com/ReimersS/81e6d9b7ba90b42800be1f8d7443689c/raw/06e2ce53033b5eb568638de1171c88ad677f1777/riscv-fpargs.patch";
 			sha256 = "1bywsiml8gd22yjqcngr0sdk9xixy6axx97yars19xyja2sz4dj5";
 		};
-		qemu = native_pkgs.qemu.override { pipewireSupport=false; hostCpuTargets=["x86_64-linux-user"]; jackSupport=false; alsaSupport=false; gtkSupport=false; vncSupport=false; pulseSupport=false; smartcardSupport=false; spiceSupport=false; glusterfsSupport=false; openGLSupport=false; sdlSupport=false; usbredirSupport=false; xenSupport=false; cephSupport=false; virglSupport=false;};
+        qemu = native_pkgs.qemu.override { pipewireSupport=false;
+        hostCpuTargets=["x86_64-linux-user"]; jackSupport=false; alsaSupport=false;
+        gtkSupport=false; vncSupport=false; pulseSupport=false; smartcardSupport=false;
+        spiceSupport=false; glusterfsSupport=false; openGLSupport=false; sdlSupport=false;
+        usbredirSupport=false; xenSupport=false; cephSupport=false; virglSupport=false;};
 		risotto-qemu = native_pkgs.stdenv.mkDerivation {
 			name = "risotto-qemu";
 			src = builtins.fetchGit {
@@ -206,7 +217,7 @@
 				]))];
 		};
 	};
-	
+
 	phoenix =
 		pkgs.llvmPackages_15.stdenv.mkDerivation {
 			name = "phoenix";
@@ -245,6 +256,35 @@
                 cp -r $src/* $out;
             '';
         };
+	risotto-bench =
+		pkgs.llvmPackages_15.stdenv.mkDerivation {
+			name = "risotto";
+			hardeningDisable = [ "all" ];
+
+			src = risotto-bench;
+			nativeBuildInputs = [
+				pkgs.gnumake
+				pkgs.binutils
+                pkgs.sqlite
+			];
+
+			configurePhase = ''
+                source sourceme
+                cd benchmarks/sqlite-bench
+            '';
+			buildPhase = "make";
+			installPhase = ''
+                ./gen-sql.py
+
+				mkdir $out;
+                if [[ -x $p ]]; then cp $p $out/; fi;
+                cp sqlite-bench.x86_64 -t $out;
+				ln -s ${pkgs.llvmPackages_15.stdenv.cc.libc}/lib/libc.so $out/libc.so;
+                ln -s ${pkgs.sqlite.lib}/lib/libsqlite3.so $out/libsqlite3.so;
+                ln -s ${toString ((builtins.elemAt (builtins.filter (x: x.pname=="libunwind") pkgs.llvmPackages_15.stdenv.cc.depsTargetTargetPropagated) 0).out.outPath)}/lib/libunwind.so $out/libunwind.so;
+				cd $out;
+			'';
+		};
 	parsec =
 		pkgs.stdenv.mkDerivation {
 			name = "parsec";
