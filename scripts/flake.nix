@@ -34,6 +34,7 @@
 			owner = "binary-translation";
 			repo = "risotto-artifact-asplos23";
 			ref = "main";
+			flake = false;
 		};
 	};
 
@@ -280,7 +281,7 @@
                 if [[ -x $p ]]; then cp $p $out/; fi;
                 cp sqlite-bench.x86_64 -t $out;
 				ln -s ${pkgs.llvmPackages_15.stdenv.cc.libc}/lib/libc.so $out/libc.so;
-                ln -s ${pkgs.sqlite.lib}/lib/libsqlite3.so $out/libsqlite3.so;
+                ln -s ${pkgs.sqlite}/lib/libsqlite3.so $out/libsqlite3.so;
                 ln -s ${toString ((builtins.elemAt (builtins.filter (x: x.pname=="libunwind") pkgs.llvmPackages_15.stdenv.cc.depsTargetTargetPropagated) 0).out.outPath)}/lib/libunwind.so $out/libunwind.so;
 				cd $out;
 			'';
