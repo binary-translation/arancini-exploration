@@ -30,11 +30,11 @@
 			rev = "80b3160c21977e627ae99f0c87404cdcd85646ad";
 		};
 		risotto-bench = {
-			type = "github";
-			owner = "taugoust";
-			repo = "risotto-artifact-asplos23";
+			type = "git";
+            url = "https://github.com/taugoust/risotto-artifact-asplos23";
 			ref = "main";
 			flake = false;
+            submodules = true;
 		};
 	};
 
@@ -270,7 +270,6 @@
 			];
 
 			configurePhase = ''
-                source sourceme
                 cd benchmarks/sqlite-bench
             '';
 			buildPhase = "make";
