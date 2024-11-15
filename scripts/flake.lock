@@ -88,11 +88,11 @@
     "risotto-bench": {
       "flake": false,
       "locked": {
-        "lastModified": 1731602080,
-        "narHash": "sha256-ktxGIotl94VGTZUfcnHbdpXCX4/ty4BJsnj818+d5Os=",
+        "lastModified": 1731681048,
+        "narHash": "sha256-JS/YwdSkiufZJR8La94UmrbP2XsDnpDZezzs+Yckhco=",
         "ref": "main",
-        "rev": "2d1c232370901c1fff9d6e3fd7ef0ab801516f39",
-        "revCount": 92,
+        "rev": "0839c21dae42c48d483938bbcae43e6545f185c0",
+        "revCount": 97,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/taugoust/risotto-artifact-asplos23"
