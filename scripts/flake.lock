@@ -85,6 +85,25 @@
         "type": "github"
       }
     },
+    "risotto-bench": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1731602080,
+        "narHash": "sha256-ktxGIotl94VGTZUfcnHbdpXCX4/ty4BJsnj818+d5Os=",
+        "ref": "main",
+        "rev": "2d1c232370901c1fff9d6e3fd7ef0ab801516f39",
+        "revCount": 92,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/taugoust/risotto-artifact-asplos23"
+      },
+      "original": {
+        "ref": "main",
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/taugoust/risotto-artifact-asplos23"
+      }
+    },
     "risotto-pkgs": {
       "locked": {
         "lastModified": 1641310271,
@@ -108,6 +127,7 @@
         "parsec-src": "parsec-src",
         "phoenix-16": "phoenix-16",
         "phoenix-src": "phoenix-src",
+        "risotto-bench": "risotto-bench",
         "risotto-pkgs": "risotto-pkgs"
       }
     },

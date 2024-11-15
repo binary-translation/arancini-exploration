@@ -266,15 +266,23 @@
 			nativeBuildInputs = [
 				pkgs.gnumake
 				pkgs.binutils
+                pkgs.python3
                 pkgs.sqlite
 			];
+
+            buildInputs = [
+                pkgs.sqlite
+            ];
+
+            NIX_CFLAGS_COMPILE = "-I${pkgs.sqlite.dev}/include";
+            NIX_LDFLAGS = "-L${pkgs.sqlite}/lib";
 
 			configurePhase = ''
                 cd benchmarks/sqlite-bench
             '';
-			buildPhase = "make";
+			buildPhase = "make LDFLAGS=${pkgs.sqlite}/lib/libsqlite3.so";
 			installPhase = ''
-                ./gen-sql.py
+                python3 gen-sql.py
 
 				mkdir $out;
                 if [[ -x $p ]]; then cp $p $out/; fi;
