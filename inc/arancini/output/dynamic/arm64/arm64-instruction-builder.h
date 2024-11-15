@@ -334,6 +334,10 @@ public:
         append(instruction("cset", def(dst), cond_operand("cc")).add_comment(comment));
     }
 
+    void cfinv(const std::string& comment = "") {
+        append(instruction("cfinv").add_comment(comment));
+    }
+
 	void seto(const register_operand &dst, const std::string &comment = "") {
         append(instruction("cset", def(dst), cond_operand("vs")).add_comment(comment));
     }

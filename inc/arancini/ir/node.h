@@ -1319,6 +1319,46 @@ struct fmt::formatter<arancini::ir::cast_op> {
     }
 };
 
+template <>
+struct fmt::formatter<arancini::ir::binary_arith_op> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(arancini::ir::binary_arith_op op, FormatContext& ctx) const {
+        using arancini::ir::binary_arith_op;
+
+        switch (op) {
+            case binary_arith_op::add:
+                return format_to(ctx.out(), "addition binary operation");
+            case binary_arith_op::sub:
+                return format_to(ctx.out(), "subtraction binary operation");
+            case binary_arith_op::mul:
+                return format_to(ctx.out(), "multiplication binary operation");
+            case binary_arith_op::div:
+                return format_to(ctx.out(), "division binary operation");
+            case binary_arith_op::mod:
+                return format_to(ctx.out(), "modulo binary operation");
+            case binary_arith_op::band:
+                return format_to(ctx.out(), "logical AND binary operation");
+            case binary_arith_op::bor:
+                return format_to(ctx.out(), "logical OR binary operation");
+            case binary_arith_op::bxor:
+                return format_to(ctx.out(), "exclusive-OR binary operation");
+            case binary_arith_op::cmpeq:
+                return format_to(ctx.out(), "compare-equal binary operation");
+            case binary_arith_op::cmpne:
+                return format_to(ctx.out(), "compare-not-equal binary operation");
+            case binary_arith_op::cmpgt:
+                return format_to(ctx.out(), "compare-greater-than binary operation");
+            case binary_arith_op::cmpoeq:
+                return format_to(ctx.out(), "subtraction binary operation");
+        default:
+            return format_to(ctx.out(), "unknown cast operation");
+        }
+    }
+};
+
 
 template <>
 struct fmt::formatter<arancini::ir::node_kinds> {
