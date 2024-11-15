@@ -41,23 +41,45 @@
 	nixConfig.extra-substituters = [ "https://musl-toolchains.cachix.org" ];
 	nixConfig.extra-trusted-public-keys = [ "musl-toolchains.cachix.org-1:g9L50mmWHHMzAVIfgLVQjhoBsjT66n3LDa0f8xeigpI=" ];
 
-	outputs = { self, nixpkgs, flake-utils, phoenix-src, phoenix-16, parsec-src, risotto-pkgs,
-    risotto-bench, ... }:
+	outputs = { self, nixpkgs, flake-utils, phoenix-src, phoenix-16, parsec-src, risotto-bench, ... }:
 	flake-utils.lib.eachSystem [ "x86_64-linux" "riscv64-linux" "aarch64-linux" ] (system:
 	let
-		pkgs = import nixpkgs { system = system; crossSystem = { config = system+"-musl"; useLLVM = true; linker = "lld"; }; };
+		pkgs = import nixpkgs {
+            system = system;
+            crossSystem = { config = system+"-musl"; useLLVM = true; linker = "lld"; };
+        };
+
+		pkgs-no-llvm = import nixpkgs {
+            system = system;
+            crossSystem = { config = system+"-musl"; useLLVM = false; linker = "lld"; };
+        };
+
 		native_pkgs = import nixpkgs { inherit system; };
-		risotto_pkgs = import risotto-pkgs { inherit system; };
 
 		rv_patch = builtins.fetchurl {
 			url = "https://gist.githubusercontent.com/ReimersS/81e6d9b7ba90b42800be1f8d7443689c/raw/06e2ce53033b5eb568638de1171c88ad677f1777/riscv-fpargs.patch";
 			sha256 = "1bywsiml8gd22yjqcngr0sdk9xixy6axx97yars19xyja2sz4dj5";
 		};
-        qemu = native_pkgs.qemu.override { pipewireSupport=false;
-        hostCpuTargets=["x86_64-linux-user"]; jackSupport=false; alsaSupport=false;
-        gtkSupport=false; vncSupport=false; pulseSupport=false; smartcardSupport=false;
-        spiceSupport=false; glusterfsSupport=false; openGLSupport=false; sdlSupport=false;
-        usbredirSupport=false; xenSupport=false; cephSupport=false; virglSupport=false;};
+
+        qemu = native_pkgs.qemu.override {
+            pipewireSupport=false;
+            hostCpuTargets=["x86_64-linux-user"];
+            jackSupport=false;
+            alsaSupport=false;
+            gtkSupport=false;
+            vncSupport=false;
+            pulseSupport=false;
+            smartcardSupport=false;
+            spiceSupport=false;
+            glusterfsSupport=false;
+            openGLSupport=false;
+            sdlSupport=false;
+            usbredirSupport=false;
+            xenSupport=false;
+            cephSupport=false;
+            virglSupport=false;
+        };
+
 		risotto-qemu = native_pkgs.stdenv.mkDerivation {
 			name = "risotto-qemu";
 			src = builtins.fetchGit {
@@ -83,6 +105,7 @@
 				cp build/qemu-x86_64 $out/bin/risotto-qemu
 			'';
 		};
+
 		risotto = native_pkgs.stdenv.mkDerivation {
 			name = "risotto";
 			src = builtins.fetchGit {
@@ -110,6 +133,7 @@
 
 			patches = [ rv_patch ];
 		};
+
 		risotto-nofence = native_pkgs.stdenv.mkDerivation {
 			name = "risotto-nofence";
 			src = builtins.fetchGit {
@@ -137,6 +161,7 @@
 
 			patches = [ rv_patch ];
 		};
+
 		risotto-tso = native_pkgs.stdenv.mkDerivation {
 			name = "risotto-tso";
 			src = builtins.fetchGit {
@@ -169,18 +194,22 @@
 			url = "http://csl.stanford.edu/~christos/data/histogram.tar.gz";
 			sha256 = "0dmd70xwvminphai6ky0frjy883vmlq2lga375ggcdqaynf9y2mq";
 		};
+
 		linear_regression_datafiles = builtins.fetchurl {
 			url = "http://csl.stanford.edu/~christos/data/linear_regression.tar.gz";
 			sha256 = "0wxk8ypabz21qzy1b1h356xccpkd0xsm4k4s3m72apd3mdw3s6ad";
 		};
+
 		string_match_datafiles = builtins.fetchurl {
 			url = "http://csl.stanford.edu/~christos/data/string_match.tar.gz";
 			sha256 = "0gv474jxwsz7imv8sq1s13kkqryvz6k9vx54wdl5h24l8im3ccx0";
 		};
+
 		reverse_index_datafiles = builtins.fetchurl {
 			url = "http://csl.stanford.edu/~christos/data/reverse_index.tar.gz";
 			sha256 = "1c2zgwl7fsf4bx295cy3625a7jgc16kh8xkybpryrwhjl78wgysj";
 		};
+
 		word_count_datafiles = builtins.fetchurl {
 			url = "http://csl.stanford.edu/~christos/data/word_count.tar.gz";
 			sha256 = "0yr45csbkzd33xa4g5csf2y4rw8xww58j41amp8wza1q8z6g0iv4";
@@ -247,8 +276,7 @@
 				tar -xzf ${word_count_datafiles};
 			'';
 		};
-    phoenix_src =
-        pkgs.stdenv.mkDerivation {
+    phoenix_src = pkgs.stdenv.mkDerivation {
             name = "phoenix-16";
             src = phoenix-16;
             phases = [ "unpackPhase" "installPhase" ];
@@ -256,10 +284,10 @@
                 mkdir -p $out;
                 cp -r $src/* $out;
             '';
-        };
-	risotto-bench =
-		pkgs.llvmPackages_15.stdenv.mkDerivation {
-			name = "risotto";
+    };
+
+	risotto-bench = pkgs.llvmPackages_15.stdenv.mkDerivation {
+			name = "risotto-bench";
 			hardeningDisable = [ "all" ];
 
 			src = risotto-bench;
@@ -294,13 +322,14 @@
                 cp cas/cas.x86_64 -t $out;
                 cp math/math.x86_64 -t $out;
 				ln -s ${pkgs.llvmPackages_15.stdenv.cc.libc}/lib/libc.so $out/libc.so;
-                ln -s ${pkgs.stdenv.cc.libcxx}/lib/libc++.so.1 $out/libc++.so;
-                ln -s ${pkgs.stdenv.cc.libcxx}/lib/libc++abi.so.1 $out/libc++abi.so;
+                ln -s ${pkgs-no-llvm.stdenv.cc.libcxx}/lib/libstdc++.so.1 $out/libstdc++.so;
+                ln -s ${pkgs-no-llvm.stdenv.cc.libcxx}/lib/libsupc++.so.1 $out/libsupc++.so;
                 ln -s ${pkgs.sqlite}/lib/libsqlite3.so $out/libsqlite3.so;
                 ln -s ${toString ((builtins.elemAt (builtins.filter (x: x.pname=="libunwind") pkgs.llvmPackages_15.stdenv.cc.depsTargetTargetPropagated) 0).out.outPath)}/lib/libunwind.so $out/libunwind.so;
 				cd $out;
 			'';
-		};
+    };
+
 	parsec =
 		pkgs.stdenv.mkDerivation {
 			name = "parsec";
