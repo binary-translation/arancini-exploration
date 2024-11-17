@@ -196,7 +196,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
 	// Generate decls for external functions found in the relocation table
 
-	if (!cmdline.count("no-static")) {
+	if (!cmdline.count("no-static") && plt_tab && dyn_sym) {
 		for (const auto &rs : relocations) {
 			for (auto r : rs->relocations()) {
 				auto sym_idx = r.symbol();
@@ -335,7 +335,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 
 			run_or_fail(cxx_compiler + " -o " + cmdline.at("output").as<std::string>() + " -fPIC -shared " + intermediate_file->name() + " " + phobjsrc->name()
 				+ tls_defines + " init_lib.c -L " + arancini_runtime_lib_dir + " -l arancini-runtime " + libs
-				+ " -Wl,-T,lib.lds,-rpath=" + arancini_runtime_lib_dir + debug_info);
+				+ fmt::format(" -Wl,-T,lib.{}.lds,-rpath={} {}", architecture, arancini_runtime_lib_dir, debug_info));
 		} else {
 			throw std::runtime_error("Input elf type must be either an executable or shared object.");
 		}

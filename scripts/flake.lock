@@ -5,11 +5,11 @@
         "systems": "systems"
       },
       "locked": {
-        "lastModified": 1710146030,
-        "narHash": "sha256-SZ5L6eA7HJ/nmkzGG7/ISclqe6oZdOZTNoesiInkXPQ=",
+        "lastModified": 1726560853,
+        "narHash": "sha256-X6rJYSESBVr3hBoH0WbKE5KvhPU5bloyZ2L4K60/fPQ=",
         "owner": "numtide",
         "repo": "flake-utils",
-        "rev": "b1d9ab70662946ef0850d488da1c9019f3a9752a",
+        "rev": "c1dfcf08411b08f6b8615f7d8971a2bfa81d5e8a",
         "type": "github"
       },
       "original": {
@@ -20,11 +20,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1720368505,
-        "narHash": "sha256-5r0pInVo5d6Enti0YwUSQK4TebITypB42bWy5su3MrQ=",
+        "lastModified": 1728472043,
+        "narHash": "sha256-+fUCZ7C34cp+bY5E9Hw4biRyI+IINVsO+sXFCieWkZA=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "ab82a9612aa45284d4adf69ee81871a389669a9e",
+        "rev": "4fa56ac6d86a213b556d4db9b1cb43a51b3e40ec",
         "type": "github"
       },
       "original": {
@@ -51,14 +51,31 @@
         "type": "github"
       }
     },
+    "phoenix-16": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1728301033,
+        "narHash": "sha256-YmnI4IUscrImOJ7Qk1VgHlN3duL0W9YPIUQEKCPEA5w=",
+        "owner": "ReimersS",
+        "repo": "phoenix",
+        "rev": "66c4c3904133b559a6c8787b8cd445d32b2343f5",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ReimersS",
+        "repo": "phoenix",
+        "rev": "66c4c3904133b559a6c8787b8cd445d32b2343f5",
+        "type": "github"
+      }
+    },
     "phoenix-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1716888159,
-        "narHash": "sha256-K/aAlYvKU5+UjvfX2N/v9S4+oxiycNtxGgol4JfL5XI=",
+        "lastModified": 1728378600,
+        "narHash": "sha256-Go2Ei1EjzFnWcfmYbWix7imNv35iqeoMDZBEbZuIYKU=",
         "owner": "ReimersS",
         "repo": "phoenix",
-        "rev": "f91305e539e489b089270b5af2b5f7427c6a3fad",
+        "rev": "25a066083d4810aae5caf99acad9a54b71b2d6fd",
         "type": "github"
       },
       "original": {
@@ -89,6 +106,7 @@
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs",
         "parsec-src": "parsec-src",
+        "phoenix-16": "phoenix-16",
         "phoenix-src": "phoenix-src",
         "risotto-pkgs": "risotto-pkgs"
       }

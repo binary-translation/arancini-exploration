@@ -1215,9 +1215,20 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		}
 	}
 	case node_kinds::ternary_atomic: {
+        auto tan = (ternary_atomic_node *)n;
 		if (p.kind() == port_kinds::value)
 			return lower_node(builder, state_arg, pkt, n);
-		// TODO: Flags
+		if (p.kind() == port_kinds::zero) {
+            auto lhs = lower_port(builder, state_arg, pkt, tan->address());
+            auto rhs = lower_port(builder, state_arg, pkt, tan->rhs());
+            auto top = lower_port(builder, state_arg, pkt, tan->top());
+
+			lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
+            lhs = builder.CreateLoad(rhs->getType(), lhs);
+			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, top, lhs), types.i8);
+
+        }
+        // TODO: Flags
 		return ConstantInt::get(types.i8, 0);
 	}
 	case node_kinds::read_local: {
@@ -1491,6 +1502,9 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		//			default:
 		//				break;
 		//			}
+		if (e_.fences_) {
+			builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
+		}
 		node_ports_to_llvm_values_[&ban->val()] = out;
 		node_ports_to_llvm_values_[&ban->operation_value()] = val;
 		return out;
@@ -1519,15 +1533,25 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		Value *out;
 		switch(tan->op()) {
 			case ternary_atomic_op::cmpxchg: {
+
+                Align align;
+                switch (rhs->getType()->getPrimitiveSizeInBits()) {
+                    case 1:
+                    case 8: align = Align(1); break;
+                    case 16: align = Align(2); break;
+                    case 32: align = Align(4); break;
+                    case 64: align = Align(8); break;
+                }
 				lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
 				if (e_.fences_) {
-					builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
+					//builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
 				}
-				auto instr = builder.CreateAtomicCmpXchg(lhs, rhs, top, Align(1), AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
-				auto new_rax_val = builder.CreateSelect(builder.CreateExtractValue(instr, 1), rhs, builder.CreateExtractValue(instr, 0));
+				auto instr = builder.CreateAtomicCmpXchg(lhs, rhs, top, align, AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
+				//auto new_rax_val = builder.CreateSelect(builder.CreateExtractValue(instr, 1), rhs, builder.CreateExtractValue(instr, 0));
+				auto new_rax_val = builder.CreateExtractValue(instr, 0);
 				builder.CreateStore(builder.CreateZExt(new_rax_val, types.i64), rax_reg);
 				if (e_.fences_) {
-					builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
+					//builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
 				}
 
 				return instr;
