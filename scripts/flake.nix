@@ -305,25 +305,22 @@
             NIX_CFLAGS_COMPILE = "-I${pkgs.sqlite.dev}/include";
             NIX_LDFLAGS = "-L${pkgs.sqlite}/lib";
 
-			configurePhase = ''
-                cd benchmarks
-            '';
+			configurePhase = "cd benchmarks";
 			buildPhase = ''
                 (cd sqlite-bench && make LDFLAGS=${pkgs.sqlite}/lib/libsqlite3.so)
                 (cd math && make)
                 (cd cas && make)
             '';
 			installPhase = ''
-                (cd sqlite-bench && python3 gen-sql.py);
-
 				mkdir $out;
+                (cd sqlite-bench && python3 gen-sql.py);
                 if [[ -x $p ]]; then cp $p $out/; fi;
                 cp sqlite-bench/sqlite-bench.x86_64 -t $out;
                 cp cas/cas.x86_64 -t $out;
                 cp math/math.x86_64 -t $out;
 				ln -s ${pkgs.llvmPackages_15.stdenv.cc.libc}/lib/libc.so $out/libc.so;
-                ln -s ${pkgs-no-llvm.stdenv.cc.libcxx}/lib/libstdc++.so.1 $out/libstdc++.so;
-                ln -s ${pkgs-no-llvm.stdenv.cc.libcxx}/lib/libsupc++.so.1 $out/libsupc++.so;
+                ln -s ${pkgs-no-llvm.stdenv.cc.cc.lib}/lib/libstdc++.so.1 $out/libstdc++.so;
+                ln -s ${pkgs-no-llvm.stdenv.cc.cc.lib}/lib/libsupc++.so.1 $out/libsupc++.so;
                 ln -s ${pkgs.sqlite}/lib/libsqlite3.so $out/libsqlite3.so;
                 ln -s ${toString ((builtins.elemAt (builtins.filter (x: x.pname=="libunwind") pkgs.llvmPackages_15.stdenv.cc.depsTargetTargetPropagated) 0).out.outPath)}/lib/libunwind.so $out/libunwind.so;
 				cd $out;
