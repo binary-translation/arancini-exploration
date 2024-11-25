@@ -179,10 +179,16 @@
 			sha256 = "1lpyk446dzv2w92g18v90blvh9fv1d9gy83b8wlssz2rv19kd2rp";
 		};
 
+        bzip2-bench = pkgs.bzip2.overrideAttrs (oldAttrs: {
+            NIX_CFLAGS_COMPILE = "${oldAttrs.NIX_CFLAGS_COMPILE or ""} -fno-tree-vectorize -fno-PIE";
+        });
 	in
 	{
 	# on x86 we plot, everywhere else we run benchmarks
 	pkgs = pkgs;
+
+    # inherit benchmarks
+    inherit bzip2-bench
 
 	devShells = {
 
@@ -216,6 +222,9 @@
 			nativeBuildInputs = [
 				pkgs.gnumake
 				pkgs.binutils
+                pkgs.gzip
+                pkgs.bzip2
+                pkgs.lua
 			];
 
 			configurePhase = "cd phoenix-2.0";
