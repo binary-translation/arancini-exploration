@@ -525,19 +525,21 @@ std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arc
     ::util::global_logger.info("Translating symbol {}; value={:x} size={} section={}\n", sym.name(), sym.value(), sym.size(), sym.section_index());
 
 	auto section = reader.get_section(sym.section_index());
+
+    [[unlikely]]
 	if (!section) {
-		throw std::runtime_error("unable to resolve symbol section");
+		throw frontend_exception("unable to resolve symbol {} in section {}", sym.name(), sym.section_index());
 	}
 
 	off_t symbol_offset_in_section = sym.value() - section->address();
 
-	const void *symbol_data = (const void *)((uintptr_t)section->data() + symbol_offset_in_section);
+    auto symbol_data = ::util::bit_cast_zeros<const char*>(section->data()) + symbol_offset_in_section;
 
 	default_ir_builder irb(ia.get_internal_function_resolver(), true);
 
-	auto start = std::chrono::high_resolution_clock::now();
-	ia.translate_chunk(irb, sym.value(), symbol_data, sym.size(), false, "__arancini__"+sym.name());
-	auto dur = std::chrono::high_resolution_clock::now() - start;
+	auto start = std::chrono::steady_clock::now();
+	ia.translate_chunk(irb, sym.value(), symbol_data, sym.size(), false, fmt::format("__arancini__{}", sym.name()));
+	auto dur = std::chrono::steady_clock::now() - start;
 
     ::util::global_logger.info("Symbol translation time: {} us\n", std::chrono::duration_cast<std::chrono::microseconds>(dur).count());
 	return irb.get_chunk();
