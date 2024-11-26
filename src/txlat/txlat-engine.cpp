@@ -1,23 +1,23 @@
-#include <arancini/output/static/static-output-engine.h>
-#include <arancini/util/logger.h>
-#include <arancini/elf/elf-reader.h>
-#include <arancini/input/x86/x86-input-arch.h>
-#include <arancini/ir/chunk.h>
-#include <arancini/ir/default-ir-builder.h>
-#include <arancini/ir/dot-graph-generator.h>
 #include <arancini/ir/opt.h>
-#include <arancini/native_lib/native-lib.h>
-#include <arancini/output/static/llvm/llvm-static-output-engine.h>
+#include <arancini/ir/chunk.h>
+#include <arancini/util/logger.h>
+#include <arancini/util/tempfile.h>
+#include <arancini/elf/elf-reader.h>
 #include <arancini/txlat/txlat-engine.h>
 #include <arancini/util/tempfile-manager.h>
-#include <arancini/util/tempfile.h>
+#include <arancini/native_lib/native-lib.h>
+#include <arancini/ir/default-ir-builder.h>
+#include <arancini/ir/dot-graph-generator.h>
+#include <arancini/input/x86/x86-input-arch.h>
+#include <arancini/output/static/static-output-engine.h>
+#include <arancini/output/static/llvm/llvm-static-output-engine.h>
 
 #include <chrono>
+#include <string>
 #include <cstdlib>
+#include <ostream>
 #include <iostream>
 #include <optional>
-#include <ostream>
-#include <string>
 #include <filesystem>
 #include <string_view>
 
@@ -52,6 +52,8 @@ static std::string_view architecture { DBT_ARCH_STR_LOWER };
 #else
 #error "Cannot determine architecture"
 #endif
+
+using measurement_clock = std::chrono::steady_clock;
 
 void txlat_engine::process_options(arancini::output::o_static::static_output_engine &oe,
                                    const boost::program_options::variables_map &cmdline)
@@ -522,13 +524,15 @@ std::shared_ptr<chunk> txlat_engine::generate_wrapper(arancini::input::input_arc
   x86 symbol sections to the Arancini IR.
 */
 std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arch &ia, elf_reader &reader, const symbol &sym) {
-    ::util::global_logger.info("Translating symbol {}; value={:x} size={} section={}\n", sym.name(), sym.value(), sym.size(), sym.section_index());
+    ::util::global_logger.info("Translating symbol {}; value={:x} size={} section={}\n",
+                               sym.name(), sym.value(), sym.size(), sym.section_index());
 
 	auto section = reader.get_section(sym.section_index());
 
     [[unlikely]]
 	if (!section) {
-		throw frontend_exception("unable to resolve symbol {} in section {}", sym.name(), sym.section_index());
+		throw txlat_exception("unable to resolve symbol {} in section {}",
+                              sym.name(), sym.section_index());
 	}
 
 	off_t symbol_offset_in_section = sym.value() - section->address();
@@ -537,11 +541,12 @@ std::shared_ptr<chunk> txlat_engine::translate_symbol(arancini::input::input_arc
 
 	default_ir_builder irb(ia.get_internal_function_resolver(), true);
 
-	auto start = std::chrono::steady_clock::now();
+	auto start = measurement_clock::now();
 	ia.translate_chunk(irb, sym.value(), symbol_data, sym.size(), false, fmt::format("__arancini__{}", sym.name()));
-	auto dur = std::chrono::steady_clock::now() - start;
+	auto dur = measurement_clock::now() - start;
 
-    ::util::global_logger.info("Symbol translation time: {} us\n", std::chrono::duration_cast<std::chrono::microseconds>(dur).count());
+    ::util::global_logger.info("Symbol translation time: {} us\n",
+                               std::chrono::duration_cast<std::chrono::microseconds>(dur).count());
 	return irb.get_chunk();
 }
 
@@ -559,7 +564,9 @@ void txlat_engine::generate_dot_graph(arancini::output::o_static::static_output_
 		c->accept(dgg);
 	}
 
+    [[likely]]
 	if (out != stdout) {
+        [[unlikely]]
         if (fclose(out) != 0) {
             ::util::global_logger.error("Unable to properly close DOT graph file");
         }
@@ -567,15 +574,14 @@ void txlat_engine::generate_dot_graph(arancini::output::o_static::static_output_
 }
 
 void txlat_engine::optimise(arancini::output::o_static::static_output_engine &oe) {
-    using clock = std::chrono::steady_clock;
-    auto start = clock::now();
+    auto start = measurement_clock::now();
 
     deadflags_opt_visitor deadflags;
     for (auto c : oe.chunks()) {
         c->accept(deadflags);
     }
 
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(clock::now() - start).count();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(measurement_clock::now() - start).count();
     ::util::global_logger.info("Optimisation: dead flags elimination pass took {} us\n", duration);
 }
 
