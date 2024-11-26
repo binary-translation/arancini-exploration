@@ -1,4 +1,5 @@
 #include <arancini/input/x86/translators/translators.h>
+#include <arancini/input/input-arch.h>
 #include <arancini/util/logger.h>
 #include <arancini/ir/ir-builder.h>
 #include <arancini/ir/node.h>
@@ -127,9 +128,9 @@ action_node *translator::write_operand(int opnum, port &value)
 		case XED_REG_CLASS_YMM:
 		case XED_REG_CLASS_ZMM: {
 			auto enc_reg_off = xedreg_to_offset(xed_get_largest_enclosing_register(reg));
-			value_node *orig;
+			value_node *orig = nullptr;
 			auto val_len = value.type().width();
-			value_node *enc;
+			value_node *enc = nullptr;
 			if (!xed_classify_sse(xed_inst())) {
 				value_node *flat;
 				switch(val_len) {
@@ -151,6 +152,8 @@ action_node *translator::write_operand(int opnum, port &value)
 					case 256: enc = read_reg( value_type::u256(), enc_reg_off); break;
 					case 512: enc = read_reg( value_type::u512(), enc_reg_off); break;
 			}
+            if (!enc)
+                throw frontend_exception("Invalid enclosing register");
 			auto enc_len = enc->val().type().width();
 			switch(val_len) {
 				case 32: {
