@@ -1,8 +1,10 @@
-#include "arancini/input/registers.h"
 #include "type-utils.h"
-#include <arancini/input/x86/translators/translators.h>
-#include <arancini/ir/ir-builder.h>
+
 #include <arancini/ir/node.h>
+#include <arancini/ir/ir-builder.h>
+#include <arancini/input/registers.h>
+#include <arancini/input/input-arch.h>
+#include <arancini/input/x86/translators/translators.h>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
@@ -12,9 +14,9 @@ void binop_translator::do_translate()
 	auto op0 = read_operand(0);
 	auto op1 = auto_cast(op0->val().type(), read_operand(1));
 
-	value_node *rslt;
+	value_node *rslt = nullptr;
 
-  auto inst_class = xed_decoded_inst_get_iclass(xed_inst());
+    auto inst_class = xed_decoded_inst_get_iclass(xed_inst());
 	switch (inst_class) {
 	case XED_ICLASS_XOR:
 	case XED_ICLASS_PXOR:
@@ -327,12 +329,14 @@ void binop_translator::do_translate()
 		auto op1 = read_operand(1);
 
 		value_type ETy = value_type::v();
-		value_type CastTy = value_type::v();
+        // TODO: is this needed?
+		// value_type CastTy = value_type::v();
 		int ENum;
 
-		value_node *cexp;
-		value_node *cfrac;
-		value_node *z;
+        // TODO: are these needed?
+		// value_node *cexp;
+		// value_node *cfrac;
+		// value_node *z;
 
 		switch(inst_class) {
 			case XED_ICLASS_UCOMISS:
@@ -423,7 +427,8 @@ void binop_translator::do_translate()
                 throw std::logic_error("Unhandled XED instruction class");
 		}
 
-		auto mask = builder().insert_constant_u8(3);
+        // TODO: is it needed?
+		// auto mask = builder().insert_constant_u8(3);
 
 		dest = builder().insert_bitcast(VecTy, dest->val());
 		op0 = builder().insert_bitcast(VecTy, op0->val());
@@ -443,7 +448,7 @@ void binop_translator::do_translate()
 		 * 7 - ordered
 		 */
 
-		value_node *cond;
+		value_node *cond = nullptr;
 		switch (op_code) {
 			case 0: cond = builder().insert_binop(binary_arith_op::cmpoeq, op0->val(), op1->val()); break;
 			case 1: cond = builder().insert_binop(binary_arith_op::cmpolt, op0->val(), op1->val()); break;
@@ -453,6 +458,8 @@ void binop_translator::do_translate()
 			case 5: cond = builder().insert_binop(binary_arith_op::cmpunlt, op0->val(), op1->val()); break;
 			case 6: cond = builder().insert_binop(binary_arith_op::cmpunle, op0->val(), op1->val()); break;
 			case 7: cond = builder().insert_binop(binary_arith_op::cmpo, op0->val(), op1->val()); break;
+            default:
+                throw frontend_exception("Invalid operation code for CMPSS");
 		}
 		auto res = builder().insert_csel(cond->val(), true_val->val(), false_val->val());
 		write_operand(0, builder().insert_vector_insert(dest->val(), 0, res->val())->val());
