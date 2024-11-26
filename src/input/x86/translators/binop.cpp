@@ -405,36 +405,41 @@ void binop_translator::do_translate()
 		auto dest = read_operand(0);
 		auto op0 = read_operand(0);
 		auto op1 = read_operand(1);
-		auto op2 = (constant_node *)read_operand(2);
+		auto op2 = reinterpret_cast<constant_node *>(read_operand(2));
 
-		value_node *true_val;
-		value_node *false_val;
+		value_node *true_val = nullptr;
+		value_node *false_val = nullptr;
 
-		value_type VecTy = value_type::v();
+		value_type vector_type = value_type::v();
 
 		switch (inst_class) {
 			case XED_ICLASS_CMPSS: {
-				true_val = builder().insert_constant_f32((float)0xFFFFFFFF);
-				false_val = builder().insert_constant_f32((float)0x00000000);
-				VecTy = value_type::vector(value_type::f32(), 4);
+				true_val = builder().insert_constant_f32(::util::bit_cast_zeros<float>(0xFFFFFFFF));
+				false_val = builder().insert_constant_f32(::util::bit_cast_zeros<float>(0x00000000));
+				vector_type = value_type::vector(value_type::f32(), 4);
 			} break;
 			case XED_ICLASS_CMPSD_XMM: {
-				true_val = builder().insert_constant_f64((float)0xFFFFFFFFFFFFFFFF);
-				false_val = builder().insert_constant_f64((float)0x000000000000000);
-				VecTy = value_type::vector(value_type::f64(), 2);
+				true_val = builder().insert_constant_f64(::util::bit_cast_zeros<double>(0xFFFFFFFFFFFFFFFF));
+				false_val = builder().insert_constant_f64(::util::bit_cast_zeros<double>(0x000000000000000));
+				vector_type = value_type::vector(value_type::f64(), 2);
 			} break;
             default:
-                throw std::logic_error("Unhandled XED instruction class");
+                throw frontend_exception("Unhandled XED instruction class");
 		}
 
         // TODO: is it needed?
 		// auto mask = builder().insert_constant_u8(3);
 
-		dest = builder().insert_bitcast(VecTy, dest->val());
-		op0 = builder().insert_bitcast(VecTy, op0->val());
+		dest = builder().insert_bitcast(vector_type, dest->val());
+		op0 = builder().insert_bitcast(vector_type, op0->val());
 		op0 = builder().insert_vector_extract(op0->val(), 0);
-		op1 = builder().insert_bitcast(VecTy, op1->val());
-		op1 = builder().insert_vector_extract(op1->val(), 0);
+        if (inst_class == XED_ICLASS_CMPSD_XMM && !op1->val().type().is_vector()) {
+            op1 = builder().insert_bitcast(value_type::f64(), op1->val());
+        } else {
+            op1 = builder().insert_bitcast(vector_type, op1->val());
+            op1 = builder().insert_vector_extract(op1->val(), 0);
+        }
+
 		auto op_code = op2->const_val_i();
 
 		/*
