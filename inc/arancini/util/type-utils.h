@@ -50,6 +50,12 @@ To variant_cast(From&& from) {
         std::forward<From>(from));
 }
 
+enum class endian {
+    little = __ORDER_LITTLE_ENDIAN__,
+    big = __ORDER_BIG_ENDIAN__,
+    native = __BYTE_ORDER
+};
+
 // helper type for the visitor #4
 template<class... Ts>
 struct overloaded : Ts... { using Ts::operator()...; };
@@ -60,14 +66,17 @@ overloaded(Ts...) -> overloaded<Ts...>;
 
 // Based on: https://github.com/jfbastien/bit_cast
 template<typename To, typename From>
-inline constexpr To bit_cast(const From& from) noexcept {
-  typename std::aligned_storage<sizeof(To), alignof(To)>::type storage;
-  std::memcpy(&storage, &from, sizeof(To));  // Above `constexpr` is optimistic, fails here.
-  return reinterpret_cast<To&>(storage);
-  // More common implementation:
-  // std::remove_const_t<To> to{};
-  // std::memcpy(&to, &from, sizeof(To));  // Above `constexpr` is optimistic, fails here.
-  // return to;
+inline constexpr To bit_cast_zeros(const From& from) noexcept {
+    To to;
+
+    if constexpr (endian::native == endian::little) {
+        std::memcpy(&to, &from, sizeof(From));
+        return to;
+    }
+
+    if constexpr (endian::native == endian::big) {
+        static_assert(0, "Big-endian architectures not supported by Arancini");
+    }
 }
 
 } // namespace util
