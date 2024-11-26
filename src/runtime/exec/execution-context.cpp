@@ -445,6 +445,10 @@ int execution_context::internal_call(void *cpu_state, int call) {
 			x86_state->RAX = native_syscall(__NR_writev, x86_state->RDI, (uintptr_t)iovec_new, iocnt);
 			break;
         }
+        case 21: // access
+            x86_state->RAX = native_syscall(__NR_faccessat, static_cast<std::uint64_t>(AT_FDCWD),
+                                            x86_state->RDI, x86_state->RSI);
+            break;
 		case 28: // madvise
         {
             util::global_logger.debug("System call: madvise()\n");
