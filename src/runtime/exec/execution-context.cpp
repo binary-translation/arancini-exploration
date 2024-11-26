@@ -382,6 +382,21 @@ int execution_context::internal_call(void *cpu_state, int call) {
 			}
 			break;
         }
+        case 13: // rt_sigaction
+        {
+            util::global_logger.debug("System call: rt_sigaction()\n");
+
+            // TODO:
+            // 1. Block SIGSEGV (but store the handler; our SIGSEGV handler should catch the SIGSEGV
+            // instead and then maybe forward it)
+            // 2. The oldset should write nullptr when no RDX is given; rather than 0
+            // 3. native_syscall() expects std::uint64_t, but we're passing it std::uintptr_t
+            auto act = reinterpret_cast<std::uintptr_t>(get_memory_ptr(x86_state->RSI));
+            auto oldact = x86_state->RDX ? reinterpret_cast<std::uintptr_t>(x86_state->RDX) : 0;
+
+            x86_state->RAX = native_syscall(__NR_rt_sigaction, x86_state->RDI, act, oldact, x86_state->R10);
+            break;
+        }
 		case 14: // rt_sigprocmask
         {
             util::global_logger.debug("System call: rt_sigprocmask()\n");
@@ -390,8 +405,7 @@ int execution_context::internal_call(void *cpu_state, int call) {
 			auto set = (uintptr_t)get_memory_ptr(x86_state->RSI);
 			auto oldset = x86_state->RDX ? (uintptr_t)get_memory_ptr(x86_state->RDX) : 0;
 
-			auto ret = native_syscall(__NR_rt_sigprocmask, x86_state->RDI, set, oldset, x86_state->R10);
-			x86_state->RAX = ret;
+			x86_state->RAX = native_syscall(__NR_rt_sigprocmask, x86_state->RDI, set, oldset, x86_state->R10);
 			break;
         }
 		case 16: // ioctl
