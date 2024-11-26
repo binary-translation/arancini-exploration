@@ -32,11 +32,6 @@ void fpvec_translator::do_translate()
         src2 = src1;
         src1 = dest;
         break;
-    default:
-        throw frontend_exception("Unexpected instruction");
-	}
-
-	switch (xed_decoded_inst_get_iclass(xed_inst())) {
 	case XED_ICLASS_XORPS: {
 		dest = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), dest->val());
 		src1 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), src1->val());
