@@ -1,8 +1,10 @@
-#include <arancini/input/x86/translators/translators.h>
 #include <arancini/input/x86/x86-input-arch.h>
-#include <arancini/ir/ir-builder.h>
-#include <arancini/native_lib/nlib_func.h>
+
 #include <arancini/util/logger.h>
+#include <arancini/ir/ir-builder.h>
+#include <arancini/input/input-arch.h>
+#include <arancini/native_lib/nlib_func.h>
+#include <arancini/input/x86/translators/translators.h>
 
 using namespace arancini::ir;
 using namespace arancini::input;
@@ -379,15 +381,15 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
 	initialise_xed();
 
-	const uint8_t *mc = (const uint8_t *)code;
+	auto mc = reinterpret_cast<const std::uint8_t*>(code);
 
-	static uint nr_chunk = 1;
+	static std::size_t nr_chunk = 1;
 
     util::global_logger.info("chunk [{}] @ {:#x} code={} size={}\n", nr_chunk, base_address, fmt::ptr(code), code_size);
 
 	nr_chunk++;
 
-	size_t offset = 0;
+    std::size_t offset = 0;
 	std::string disasm;
 
 	translation_result r;
@@ -398,29 +400,20 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 		xed_decoded_inst_set_mode(&xedd, XED_MACHINE_MODE_LONG_64, XED_ADDRESS_WIDTH_64b);
 		xed_decoded_inst_set_input_chip(&xedd, XED_CHIP_ALL);
 
-		xed_error_enum_t xed_error = xed_decode(&xedd, &mc[offset], code_size - offset);
+		auto xed_error = xed_decode(&xedd, &mc[offset], code_size - offset);
 		if (xed_error != XED_ERROR_NONE) {
-			throw std::runtime_error(fmt::format("unable to decode instruction: {} instruction: {}",
-                                                 std::to_string(xed_error), base_address + offset));
+			throw frontend_exception("unable to decode instruction at address {:#x}: {}",
+                                     base_address + offset, xed_error_enum_t2str(xed_error));
 		}
 
-		xed_uint_t length = xed_decoded_inst_get_length(&xedd);
+		auto length = xed_decoded_inst_get_length(&xedd);
 
 		r = translate_instruction(builder, base_address, &xedd, debug(), da_, disasm);
 
+        [[unlikely]]
 		if (r == translation_result::fail) {
-			throw std::runtime_error("instruction translation failure: " + std::to_string(xed_error));
+			throw frontend_exception("instruction translation failure: {}", xed_error_enum_t2str(xed_error));
 		} else if (r == translation_result::end_of_block && basic_block) {
-            // Print backwards branch addr (if exists)
-            // Useful for debug infrastructure
-            auto pos = disasm.find("0x");
-            if (pos != disasm.npos) {
-                auto addr_str = disasm.substr(pos);
-                off_t addr = std::strtol(addr_str.c_str(), nullptr, 16);
-
-                if (addr > base_address && addr < base_address + offset + length)
-                    util::global_logger.info("Backwards branch @ {}\n", addr_str);
-            }
 			break;
 		}
 
@@ -428,7 +421,7 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 		base_address += length;
 	}
 
-	if (r==translation_result::normal) {
+	if (r == translation_result::normal) {
 		//End of translation but no set of PC
 		builder.begin_packet(0);
 		builder.insert_write_pc(builder.insert_constant_u64(base_address)->val(), br_type::br);
@@ -441,13 +434,13 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 void x86_input_arch::gen_wrapper(ir_builder &builder, const native_lib::nlib_function &func)
 {
 
-	builder.begin_chunk("__arancini__" + func.fname + "_wrapper");
+	builder.begin_chunk(fmt::format("__arancini__{}_wrapper", func.fname));
 	builder.begin_packet(0);
 
 	std::vector<value_type> params = func.sig.parameter_types();
 
-	const std::array<reg_offsets, 6> gpr_arg_regoff { reg_offsets::RDI, reg_offsets::RSI, reg_offsets::RDX, reg_offsets::RCX, reg_offsets::R8,
-		reg_offsets::R9 };
+	const std::array<reg_offsets, 6> gpr_arg_regoff { reg_offsets::RDI, reg_offsets::RSI, reg_offsets::RDX,
+                                                      reg_offsets::RCX, reg_offsets::R8, reg_offsets::R9 };
 	const std::array<reg_idx, 6> gpr_arg_regidx { reg_idx::RDI, reg_idx::RSI, reg_idx::RCX, reg_idx::RDX, reg_idx::R8, reg_idx::R9 };
 	const std::array<const char *, 6> gpr_arg_regname { "RDI", "RSI", "RCX", "RDX", "R8", "R9" };
 
@@ -463,7 +456,7 @@ void x86_input_arch::gen_wrapper(ir_builder &builder, const native_lib::nlib_fun
 		case value_type_class::signed_integer:
 		case value_type_class::unsigned_integer:
 			if (gri >= 6) {
-				throw std::runtime_error("Stack args unsupported in native lib wrapper.");
+				throw frontend_exception("Stack args unsupported in native lib wrapper.");
 			} else {
 				args.push_back(
 					&builder.insert_read_reg(item, (unsigned long)gpr_arg_regoff[gri], (unsigned long)gpr_arg_regidx[gri], gpr_arg_regname[gri])->val());
@@ -471,7 +464,7 @@ void x86_input_arch::gen_wrapper(ir_builder &builder, const native_lib::nlib_fun
 			}
 			break;
 		case value_type_class::floating_point:
-			throw std::runtime_error("Float args unsupported in native lib wrapper.");
+			throw frontend_exception("Float args unsupported in native lib wrapper.");
 		}
 	}
 
@@ -486,11 +479,11 @@ void x86_input_arch::gen_wrapper(ir_builder &builder, const native_lib::nlib_fun
 		if (retty.element_width() <= 64) {
 			builder.insert_write_reg(static_cast<unsigned long>(reg_offsets::RAX), static_cast<unsigned long>(reg_idx::RAX), "RAX", call->val());
 		} else {
-			throw std::runtime_error("Return types > 64bit unsupported in native lib wrapper.");
+			throw frontend_exception("Return types > 64bit unsupported in native lib wrapper.");
 		}
 		break;
 	case value_type_class::floating_point:
-		throw std::runtime_error("Float return types unsupported in native lib wrapper.");
+		throw frontend_exception("Float return types unsupported in native lib wrapper.");
 	}
 	builder.end_packet();
 
@@ -511,3 +504,4 @@ void x86_input_arch::gen_wrapper(ir_builder &builder, const native_lib::nlib_fun
 
 	builder.end_chunk();
 }
+
