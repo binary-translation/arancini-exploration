@@ -179,16 +179,35 @@
 			sha256 = "1lpyk446dzv2w92g18v90blvh9fv1d9gy83b8wlssz2rv19kd2rp";
 		};
 
-        bzip2-bench = pkgs.bzip2.overrideAttrs (oldAttrs: {
-            NIX_CFLAGS_COMPILE = "${oldAttrs.NIX_CFLAGS_COMPILE or ""} -fno-tree-vectorize -fno-PIE";
+        bzip3-bench = pkgs.bzip3.overrideAttrs (oldAttrs: {
+            NIX_CFLAGS_COMPILE = "${oldAttrs.NIX_CFLAGS_COMPILE or ""} -fno-tree-vectorize -fno-PIE -fPIC";
+            NIX_LDFLAGS = "${oldAttrs.NIX_LDFLAGS or ""} -no-pie";
+            hardeningDisable = ["all"];
         });
+
+        lua-custom = pkgs.lua.overrideAttrs (oldAttrs: {
+            NIX_CFLAGS_COMPILE = "${oldAttrs.NIX_CFLAGS_COMPILE or ""} -fno-tree-vectorize -fno-PIE -fPIC";
+            NIX_LDFLAGS = "${oldAttrs.NIX_LDFLAGS or ""} -no-pie";
+            hardeningDisable = ["all"];
+        });
+
+        tcl-custom = pkgs.tcl.overrideAttrs (oldAttrs: {
+            buildPhase = ''
+              export CFLAGS="-fno-tree-vectorize -fno-PIE -fPIC"
+              export LDFLAGS="-fno-PIE -no-pie"
+              ./configure --prefix=$out --disable-shared CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS"
+              make
+            '';
+         });
 	in
 	{
 	# on x86 we plot, everywhere else we run benchmarks
 	pkgs = pkgs;
 
     # inherit benchmarks
-    inherit bzip2-bench
+    inherit bzip3-bench;
+    inherit lua-custom;
+    inherit tcl-custom;
 
 	devShells = {
 
