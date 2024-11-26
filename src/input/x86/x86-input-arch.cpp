@@ -393,7 +393,8 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
     std::size_t offset = 0;
 	std::string disasm;
 
-	translation_result r;
+    // TODO: it this the correct default
+	translation_result r = translation_result::noop;
 
 	while (offset < code_size) {
 		xed_decoded_inst_t xedd;
@@ -412,15 +413,19 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 		r = translate_instruction(builder, base_address, &xedd, debug(), da_, disasm);
 
         [[unlikely]]
-		if (r == translation_result::fail) {
+		if (r == translation_result::fail)
 			throw frontend_exception("instruction translation failure: {}", xed_error_enum_t2str(xed_error));
-		} else if (r == translation_result::end_of_block && basic_block) {
+		else if (r == translation_result::end_of_block && basic_block)
 			break;
-		}
 
 		offset += length;
 		base_address += length;
 	}
+
+    [[unlikely]]
+    if (r == translation_result::noop) {
+        throw frontend_exception("chunk passed to translator contains no instructions");
+    }
 
 	if (r == translation_result::normal) {
 		//End of translation but no set of PC
