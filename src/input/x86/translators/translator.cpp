@@ -39,7 +39,7 @@ void translator::dump_xed_encoding(void)
     const xed_inst_t *insn = xed_decoded_inst_inst(xed_ins);
     auto nops = xed_decoded_inst_noperands(xed_ins);
     char buf[64];
-  
+
     xed_format_context(XED_SYNTAX_INTEL, xed_ins, buf, sizeof(buf) - 1, 0, nullptr, 0);
     util::global_logger.info("Decoding: {}\n", buf);
     util::global_logger.info("XED encoding:\n");
