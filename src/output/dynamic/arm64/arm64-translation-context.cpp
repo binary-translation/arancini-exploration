@@ -1763,11 +1763,18 @@ void arm64_translation_context::materialise_internal_call(const internal_call_no
 }
 
 void arm64_translation_context::materialise_read_local(const read_local_node &n) {
+    [[unlikely]]
+    if (locals_.count(n.local()) == 0)
+        throw backend_exception("Attempting to read local@{} of type {} that does not exist",
+                                fmt::ptr(n.local()), n.local()->type());
+
     const auto &dest_vregs = vreg_alloc_.allocate(n.val());
     const auto &locals = locals_[n.local()];
 
+    [[unlikely]]
     if (locals.size() != dest_vregs.size())
-        throw backend_exception("Read local received mismatched types");
+        throw backend_exception("Read local received mismatched types for locals {} and destination {}",
+                                 n.local()->type(), n.val().type());
 
     builder_.insert_comment("Read local variable");
     for (std::size_t i = 0; i < dest_vregs.size(); ++i)
@@ -1775,18 +1782,18 @@ void arm64_translation_context::materialise_read_local(const read_local_node &n)
 }
 
 void arm64_translation_context::materialise_write_local(const write_local_node &n) {
-    const auto &write_vregs = vreg_alloc_.get(n.write_value());
+    const auto &write_regs = vreg_alloc_.get(n.write_value());
     if (locals_.count(n.local()) == 0) {
         const auto &dest_vregs = vreg_alloc_.allocate(n.val());
-        locals_[n.local()] = dest_vregs;
+        locals_.emplace(n.local(), dest_vregs);
     }
 
     const auto &dest_vregs = locals_[n.local()];
-    if (write_vregs.size() != dest_vregs.size())
+    if (write_regs.size() != dest_vregs.size())
         throw backend_exception("Write local received mismatched types");
 
     builder_.insert_comment("Write local variable");
     for (std::size_t i = 0; i < dest_vregs.size(); ++i)
-        builder_.mov(dest_vregs[i], dest_vregs[i]);
+        builder_.mov(dest_vregs[i], write_regs[i]);
 }
 
