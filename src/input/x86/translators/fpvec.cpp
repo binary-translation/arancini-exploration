@@ -10,13 +10,14 @@ void fpvec_translator::do_translate()
 {
 	// Right now we're missing the kmovw instruction anyways, but just in case
 	if (xed_decoded_inst_masked_vector_operation(xed_inst()))
-		throw frontend_exception("Masked instructions not supported");
+		throw std::runtime_error("Masked instructions not supported");
 
 	// TODO: do not read dst if we overwrite everything
 	auto dest = read_operand(0);
 	auto src1 = read_operand(1);
 	auto src2 = read_operand(2);
 
+    // Handle common parts for these instructions first
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
 	case XED_ICLASS_SUBPD:
 	case XED_ICLASS_ADDPD:
@@ -32,6 +33,11 @@ void fpvec_translator::do_translate()
         src2 = src1;
         src1 = dest;
         break;
+    default:
+        break;
+	}
+
+	switch (xed_decoded_inst_get_iclass(xed_inst())) {
 	case XED_ICLASS_XORPS: {
 		dest = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), dest->val());
 		src1 = builder().insert_bitcast(value_type::vector(value_type::f32(), 4), src1->val());
