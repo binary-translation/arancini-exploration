@@ -1,6 +1,7 @@
-#include <arancini/input/x86/translators/translators.h>
 #include <arancini/ir/node.h>
 #include <arancini/ir/ir-builder.h>
+#include <arancini/input/input-arch.h>
+#include <arancini/input/x86/translators/translators.h>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
@@ -9,7 +10,7 @@ void fpvec_translator::do_translate()
 {
 	// Right now we're missing the kmovw instruction anyways, but just in case
 	if (xed_decoded_inst_masked_vector_operation(xed_inst()))
-		throw std::runtime_error("Masked instructions not supported");
+		throw frontend_exception("Masked instructions not supported");
 
 	// TODO: do not read dst if we overwrite everything
 	auto dest = read_operand(0);
@@ -26,11 +27,13 @@ void fpvec_translator::do_translate()
 	case XED_ICLASS_ADDSS:
 	case XED_ICLASS_SUBSS:
 	case XED_ICLASS_DIVSS:
-	case XED_ICLASS_MULSS: {
+	case XED_ICLASS_MULSS:
 		// we don't have 3 operands
-		src2 = src1;
-		src1 = dest;
-	} break;
+        src2 = src1;
+        src1 = dest;
+        break;
+    default:
+        throw frontend_exception("Unexpected instruction");
 	}
 
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
@@ -120,7 +123,7 @@ void fpvec_translator::do_translate()
   }
 
 	default:
-		throw std::runtime_error("Unknown fpvec instruction");
+		throw frontend_exception("Unknown fpvec instruction");
 	}
 
 	switch (xed_decoded_inst_get_iclass(xed_inst())) {
@@ -185,19 +188,18 @@ void fpvec_translator::do_translate()
 		break;
 	}
 	case XED_ICLASS_CVTTSD2SI:
-	case XED_ICLASS_CVTTSS2SI: {
+	case XED_ICLASS_CVTTSS2SI:
 		dest = builder().insert_convert(dest->val().type(), src1->val(), fp_convert_type::trunc);
 		write_operand(0, dest->val());
 		break;
-	}
 	case XED_ICLASS_CVTSS2SI:
-	case XED_ICLASS_CVTSS2SD: {
+	case XED_ICLASS_CVTSS2SD:
 		dest = builder().insert_convert(dest->val().type(), src1->val(), fp_convert_type::none);
 		write_operand(0, dest->val());
 		break;
-	}
-	default: {
-		throw std::runtime_error(std::string("Unknown fpvec instruction: ")+xed_iclass_enum_t2str(xed_decoded_inst_get_iclass(xed_inst())));
-    } break;
+	default:
+		throw frontend_exception("Unknown fpvec instruction: {}"),
+                                 xed_iclass_enum_t2str(xed_decoded_inst_get_iclass(xed_inst()));
 	}
 }
+
