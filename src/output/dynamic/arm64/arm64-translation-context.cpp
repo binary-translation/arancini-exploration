@@ -84,7 +84,8 @@ register_operand arm64_translation_context::move_to_register(T imm, ir::value_ty
         throw backend_exception("Cannot move immediate {} into vector type {}", imm, type);
 
     // Convert to unsigned long long so that clzll can be used
-    auto immediate = util::bit_cast<unsigned long long>(imm);
+    // 1s in sizeof(unsinged long long) - sizeof(imm) upper bits
+    auto immediate = util::bit_cast_zeros<unsigned long long>(imm) & 0xFF;
 
     // Check the actual size of the value
     std::size_t actual_size = get_min_bitsize(immediate);
@@ -130,7 +131,7 @@ reg_or_imm arm64_translation_context::move_immediate(T imm, ir::value_type imm_t
     if (imm_type.is_vector() || imm_type.element_width() > value_types::base_type.element_width())
         throw backend_exception("Attempting to move immediate {} into unsupported immediate type {}", imm, imm_type);
 
-    auto immediate = util::bit_cast<unsigned long long>(imm);
+    auto immediate = util::bit_cast_zeros<unsigned long long>(imm);
     std::size_t actual_size = get_min_bitsize(immediate);
 
     if (actual_size < imm_type.element_width())
