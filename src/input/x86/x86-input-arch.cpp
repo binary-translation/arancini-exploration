@@ -350,8 +350,8 @@ static translation_result translate_instruction(ir_builder &builder, size_t addr
 	if (debug) {
 		char buffer[64];
 		xed_format_context(da == disassembly_syntax::intel ? XED_SYNTAX_INTEL : XED_SYNTAX_ATT, xedd, buffer, sizeof(buffer) - 1, address, nullptr, 0);
-        util::global_logger.debug("Translating instruction {}", buffer);
 		disasm = std::string(buffer);
+        util::global_logger.debug("Translating instruction {}", disasm);
 	}
 
 	auto t = get_translator(builder, xed_decoded_inst_get_iclass(xedd));
