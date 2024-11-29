@@ -575,32 +575,30 @@ public:
 		, convert_type_(convert_type)
 	{
 		if (op == cast_op::bitcast) {
-			if (target_type.width() != source_value.type().width()) {
-				throw ir_exception("cannot bitcast between types with different sizes target={}, source={}",
-                                   target_type, source_value.type());
-			}
+            [[unlikely]]
+			if (target_type.width() != source_value.type().width())
+				throw ir_exception("cannot bitcast from {} to {} because their classes differ",
+                                   source_value.type(), target_type);
 		} else if (op == cast_op::convert) {
 			if ((target_type.type_class() != value_type_class::floating_point) &&
                 (source_value.type().type_class() != value_type_class::floating_point))
             {
                 [[unlikely]]
-				if (target_type.type_class() == source_value.type().type_class()) {
-					throw ir_exception("cannot convert between the same non-FP type classes target={}, source={}",
-                                       target_type, source_value.type());
-				}
+				if (target_type.type_class() == source_value.type().type_class())
+					throw ir_exception("cannot convert from {} to {} because they are the same",
+                                       source_value.type(), target_type);
 			}
 		} else if (op != cast_op::zx) {
             [[unlikely]]
-			if (target_type.type_class() != source_value.type().type_class()) {
-				throw ir_exception("cannot cast between type classes target={}, source={}",
-                                   target_type, source_value.type());
-			}
+			if (target_type.type_class() != source_value.type().type_class())
+				throw ir_exception("cannot perform non-sign-extend cast from {} to {} because type classes differ",
+                                   source_value.type(), target_type);
 		}
 
         [[unlikely]]
 		if ((convert_type != fp_convert_type::none) && (op != cast_op::convert)) {
-			throw ir_exception("convert type should be 'none' if the cast_op is not 'convert' target={}, source={}",
-                               target_type, source_value.type());
+			throw ir_exception("conversion type {} not supported for non-convert operations in casting from {} to {}",
+                               convert_type, source_value.type(), target_type);
 		}
 
 		source_value.add_target(this);
@@ -1313,6 +1311,28 @@ struct fmt::formatter<arancini::ir::cast_op> {
             return format_to(ctx.out(), "truncate operation");
         case cast_op::convert:
             return format_to(ctx.out(), "convert operation");
+        default:
+            return format_to(ctx.out(), "unknown cast operation");
+        }
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::ir::fp_convert_type> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(arancini::ir::fp_convert_type op, FormatContext& ctx) const {
+        using arancini::ir::fp_convert_type;
+
+        switch (op) {
+        case fp_convert_type::none:
+            return format_to(ctx.out(), "no floating-point conversion");
+        case fp_convert_type::round:
+            return format_to(ctx.out(), "floating-point rounding conversion");
+        case fp_convert_type::trunc:
+            return format_to(ctx.out(), "floating-point truncating conversion");
         default:
             return format_to(ctx.out(), "unknown cast operation");
         }
