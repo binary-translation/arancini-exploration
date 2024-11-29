@@ -185,13 +185,13 @@
             hardeningDisable = ["all"];
         });
 
-        lua-custom = pkgs.lua.overrideAttrs (oldAttrs: {
+        lua-bench = pkgs.lua.overrideAttrs (oldAttrs: {
             NIX_CFLAGS_COMPILE = "${oldAttrs.NIX_CFLAGS_COMPILE or ""} -fno-tree-vectorize -fno-PIE -fPIC";
             NIX_LDFLAGS = "${oldAttrs.NIX_LDFLAGS or ""} -no-pie";
             hardeningDisable = ["all"];
         });
 
-        tcl-custom = pkgs.tcl.overrideAttrs (oldAttrs: {
+        tcl-bench = pkgs.tcl.overrideAttrs (oldAttrs: {
             buildPhase = ''
               export CFLAGS="-fno-tree-vectorize -fno-PIE -fPIC"
               export LDFLAGS="-fno-PIE -no-pie"
@@ -199,6 +199,14 @@
               make
             '';
          });
+
+        sqlite-bench = pkgs.sqlite.overrideAttrs (oldAttrs: {
+            env = (oldAttrs.env or { }) // {
+              NIX_CFLAGS_COMPILE = "-fno-tree-vectorize -fno-PIE -fPIC";
+            };
+            NIX_LDFLAGS = "${oldAttrs.NIX_LDFLAGS or ""} -no-pie";
+            hardeningDisable = ["all"];
+        });
 	in
 	{
 	# on x86 we plot, everywhere else we run benchmarks
@@ -206,8 +214,9 @@
 
     # inherit benchmarks
     inherit bzip3-bench;
-    inherit lua-custom;
-    inherit tcl-custom;
+    inherit lua-bench;
+    inherit tcl-bench;
+    inherit sqlite-bench;
 
 	devShells = {
 
@@ -241,9 +250,6 @@
 			nativeBuildInputs = [
 				pkgs.gnumake
 				pkgs.binutils
-                pkgs.gzip
-                pkgs.bzip2
-                pkgs.lua
 			];
 
 			configurePhase = "cd phoenix-2.0";
