@@ -145,7 +145,7 @@ public:
 
     // Lookup
     [[nodiscard]]
-    const register_operand *get_allocation(const register_operand &vreg) {
+    const register_operand *get_allocation(const register_operand &vreg) const {
         if (current_allocations_.count(vreg))
             return &current_allocations_.at(vreg);
         return nullptr;
@@ -194,75 +194,77 @@ void instruction_builder::allocate() {
         bool has_unused_keep = false;
 
         logger.debug("Allocating instruction {}\n", instr);
-
-
-		// kill defs first
         for (auto& op : instr.operands()) {
-			// Only regs can be /real/ defs
-            if (op.is_def()) {
-                // TODO: can't get() be avoided here?
-                if (auto* vreg = std::get_if<register_operand>(&op.get()); vreg && vreg->is_virtual()) {
-                    logger.debug("Defining register {}\n", *vreg);
+            [[unlikely]]
+            if (!op.is_def()) continue;
 
-                    // Get previous allocations
-                    if (const auto* prev = reg_alloc.get_allocation(*vreg); prev) {
-                        logger.debug("Assign definition {} to existing allocation {}\n",
-                                     op, *prev);
+            // kill defs first
+            // Only registers can be defs
+            // TODO: can't get() be avoided here?
+            auto vreg = std::get<register_operand>(op.get());
+            logger.debug("Defining register {}\n", vreg);
 
-                        // Assign operand to previously allocated register
-                        op = *prev;
+            // Get previous allocations
+            if (const auto* prev = reg_alloc.get_allocation(vreg); prev) {
+                logger.debug("Assign definition {} to existing allocation {}\n",
+                             op, *prev);
 
-                        // Allocation not needed beyond this point
-                        reg_alloc.deallocate(*prev);
+                // Assign operand to previously allocated register
+                op = *prev;
 
-                        logger.debug("Register {} available\n", *prev);
-                    }
-                } else if (instr.is_keep()) {
-                    // No previous allocation: no users of this definition exist
-                    // Need to allocate anyway; since instruction is marked as keep()
-                    logger.debug("No previous allocation exists for 'keep' definition {}\n", op);
+                // Allocation not needed beyond this point
+                reg_alloc.deallocate(*prev);
 
+                logger.debug("Register {} available\n", *prev);
+            } else if (instr.is_keep()) {
+                // No previous allocation: no users of this definition exist
+                // Need to allocate anyway; since instruction is marked as keep()
+                logger.debug("No previous allocation exists for 'keep' definition {}\n", op);
+
+                auto allocation = reg_alloc.allocate(vreg);
+
+                // Marked as unused
+                // Allocation becomes available before next instruction
+                has_unused_keep = true;
+
+                logger.debug("Unused definition allocated to {}\n", allocation);
+
+                op = allocation;
+            } else {
+                logger.debug("Register not allocated - killing instruction\n", op);
+                instr.kill();
+                break;
+            }
+        }
+
+        for (auto& op : instr.operands()) {
+            if (op.is_def()) continue;
+
+            if (const auto *vreg = std::get_if<register_operand>(&op.get()); vreg && vreg->is_virtual()) {
+                if (const auto *prev = reg_alloc.get_allocation(*vreg); prev) {
+                    logger.debug("Assign reference {} to existing allocation {}\n", op, *prev);
+
+                    op = *prev;
+                } else {
                     auto allocation = reg_alloc.allocate(*vreg);
 
-                    // Marked as unused
-                    // Allocation becomes available before next instruction
-                    has_unused_keep = true;
-
-                    logger.debug("Unused definition allocated to {}\n", allocation);
-
+                    logger.debug("Assign reference {} to new allocation {}\n", op, allocation);
                     op = allocation;
-                } else {
-                    logger.debug("Register not allocated - killing instruction\n", op);
-                    instr.kill();
-                    break;
                 }
-            } else {
-                if (const auto *vreg = std::get_if<register_operand>(&op.get()); vreg && vreg->is_virtual()) {
-                    if (const auto *prev = reg_alloc.get_allocation(*vreg); prev) {
-                        logger.debug("Assign reference {} to existing allocation {}\n", op, *prev);
+            } else if (const auto *mem = std::get_if<memory_operand>(&op.get());
+                       mem && mem->base_register().is_virtual())
+            {
+                const auto &base_vreg = mem->base_register();
+                if (const auto *prev = reg_alloc.get_allocation(base_vreg); prev) {
+                    logger.debug("Assign reference {} to existing allocation {}\n", op, *prev);
 
-                        op = *prev;
-                    } else {
-                        auto allocation = reg_alloc.allocate(*vreg);
+                    op = memory_operand(*prev, mem->offset(), mem->mode());
+                } else {
+                    auto allocation = reg_alloc.allocate(base_vreg);
 
-                        logger.debug("Assign reference {} to new allocation {}\n", op, allocation);
-                        op = allocation;
-                    }
-                } else if (const auto *mem = std::get_if<memory_operand>(&op.get());
-                           mem && mem->base_register().is_virtual())
-                {
-                        const auto &base_vreg = mem->base_register();
-                        if (const auto *prev = reg_alloc.get_allocation(base_vreg); prev) {
-                            logger.debug("Assign reference {} to existing allocation {}\n", op, *prev);
+                    logger.debug("Assign reference {} to existing allocation {}\n", op, allocation);
 
-                            op = memory_operand(*prev, mem->offset(), mem->mode());
-                        } else {
-                            auto allocation = reg_alloc.allocate(base_vreg);
-
-                            logger.debug("Assign reference {} to existing allocation {}\n", op, allocation);
-
-                            op = memory_operand(allocation, mem->offset(), mem->mode());
-                        }
+                    op = memory_operand(allocation, mem->offset(), mem->mode());
                 }
             }
         }
