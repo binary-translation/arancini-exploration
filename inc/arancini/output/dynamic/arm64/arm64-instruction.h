@@ -117,6 +117,14 @@ private:
     register_index_type index_;
 };
 
+inline bool operator==(const register_operand& r1, const register_operand& r2) {
+    return r1.index() == r2.index() && r1.type() == r2.type();
+}
+
+inline bool operator!=(const register_operand& r1, const register_operand& r2) {
+    return !(r1 == r2);
+}
+
 // TODO: ARM uses logical immediates that make determining their encoding completely different than
 // what fits() does
 class immediate_operand {
