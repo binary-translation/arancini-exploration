@@ -96,7 +96,7 @@ public:
     void movz(const register_operand &dst,
               const immediate_operand &src,
               const shift_operand &shift, const std::string &comment = "") {
-        append(instruction("movz", def(dst), use(src), use(shift)).add_comment(comment));
+        append(instruction("movz", use(def(dst)), use(src), use(shift)).add_comment(comment));
     }
 
     void movk(const register_operand &dst,
@@ -145,7 +145,7 @@ public:
 
     void cmp(const register_operand &dst,
              const reg_or_imm &src, const std::string &comment = "") {
-        append(instruction("cmp", use(def(dst)), use(src)).add_comment(comment));
+        append(instruction("cmp", use(dst), use(src)).as_keep().add_comment(comment));
     }
 
     void tst(const register_operand &dst,

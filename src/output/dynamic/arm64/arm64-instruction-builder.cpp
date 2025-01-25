@@ -168,8 +168,7 @@ private:
 
     struct register_hash {
         std::size_t operator()(const register_operand &reg) const {
-            return std::hash<std::size_t>{}(reg.index()) ^
-                   register_type_hash{}(reg.type());
+            return std::hash<std::size_t>{}(reg.index()); 
         }
     };
 
@@ -197,6 +196,7 @@ void instruction_builder::allocate() {
         for (auto& op : instr.operands()) {
             [[unlikely]]
             if (!op.is_def()) continue;
+            if (op.is_use()) continue;
 
             // kill defs first
             // Only registers can be defs
@@ -233,12 +233,16 @@ void instruction_builder::allocate() {
             } else {
                 logger.debug("Register not allocated - killing instruction\n", op);
                 instr.kill();
-                break;
             }
+
+            break;
         }
 
+        if (instr.is_dead()) continue;
+
         for (auto& op : instr.operands()) {
-            if (op.is_def()) continue;
+            [[unlikely]]
+            if (!op.is_use()) continue;
 
             if (const auto *vreg = std::get_if<register_operand>(&op.get()); vreg && vreg->is_virtual()) {
                 if (const auto *prev = reg_alloc.get_allocation(*vreg); prev) {
