@@ -222,6 +222,15 @@ void instruction_builder::allocate() {
         logger.debug("Allocating instruction {}\n", instr);
 
         implicit_dependencies.insert(instr.implicit_dependencies());
+
+        // Handle side-effects
+        for (const auto& reg_side_effect : instr.side_effect_writes()) {
+            if (implicit_dependencies.fulfills(reg_side_effect)) {
+                instr.as_keep();
+                implicit_dependencies.satisfy(reg_side_effect);
+            }
+        }
+
         for (auto& op : instr.operands()) {
             [[unlikely]]
             if (!op.is_def()) continue;
@@ -266,6 +275,7 @@ void instruction_builder::allocate() {
                 logger.debug("Register not allocated - killing instruction\n", op);
                 instr.kill();
             }
+
             break;
         }
 

@@ -16,7 +16,8 @@ public:
 	instruction& name(const register_operand &dst, \
                       const register_operand &src1, \
                       const reg_or_imm &src2) { \
-        return append(instruction(#name, def(dst), use(src1), use(src2)).as_keep()); \
+        return append(instruction(#name, def(dst), use(src1), use(src2)) \
+                      .implicitly_writes({register_operand(register_operand::nzcv)})); \
     }
 
 #define ARITH_OP_SHIFT(name) \
@@ -24,7 +25,8 @@ public:
                       const register_operand &src1, \
                       const reg_or_imm &src2, \
                       const shift_operand &shift) { \
-        return append(instruction(#name, def(dst), use(src1), use(src2), use(shift)).as_keep()); \
+        return append(instruction(#name, def(dst), use(src1), use(src2), use(shift)) \
+                      .implicitly_writes({register_operand(register_operand::nzcv)})); \
     }
 
 // TODO: refactor everything this way
@@ -69,7 +71,8 @@ public:
     instruction& ands(const register_operand &dst,
               const register_operand &src1,
               const reg_or_imm &src2) {
-        return append(instruction("ands", def(dst), use(src1), use(src2)).as_keep());
+        return append(instruction("ands", def(dst), use(src1), use(src2))
+                      .implicitly_writes({register_operand(register_operand::nzcv)}));
     }
 
     instruction& eor_(const register_operand &dst,
@@ -144,7 +147,8 @@ public:
 
     instruction& cmp(const register_operand &dst,
              const reg_or_imm &src) {
-        return append(instruction("cmp", use(dst), use(src)).as_keep());
+        return append(instruction("cmp", use(dst), use(src))
+                      .implicitly_writes({register_operand(register_operand::nzcv)}));
     }
 
     instruction& tst(const register_operand &dst,
@@ -306,7 +310,7 @@ public:
     }
 
     instruction& ret() {
-        return append(instruction("ret", {register_operand(register_operand::x0)}));
+        return append(instruction("ret").implicitly_reads({register_operand(register_operand::x0)}));
     }
 
     instruction& brk(const immediate_operand &imm) {
@@ -318,27 +322,31 @@ public:
     }
 
 	instruction& setz(const register_operand &dst) {
-        return append(instruction("cset", def(dst), cond_operand("eq")));
+        return append(instruction("cset", def(dst), cond_operand("eq"))
+                      .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 
 	instruction& sets(const register_operand &dst) {
-        return append(instruction("cset", def(dst), cond_operand("lt")));
+        return append(instruction("cset", def(dst), cond_operand("lt"))
+                      .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 
 	instruction& setc(const register_operand &dst) {
-        return append(instruction("cset", def(dst), cond_operand("cs")));
+        return append(instruction("cset", def(dst), cond_operand("cs"))
+                      .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 
 	instruction& setcc(const register_operand &dst) {
-        return append(instruction("cset", def(dst), cond_operand("cc")));
+        return append(instruction("cset", def(dst), cond_operand("cc"))
+                      .implicitly_reads({register_operand(register_operand::nzcv)}));
+    }
+	instruction& seto(const register_operand &dst) {
+        return append(instruction("cset", def(dst), cond_operand("vs"))
+                      .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 
     instruction& cfinv() {
         return append(instruction("cfinv"));
-    }
-
-	instruction& seto(const register_operand &dst) {
-        return append(instruction("cset", def(dst), cond_operand("vs")));
     }
 
     instruction& sxtb(const register_operand &dst, const register_operand &src) {

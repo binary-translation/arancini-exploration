@@ -358,22 +358,20 @@ public:
         operands_ = {std::forward<Args>(args)...};
     }
 
-    template <typename... Args>
-    instruction(const std::string& opc, Args&&... args,
-                std::initializer_list<register_operand> implicit_deps)
-        : opcode_(opc),
-          implicit_deps_(implicit_deps)
-    {
-        static_assert(sizeof...(Args) <= 5,
-                      "aarch64 instructions accept at most 5 operands");
-        opcount_ = sizeof...(Args);
-        operands_ = {std::forward<Args>(args)...};
-    }
-
     instruction(const label_operand &label)
         : opcode_(label.name())
         , label_(true)
     { }
+
+    instruction &implicitly_reads(std::initializer_list<register_operand> deps) {
+        implicit_deps_.insert(implicit_deps_.end(), deps);
+        return *this;
+    }
+
+    instruction &implicitly_writes(std::initializer_list<register_operand> deps) {
+        explicit_deps_.insert(explicit_deps_.end(), deps);
+        return *this;
+    }
 
     instruction &add_comment(const std::string &comment) { comment_ = comment; return *this; }
 
@@ -417,12 +415,24 @@ public:
     [[nodiscard]]
 	const operand_array &operands() const { return operands_; }
 
+    [[nodiscard]]
     std::vector<register_operand>& implicit_dependencies() {
         return implicit_deps_;
     }
 
+    [[nodiscard]]
     const std::vector<register_operand>& implicit_dependencies() const {
         return implicit_deps_;
+    }
+
+    [[nodiscard]]
+    std::vector<register_operand>& side_effect_writes() {
+        return explicit_deps_;
+    }
+
+    [[nodiscard]]
+    const std::vector<register_operand>& side_effect_writes() const {
+        return explicit_deps_;
     }
 private:
     std::string opcode_;
@@ -435,7 +445,9 @@ private:
 
     std::size_t opcount_ = 0;
     operand_array operands_;
+
     std::vector<register_operand> implicit_deps_;
+    std::vector<register_operand> explicit_deps_;
 };
 
 } // namespace arancini::output::dynamic::arm64
