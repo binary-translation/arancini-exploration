@@ -3,6 +3,7 @@
 
 #include <bitset>
 #include <unordered_map>
+#include <unordered_set>
 
 using namespace arancini::output::dynamic::arm64;
 
@@ -114,6 +115,12 @@ private:
     }
 };
 
+struct register_hash {
+    std::size_t operator()(const register_operand &reg) const {
+        return std::hash<std::size_t>{}(reg.index());
+    }
+};
+
 class register_allocator {
 public:
     register_allocator(system_register_set regset):
@@ -166,14 +173,33 @@ private:
         }
     };
 
-    struct register_hash {
-        std::size_t operator()(const register_operand &reg) const {
-            return std::hash<std::size_t>{}(reg.index()); 
-        }
-    };
-
     using register_map = std::unordered_map<register_operand, register_operand, register_hash>;
     register_map current_allocations_;
+};
+
+bool fulfills_keep(const instruction& instr,
+                   const register_operand& op,
+                   const std::unordered_set<register_operand, register_hash>& implicit_deps)
+{
+    return instr.is_keep() || implicit_deps.count(op);
+}
+
+class implicit_dependency_handler {
+public:
+    void satisfy(const register_operand& op) {
+        deps_.erase(op);
+    }
+
+    void insert(const std::vector<register_operand>& implicit_dependencies) {
+        deps_.insert(implicit_dependencies.begin(),
+                     implicit_dependencies.end());
+    }
+
+    bool fulfills(const register_operand& reg) {
+        return deps_.count(reg) != 0;
+    }
+private:
+    std::unordered_set<register_operand, register_hash> deps_;
 };
 
 void instruction_builder::allocate() {
@@ -187,12 +213,15 @@ void instruction_builder::allocate() {
     // Frame Pointer - points to guest registers (x29)
     system_register_set regset{register_set<32>{0x11FFFFFFF}, register_set<32>{0xFFFFFFFFF}};
     register_allocator reg_alloc{regset};
+    implicit_dependency_handler implicit_dependencies;
 
 	for (auto it = instructions_.rbegin(); it != instructions_.rend(); it++) {
 		auto &instr = *it;
         bool has_unused_keep = false;
 
         logger.debug("Allocating instruction {}\n", instr);
+
+        implicit_dependencies.insert(instr.implicit_dependencies());
         for (auto& op : instr.operands()) {
             [[unlikely]]
             if (!op.is_def()) continue;
@@ -215,8 +244,11 @@ void instruction_builder::allocate() {
                 // Allocation not needed beyond this point
                 reg_alloc.deallocate(*prev);
 
+                // If there existed any implicit dependency on the allocated register, we satisfy it
+                implicit_dependencies.satisfy(*prev);
+
                 logger.debug("Register {} available\n", *prev);
-            } else if (instr.is_keep()) {
+            } else if (instr.is_keep() || implicit_dependencies.fulfills(op)) {
                 // No previous allocation: no users of this definition exist
                 // Need to allocate anyway; since instruction is marked as keep()
                 logger.debug("No previous allocation exists for 'keep' definition {}\n", op);
@@ -234,7 +266,6 @@ void instruction_builder::allocate() {
                 logger.debug("Register not allocated - killing instruction\n", op);
                 instr.kill();
             }
-
             break;
         }
 

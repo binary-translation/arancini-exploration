@@ -193,7 +193,7 @@ public:
              const register_operand &src1,
              const immediate_operand &immr,
              const immediate_operand &imms) {
-        return append(instruction("bfi", use(def(dst)), use(src1), use(immr), use(imms)).as_keep());
+        return append(instruction("bfi", use(def(dst)), use(src1), use(immr), use(imms)));
     }
 
 
@@ -206,7 +206,7 @@ public:
 #define STR_VARIANTS(name) \
     instruction& name(const register_operand &src, \
               const memory_operand &base) { \
-        return append(instruction(#name, use(src), use(base))); \
+        return append(instruction(#name, use(src), use(base)).as_keep()); \
     } \
 
     LDR_VARIANTS(ldr);
@@ -306,7 +306,7 @@ public:
     }
 
     instruction& ret() {
-        return append(instruction("ret"));
+        return append(instruction("ret", {register_operand(register_operand::x0)}));
     }
 
     instruction& brk(const immediate_operand &imm) {

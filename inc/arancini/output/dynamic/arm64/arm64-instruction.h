@@ -39,6 +39,10 @@ static assembler asm_;
 
 class register_operand {
 public:
+    // TODO: this design requires writing
+    // register_operand(register_operand::x0)
+    // We should get to a point where we can write
+    // register_operand::x0 and we imply the x0 index
     enum regname64 : std::uint8_t {
         x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15,
         x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, x29, x30,
@@ -354,6 +358,18 @@ public:
         operands_ = {std::forward<Args>(args)...};
     }
 
+    template <typename... Args>
+    instruction(const std::string& opc, Args&&... args,
+                std::initializer_list<register_operand> implicit_deps)
+        : opcode_(opc),
+          implicit_deps_(implicit_deps)
+    {
+        static_assert(sizeof...(Args) <= 5,
+                      "aarch64 instructions accept at most 5 operands");
+        opcount_ = sizeof...(Args);
+        operands_ = {std::forward<Args>(args)...};
+    }
+
     instruction(const label_operand &label)
         : opcode_(label.name())
         , label_(true)
@@ -400,6 +416,14 @@ public:
 
     [[nodiscard]]
 	const operand_array &operands() const { return operands_; }
+
+    std::vector<register_operand>& implicit_dependencies() {
+        return implicit_deps_;
+    }
+
+    const std::vector<register_operand>& implicit_dependencies() const {
+        return implicit_deps_;
+    }
 private:
     std::string opcode_;
     std::string comment_;
@@ -411,6 +435,7 @@ private:
 
     std::size_t opcount_ = 0;
     operand_array operands_;
+    std::vector<register_operand> implicit_deps_;
 };
 
 } // namespace arancini::output::dynamic::arm64
