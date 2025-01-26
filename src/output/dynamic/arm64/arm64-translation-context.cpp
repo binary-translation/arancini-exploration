@@ -170,7 +170,7 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
     instr_cnt_++;
 
     // TODO: these separators should be inserted only in debug builds
-    builder_.insert_separator(fmt::format("instruction_{}", instr_cnt_), disasm);
+    builder_.insert_separator(fmt::format("instruction_{}", instr_cnt_)).add_comment(disasm);
 
     nodes_.clear();
 }
@@ -342,14 +342,14 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
         switch (width) {
             case 1:
             case 8:
-                builder_.ldrb(dest_vregs[i], addr, comment);
+                builder_.ldrb(dest_vregs[i], addr).add_comment(comment);
                 break;
             case 16:
-                builder_.ldrh(dest_vregs[i], addr, comment);
+                builder_.ldrh(dest_vregs[i], addr).add_comment(comment);
                 break;
             case 32:
             case 64:
-                builder_.ldr(dest_vregs[i], addr, comment);
+                builder_.ldr(dest_vregs[i], addr).add_comment(comment);
                 break;
             default:
                 throw backend_exception("cannot load individual register values larger than 64-bits");
@@ -367,7 +367,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     if (is_flag_port(n.value())) {
         const auto &src_vreg = flag_map.at(static_cast<reg_offsets>(n.regoff()));
         auto addr = guestreg_memory_operand(n.regoff());
-        builder_.strb(src_vreg, addr, fmt::format("write flag: {}", n.regname()));
+        builder_.strb(src_vreg, addr).add_comment(fmt::format("write flag: {}", n.regname()));
         return;
     }
 
@@ -390,14 +390,14 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
         switch (width) {
             case 1:
             case 8:
-                builder_.strb(src_vregs[i], addr, comment);
+                builder_.strb(src_vregs[i], addr).add_comment(comment);
                 break;
             case 16:
-                builder_.strh(src_vregs[i], addr, comment);
+                builder_.strh(src_vregs[i], addr).add_comment(comment);
                 break;
             case 32:
             case 64:
-                builder_.str(src_vregs[i], addr, comment);
+                builder_.str(src_vregs[i], addr).add_comment(comment);
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
@@ -424,14 +424,14 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
         switch (width) {
             case 1:
             case 8:
-                builder_.ldrb(dest_vregs[i], mem_op, comment);
+                builder_.ldrb(dest_vregs[i], mem_op).add_comment(comment);
                 break;
             case 16:
-                builder_.ldrh(dest_vregs[i], mem_op, comment);
+                builder_.ldrh(dest_vregs[i], mem_op).add_comment(comment);
                 break;
             case 32:
             case 64:
-                builder_.ldr(dest_vregs[i], mem_op, comment);
+                builder_.ldr(dest_vregs[i], mem_op).add_comment(comment);
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
@@ -460,14 +460,14 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
         switch (width) {
             case 1:
             case 8:
-                builder_.strb(src_vregs[i], mem_op, comment);
+                builder_.strb(src_vregs[i], mem_op).add_comment(comment);
                 break;
             case 16:
-                builder_.strh(src_vregs[i], mem_op, comment);
+                builder_.strh(src_vregs[i], mem_op).add_comment(comment);
                 break;
             case 32:
             case 64:
-                builder_.str(src_vregs[i], mem_op, comment);
+                builder_.str(src_vregs[i], mem_op).add_comment(comment);
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
@@ -478,7 +478,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
 
 void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
 	auto dest_vreg = vreg_alloc_.allocate(n.val());
-    builder_.mov(dest_vreg, move_to_register(this_pc_, value_type::u64()), "read program counter");
+    builder_.mov(dest_vreg, move_to_register(this_pc_, value_type::u64())).add_comment("read program counter");
 }
 
 void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
@@ -491,9 +491,8 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
 		ret_ = 4;
 	}
 
-    builder_.str(new_pc_vreg,
-                 guestreg_memory_operand(static_cast<int>(reg_offsets::PC)),
-                 "write program counter");
+    builder_.str(new_pc_vreg, guestreg_memory_operand(static_cast<int>(reg_offsets::PC)))
+            .add_comment("write program counter");
 }
 
 void arm64_translation_context::materialise_label(const label_node &n) {
@@ -520,10 +519,10 @@ void arm64_translation_context::materialise_constant(const constant_node &n) {
 
     if (n.val().type().is_floating_point()) {
         auto value = n.const_val_f();
-        builder_.mov(dest_vreg, move_to_register(value, n.val().type()), "move float into register");
+        builder_.mov(dest_vreg, move_to_register(value, n.val().type())).add_comment("move float into register");
     } else {
         auto value = n.const_val_i();
-        builder_.mov(dest_vreg, move_to_register(value, n.val().type()), "move integer into register");
+        builder_.mov(dest_vreg, move_to_register(value, n.val().type())).add_comment("move integer into register");
     }
 }
 
@@ -555,10 +554,10 @@ inline shift_operand extend_register(instruction_builder& builder, const registe
 }
 
 void fill_byte_with_bit(instruction_builder& builder, const register_operand& reg) {
-    builder.lsl(reg, reg, immediate_operand(7, value_type::u8()),
-                "shift left LSB to set sign bit of byte");
-    builder.asr(reg, reg, immediate_operand(7, value_type::u8()),
-                "shift right to fill LSB with sign bit (except for least-significant bit)");
+    builder.lsl(reg, reg, immediate_operand(7, value_type::u8()))
+                .add_comment("shift left LSB to set sign bit of byte");
+    builder.asr(reg, reg, immediate_operand(7, value_type::u8()))
+                .add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
 }
 
 [[nodiscard]]
@@ -656,8 +655,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 auto compare_regset = vreg_alloc_.allocate(dest_regset[0].type());
                 builder_.mov(compare_regset, move_to_register(0xFFFF0000, compare_regset[0].type()));
                 builder_.cmp(compare_regset, dest_regset);
-                builder_.cset(flag_map[reg_offsets::CF], cond_operand("ne"), "compute flag: CF");
-                builder_.cset(flag_map[reg_offsets::OF], cond_operand("ne"), "compute flag: OF");
+                builder_.cset(flag_map[reg_offsets::CF], cond_operand("ne")).add_comment("compute flag: CF");
+                builder_.cset(flag_map[reg_offsets::OF], cond_operand("ne")).add_comment("compute flag: OF");
                 sets_flags = false;
             }
             break;
@@ -684,8 +683,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 // CF and OF are set to 1 when lhs * rhs > 64-bits
                 // Otherwise they are set to 0
                 builder_.cmp(dest_regset[1], immediate_operand(0, ir::value_type::u8()));
-                builder_.setz(flag_map[reg_offsets::CF], "compute flag: CF");
-                builder_.setz(flag_map[reg_offsets::OF], "compute flag: OF");
+                builder_.setz(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
+                builder_.setz(flag_map[reg_offsets::OF]).add_comment("compute flag: OF");
                 sets_flags = false;
                 break;
             } else {
@@ -912,8 +911,10 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             throw backend_exception("Unsupported comparison between {} x {}",
                                     n.lhs().type(), n.rhs().type());
 
-        builder_.cmp(lhs_regset[0], rhs_regset[0], "compare LHS and RHS to generate condition for conditional set");
-        builder_.cset(dest_regset[0], get_cset_type(n.op()), "set to 1 if condition is true (based flags from the previous compare)");
+        builder_.cmp(lhs_regset[0], rhs_regset[0])
+                .add_comment("compare LHS and RHS to generate condition for conditional set");
+        builder_.cset(dest_regset[0], get_cset_type(n.op()))
+                .add_comment("set to 1 if condition is true (based flags from the previous compare)");
 		break;
 	default:
 		throw backend_exception("Unsupported binary arithmetic operation with index {}", util::to_underlying(n.op()));
@@ -923,17 +924,17 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
     // But not operations on vectors
     [[likely]]
     if (sets_flags) {
-        builder_.setz(flag_map[reg_offsets::ZF], "compute flag: ZF");
-        builder_.sets(flag_map[reg_offsets::SF], "compute flag: SF");
-        builder_.seto(flag_map[reg_offsets::OF], "compute flag: OF");
+        builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");
+        builder_.sets(flag_map[reg_offsets::SF]).add_comment("compute flag: SF");
+        builder_.seto(flag_map[reg_offsets::OF]).add_comment("compute flag: OF");
 
         // ARM computes flags in the same way as x86 for subtraction
         // EXCEPT for the CF; which is cleared when there is underflow and set otherwise (the
         // opposite behaviour to x86)
         if (n.op() == binary_arith_op::sub)
-            builder_.setcc(flag_map[reg_offsets::CF], "compute flag: CF");
+            builder_.setcc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
         else
-            builder_.setc(flag_map[reg_offsets::CF], "compute flag: CF");
+            builder_.setc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
     }
 }
 
@@ -992,10 +993,10 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
         }
     }
 
-	builder_.setz(flag_map[reg_offsets::ZF], "compute flag: ZF");
-	builder_.sets(flag_map[reg_offsets::SF], "compute flag: SF");
-	builder_.seto(flag_map[reg_offsets::OF], "compute flag: OF");
-    builder_.setc(flag_map[reg_offsets::CF], "compute flag: CF");
+	builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");
+	builder_.sets(flag_map[reg_offsets::SF]).add_comment("compute flag: SF");
+	builder_.seto(flag_map[reg_offsets::OF]).add_comment("compute flag: OF");
+    builder_.setc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
 }
 
 void arm64_translation_context::materialise_binary_atomic(const binary_atomic_node &n) {
@@ -1152,7 +1153,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             builder_.insert_comment("Atomic addition (load atomically, add and retry if failed)");
 
             auto restart_label = fmt::format("restart_{}", instr_cnt_);
-            builder_.label(restart_label, "set label for jump (needed in case of restarting operation)");
+            builder_.label(restart_label).add_comment("set label for jump (needed in case of restarting operation)");
             switch(n.val().type().element_width()) {
             case 1:
             case 8:
@@ -1170,7 +1171,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             default:
                 throw backend_exception("Atomic XADD not supported for sizes > 64-bit");
             }
-            builder_.adds(dest_vreg, dest_vreg, src_vreg, "perform addition with loaded source");
+            builder_.adds(dest_vreg, dest_vreg, src_vreg).add_comment("perform addition with loaded source");
 
             auto status = vreg_alloc_.allocate(value_type::u32());
             switch(n.val().type().element_width()) {
@@ -1191,7 +1192,8 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
                 throw backend_exception("Atomic XADD not supported for sizes > 64-bit");
             }
 
-            builder_.cbnz(status, restart_label, "write back source or restart operation (by jumping to label)");
+            builder_.cbnz(status, restart_label)
+                    .add_comment("write back source or restart operation (by jumping to label)");
         }
         break;
     case binary_atomic_op::xchg:
@@ -1218,12 +1220,12 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
 		throw backend_exception("unsupported binary atomic operation {}", util::to_underlying(n.op()));
 	}
 
-	builder_.setz(flag_map[reg_offsets::ZF], "write flag: ZF");
-	builder_.sets(flag_map[reg_offsets::SF], "write flag: SF");
-	builder_.seto(flag_map[reg_offsets::OF], "write flag: OF");
+	builder_.setz(flag_map[reg_offsets::ZF]).add_comment("write flag: ZF");
+	builder_.sets(flag_map[reg_offsets::SF]).add_comment("write flag: SF");
+	builder_.seto(flag_map[reg_offsets::OF]).add_comment("write flag: OF");
 
     if (n.op() != binary_atomic_op::sub)
-        builder_.setc(flag_map[reg_offsets::CF], "write flag: CF");
+        builder_.setc(flag_map[reg_offsets::CF]).add_comment("write flag: CF");
 }
 
 void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_node &n) {
@@ -1251,9 +1253,9 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
     case ternary_atomic_op::cmpxchg:
         if constexpr (supports_lse) {
             builder_.insert_comment("Atomic CMPXCHG using CAS (enabled on systems with LSE support");
-            builder_.cas(acc_vreg, src_vreg, memory_operand(mem_addr),
-                          "write source to memory if source == accumulator, accumulator = source");
-            builder_.mov(acc_vreg, dest_vreg, "move result of accumulator into destination register");
+            builder_.cas(acc_vreg, src_vreg, memory_operand(mem_addr))
+                    .add_comment("write source to memory if source == accumulator, accumulator = source");
+            builder_.mov(acc_vreg, dest_vreg).add_comment("move result of accumulator into destination register");
             builder_.cmp(dest_vreg, immediate_operand(0, value_types::u6));
         } else {
             auto loop_label = fmt::format("loop_{}", instr_cnt_);
@@ -1262,16 +1264,16 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
 
             builder_.insert_comment("Atomic CMPXCHG without CAS");
             builder_.label(loop_label);
-            builder_.ldxr(dest_vreg, memory_operand(mem_addr), "load atomically");
-            builder_.cmp(dest_vreg, acc_vreg, "compare with accumulator");
-            builder_.bne(failure_label, "if loaded value != accumulator branch to failure");
-            builder_.stxr(dest_vreg, src_vreg, memory_operand(mem_addr), "store if not failure");
+            builder_.ldxr(dest_vreg, memory_operand(mem_addr)).add_comment("load atomically");
+            builder_.cmp(dest_vreg, acc_vreg).add_comment("compare with accumulator");
+            builder_.bne(failure_label).add_comment("if loaded value != accumulator branch to failure");
+            builder_.stxr(dest_vreg, src_vreg, memory_operand(mem_addr)).add_comment("store if not failure");
             // Compare and also set flags for later
             builder_.cmp(dest_vreg, immediate_operand(0, ir::value_type::u1()));
-            builder_.beq(success_label, "== 0 represents success storing");
+            builder_.beq(success_label).add_comment("== 0 represents success storing");
             builder_.label(failure_label);
             builder_.add(acc_vreg, dest_vreg, immediate_operand(0, acc_vreg.type()));
-            builder_.b(loop_label, "loop until failure or success");
+            builder_.b(loop_label).add_comment("loop until failure or success");
             builder_.label(success_label);
         }
         break;
@@ -1279,10 +1281,10 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
 		throw backend_exception("unsupported binary atomic operation {}", util::to_underlying(n.op()));
     }
 
-    builder_.setz(flag_map[reg_offsets::ZF], "compute flag: ZF");
-    builder_.sets(flag_map[reg_offsets::SF], "compute flag: SF");
-    builder_.seto(flag_map[reg_offsets::OF], "compute flag: OF");
-    builder_.setc(flag_map[reg_offsets::CF], "compute flag: CF");
+    builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");
+    builder_.sets(flag_map[reg_offsets::SF]).add_comment("compute flag: SF");
+    builder_.seto(flag_map[reg_offsets::OF]).add_comment("compute flag: OF");
+    builder_.setc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
 }
 
 void arm64_translation_context::materialise_unary_arith(const unary_arith_node &n) {
@@ -1355,11 +1357,11 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             // sign-extend to 1 byte
             // sign-extend the rest
             // TODO: this is likely wrong
-            builder_.lsl(dest_vreg, src_vreg, immediate_operand(7, value_type::u8()),
-                         "shift left LSB to set sign bit of byte");
-            builder_.sxtb(dest_vreg, dest_vreg, "sign-extend");
-            builder_.asr(dest_vreg, dest_vreg, immediate_operand(7, value_type::u8()),
-                         "shift right to fill LSB with sign bit (except for least-significant bit)");
+            builder_.lsl(dest_vreg, src_vreg, immediate_operand(7, value_type::u8()))
+                    .add_comment("shift left LSB to set sign bit of byte");
+            builder_.sxtb(dest_vreg, dest_vreg).add_comment("sign-extend");
+            builder_.asr(dest_vreg, dest_vreg, immediate_operand(7, value_type::u8()))
+                    .add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
             break;
         case 8:
             builder_.sxtb(dest_vreg, src_vreg);
@@ -1414,7 +1416,9 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             for (std::size_t i = 0; i < src_vregs.size(); ++i) {
                 const register_operand& src_vreg = vreg_alloc_.allocate(dest_vreg.type());
                 builder_.mov(src_vreg, src_vregs[i]);
-                builder_.lsl(src_vreg, src_vreg, move_immediate(dest_pos % n.val().type().element_width(), value_types::u6, src_vreg.type()));
+                builder_.lsl(src_vreg, src_vreg,
+                             move_immediate(dest_pos % n.val().type().element_width(),
+                                            value_types::u6, src_vreg.type()));
                 builder_.orr_(dest_vregs[dest_idx], dest_vregs[dest_idx], src_vreg);
 
                 dest_pos += src_vregs[i].type().width();
@@ -1427,7 +1431,9 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
                 const register_operand& src_vreg = vreg_alloc_.allocate(dest_vreg.type());
                 builder_.mov(src_vreg, src_vregs[src_idx]);
-                builder_.lsl(src_vreg, src_vreg, move_immediate(src_pos % n.source_value().type().element_width(), value_types::u6, src_vreg.type()));
+                builder_.lsl(src_vreg, src_vreg,
+                             move_immediate(src_pos % n.source_value().type().element_width(),
+                                            value_types::u6, src_vreg.type()));
                 builder_.mov(dest_vregs[i], src_vreg);
 
                 src_pos += src_vregs[i].type().width();
@@ -1591,7 +1597,8 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
     const auto &false_vregs = materialise_port(n.falseval());
 
     /* builder_.brk(immediate_operand(100, 64)); */
-    builder_.cmp(cond_vregs, immediate_operand(0, value_type::u8()), "compare condition for conditional select");
+    builder_.cmp(cond_vregs, immediate_operand(0, value_type::u8()))
+            .add_comment("compare condition for conditional select");
     builder_.csel(dest_vreg, true_vregs, false_vregs, cond_operand("NE"));
 }
 

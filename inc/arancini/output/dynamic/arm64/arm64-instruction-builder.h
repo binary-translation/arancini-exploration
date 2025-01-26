@@ -13,19 +13,18 @@ class instruction_builder {
 public:
 
 #define ARITH_OP_BASIC(name) \
-	void name(const register_operand &dst, \
-              const register_operand &src1, \
-              const reg_or_imm &src2, \
-              const std::string &comment = "") { \
-        append(instruction(#name, def(dst), use(src1), use(src2)).as_keep().add_comment(comment)); \
+	instruction& name(const register_operand &dst, \
+                      const register_operand &src1, \
+                      const reg_or_imm &src2) { \
+        return append(instruction(#name, def(dst), use(src1), use(src2)).as_keep()); \
     }
 
 #define ARITH_OP_SHIFT(name) \
-    void name(const register_operand &dst, \
-              const register_operand &src1, \
-              const reg_or_imm &src2, \
-              const shift_operand &shift) { \
-        append(instruction(#name, def(dst), use(src1), use(src2), use(shift)).as_keep()); \
+    instruction& name(const register_operand &dst, \
+                      const register_operand &src1, \
+                      const reg_or_imm &src2, \
+                      const shift_operand &shift) { \
+        return append(instruction(#name, def(dst), use(src1), use(src2), use(shift)).as_keep()); \
     }
 
 // TODO: refactor everything this way
@@ -54,160 +53,160 @@ public:
     // SBCS
     ARITH_OP(sbcs);
 
-    void orr_(const register_operand &dst,
+    instruction& orr_(const register_operand &dst,
               const register_operand &src1,
-              const reg_or_imm &src2, const std::string &comment = "") {
-        append(instruction("orr", def(dst), use(src1), use(src2)).add_comment(comment));
+              const reg_or_imm &src2) {
+        return append(instruction("orr", def(dst), use(src1), use(src2)));
     }
 
-    void and_(const register_operand &dst,
+    instruction& and_(const register_operand &dst,
               const register_operand &src1,
-              const reg_or_imm &src2, const std::string &comment = "") {
-        append(instruction("and", def(dst), use(src1), use(src2)).add_comment(comment));
+              const reg_or_imm &src2) {
+        return append(instruction("and", def(dst), use(src1), use(src2)));
     }
 
     // TODO: refactor this; there should be only a single version and the comment should be removed
-    void ands(const register_operand &dst,
+    instruction& ands(const register_operand &dst,
               const register_operand &src1,
-              const reg_or_imm &src2, const std::string &comment = "") {
-        append(instruction("ands", def(dst), use(src1), use(src2)).as_keep().add_comment(comment));
+              const reg_or_imm &src2) {
+        return append(instruction("ands", def(dst), use(src1), use(src2)).as_keep());
     }
 
-    void eor_(const register_operand &dst,
+    instruction& eor_(const register_operand &dst,
               const register_operand &src1,
-              const reg_or_imm &src2, const std::string &comment = "") {
-        append(instruction("eor", def(dst), use(src1), use(src2)).add_comment(comment));
+              const reg_or_imm &src2) {
+        return append(instruction("eor", def(dst), use(src1), use(src2)));
     }
 
-    void not_(const register_operand &dst, const reg_or_imm &src, const std::string &comment = "") {
-        append(instruction("mvn", def(dst), use(src)).add_comment(comment));
+    instruction& not_(const register_operand &dst, const reg_or_imm &src) {
+        return append(instruction("mvn", def(dst), use(src)));
     }
 
-    void neg(const register_operand &dst, const register_operand &src, const std::string &comment = "") {
-        append(instruction("neg", def(dst), use(src)).add_comment(comment));
+    instruction& neg(const register_operand &dst, const register_operand &src) {
+        return append(instruction("neg", def(dst), use(src)));
     }
 
-    void movn(const register_operand &dst,
+    instruction& movn(const register_operand &dst,
               const immediate_operand &src,
-              const shift_operand &shift, const std::string &comment = "") {
-        append(instruction("movn", def(dst), use(src), use(shift)).add_comment(comment));
+              const shift_operand &shift) {
+        return append(instruction("movn", def(dst), use(src), use(shift)));
     }
 
-    void movz(const register_operand &dst,
+    instruction& movz(const register_operand &dst,
               const immediate_operand &src,
-              const shift_operand &shift, const std::string &comment = "") {
-        append(instruction("movz", def(dst), use(src), use(shift)).add_comment(comment));
+              const shift_operand &shift) {
+        return append(instruction("movz", def(dst), use(src), use(shift)));
     }
 
-    void movk(const register_operand &dst,
+    instruction& movk(const register_operand &dst,
               const immediate_operand &src,
-              const shift_operand &shift, const std::string &comment = "") {
-        append(instruction("movk", use(def(dst)), use(src), use(shift)).add_comment(comment));
+              const shift_operand &shift) {
+        return append(instruction("movk", use(def(dst)), use(src), use(shift)));
     }
 
-    instruction& mov(const register_operand &dst, const reg_or_imm &src, const std::string &comment = "") {
-        return append(instruction("mov", def(dst), use(src)).add_comment(comment));
+    instruction& mov(const register_operand &dst, const reg_or_imm &src) {
+        return append(instruction("mov", def(dst), use(src)));
     }
 
-    void b(const label_operand &dest, const std::string &comment = "") {
-        append(instruction("b", use(dest)).add_comment(comment).as_branch());
+    instruction& b(const label_operand &dest) {
+        return append(instruction("b", use(dest)).as_branch());
     }
 
-    void beq(const label_operand &dest, const std::string &comment = "") {
-        append(instruction("beq", use(dest)).add_comment(comment).as_branch());
+    instruction& beq(const label_operand &dest) {
+        return append(instruction("beq", use(dest)).as_branch());
     }
 
-    void bl(const label_operand &dest, const std::string &comment = "") {
-        append(instruction("bl", use(dest)).add_comment(comment).as_branch());
+    instruction& bl(const label_operand &dest) {
+        return append(instruction("bl", use(dest)).as_branch());
     }
 
-    void bne(const label_operand &dest, const std::string &comment = "") {
-        append(instruction("bne", use(dest)).add_comment(comment).as_branch());
+    instruction& bne(const label_operand &dest) {
+        return append(instruction("bne", use(dest)).as_branch());
     }
 
     // Check reg == 0 and jump if true
     // Otherwise, continue to the next instruction
     // Does not affect condition flags (can be used to compare-and-branch with 1 instruction)
-    void cbz(const register_operand &reg, const label_operand &label, const std::string &comment = "") {
-        append(instruction("cbz", use(reg), use(label)).as_branch().add_comment(comment));
+    instruction& cbz(const register_operand &reg, const label_operand &label) {
+        return append(instruction("cbz", use(reg), use(label)).as_branch());
     }
 
     // TODO: check if this allocated correctly
-    void cbnz(const register_operand &rt, const label_operand &dest, const std::string &comment = "") {
-        append(instruction("cbnz", use(rt), use(dest)).add_comment(comment).as_branch());
+    instruction& cbnz(const register_operand &rt, const label_operand &dest) {
+        return append(instruction("cbnz", use(rt), use(dest)).as_branch());
     }
 
     // TODO: handle register_set
-    void cmn(const register_operand &dst,
-             const reg_or_imm &src, const std::string &comment = "") {
-        append(instruction("cmn", use(def(dst)), use(src)).add_comment(comment));
+    instruction& cmn(const register_operand &dst,
+             const reg_or_imm &src) {
+        return append(instruction("cmn", use(def(dst)), use(src)));
     }
 
-    void cmp(const register_operand &dst,
-             const reg_or_imm &src, const std::string &comment = "") {
-        append(instruction("cmp", use(dst), use(src)).as_keep().add_comment(comment));
+    instruction& cmp(const register_operand &dst,
+             const reg_or_imm &src) {
+        return append(instruction("cmp", use(dst), use(src)).as_keep());
     }
 
-    void tst(const register_operand &dst,
-             const reg_or_imm &src, const std::string &comment = "") {
-        append(instruction("tst", use(def(dst)), use(src)).add_comment(comment));
+    instruction& tst(const register_operand &dst,
+             const reg_or_imm &src) {
+        return append(instruction("tst", use(def(dst)), use(src)));
     }
 
-    void lsl(const register_operand &dst,
+    instruction& lsl(const register_operand &dst,
              const register_operand &src1,
-             const reg_or_imm &src2, const std::string &comment = "") {
-        append(instruction("lsl", def(dst), use(src1), use(src2)).add_comment(comment));
+             const reg_or_imm &src2) {
+        return append(instruction("lsl", def(dst), use(src1), use(src2)));
     }
 
-    void lsr(const register_operand &dst,
+    instruction& lsr(const register_operand &dst,
              const register_operand &src1,
-             const reg_or_imm &src2, const std::string &comment = "") {
-        append(instruction("lsr", def(dst), use(src1), use(src2)).add_comment(comment));
+             const reg_or_imm &src2) {
+        return append(instruction("lsr", def(dst), use(src1), use(src2)));
     }
 
-    void asr(const register_operand &dst,
+    instruction& asr(const register_operand &dst,
              const register_operand &src1,
-             const reg_or_imm &src2, const std::string &comment = "") {
-        append(instruction("asr", def(dst), use(src1), use(src2)).add_comment(comment));
+             const reg_or_imm &src2) {
+        return append(instruction("asr", def(dst), use(src1), use(src2)));
     }
 
-    void csel(const register_operand &dst,
+    instruction& csel(const register_operand &dst,
               const register_operand &src1,
               const register_operand &src2,
-              const cond_operand &cond, const std::string &comment = "") {
-        append(instruction("csel", def(dst), use(src1), use(src2), use(cond)).add_comment(comment));
+              const cond_operand &cond) {
+        return append(instruction("csel", def(dst), use(src1), use(src2), use(cond)));
     }
 
-    void cset(const register_operand &dst,
-              const cond_operand &cond, const std::string &comment = "") {
-        append(instruction("cset", def(dst), use(cond)).add_comment(comment));
+    instruction& cset(const register_operand &dst,
+              const cond_operand &cond) {
+        return append(instruction("cset", def(dst), use(cond)));
     }
 
-    void bfxil(const register_operand &dst,
+    instruction& bfxil(const register_operand &dst,
                const register_operand &src1,
                const immediate_operand &lsb,
-               const immediate_operand &width, const std::string &comment = "") {
-        append(instruction("bfxil", use(def(dst)), use(src1), use(lsb), use(width)).add_comment(comment));
+               const immediate_operand &width) {
+        return append(instruction("bfxil", use(def(dst)), use(src1), use(lsb), use(width)));
     }
 
-    void bfi(const register_operand &dst,
+    instruction& bfi(const register_operand &dst,
              const register_operand &src1,
              const immediate_operand &immr,
-             const immediate_operand &imms, const std::string &comment = "") {
-        append(instruction("bfi", use(def(dst)), use(src1), use(immr), use(imms)).as_keep().add_comment(comment));
+             const immediate_operand &imms) {
+        return append(instruction("bfi", use(def(dst)), use(src1), use(immr), use(imms)).as_keep());
     }
 
 
 #define LDR_VARIANTS(name) \
-    void name(const register_operand &dest, \
-             const memory_operand &base, const std::string &comment = "") { \
-        append(instruction(#name, def(dest), use(base)).add_comment(comment)); \
+    instruction& name(const register_operand &dest, \
+             const memory_operand &base) { \
+        return append(instruction(#name, def(dest), use(base))); \
     } \
 
 #define STR_VARIANTS(name) \
-    void name(const register_operand &src, \
-              const memory_operand &base, const std::string &comment = "") { \
-        append(instruction(#name, use(src), use(base)).add_comment(comment)); \
+    instruction& name(const register_operand &src, \
+              const memory_operand &base) { \
+        return append(instruction(#name, use(src), use(base))); \
     } \
 
     LDR_VARIANTS(ldr);
@@ -218,170 +217,169 @@ public:
     STR_VARIANTS(strh);
     STR_VARIANTS(strb);
 
-    void mul(const register_operand &dest,
+    instruction& mul(const register_operand &dest,
              const register_operand &src1,
-             const register_operand &src2, const std::string &comment = "") {
-        append(instruction("mul", def(dest), use(src1), use(src2)).add_comment(comment));
+             const register_operand &src2) {
+        return append(instruction("mul", def(dest), use(src1), use(src2)));
     }
 
-    void smulh(const register_operand &dest,
+    instruction& smulh(const register_operand &dest,
                const register_operand &src1,
-               const register_operand &src2, const std::string &comment = "") {
-        append(instruction("smulh", def(dest), use(src1), use(src2)).add_comment(comment));
+               const register_operand &src2) {
+        return append(instruction("smulh", def(dest), use(src1), use(src2)));
     }
 
-    void smull(const register_operand &dest,
+    instruction& smull(const register_operand &dest,
                const register_operand &src1,
-               const register_operand &src2, const std::string &comment = "") {
-        append(instruction("smull", def(dest), use(src1), use(src2)).add_comment(comment));
+               const register_operand &src2) {
+        return append(instruction("smull", def(dest), use(src1), use(src2)));
     }
 
-    void umulh(const register_operand &dest,
+    instruction& umulh(const register_operand &dest,
                const register_operand &src1,
-               const register_operand &src2, const std::string &comment = "") {
-        append(instruction("umulh", def(dest), use(src1), use(src2)).add_comment(comment));
+               const register_operand &src2) {
+        return append(instruction("umulh", def(dest), use(src1), use(src2)));
     }
 
-    void umull(const register_operand &dest,
+    instruction& umull(const register_operand &dest,
                const register_operand &src1,
-               const register_operand &src2, const std::string &comment = "") {
-        append(instruction("umull", def(dest), use(src1), use(src2)).add_comment(comment));
+               const register_operand &src2) {
+        return append(instruction("umull", def(dest), use(src1), use(src2)));
     }
 
-    void fmul(const register_operand &dest,
+    instruction& fmul(const register_operand &dest,
               const register_operand &src1,
-              const register_operand &src2, const std::string &comment = "") {
-        append(instruction("fmul", def(dest), use(src1), use(src2)).add_comment(comment));
+              const register_operand &src2) {
+        return append(instruction("fmul", def(dest), use(src1), use(src2)));
     }
 
-    void sdiv(const register_operand &dest,
+    instruction& sdiv(const register_operand &dest,
               const register_operand &src1,
-              const register_operand &src2, const std::string &comment = "") {
-        append(instruction("sdiv", def(dest), use(src1), use(src2)).add_comment(comment));
+              const register_operand &src2) {
+        return append(instruction("sdiv", def(dest), use(src1), use(src2)));
     }
 
-    void udiv(const register_operand &dest,
+    instruction& udiv(const register_operand &dest,
               const register_operand &src1,
-              const register_operand &src2, const std::string &comment = "") {
-        append(instruction("udiv", def(dest), use(src1), use(src2)).add_comment(comment));
+              const register_operand &src2) {
+        return append(instruction("udiv", def(dest), use(src1), use(src2)));
     }
 
-    void fcvtzs(const register_operand &dest,
-                const register_operand &src, const std::string &comment = "") {
-        append(instruction("fcvtzs", def(dest), use(src)).add_comment(comment));
+    instruction& fcvtzs(const register_operand &dest,
+                const register_operand &src) {
+        return append(instruction("fcvtzs", def(dest), use(src)));
     }
 
-    void fcvtzu(const register_operand &dest,
-                const register_operand &src, const std::string &comment = "") {
-        append(instruction("fcvtzu", def(dest), use(src)).add_comment(comment));
+    instruction& fcvtzu(const register_operand &dest,
+                const register_operand &src) {
+        return append(instruction("fcvtzu", def(dest), use(src)));
     }
 
-    void fcvtas(const register_operand &dest,
-                const register_operand &src, const std::string &comment = "") {
-        append(instruction("fcvtas", def(dest), use(src)).add_comment(comment));
+    instruction& fcvtas(const register_operand &dest,
+                const register_operand &src) {
+        return append(instruction("fcvtas", def(dest), use(src)));
     }
 
-    void fcvtau(const register_operand &dest,
-                const register_operand &src, const std::string &comment = "") {
-        append(instruction("fcvtau", def(dest), use(src)).add_comment(comment));
+    instruction& fcvtau(const register_operand &dest,
+                const register_operand &src) {
+        return append(instruction("fcvtau", def(dest), use(src)));
     }
 
-    void scvtf(const register_operand &dest,
-               const register_operand &src, const std::string &comment = "") {
-        append(instruction("scvtf", def(dest), use(src)).add_comment(comment));
+    instruction& scvtf(const register_operand &dest,
+               const register_operand &src) {
+        return append(instruction("scvtf", def(dest), use(src)));
     }
 
-    void ucvtf(const register_operand &dest,
-               const register_operand &src, const std::string &comment = "") {
-        append(instruction("ucvtf", def(dest), use(src)).add_comment(comment));
+    instruction& ucvtf(const register_operand &dest,
+               const register_operand &src) {
+        return append(instruction("ucvtf", def(dest), use(src)));
     }
 
-    void mrs(const register_operand &dest,
-             const register_operand &src, const std::string &comment = "") {
-        append(instruction("mrs", use(def(dest)), use(def(src))).add_comment(comment));
+    instruction& mrs(const register_operand &dest,
+             const register_operand &src) {
+        return append(instruction("mrs", use(def(dest)), use(def(src))));
     }
 
-    void msr(const register_operand &dest,
-             const register_operand &src, const std::string &comment = "") {
-        append(instruction("msr", use(def(dest)), use(def(src))).add_comment(comment));
+    instruction& msr(const register_operand &dest,
+             const register_operand &src) {
+        return append(instruction("msr", use(def(dest)), use(def(src))));
     }
 
-    void ret(const std::string &comment = "") {
-        append(instruction("ret").add_comment(comment));
+    instruction& ret() {
+        return append(instruction("ret"));
     }
 
-    void brk(const immediate_operand &imm, const std::string &comment = "") {
-        append(instruction("brk", use(imm)).add_comment(comment));
+    instruction& brk(const immediate_operand &imm) {
+        return append(instruction("brk", use(imm)));
     }
 
-    void label(const std::string &label, const std::string &comment = "") {
-        append(instruction(label_operand(fmt::format("{}:", label))).add_comment(comment));
+    instruction& label(const std::string &label) {
+        return append(instruction(label_operand(fmt::format("{}:", label))));
     }
 
-	void setz(const register_operand &dst, const std::string &comment = "") {
-        append(instruction("cset", def(dst), cond_operand("eq")).add_comment(comment));
+	instruction& setz(const register_operand &dst) {
+        return append(instruction("cset", def(dst), cond_operand("eq")));
     }
 
-	void sets(const register_operand &dst, const std::string &comment = "") {
-        append(instruction("cset", def(dst), cond_operand("lt")).add_comment(comment));
+	instruction& sets(const register_operand &dst) {
+        return append(instruction("cset", def(dst), cond_operand("lt")));
     }
 
-	void setc(const register_operand &dst, const std::string &comment = "") {
-        append(instruction("cset", def(dst), cond_operand("cs")).add_comment(comment));
+	instruction& setc(const register_operand &dst) {
+        return append(instruction("cset", def(dst), cond_operand("cs")));
     }
 
-	void setcc(const register_operand &dst, const std::string &comment = "") {
-        append(instruction("cset", def(dst), cond_operand("cc")).add_comment(comment));
+	instruction& setcc(const register_operand &dst) {
+        return append(instruction("cset", def(dst), cond_operand("cc")));
     }
 
-    void cfinv(const std::string& comment = "") {
-        append(instruction("cfinv").add_comment(comment));
+    instruction& cfinv() {
+        return append(instruction("cfinv"));
     }
 
-	void seto(const register_operand &dst, const std::string &comment = "") {
-        append(instruction("cset", def(dst), cond_operand("vs")).add_comment(comment));
+	instruction& seto(const register_operand &dst) {
+        return append(instruction("cset", def(dst), cond_operand("vs")));
     }
 
-    void sxtb(const register_operand &dst, const register_operand &src, const std::string &comment = "") {
-        append(instruction("sxtb", def(dst), use(src)).add_comment(comment));
+    instruction& sxtb(const register_operand &dst, const register_operand &src) {
+        return append(instruction("sxtb", def(dst), use(src)));
     }
 
-    void sxth(const register_operand &dst, const register_operand &src, const std::string &comment = "") {
-        append(instruction("sxth", def(dst), use(src)).add_comment(comment));
+    instruction& sxth(const register_operand &dst, const register_operand &src) {
+        return append(instruction("sxth", def(dst), use(src)));
     }
 
-    void sxtw(const register_operand &dst, const register_operand &src, const std::string &comment = "") {
-        append(instruction("sxtw", def(dst), use(src)).add_comment(comment));
+    instruction& sxtw(const register_operand &dst, const register_operand &src) {
+        return append(instruction("sxtw", def(dst), use(src)));
     }
 
-    void uxtb(const register_operand &dst, const register_operand &src, const std::string &comment = "") {
-        append(instruction("uxtb", def(dst), use(src)).add_comment(comment));
+    instruction& uxtb(const register_operand &dst, const register_operand &src) {
+        return append(instruction("uxtb", def(dst), use(src)));
     }
 
-    void uxth(const register_operand &dst, const register_operand &src, const std::string &comment = "") {
-        append(instruction("uxth", def(dst), use(src)).add_comment(comment));
+    instruction& uxth(const register_operand &dst, const register_operand &src) {
+        return append(instruction("uxth", def(dst), use(src)));
     }
 
-    void uxtw(const register_operand &dst, const register_operand &src, const std::string &comment = "") {
-        append(instruction("uxtw", def(dst), use(src)).add_comment(comment));
+    instruction& uxtw(const register_operand &dst, const register_operand &src) {
+        return append(instruction("uxtw", def(dst), use(src)));
     }
 
-    void cas(const register_operand &dst, const register_operand &src,
-             const memory_operand &mem_addr, const std::string &comment = "")
-    {
-        append(instruction("cas", use(dst), use(src), use(mem_addr)).as_keep().add_comment(comment));
+    instruction& cas(const register_operand &dst, const register_operand &src,
+                     const memory_operand &mem_addr) {
+        return append(instruction("cas", use(dst), use(src), use(mem_addr)).as_keep());
     }
 
 // ATOMICs
     // LDXR{size} {Rt}, [Rn]
 #define LD_A_XR(name, size) \
-    void name##size(const register_operand &dst, const memory_operand &mem, const std::string &comment = "") { \
-        append(instruction(#name#size, def(dst), use(mem)).add_comment(comment)); \
+    instruction& name##size(const register_operand &dst, const memory_operand &mem) { \
+        return append(instruction(#name#size, def(dst), use(mem))); \
     }
 
 #define ST_A_XR(name, size) \
-    void name##size(const register_operand &status, const register_operand &rt, const memory_operand &mem, const std::string &comment = "") { \
-        append(instruction(#name#size, def(status), use(rt), use(mem)).as_keep().add_comment(comment)); \
+    instruction& name##size(const register_operand &status, const register_operand &rt, const memory_operand &mem) { \
+        return append(instruction(#name#size, def(status), use(rt), use(mem)).as_keep()); \
     }
 
 #define LD_A_XR_VARIANTS(name) \
@@ -403,8 +401,8 @@ public:
     ST_A_XR_VARIANTS(stlxr);
 
 #define AMO_SIZE_VARIANT(name, suffix_type, suffix_size) \
-    void name##suffix_type##suffix_size(const register_operand &rm, const register_operand &rt, const memory_operand &mem) { \
-        append(instruction(#name#suffix_type#suffix_size, use(rm), use(def(rt)), use(mem))); \
+    instruction& name##suffix_type##suffix_size(const register_operand &rm, const register_operand &rt, const memory_operand &mem) { \
+        return append(instruction(#name#suffix_type#suffix_size, use(rm), use(def(rt)), use(mem))); \
     }
 
 #define AMO_SIZE_VARIANTS(name, size) \
@@ -445,8 +443,8 @@ public:
 //
 // Otherwise, we should just use SVE2 operations directly
 #define VOP_ARITH(name) \
-    void name(const std::string &size, const register_operand &dest, const register_operand &src1, const register_operand &src2) { \
-        append(instruction(#name "." + size, def(dest), use(src1), use(src2))); \
+    instruction& name(const std::string &size, const register_operand &dest, const register_operand &src1, const register_operand &src2) { \
+        return append(instruction(#name "." + size, def(dest), use(src1), use(src2))); \
     }
 
     // vector additions
@@ -506,39 +504,39 @@ public:
 
 // SVE2
     // SVE2 version
-    void add(const register_operand &dst,
+    instruction& add(const register_operand &dst,
              const register_operand &pred,
              const register_operand &src1,
              const register_operand &src2) {
-        append(instruction("add", def(dst), use(pred), use(src1), use(src2)));
+        return append(instruction("add", def(dst), use(pred), use(src1), use(src2)));
     }
 
     // SVE2
-    void sub(const register_operand &dst,
+    instruction& sub(const register_operand &dst,
              const register_operand &pred,
              const register_operand &src1,
              const register_operand &src2) {
-        append(instruction("sub", def(dst), use(pred), use(src1), use(src2)));
+        return append(instruction("sub", def(dst), use(pred), use(src1), use(src2)));
     }
 
     // SVE2
-    void ld1(const register_operand &src,
+    instruction& ld1(const register_operand &src,
              const register_operand &pred,
              const memory_operand &addr) {
-        append(instruction("ld1", use(src), use(pred), use(addr)));
+        return append(instruction("ld1", use(src), use(pred), use(addr)));
     }
 
-    void st1(const register_operand &dest,
+    instruction& st1(const register_operand &dest,
              const register_operand &pred,
              const memory_operand &addr) {
-        append(instruction("st1", def(dest), use(pred), use(addr)));
+        return append(instruction("st1", def(dest), use(pred), use(addr)));
     }
 
-    void ptrue(const register_operand &dest) {
-        append(instruction("ptrue", def(dest)));
+    instruction& ptrue(const register_operand &dest) {
+        return append(instruction("ptrue", def(dest)));
     }
 
-    void insert_separator(const std::string &sep, const std::string &comment) { label(sep, comment); }
+    instruction& insert_separator(const std::string &sep) { return label(sep); }
 
     template <typename... Args>
     void insert_comment(std::string_view format, Args&&... args) {
