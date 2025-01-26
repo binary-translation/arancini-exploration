@@ -131,6 +131,7 @@ inline bool operator!=(const register_operand& r1, const register_operand& r2) {
 
 // TODO: ARM uses logical immediates that make determining their encoding completely different than
 // what fits() does
+// TODO: virtual destructor
 class immediate_operand {
 public:
     immediate_operand() = default;
@@ -167,22 +168,36 @@ private:
     value_type type_;
 };
 
-class shift_operand : public immediate_operand {
+class shift_operand  {
 public:
+    enum class shift_type {
+        none,
+        lsl,
+        lsr,
+        asr,
+        ror,
+        rrx,
+        uxtb,
+        uxth,
+        sxtb,
+        sxth
+    };
+
     shift_operand() = default;
 
-    shift_operand(const std::string &modifier, immediate_operand imm)
-        : immediate_operand(imm)
-        , modifier_(modifier)
+    shift_operand(shift_type modifier, immediate_operand imm):
+        modifier_(modifier),
+        amount_(imm)
     { }
 
     [[nodiscard]]
-    std::string& modifier() { return modifier_; }
+    shift_type modifier() { return modifier_; }
 
     [[nodiscard]]
-    const std::string& modifier() const { return modifier_; }
+    immediate_operand amount() { return amount_; }
 private:
-    std::string modifier_;
+    shift_type modifier_;
+    immediate_operand amount_;
 };
 
 class label_operand {
@@ -605,9 +620,30 @@ struct fmt::formatter<arancini::output::dynamic::arm64::shift_operand> {
 
     template <typename FormatContext>
     auto format(arancini::output::dynamic::arm64::shift_operand shift, FormatContext& ctx) const {
-        if (!shift.modifier().empty())
-            fmt::format_to(ctx.out(), "{} ", shift.modifier());
-        return fmt::format_to(ctx.out(), "#{:#x}", shift.value());
+        switch (shift.modifier()) {
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::none:
+            return fmt::format_to(ctx.out(), "{}", shift.amount());
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::lsl:
+            return fmt::format_to(ctx.out(), "LSL {}", shift.amount());
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::lsr:
+            return fmt::format_to(ctx.out(), "LSR {}", shift.amount());
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::asr:
+            return fmt::format_to(ctx.out(), "ASR {}", shift.amount());
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::ror:
+            return fmt::format_to(ctx.out(), "ROR {}", shift.amount());
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::rrx:
+            return fmt::format_to(ctx.out(), "RRX {}", shift.amount());
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::uxtb:
+            return fmt::format_to(ctx.out(), "UXTB {}", shift.amount());
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::uxth:
+            return fmt::format_to(ctx.out(), "UXTH {}", shift.amount());
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::sxtb:
+            return fmt::format_to(ctx.out(), "SXTB {}", shift.amount());
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::sxth:
+            return fmt::format_to(ctx.out(), "SXTH {}", shift.amount());
+        default:
+            throw arancini::output::dynamic::arm64::backend_exception("Unknown shift operand type");
+        }
     }
 };
 

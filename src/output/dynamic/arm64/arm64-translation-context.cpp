@@ -115,11 +115,11 @@ register_operand arm64_translation_context::move_to_register(T imm, ir::value_ty
     builder_.insert_comment("Move immediate {:#x} directly as > 16-bits", immediate);
     builder_.movz(reg,
                   immediate_operand(immediate & 0xFFFF, value_type::u16()),
-                  shift_operand("LSL", {0, value_type::u1()}));
+                  shift_operand(shift_operand::shift_type::lsl, {0, value_type::u1()}));
     for (std::size_t i = 1; i < move_count; ++i) {
         builder_.movk(reg,
                       immediate_operand(immediate >> (i * 16) & 0xFFFF, value_type::u16()),
-                      shift_operand("LSL", {i * 16, value_type::u16()}));
+                      shift_operand(shift_operand::shift_type::lsl, {i * 16, value_type::u16()}));
     }
 
     return reg;
@@ -527,24 +527,24 @@ void arm64_translation_context::materialise_constant(const constant_node &n) {
 }
 
 inline shift_operand extend_register(instruction_builder& builder, const register_operand& reg, arancini::ir::value_type type) {
-    const char* mod = "LSL";
+    auto mod = shift_operand::shift_type::lsl;
 
     switch (type.element_width()) {
     case 8:
         if (type.type_class() == value_type_class::signed_integer) {
-            mod = "SXTB";
+            mod = shift_operand::shift_type::sxtb;
             builder.sxtb(reg, reg);
         } else {
-            mod = "UXTB";
+            mod = shift_operand::shift_type::uxtb;
             builder.uxtb(reg, reg);
         }
         break;
     case 16:
         if (type.type_class() == value_type_class::signed_integer) {
-            mod = "SXTH";
+            mod = shift_operand::shift_type::sxth;
             builder.sxth(reg, reg);
         } else {
-            mod = "UXTH";
+            mod = shift_operand::shift_type::uxth;
             builder.uxth(reg, reg);
         }
         break;
