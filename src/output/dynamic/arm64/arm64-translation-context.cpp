@@ -192,7 +192,7 @@ void arm64_translation_context::end_instruction() {
 
 void arm64_translation_context::end_block() {
     // Return value in x0 = 0;
-	builder_.mov(dbt_retval_register, move_to_register(ret_, dbt_retval_register.type()));
+	builder_.mov(dbt_retval_register, move_to_register(ret_, dbt_retval_register.type())).as_keep();
 
     try {
         builder_.allocate();

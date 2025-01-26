@@ -96,7 +96,7 @@ public:
     void movz(const register_operand &dst,
               const immediate_operand &src,
               const shift_operand &shift, const std::string &comment = "") {
-        append(instruction("movz", use(def(dst)), use(src), use(shift)).add_comment(comment));
+        append(instruction("movz", def(dst), use(src), use(shift)).add_comment(comment));
     }
 
     void movk(const register_operand &dst,
@@ -105,8 +105,8 @@ public:
         append(instruction("movk", use(def(dst)), use(src), use(shift)).add_comment(comment));
     }
 
-    void mov(const register_operand &dst, const reg_or_imm &src, const std::string &comment = "") {
-        append(instruction("mov", def(dst), use(src)).add_comment(comment));
+    instruction& mov(const register_operand &dst, const reg_or_imm &src, const std::string &comment = "") {
+        return append(instruction("mov", def(dst), use(src)).add_comment(comment));
     }
 
     void b(const label_operand &dest, const std::string &comment = "") {
@@ -588,7 +588,10 @@ public:
 private:
 	std::vector<instruction> instructions_;
 
-	void append(const instruction &i) { instructions_.push_back(i); }
+	instruction& append(const instruction &i) {
+        instructions_.push_back(i);
+        return instructions_.back();
+    }
 
     void spill();
 };
