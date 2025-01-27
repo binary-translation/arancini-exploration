@@ -111,20 +111,27 @@ public:
         return append(instruction("mov", def(dst), use(src)));
     }
 
-    instruction& b(const label_operand &dest) {
+    instruction& b(label_operand &dest) {
+        dest.set_branch_target();
         return append(instruction("b", use(dest)).as_branch());
     }
 
-    instruction& beq(const label_operand &dest) {
-        return append(instruction("beq", use(dest)).as_branch());
+    instruction& beq(label_operand &dest) {
+        dest.set_branch_target();
+        return append(instruction("beq", use(dest)).as_branch()
+                      .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 
-    instruction& bl(const label_operand &dest) {
-        return append(instruction("bl", use(dest)).as_branch());
+    instruction& bl(label_operand &dest) {
+        dest.set_branch_target();
+        return append(instruction("bl", use(dest)).as_branch()
+                      .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 
-    instruction& bne(const label_operand &dest) {
-        return append(instruction("bne", use(dest)).as_branch());
+    instruction& bne(label_operand &dest) {
+        dest.set_branch_target();
+        return append(instruction("bne", use(dest)).as_branch()
+                      .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 
     // Check reg == 0 and jump if true
@@ -153,7 +160,8 @@ public:
 
     instruction& tst(const register_operand &dst,
              const reg_or_imm &src) {
-        return append(instruction("tst", use(def(dst)), use(src)));
+        return append(instruction("tst", use(def(dst)), use(src))
+                      .implicitly_writes({register_operand(register_operand::nzcv)}));
     }
 
     instruction& lsl(const register_operand &dst,
@@ -317,8 +325,8 @@ public:
         return append(instruction("brk", use(imm)));
     }
 
-    instruction& label(const std::string &label) {
-        return append(instruction(label_operand(fmt::format("{}:", label))));
+    instruction& label(const label_operand &label) {
+        return append(instruction(label));
     }
 
 	instruction& setz(const register_operand &dst) {
@@ -543,8 +551,6 @@ public:
     instruction& ptrue(const register_operand &dest) {
         return append(instruction("ptrue", def(dest)));
     }
-
-    instruction& insert_separator(const std::string &sep) { return label(sep); }
 
     template <typename... Args>
     void insert_comment(std::string_view format, Args&&... args) {

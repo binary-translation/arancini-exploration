@@ -204,8 +204,13 @@ class label_operand {
 public:
     label_operand() = default;
 
-    label_operand(const std::string label):
+    label_operand(const std::string& label):
         name_(label)
+    { }
+
+    label_operand(const std::string& label, std::size_t branch_target_count):
+        name_(label),
+        branch_target_count_(branch_target_count)
     { }
 
     [[nodiscard]]
@@ -213,8 +218,16 @@ public:
 
     [[nodiscard]]
     const std::string& name() const { return name_; }
+
+    label_operand& set_branch_target() { branch_target_count_++; return *this; };
+
+    [[nodiscard]]
+    std::size_t get_branch_target_count() const {
+        return branch_target_count_;
+    }
 private:
     std::string name_;
+    std::size_t branch_target_count_;
 };
 
 class cond_operand {

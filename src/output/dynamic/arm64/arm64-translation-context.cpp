@@ -169,8 +169,8 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
 
     instr_cnt_++;
 
-    // TODO: these separators should be inserted only in debug builds
-    builder_.insert_separator(fmt::format("instruction_{}", instr_cnt_)).add_comment(disasm);
+    // TODO: these comments should be inserted only in debug builds
+    builder_.insert_comment("instruction_{}: {}", instr_cnt_, disasm);
 
     nodes_.clear();
 }
@@ -502,16 +502,16 @@ void arm64_translation_context::materialise_label(const label_node &n) {
 }
 
 void arm64_translation_context::materialise_br(const br_node &n) {
-    auto label_name = fmt::format("{}_{}", n.target()->name(), instr_cnt_);
-    builder_.b(label_name);
+    auto label = label_operand(fmt::format("{}_{}", n.target()->name(), instr_cnt_));
+    builder_.b(label);
 }
 
 void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
     const auto &cond_vregs = materialise_port(n.cond());
 
     builder_.cmp(cond_vregs, immediate_operand(1, value_type::u8()));
-    auto label_name = fmt::format("{}_{}", n.target()->name(), instr_cnt_);
-    builder_.beq(label_name);
+    auto label = label_operand(fmt::format("{}_{}", n.target()->name(), instr_cnt_));
+    builder_.beq(label);
 }
 
 void arm64_translation_context::materialise_constant(const constant_node &n) {
@@ -1232,47 +1232,45 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
     // Destination register only used for storing return code of STXR (a 32-bit value)
     // Since STXR expects a 32-bit register; we directly allocate a 32-bit one
     // NOTE: we're only going to use it afterwards for a comparison and an increment
-    const register_operand &dest_vreg = vreg_alloc_.allocate(n.val(), ir::value_type::u32());
+    const register_operand &status_reg = vreg_alloc_.allocate(n.val(), value_type::u32());
+    const register_operand &current_data_reg = vreg_alloc_.allocate(n.val(), n.rhs().type());
 
-    const register_operand &acc_vreg = materialise_port(n.rhs());
-    const register_operand &src_vreg = materialise_port(n.top());
-    const register_operand &addr_vreg = materialise_port(n.address());
+    const register_operand &acc_reg = materialise_port(n.rhs());
+    const register_operand &src_reg = materialise_port(n.top());
+    const register_operand &addr_reg = materialise_port(n.address());
 
     allocate_flags(vreg_alloc_, flag_map, n);
 
     // CMPXCHG:
     // dest_reg = mem[addr];
     // if (dest_reg != acc_reg) acc_reg = dest_reg;
-    // else try mem[addr] = src_vreg;
+    // else try mem[addr] = src_reg;
     //      if (failed) goto beginning
     // end
-    // String match fails here because dest_vregs is a 64-bit register; but it can only be 32-bit
-    // TODO: recheck
-    auto mem_addr = memory_operand(addr_vreg);
+    auto mem_addr = memory_operand(addr_reg);
     switch (n.op()) {
     case ternary_atomic_op::cmpxchg:
         if constexpr (supports_lse) {
             builder_.insert_comment("Atomic CMPXCHG using CAS (enabled on systems with LSE support");
-            builder_.cas(acc_vreg, src_vreg, memory_operand(mem_addr))
-                    .add_comment("write source to memory if source == accumulator, accumulator = source");
-            builder_.mov(acc_vreg, dest_vreg).add_comment("move result of accumulator into destination register");
-            builder_.cmp(dest_vreg, immediate_operand(0, value_types::u6));
+            builder_.cas(acc_reg, src_reg, memory_operand(mem_addr))
+                    .add_comment("write source (2nd reg) to memory if source == accumulator (1st reg), accumulator = source");
+            builder_.cmp(acc_reg, immediate_operand(0, value_types::u6));
         } else {
-            auto loop_label = fmt::format("loop_{}", instr_cnt_);
-            auto failure_label = fmt::format("failure_{}", instr_cnt_);
-            auto success_label = fmt::format("success_{}", instr_cnt_);
+            auto loop_label = label_operand("loop_{}", instr_cnt_);
+            auto failure_label = label_operand("failure_{}", instr_cnt_);
+            auto success_label = label_operand("success_{}", instr_cnt_);
 
             builder_.insert_comment("Atomic CMPXCHG without CAS");
             builder_.label(loop_label);
-            builder_.ldxr(dest_vreg, memory_operand(mem_addr)).add_comment("load atomically");
-            builder_.cmp(dest_vreg, acc_vreg).add_comment("compare with accumulator");
+            builder_.ldxr(current_data_reg, memory_operand(mem_addr)).add_comment("load atomically");
+            builder_.cmp(current_data_reg, acc_reg).add_comment("compare with accumulator");
             builder_.bne(failure_label).add_comment("if loaded value != accumulator branch to failure");
-            builder_.stxr(dest_vreg, src_vreg, memory_operand(mem_addr)).add_comment("store if not failure");
+            builder_.stxr(status_reg, src_reg, memory_operand(mem_addr)).add_comment("store if not failure");
             // Compare and also set flags for later
-            builder_.cmp(dest_vreg, immediate_operand(0, ir::value_type::u1()));
+            builder_.cmp(status_reg, immediate_operand(0, ir::value_type::u1()));
             builder_.beq(success_label).add_comment("== 0 represents success storing");
             builder_.label(failure_label);
-            builder_.add(acc_vreg, dest_vreg, immediate_operand(0, acc_vreg.type()));
+            builder_.mov(acc_reg, current_data_reg).add_comment("move current memory value into accumulator");
             builder_.b(loop_label).add_comment("loop until failure or success");
             builder_.label(success_label);
         }

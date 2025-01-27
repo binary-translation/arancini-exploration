@@ -202,6 +202,43 @@ private:
     std::unordered_set<register_operand, register_hash> deps_;
 };
 
+class branch_liveness_tracker {
+public:
+    void track_label(const instruction& label_instr) {
+        [[unlikely]]
+        if (!label_instr.is_label())
+            throw backend_exception("attempting to track non-label as label instruction: {}", label_instr);
+
+        const label_operand& label = label_instr.operands()[0];
+        tracker_[label.name()] = label.get_branch_target_count();
+    }
+
+    void track_branch(const instruction& branch) {
+        [[unlikely]]
+        if (!branch.is_branch())
+            throw backend_exception("attempting to track non-branch as branch instruction: {}", branch);
+
+        const label_operand* label_op = nullptr;
+        for (const auto& op : branch.operands()) {
+            label_op = std::get_if<label_operand>(&op.get());
+            if (label_op) {
+                break;
+            }
+        }
+
+        // Handling only forward branches for now
+        // TODO: fixup for backwards branches
+        tracker_[label_op->name()]--;
+        if (tracker_[label_op->name()] == 0)
+            tracker_.erase(label_op->name());
+    }
+
+    [[nodiscard]]
+    bool in_branch_block() { return !tracker_.empty(); }
+private:
+    std::unordered_map<std::string, std::size_t> tracker_;
+};
+
 void instruction_builder::allocate() {
 	// reverse linear scan reg_alloc
     // TODO: handle direct physical register usage
@@ -213,6 +250,8 @@ void instruction_builder::allocate() {
     // Frame Pointer - points to guest registers (x29)
     system_register_set regset{register_set<32>{0x11FFFFFFF}, register_set<32>{0xFFFFFFFFF}};
     register_allocator reg_alloc{regset};
+
+    branch_liveness_tracker branch_tracker;
     implicit_dependency_handler implicit_dependencies;
 
 	for (auto it = instructions_.rbegin(); it != instructions_.rend(); it++) {
@@ -230,6 +269,9 @@ void instruction_builder::allocate() {
                 implicit_dependencies.satisfy(reg_side_effect);
             }
         }
+
+        if (instr.is_label())
+            branch_tracker.track_label(instr);
 
         for (auto& op : instr.operands()) {
             [[unlikely]]
@@ -251,7 +293,8 @@ void instruction_builder::allocate() {
                 op = *prev;
 
                 // Allocation not needed beyond this point
-                reg_alloc.deallocate(*prev);
+                if (!branch_tracker.in_branch_block())
+                    reg_alloc.deallocate(*prev);
 
                 // If there existed any implicit dependency on the allocated register, we satisfy it
                 implicit_dependencies.satisfy(*prev);
@@ -344,6 +387,9 @@ void instruction_builder::allocate() {
                 }
             }
         }
+
+        if (instr.is_branch())
+            branch_tracker.track_branch(instr);
     }
 }
 
