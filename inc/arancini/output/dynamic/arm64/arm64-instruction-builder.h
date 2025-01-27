@@ -326,7 +326,7 @@ public:
     }
 
     instruction& label(const label_operand &label) {
-        return append(instruction(label));
+        return append(instruction(fmt::format("{}:", label)));
     }
 
 	instruction& setz(const register_operand &dst) {
@@ -558,12 +558,10 @@ public:
     }
 
     // TODO: maybe broken
-    template <typename... Args>
-    bool has_label(const std::string& format, Args&&... args) {
-        auto label = fmt::format(fmt::format("{}:", format), std::forward<Args>(args)...);
+    bool has_label(const instruction& label) {
         return std::any_of(instructions_.rbegin(), instructions_.rend(),
                             [&](const instruction &inst) {
-                                return inst.opcode() == label;
+                                return inst.opcode() == label.opcode();
                             });
     }
 

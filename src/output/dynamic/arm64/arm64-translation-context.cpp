@@ -496,9 +496,9 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
 }
 
 void arm64_translation_context::materialise_label(const label_node &n) {
-    auto label_name = fmt::format("{}_{}", n.name(), instr_cnt_);
-    if (!builder_.has_label("{}_{}", n.name(), instr_cnt_))
-        builder_.label(label_name);
+    auto label = label_operand(fmt::format("{}_{}", n.name(), instr_cnt_));
+    if (!builder_.has_label(label))
+        builder_.label(label);
 }
 
 void arm64_translation_context::materialise_br(const br_node &n) {
@@ -1152,7 +1152,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             // TODO: must find a way to make this unique
             builder_.insert_comment("Atomic addition (load atomically, add and retry if failed)");
 
-            auto restart_label = fmt::format("restart_{}", instr_cnt_);
+            auto restart_label = label_operand(fmt::format("restart_{}", instr_cnt_));
             builder_.label(restart_label).add_comment("set label for jump (needed in case of restarting operation)");
             switch(n.val().type().element_width()) {
             case 1:

@@ -63,13 +63,25 @@ public:
     [[nodiscard]]
     std::size_t allocate(arancini::ir::value_type t) {
 		// The reverse linear register reg_alloc we use expects that we'll find the first free
-            // register, even when there exists a gap between "assigned" and "unassigned registers"
-		auto index = registers_._Find_first();
-        registers_.flip(index);
-        return index;
+        // register, even when there exists a gap between "assigned" and "unassigned registers"
+		auto idx = registers_._Find_first();
+
+        [[unlikely]]
+        if (idx >= registers_.size()) {
+            throw backend_exception("run out registers to allocate and register spilling not supported");
+        }
+
+        registers_.flip(idx);
+        return idx;
     }
 
     void deallocate(std::size_t idx) {
+        [[unlikely]]
+        if (idx >= registers_.size()) {
+            throw backend_exception("attempting to deallocate register index {} but only {} registers exist",
+                                    idx, registers_.size());
+        }
+
         // Check if allocated previously
         [[unlikely]]
         if (registers_[idx] == 1)
@@ -209,7 +221,7 @@ public:
         if (!label_instr.is_label())
             throw backend_exception("attempting to track non-label as label instruction: {}", label_instr);
 
-        const label_operand& label = label_instr.operands()[0];
+        const label_operand& label = label_instr.opcode();
         tracker_[label.name()] = label.get_branch_target_count();
     }
 
@@ -293,8 +305,9 @@ void instruction_builder::allocate() {
                 op = *prev;
 
                 // Allocation not needed beyond this point
-                if (!branch_tracker.in_branch_block())
-                    reg_alloc.deallocate(*prev);
+                // TODO: enable this when backwards branches are working
+                // if (!branch_tracker.in_branch_block())
+                reg_alloc.deallocate(*prev);
 
                 // If there existed any implicit dependency on the allocated register, we satisfy it
                 implicit_dependencies.satisfy(*prev);
