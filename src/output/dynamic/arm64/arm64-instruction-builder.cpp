@@ -222,6 +222,16 @@ public:
             throw backend_exception("attempting to track non-label as label instruction: {}", label_instr);
 
         const label_operand& label = label_instr.opcode();
+
+        // We've already seen this label referrenced by a later branch
+        // So, this is a label for a backwards branch
+        if (expected_labels_.count(label.name())) {
+            expected_labels_.erase(label.name());
+            return;
+        }
+
+        // First time we see label
+        // Branches referencing it are higher in the instruction stream (forward branches)
         tracker_[label.name()] = label.get_branch_target_count();
     }
 
@@ -230,6 +240,7 @@ public:
         if (!branch.is_branch())
             throw backend_exception("attempting to track non-branch as branch instruction: {}", branch);
 
+        // Extract branch target
         const label_operand* label_op = nullptr;
         for (const auto& op : branch.operands()) {
             label_op = std::get_if<label_operand>(&op.get());
@@ -238,17 +249,27 @@ public:
             }
         }
 
-        // Handling only forward branches for now
-        // TODO: fixup for backwards branches
-        tracker_[label_op->name()]--;
-        if (tracker_[label_op->name()] == 0)
-            tracker_.erase(label_op->name());
+        // If branch target is tracked, it must be have been seen
+        // This means that we branch forward in the instruction stream (since we allocate registers
+        // in reverse)
+        if (tracker_.count(label_op->name())) {
+            logger.debug("Found forward branch to {}; remaining {}",
+                         label_op->name(), tracker_[label_op->name()]-1);
+            if (--tracker_[label_op->name()] == 0)
+                tracker_.erase(label_op->name());
+            return;
+        }
+
+        // If branch target is not tracked, we must be jumping backwards to some unseen label (as of
+        // now)
+        expected_labels_.insert(label_op->name());
     }
 
     [[nodiscard]]
-    bool in_branch_block() { return !tracker_.empty(); }
+    bool in_branch_block() const { return !(tracker_.empty() && expected_labels_.empty()); }
 private:
     std::unordered_map<std::string, std::size_t> tracker_;
+    std::unordered_set<std::string> expected_labels_;
 };
 
 void instruction_builder::allocate() {
@@ -306,8 +327,8 @@ void instruction_builder::allocate() {
 
                 // Allocation not needed beyond this point
                 // TODO: enable this when backwards branches are working
-                // if (!branch_tracker.in_branch_block())
-                reg_alloc.deallocate(*prev);
+                if (!branch_tracker.in_branch_block())
+                    reg_alloc.deallocate(*prev);
 
                 // If there existed any implicit dependency on the allocated register, we satisfy it
                 implicit_dependencies.satisfy(*prev);
