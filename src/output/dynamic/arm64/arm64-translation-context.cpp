@@ -62,6 +62,7 @@ register_sequence virtual_register_allocator::allocate(ir::value_type type) {
     return regset;
 }
 
+// This is completely wrong
 register_operand arm64_translation_context::cast(const register_operand &op, value_type type) {
     auto dest_vreg = vreg_alloc_.allocate(type);
     builder_.mov(dest_vreg, op);
@@ -1584,8 +1585,8 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 
 void arm64_translation_context::materialise_csel(const csel_node &n) {
     if (n.val().type().is_vector() || n.val().type().element_width() > value_types::base_type.element_width()) {
-        throw backend_exception("Cannot implement conditional selection for \
-                                  vectors and elements widths exceeding 64-bits");
+        throw backend_exception("Cannot implement conditional selection for " \
+                                "vectors and elements widths exceeding 64-bits");
     }
 
     const auto &dest_vreg = vreg_alloc_.allocate(n.val());
@@ -1600,35 +1601,39 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
 }
 
 void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
-    if (n.val().type().is_vector() || n.val().type().element_width() > value_types::base_type.element_width()) {
-        throw backend_exception("Cannot implement bit shifts for \
-                                  vectors and elements widths exceeding 64-bits");
+    [[unlikely]]
+    if (n.val().type().is_vector()) {
+        throw backend_exception("Cannot implement bit shifts for " \
+                                "vectors and elements widths exceeding 64-bits");
     }
 
-    // TODO: refactor this
-    const register_operand &input = materialise_port(n.input());
-    const register_operand &amount1 = materialise_port(n.amount());
+    const auto& input = materialise_port(n.input());
+    const register_operand& amount = materialise_port(n.amount());
 
-    auto dest_type = n.val().type();
-    if (n.val().type().element_width() < input.type().element_width())
-        dest_type = input.type();
+    // auto dest_type = n.val().type();
+    // if (n.val().type().element_width() < input.type().element_width())
+    //     dest_type = input.type();
+    //
+    // if (dest_type.element_width() < amount1.type().element_width())
+    //     dest_type = amount1.type();
 
-    if (dest_type.element_width() < amount1.type().element_width())
-        dest_type = amount1.type();
+    // const register_operand& amount = vreg_alloc_.allocate(dest_type);
+    // builder_.mov(amount, amount1);
 
-    const register_operand& amount = vreg_alloc_.allocate(dest_type);
-    builder_.mov(amount, amount1);
-
-    const register_operand& dest_vreg = vreg_alloc_.allocate(n.val(), dest_type);
+    const auto& dest_vreg = vreg_alloc_.allocate(n.val());
 
     switch (n.op()) {
     case shift_op::lsl:
-        builder_.lsl(dest_vreg, input, amount);
+        for (std::size_t i = 0; i < dest_vreg.size(); ++i)
+            builder_.lsl(dest_vreg[i], input[i], amount);
         break;
     case shift_op::lsr:
-        builder_.lsr(dest_vreg, input, amount);
+        for (std::size_t i = 0; i < dest_vreg.size(); ++i)
+            builder_.lsr(dest_vreg[i], input[i], amount);
         break;
     case shift_op::asr:
+        if (dest_vreg.size() > 1)
+            throw backend_exception("Cannot ASR for > 64-bit");
         builder_.asr(dest_vreg, input, amount);
         break;
     default:

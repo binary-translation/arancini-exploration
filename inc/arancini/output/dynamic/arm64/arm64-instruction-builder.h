@@ -167,20 +167,44 @@ public:
     }
 
     instruction& lsl(const register_operand &dst,
-             const register_operand &src1,
-             const reg_or_imm &src2) {
+                     const register_operand &src1,
+                     const reg_or_imm &src2)
+    {
+        if (auto* reg = std::get_if<register_operand>(&src2.get()); reg) {
+            register_operand reg2;
+            if (dst.type().element_width() > reg->type().width() && dst.type().element_width() > 32) {
+                reg2 = register_operand(reg->index(), ir::value_type::u64());
+                return append(instruction("lsr", def(dst), use(src1), use(reg2)));
+            }
+        }
         return append(instruction("lsl", def(dst), use(src1), use(src2)));
     }
 
     instruction& lsr(const register_operand &dst,
-             const register_operand &src1,
-             const reg_or_imm &src2) {
+                     const register_operand &src1,
+                     const reg_or_imm &src2)
+    {
+        if (auto* reg = std::get_if<register_operand>(&src2.get()); reg) {
+            register_operand reg2;
+            if (dst.type().element_width() > reg->type().width() && dst.type().element_width() > 32) {
+                reg2 = register_operand(reg->index(), ir::value_type::u64());
+                return append(instruction("lsr", def(dst), use(src1), use(reg2)));
+            }
+        }
         return append(instruction("lsr", def(dst), use(src1), use(src2)));
     }
 
     instruction& asr(const register_operand &dst,
-             const register_operand &src1,
-             const reg_or_imm &src2) {
+                     const register_operand &src1,
+                     const reg_or_imm &src2)
+    {
+        if (auto* reg = std::get_if<register_operand>(&src2.get()); reg) {
+            register_operand reg2;
+            if (dst.type().element_width() > reg->type().width() && dst.type().element_width() > 32) {
+                reg2 = register_operand(reg->index(), ir::value_type::u64());
+                return append(instruction("lsr", def(dst), use(src1), use(reg2)));
+            }
+        }
         return append(instruction("asr", def(dst), use(src1), use(src2)));
     }
 

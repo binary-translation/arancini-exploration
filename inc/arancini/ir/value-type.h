@@ -94,6 +94,13 @@ public:
 			return value_type(value_type_class::unsigned_integer, element_width_, nr_elements_);
 		throw std::logic_error(fmt::format("{}:{}: Initial type must be an integer", __FILE__, __LINE__));
 	}
+
+    value_type& operator=(const value_type& v1) {
+        tc_ = v1.type_class();
+        element_width_ = v1.element_width();
+        nr_elements_ = v1.nr_elements();
+        return *this;
+    }
 private:
 	value_type_class tc_;
 	size_type element_width_;

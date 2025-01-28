@@ -107,7 +107,10 @@ public:
     bool is_virtual() const { return index_ > 32; }
 
     [[nodiscard]]
-    ir::value_type type() const { return type_; }
+    ir::value_type& type() { return type_; }
+
+    [[nodiscard]]
+    const ir::value_type& type() const { return type_; }
 
     [[nodiscard]]
     register_index_type index() const { return index_; }
