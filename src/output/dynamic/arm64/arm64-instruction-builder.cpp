@@ -216,23 +216,26 @@ private:
 
 class branch_liveness_tracker {
 public:
-    void track_label(const instruction& label_instr) {
-        [[unlikely]]
-        if (!label_instr.is_label())
-            throw backend_exception("attempting to track non-label as label instruction: {}", label_instr);
+    void track_label(const instruction& instr, const std::unordered_map<std::string, std::size_t>& label_refcount) {
+        if (instr.label().empty()) return;
 
-        const label_operand& label = label_instr.opcode();
+        const std::string& label_name = instr.label().name();
 
         // We've already seen this label referrenced by a later branch
         // So, this is a label for a backwards branch
-        if (expected_labels_.count(label.name())) {
-            expected_labels_.erase(label.name());
+        logger.debug("Found branch label {}\n", label_name);
+        if (expected_labels_.count(label_name)) {
+            expected_labels_.erase(label_name);
+            logger.debug("Branch label {} matches to backward branch; {} remaining backward branches\n",
+                         label_name, expected_labels_.size());
             return;
         }
 
         // First time we see label
         // Branches referencing it are higher in the instruction stream (forward branches)
-        tracker_[label.name()] = label.get_branch_target_count();
+        tracker_[label_name] = label_refcount.at(label_name);
+        logger.debug("Found label {} for forward branch; tracking {} forward branches\n",
+                     label_name, tracker_.size());
     }
 
     void track_branch(const instruction& branch) {
@@ -249,20 +252,24 @@ public:
             }
         }
 
+        auto label_name = label_op->name();
+
         // If branch target is tracked, it must be have been seen
         // This means that we branch forward in the instruction stream (since we allocate registers
         // in reverse)
-        if (tracker_.count(label_op->name())) {
-            logger.debug("Found forward branch to {}; remaining {}",
-                         label_op->name(), tracker_[label_op->name()]-1);
-            if (--tracker_[label_op->name()] == 0)
-                tracker_.erase(label_op->name());
+        if (tracker_.count(label_name)) {
+            logger.debug("Found forward branch to {}; remaining {}\n",
+                         label_op->name(), tracker_[label_name]-1);
+            if (--tracker_[label_name] == 0)
+                tracker_.erase(label_name);
             return;
         }
 
         // If branch target is not tracked, we must be jumping backwards to some unseen label (as of
         // now)
-        expected_labels_.insert(label_op->name());
+        expected_labels_.insert(label_name);
+        logger.debug("Found backward branch to {}; tracked backward branches {}\n",
+                     label_op->name(), expected_labels_.size());
     }
 
     [[nodiscard]]
@@ -303,8 +310,7 @@ void instruction_builder::allocate() {
             }
         }
 
-        if (instr.is_label())
-            branch_tracker.track_label(instr);
+        branch_tracker.track_label(instr, label_refcount_);
 
         for (auto& op : instr.operands()) {
             [[unlikely]]

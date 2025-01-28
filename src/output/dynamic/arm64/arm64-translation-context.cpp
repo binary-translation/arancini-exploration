@@ -497,8 +497,7 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
 
 void arm64_translation_context::materialise_label(const label_node &n) {
     auto label = label_operand(fmt::format("{}_{}", n.name(), instr_cnt_));
-    if (!builder_.has_label(label))
-        builder_.label(label);
+    builder_.label(label);
 }
 
 void arm64_translation_context::materialise_br(const br_node &n) {
@@ -1256,9 +1255,9 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
                     .add_comment("write source (2nd reg) to memory if source == accumulator (1st reg), accumulator = source");
             builder_.cmp(acc_reg, immediate_operand(0, value_types::u6));
         } else {
-            auto loop_label = label_operand("loop_{}", instr_cnt_);
-            auto failure_label = label_operand("failure_{}", instr_cnt_);
-            auto success_label = label_operand("success_{}", instr_cnt_);
+            auto loop_label = label_operand(fmt::format("loop_{}", instr_cnt_));
+            auto failure_label = label_operand(fmt::format("failure_{}", instr_cnt_));
+            auto success_label = label_operand(fmt::format("success_{}", instr_cnt_));
 
             builder_.insert_comment("Atomic CMPXCHG without CAS");
             builder_.label(loop_label);

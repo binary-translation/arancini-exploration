@@ -208,26 +208,16 @@ public:
         name_(label)
     { }
 
-    label_operand(const std::string& label, std::size_t branch_target_count):
-        name_(label),
-        branch_target_count_(branch_target_count)
-    { }
-
     [[nodiscard]]
     std::string& name() { return name_; }
 
     [[nodiscard]]
     const std::string& name() const { return name_; }
 
-    label_operand& set_branch_target() { branch_target_count_++; return *this; };
-
     [[nodiscard]]
-    std::size_t get_branch_target_count() const {
-        return branch_target_count_;
-    }
+    bool empty() const { return name_.empty(); }
 private:
     std::string name_;
-    std::size_t branch_target_count_;
 };
 
 class cond_operand {
@@ -386,9 +376,16 @@ public:
         operands_ = {std::forward<Args>(args)...};
     }
 
-    instruction(const label_operand &label)
-        : opcode_(label.name())
-        , label_(true)
+    template <typename... Args>
+    instruction(const label_operand &label, const std::string& opc, Args&&... args):
+        instruction(opc, std::forward<Args>(args)...)
+    {
+        label_ = label;
+    }
+
+    template <typename... Args>
+    instruction(const label_operand &label):
+        label_(label)
     { }
 
     instruction &implicitly_reads(std::initializer_list<register_operand> deps) {
@@ -421,9 +418,6 @@ public:
 
     [[nodiscard]]
     bool is_branch() const { return branch_; }
-
-    [[nodiscard]]
-    bool is_label() const { return label_; }
 
     [[nodiscard]]
     bool is_keep() const { return keep_; }
@@ -462,12 +456,21 @@ public:
     const std::vector<register_operand>& side_effect_writes() const {
         return explicit_deps_;
     }
+
+    [[nodiscard]]
+    label_operand& label() {
+        return label_;
+    }
+
+    [[nodiscard]]
+    const label_operand& label() const {
+        return label_;
+    }
 private:
     std::string opcode_;
     std::string comment_;
 
     bool branch_ = false;
-    bool label_ = false;
     bool dead_ = false;
     bool keep_ = false;
 
@@ -476,6 +479,8 @@ private:
 
     std::vector<register_operand> implicit_deps_;
     std::vector<register_operand> explicit_deps_;
+
+    label_operand label_;
 };
 
 } // namespace arancini::output::dynamic::arm64
@@ -711,10 +716,20 @@ struct fmt::formatter<arancini::output::dynamic::arm64::instruction> {
 
     template <typename FormatContext>
     auto format(const arancini::output::dynamic::arm64::instruction& instr, FormatContext& ctx) const {
+        std::string front;
+        if (!instr.label().name().empty()) {
+            if (instr.opcode().empty())
+                front = fmt::format("{}:", instr.label());
+            else
+                front = fmt::format("{}: {}", instr.label(), instr.opcode());
+        } else {
+            front = instr.opcode();
+        }
+
         if (instr.is_dead())
-            fmt::format_to(ctx.out(), "// Dead instruction: {}", instr.opcode());
+            fmt::format_to(ctx.out(), "// Dead instruction: {}", front);
         else
-            fmt::format_to(ctx.out(), "{}", instr.opcode());
+            fmt::format_to(ctx.out(), "{}", front);
 
         if (instr.operand_count() == 0) {
             if (!instr.comment().empty())

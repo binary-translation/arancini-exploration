@@ -112,24 +112,24 @@ public:
     }
 
     instruction& b(label_operand &dest) {
-        dest.set_branch_target();
+        label_refcount_[dest.name()]++;
         return append(instruction("b", use(dest)).as_branch());
     }
 
     instruction& beq(label_operand &dest) {
-        dest.set_branch_target();
+        label_refcount_[dest.name()]++;
         return append(instruction("beq", use(dest)).as_branch()
                       .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 
     instruction& bl(label_operand &dest) {
-        dest.set_branch_target();
+        label_refcount_[dest.name()]++;
         return append(instruction("bl", use(dest)).as_branch()
                       .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 
     instruction& bne(label_operand &dest) {
-        dest.set_branch_target();
+        label_refcount_[dest.name()]++;
         return append(instruction("bne", use(dest)).as_branch()
                       .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
@@ -138,11 +138,13 @@ public:
     // Otherwise, continue to the next instruction
     // Does not affect condition flags (can be used to compare-and-branch with 1 instruction)
     instruction& cbz(const register_operand &reg, const label_operand &label) {
+        label_refcount_[label.name()]++;
         return append(instruction("cbz", use(reg), use(label)).as_branch());
     }
 
     // TODO: check if this allocated correctly
     instruction& cbnz(const register_operand &rt, const label_operand &dest) {
+        label_refcount_[dest.name()]++;
         return append(instruction("cbnz", use(rt), use(dest)).as_branch());
     }
 
@@ -326,7 +328,7 @@ public:
     }
 
     instruction& label(const label_operand &label) {
-        return append(instruction(fmt::format("{}:", label)));
+        return append(instruction(label));
     }
 
 	instruction& setz(const register_operand &dst) {
@@ -557,14 +559,6 @@ public:
         append(instruction(fmt::format("// {}", fmt::format(format, std::forward<Args>(args)...))));
     }
 
-    // TODO: maybe broken
-    bool has_label(const instruction& label) {
-        return std::any_of(instructions_.rbegin(), instructions_.rend(),
-                            [&](const instruction &inst) {
-                                return inst.opcode() == label.opcode();
-                            });
-    }
-
 	void allocate();
 
 	void emit(machine_code_writer &writer);
@@ -597,6 +591,7 @@ public:
     const_instruction_stream_iterator instruction_cend() const { return instructions_.cend(); }
 private:
 	std::vector<instruction> instructions_;
+    std::unordered_map<std::string, std::size_t> label_refcount_;
 
 	instruction& append(const instruction &i) {
         instructions_.push_back(i);
