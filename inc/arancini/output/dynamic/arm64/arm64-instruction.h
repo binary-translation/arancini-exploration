@@ -37,7 +37,7 @@ private:
 
 static assembler asm_;
 
-class register_operand {
+class register_operand final {
 public:
     // TODO: this design requires writing
     // register_operand(register_operand::x0)
@@ -132,7 +132,7 @@ inline bool operator!=(const register_operand& r1, const register_operand& r2) {
 // TODO: ARM uses logical immediates that make determining their encoding completely different than
 // what fits() does
 // TODO: virtual destructor
-class immediate_operand {
+class immediate_operand final {
 public:
     immediate_operand() = default;
 
@@ -167,7 +167,7 @@ private:
     ir::value_type type_;
 };
 
-class shift_operand  {
+class shift_operand final {
 public:
     enum class shift_type {
         none,
@@ -199,7 +199,7 @@ private:
     immediate_operand amount_;
 };
 
-class label_operand {
+class label_operand final {
 public:
     label_operand() = default;
 
@@ -219,7 +219,7 @@ private:
     std::string name_;
 };
 
-class cond_operand {
+class cond_operand final {
 public:
     cond_operand() = default;
 
@@ -237,7 +237,7 @@ private:
 };
 
 // TODO: replace indexing with enum
-class memory_operand {
+class memory_operand final {
 public:
     memory_operand() = default;
 
@@ -361,7 +361,7 @@ operand use(const T& o) {
     return operand{o}.as_use();
 }
 
-class instruction {
+class instruction final {
 public:
     typedef std::array<operand, 5> operand_array;
 

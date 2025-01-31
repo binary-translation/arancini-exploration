@@ -13,7 +13,7 @@
 
 namespace arancini::output::dynamic::arm64 {
 
-class port_register_allocator {
+class port_register_allocator final {
 public:
     port_register_allocator(virtual_register_allocator* regalloc):
         regalloc_(regalloc)
@@ -43,7 +43,7 @@ private:
 	std::unordered_map<const ir::port *, register_sequence> port_to_vreg_;
 };
 
-class arm64_translation_context : public translation_context {
+class arm64_translation_context final : public translation_context {
 public:
 	arm64_translation_context(machine_code_writer &writer):
         translation_context(writer)

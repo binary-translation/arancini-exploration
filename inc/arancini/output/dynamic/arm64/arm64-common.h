@@ -5,7 +5,7 @@
 
 namespace arancini::output::dynamic::arm64 {
 
-class backend_exception : public std::runtime_error {
+class backend_exception final : public std::runtime_error {
 public:
     template <typename... Args>
     backend_exception(std::string_view format, Args&&... args):

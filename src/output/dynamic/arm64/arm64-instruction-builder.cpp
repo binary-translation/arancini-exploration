@@ -77,7 +77,7 @@ void instruction_builder::emit(machine_code_writer &writer) {
 }
 
 template <std::size_t Size>
-class register_set {
+class register_set final {
 public:
     using value_type = std::bitset<Size>;
 
@@ -117,7 +117,7 @@ private:
     value_type registers_;
 };
 
-class system_register_set {
+class system_register_set final {
 public:
     system_register_set(register_set<32> available_gp_regs, register_set<32> available_fp_regs):
         gpr_(available_gp_regs),
@@ -152,13 +152,13 @@ private:
     }
 };
 
-struct register_hash {
+struct register_hash final {
     std::size_t operator()(const register_operand &reg) const {
         return std::hash<std::size_t>{}(reg.index());
     }
 };
 
-class physical_register_allocator {
+class physical_register_allocator final {
 public:
     physical_register_allocator(system_register_set regset):
         regset_(regset)
@@ -221,7 +221,7 @@ bool fulfills_keep(const instruction& instr,
     return instr.is_keep() || implicit_deps.count(op);
 }
 
-class implicit_dependency_handler {
+class implicit_dependency_handler final {
 public:
     void satisfy(const register_operand& op) {
         logger.debug("Implicit dependency on {} satisfied by side-effect write\n", op);
@@ -240,7 +240,7 @@ private:
     std::unordered_set<register_operand, register_hash> deps_;
 };
 
-class branch_liveness_tracker {
+class branch_liveness_tracker final {
 public:
     void track_label(const instruction& instr, const std::unordered_map<std::string, std::size_t>& label_refcount) {
         if (instr.label().empty()) return;

@@ -9,7 +9,7 @@
 
 namespace arancini::output::dynamic::arm64 {
 
-class register_sequence {
+class register_sequence final {
 public:
     // TODO: do we need this?
     register_sequence() = default;
@@ -67,7 +67,7 @@ private:
     std::vector<register_operand> regs_;
 };
 
-class virtual_register_allocator {
+class virtual_register_allocator final {
 public:
     [[nodiscard]]
     register_sequence allocate([[maybe_unused]] ir::value_type type);
@@ -81,9 +81,9 @@ private:
     }
 };
 
-class instruction_builder {
+class instruction_builder final {
 public:
-    struct immediates_upgrade_policy {
+    struct immediates_upgrade_policy final {
         friend instruction_builder;
 
         reg_or_imm operator()(const reg_or_imm& op) {
@@ -105,7 +105,7 @@ public:
         ir::value_type reg_type_;
     };
 
-    struct immediates_strict_policy {
+    struct immediates_strict_policy final {
         friend instruction_builder;
 
         reg_or_imm operator()(const reg_or_imm& op) {
