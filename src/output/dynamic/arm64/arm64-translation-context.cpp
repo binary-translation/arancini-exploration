@@ -36,119 +36,51 @@ static flag_map_type flag_map {
 };
 
 template <typename NodeType>
-void allocate_flags(virtual_register_allocator& allocator, flag_map_type& flag_map, const NodeType& n) {
+void allocate_flags(port_register_allocator& allocator, flag_map_type& flag_map, const NodeType& n) {
     flag_map[reg_offsets::ZF] = allocator.allocate(n.zero(), value_type::u1());
     flag_map[reg_offsets::SF] = allocator.allocate(n.negative(), value_type::u1());
     flag_map[reg_offsets::OF] = allocator.allocate(n.overflow(), value_type::u1());
     flag_map[reg_offsets::CF] = allocator.allocate(n.carry(), value_type::u1());
 }
 
-register_sequence virtual_register_allocator::allocate(ir::value_type type) {
-    std::size_t reg_count = type.nr_elements();
-    auto element_width = type.width();
-    if (element_width > value_types::base_type.width()) {
-        element_width = value_types::base_type.width();
-        reg_count = type.width() / element_width;
-    }
-
-    auto reg_type = ir::value_type(type.type_class(), element_width, 1);
-
-    register_sequence regset;
-    for (std::size_t i = 0; i < reg_count; ++i) {
-        auto reg = register_sequence{register_operand(next_vreg_++, reg_type)};
-        regset.push_back(reg);
-    }
-
-    return regset;
+void fill_byte_with_bit(instruction_builder& builder, const register_operand& reg) {
+    builder.lsl(reg, reg, 7)
+                .add_comment("shift left LSB to set sign bit of byte");
+    builder.asr(reg, reg, 7)
+                .add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
 }
 
-register_operand arm64_translation_context::cast(const register_operand &op, value_type type) {
-    auto dest_vreg = vreg_alloc_.allocate(type);
-    builder_.mov(dest_vreg, op);
-    return dest_vreg;
-}
+register_operand arm64_translation_context::cast(const register_operand &src, value_type type) {
+    builder_.insert_comment("Internal cast from {} to {}", src.type(), type);
 
-[[nodiscard]]
-inline std::size_t get_min_bitsize(unsigned long long imm) {
-    return value_types::base_type.element_width() - __builtin_clzll(imm|1);
-}
-
-template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int>>
-register_operand arm64_translation_context::move_to_register(T imm, ir::value_type type) {
-    // Sanity checks
-    static_assert (sizeof(T) <= sizeof(std::uint64_t),
-                   "Attempting to move immediate requiring more than 64-bits into register");
-
-    [[unlikely]]
-    if (type.is_vector())
-        throw backend_exception("Cannot move immediate {} into vector type {}", imm, type);
-
-    // Convert to unsigned long long so that clzll can be used
-    // 1s in sizeof(unsinged long long) - sizeof(imm) upper bits
-    auto immediate = util::bit_cast_zeros<unsigned long long>(imm);
-
-    // Check the actual size of the value
-    std::size_t actual_size = get_min_bitsize(immediate);
-    if (actual_size > type.width()) {
-        logger.warn("Converting value of size {} to size {} by truncation\n",
-                    actual_size, type.element_width());
-        actual_size = type.element_width();
+    auto dest = vreg_alloc_.allocate(type);
+    switch (src.type().element_width()) {
+    case 1:
+        fill_byte_with_bit(builder_, src);
+    case 8:
+        builder_.sxtb(dest, src);
+        break;
+    case 16:
+        builder_.sxth(dest, src);
+        break;
+    case 32:
+        builder_.sxtw(dest, src);
+        break;
+    default:
+        builder_.mov(dest, src);
     }
-
-
-    // Determine how many 16-bit chunks we need to move
-    std::size_t move_count = actual_size / 16 + (actual_size % 16 != 0);
-    logger.debug("Moving value {:#x} requires {} 16-bit moves\n", immediate, move_count);
-
-    // Can be moved in one go
-    // TODO: this should be 12
-    if (actual_size < 12) {
-        builder_.insert_comment("Move immediate {:#x} directly as < 16-bits", immediate);
-        auto reg = vreg_alloc_.allocate(type);
-        builder_.mov(reg, immediate_operand(immediate & 0xFFFF, value_type::u16()));
-        return reg;
-    }
-
-    // Can be moved in multiple operations
-    // NOTE: this assumes that we're only working with 64-bit registers or smaller
-    auto reg = vreg_alloc_.allocate(type);
-    builder_.insert_comment("Move immediate {:#x} directly as > 16-bits", immediate);
-    builder_.movz(reg,
-                  immediate_operand(immediate & 0xFFFF, value_type::u16()),
-                  shift_operand(shift_operand::shift_type::lsl, {0, value_type::u1()}));
-    for (std::size_t i = 1; i < move_count; ++i) {
-        builder_.movk(reg,
-                      immediate_operand(immediate >> (i * 16) & 0xFFFF, value_type::u16()),
-                      shift_operand(shift_operand::shift_type::lsl, {i * 16, value_type::u16()}));
-    }
-
-    return reg;
-}
-
-template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int>>
-reg_or_imm arm64_translation_context::move_immediate(T imm, ir::value_type imm_type, ir::value_type reg_type) {
-    [[unlikely]]
-    if (imm_type.is_vector() || imm_type.element_width() > value_types::base_type.element_width())
-        throw backend_exception("Attempting to move immediate {} into unsupported immediate type {}", imm, imm_type);
-
-    auto immediate = util::bit_cast_zeros<unsigned long long>(imm);
-    std::size_t actual_size = get_min_bitsize(immediate);
-
-    if (actual_size < imm_type.element_width())
-        return immediate_operand(imm, imm_type);
-
-    return move_to_register(imm, reg_type);
+    return dest;
 }
 
 memory_operand
 arm64_translation_context::guestreg_memory_operand(int regoff, memory_operand::address_mode mode) {
     if (regoff > 255 || regoff < -256) {
         const register_operand& base_vreg = vreg_alloc_.allocate(value_types::addr_type);
-        builder_.mov(base_vreg, immediate_operand(regoff, value_type::u32()));
+        builder_.mov(base_vreg, regoff);
         builder_.add(base_vreg, context_block_reg, base_vreg);
-        return memory_operand(base_vreg, immediate_operand(0, value_types::u12), mode);
+        return memory_operand(base_vreg, 0, mode);
     } else {
-        return memory_operand(context_block_reg, immediate_operand(regoff, value_types::u12), mode);
+        return memory_operand(context_block_reg, regoff, mode);
     }
 }
 
@@ -181,7 +113,7 @@ void arm64_translation_context::end_instruction() {
             materialise(node);
     } catch (std::exception &e) {
         logger.error("{}\n", util::logging_separator());
-        logger.error("Instruction translation failed for guest instruction {} with translation:\n{}\n",
+        logger.error("Instruction translation failed for guest instruction '{}' with translation:\n{}\n",
                      current_instruction_disasm_,
                      fmt::format("{}", fmt::join(builder_.instruction_begin(), builder_.instruction_end(), "\n")));
         logger.error("{}\n", util::logging_separator());
@@ -191,19 +123,22 @@ void arm64_translation_context::end_instruction() {
 }
 
 void arm64_translation_context::end_block() {
-    // Return value in x0 = 0;
-	builder_.mov(dbt_retval_register, move_to_register(ret_, dbt_retval_register.type()));
 
     try {
         builder_.allocate();
 
+        // These instructions can be inserted after register allocation, since they do not depend on
+        // virtual registers and only def()
+        builder_.mov(dbt_retval_register, ret_);
+
+        // Return value in x0 = 0;
         builder_.ret();
 
         builder_.emit(writer());
     } catch (std::exception &e) {
         // TODO: views as lvalues
         logger.error("{}\n", util::logging_separator());
-        logger.error("Register allocation failed for guest instruction {} with translation:\n{}\n",
+        logger.error("Register allocation failed for guest instruction '{}' with translation:\n{}\n",
                      current_instruction_disasm_,
                      fmt::format("{}", fmt::join(builder_.instruction_begin(), builder_.instruction_end(), "\n")));
         logger.error("{}\n", util::logging_separator());
@@ -420,7 +355,7 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
         std::size_t width = dest_vregs[i].type().width();
 
-        memory_operand mem_op(addr_vreg, immediate_operand(i * width, value_types::u12));
+        memory_operand mem_op(addr_vreg, i * width);
         switch (width) {
             case 1:
             case 8:
@@ -456,7 +391,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
     for (std::size_t i = 0; i < src_vregs.size(); ++i) {
         std::size_t width = src_vregs[i].type().width();
 
-        memory_operand mem_op(address, immediate_operand(i * width, value_types::u12));
+        memory_operand mem_op(address, i * width);
         switch (width) {
             case 1:
             case 8:
@@ -477,8 +412,8 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
 }
 
 void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
-	auto dest_vreg = vreg_alloc_.allocate(n.val());
-    builder_.mov(dest_vreg, move_to_register(this_pc_, value_type::u64())).add_comment("read program counter");
+	auto dest = vreg_alloc_.allocate(n.val());
+    builder_.mov(dest, this_pc_).add_comment("read program counter");
 }
 
 void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
@@ -508,7 +443,7 @@ void arm64_translation_context::materialise_br(const br_node &n) {
 void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
     const auto &cond_vregs = materialise_port(n.cond());
 
-    builder_.cmp(cond_vregs, immediate_operand(1, value_type::u8()));
+    builder_.cmp(cond_vregs, 1);
     auto label = label_operand(fmt::format("{}_{}", n.target()->name(), instr_cnt_));
     builder_.beq(label);
 }
@@ -518,10 +453,10 @@ void arm64_translation_context::materialise_constant(const constant_node &n) {
 
     if (n.val().type().is_floating_point()) {
         auto value = n.const_val_f();
-        builder_.mov(dest_vreg, move_to_register(value, n.val().type())).add_comment("move float into register");
+        builder_.mov(dest_vreg, value).add_comment("move float into register");
     } else {
         auto value = n.const_val_i();
-        builder_.mov(dest_vreg, move_to_register(value, n.val().type())).add_comment("move integer into register");
+        builder_.mov(dest_vreg, value).add_comment("move integer into register");
     }
 }
 
@@ -549,14 +484,7 @@ inline shift_operand extend_register(instruction_builder& builder, const registe
         break;
     }
 
-    return shift_operand(mod, immediate_operand(0, value_types::u6));
-}
-
-void fill_byte_with_bit(instruction_builder& builder, const register_operand& reg) {
-    builder.lsl(reg, reg, immediate_operand(7, value_type::u8()))
-                .add_comment("shift left LSB to set sign bit of byte");
-    builder.asr(reg, reg, immediate_operand(7, value_type::u8()))
-                .add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
+    return shift_operand(mod, 0);
 }
 
 [[nodiscard]]
@@ -652,7 +580,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             // Otherwise they are set to 0
             if (sets_flags) {
                 auto compare_regset = vreg_alloc_.allocate(dest_regset[0].type());
-                builder_.mov(compare_regset, move_to_register(0xFFFF0000, compare_regset[0].type()));
+                builder_.mov(compare_regset, 0xFFFF0000);
                 builder_.cmp(compare_regset, dest_regset);
                 builder_.cset(flag_map[reg_offsets::CF], cond_operand("ne")).add_comment("compute flag: CF");
                 builder_.cset(flag_map[reg_offsets::OF], cond_operand("ne")).add_comment("compute flag: OF");
@@ -681,7 +609,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 // TODO: need to compute CF and OF
                 // CF and OF are set to 1 when lhs * rhs > 64-bits
                 // Otherwise they are set to 0
-                builder_.cmp(dest_regset[1], immediate_operand(0, ir::value_type::u8()));
+                builder_.cmp(dest_regset[1], 0);
                 builder_.setz(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
                 builder_.setz(flag_map[reg_offsets::OF]).add_comment("compute flag: OF");
                 sets_flags = false;
@@ -859,7 +787,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             throw backend_exception("Unsupported AND operation between {} x {}",
                                     n.lhs().type(), n.rhs().type());
         }
-        builder_.cmp(dest_regset, immediate_operand(0, ir::value_type::u8()));
+        builder_.cmp(dest_regset, 0);
 		break;
 	case binary_arith_op::band:
         if (is_vector_op) {
@@ -897,7 +825,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             // EOR does not set flags
             // CMP is used to set the flags
             if (!is_vector_op)
-                builder_.cmp(dest_regset[i-1], immediate_operand(0, value_type::u8()));
+                builder_.cmp(dest_regset[i-1], 0);
             else
                 sets_flags = false;
         }
@@ -967,7 +895,7 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
     for (std::size_t i = 0; i < dest_regs.size(); ++i) {
         // Set carry flag
         builder_.mrs(pstate, register_operand(register_operand::nzcv));
-        builder_.lsl(top_regs[i], top_regs[i], immediate_operand(0x3, value_type::u8()));
+        builder_.lsl(top_regs[i], top_regs[i], 0x3);
 
         cast(top_regs[i], pstate.type());
 
@@ -1253,7 +1181,7 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
             builder_.insert_comment("Atomic CMPXCHG using CAS (enabled on systems with LSE support");
             builder_.cas(acc_reg, src_reg, memory_operand(mem_addr))
                     .add_comment("write source (2nd reg) to memory if source == accumulator (1st reg), accumulator = source");
-            builder_.cmp(acc_reg, immediate_operand(0, value_types::u6));
+            builder_.cmp(acc_reg, 0);
         } else {
             auto loop_label = label_operand(fmt::format("loop_{}", instr_cnt_));
             auto failure_label = label_operand(fmt::format("failure_{}", instr_cnt_));
@@ -1266,7 +1194,7 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
             builder_.bne(failure_label).add_comment("if loaded value != accumulator branch to failure");
             builder_.stxr(status_reg, src_reg, memory_operand(mem_addr)).add_comment("store if not failure");
             // Compare and also set flags for later
-            builder_.cmp(status_reg, immediate_operand(0, ir::value_type::u1()));
+            builder_.cmp(status_reg, 0);
             builder_.beq(success_label).add_comment("== 0 represents success storing");
             builder_.label(failure_label);
             builder_.mov(acc_reg, current_data_reg).add_comment("move current memory value into accumulator");
@@ -1298,14 +1226,14 @@ void arm64_translation_context::materialise_unary_arith(const unary_arith_node &
     case unary_arith_op::bnot:
         /* builder_.brk(immediate_operand(100, 64)); */
         if (is_flag_port(n.val()))
-            builder_.eor_(dest_vreg, lhs_vreg, immediate_operand(1, value_type::u8()));
+            builder_.eor_(dest_vreg, lhs_vreg, 1);
         else
             builder_.not_(dest_vreg, lhs_vreg);
         break;
     case unary_arith_op::neg:
         // neg: ~reg + 1 for complement-of-2
         builder_.not_(dest_vreg, lhs_vreg);
-        builder_.add(dest_vreg, dest_vreg, immediate_operand(1, value_type::u8()));
+        builder_.add(dest_vreg, dest_vreg, 1);
         break;
     default:
         throw backend_exception("Unknown unary operation");
@@ -1354,10 +1282,10 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             // sign-extend to 1 byte
             // sign-extend the rest
             // TODO: this is likely wrong
-            builder_.lsl(dest_vreg, src_vreg, immediate_operand(7, value_type::u8()))
+            builder_.lsl(dest_vreg, src_vreg, 7)
                     .add_comment("shift left LSB to set sign bit of byte");
             builder_.sxtb(dest_vreg, dest_vreg).add_comment("sign-extend");
-            builder_.asr(dest_vreg, dest_vreg, immediate_operand(7, value_type::u8()))
+            builder_.asr(dest_vreg, dest_vreg, 7)
                     .add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
             break;
         case 8:
@@ -1392,7 +1320,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             builder_.insert_comment("Determine sign and write to upper registers");
             for (std::size_t i = src_vregs.size(); i < dest_vregs.size(); ++i) {
                 builder_.mov(dest_vregs[i], src_vregs[src_vregs.size()-1]);
-                builder_.asr(dest_vregs[i], dest_vregs[i], move_to_register(64, value_type::u8()));
+                builder_.asr(dest_vregs[i], dest_vregs[i], 64);
             }
         }
         break;
@@ -1413,9 +1341,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             for (std::size_t i = 0; i < src_vregs.size(); ++i) {
                 const register_operand& src_vreg = vreg_alloc_.allocate(dest_vreg.type());
                 builder_.mov(src_vreg, src_vregs[i]);
-                builder_.lsl(src_vreg, src_vreg,
-                             move_immediate(dest_pos % n.val().type().element_width(),
-                                            value_types::u6, src_vreg.type()));
+                builder_.lsl(src_vreg, src_vreg, dest_pos % n.val().type().element_width());
                 builder_.orr_(dest_vregs[dest_idx], dest_vregs[dest_idx], src_vreg);
 
                 dest_pos += src_vregs[i].type().width();
@@ -1428,9 +1354,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
                 const register_operand& src_vreg = vreg_alloc_.allocate(dest_vreg.type());
                 builder_.mov(src_vreg, src_vregs[src_idx]);
-                builder_.lsl(src_vreg, src_vreg,
-                             move_immediate(src_pos % n.source_value().type().element_width(),
-                                            value_types::u6, src_vreg.type()));
+                builder_.lsl(src_vreg, src_vreg, src_pos % n.source_value().type().element_width());
                 builder_.mov(dest_vregs[i], src_vreg);
 
                 src_pos += src_vregs[i].type().width();
@@ -1449,23 +1373,10 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
                                     n.source_value().type().element_width());
         }
 
-        builder_.insert_comment("zero-extend from {} x {} to {} x {}",
-                                 n.val().type().nr_elements(), n.val().type().element_width(),
-                                n.source_value().type().nr_elements(), n.source_value().type().element_width());
+        builder_.insert_comment("zero-extend from {} to {}", n.source_value().type(), n.val().type());
 
-        // IDEA:
-        // 1. Zero-extend reasonably
-        // 2. If dest_value > 64-bit, determine sign
-        // 3. Plaster sign all over the upper bits
         switch (n.source_value().type().element_width()) {
         case 1:
-            // 1 -> N
-            // sign-extend to 1 byte
-            // sign-extend the rest
-            builder_.lsl(dest_vreg, src_vreg, immediate_operand(7, value_type::u8()));
-            builder_.uxtb(dest_vreg, src_vreg);
-            builder_.lsr(dest_vreg, src_vreg, immediate_operand(7, value_type::u8()));
-            break;
         case 8:
             builder_.uxtb(dest_vreg, src_vreg);
             break;
@@ -1473,9 +1384,9 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             builder_.uxth(dest_vreg, src_vreg);
             break;
         case 32:
-        case 64:
-            builder_.mov(dest_vreg, src_vreg);
+            builder_.uxtw(dest_vreg, src_vreg);
             break;
+        case 64:
         case 128:
         case 256:
             // Handle separately
@@ -1492,7 +1403,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         builder_.insert_comment("Set upper registers to zero");
         if (dest_vregs.size() > 1) {
             for (std::size_t i = src_vregs.size(); i < dest_vregs.size(); ++i)
-                builder_.mov(dest_vregs[i], immediate_operand(0, value_type::u1()));
+                builder_.mov(dest_vregs[i], 0);
         }
         break;
     case cast_op::trunc:
@@ -1512,12 +1423,12 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             // We can end up with a 64-bit dest_vreg and a 32-bit src_vreg
             //
             // Does this even need a fix?
-            builder_.and_(src_vreg, src_vreg, immediate_operand(1, value_type::u1()));
+            builder_.and_(src_vreg, src_vreg, 1);
             builder_.mov(dest_vreg, src_vreg);
         } else if (src_vregs.size() == 1) {
             // TODO: again register reallocation problems, this should be clearly
             // specified as a smaller size
-            auto immediate = move_immediate(64 - dest_vreg.type().element_width(), value_types::u6);
+            immediate_operand immediate = 64 - dest_vreg.type().element_width();
             if (src_vreg.type().element_width() > dest_vreg.type().element_width())
                 src_vreg.cast(dest_vreg.type());
             builder_.lsl(dest_vreg, src_vreg, immediate);
@@ -1594,7 +1505,7 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
     const auto &false_vregs = materialise_port(n.falseval());
 
     /* builder_.brk(immediate_operand(100, 64)); */
-    builder_.cmp(cond_vregs, immediate_operand(0, value_type::u8()))
+    builder_.cmp(cond_vregs, 0)
             .add_comment("compare condition for conditional select");
     builder_.csel(dest_vreg, true_vregs, false_vregs, cond_operand("NE"));
 }
@@ -1606,20 +1517,12 @@ void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
     }
 
     // TODO: refactor this
-    const register_operand &input = materialise_port(n.input());
-    const register_operand &amount1 = materialise_port(n.amount());
+    const auto& input = materialise_port(n.input());
 
-    auto dest_type = n.val().type();
-    if (n.val().type().element_width() < input.type().element_width())
-        dest_type = input.type();
+    auto& amount = materialise_port(n.amount());
+    amount = cast(amount, n.val().type());
 
-    if (dest_type.element_width() < amount1.type().element_width())
-        dest_type = amount1.type();
-
-    const register_operand& amount = vreg_alloc_.allocate(dest_type);
-    builder_.mov(amount, amount1);
-
-    const register_operand& dest_vreg = vreg_alloc_.allocate(n.val(), dest_type);
+    const auto& dest_vreg = vreg_alloc_.allocate(n.val());
 
     switch (n.op()) {
     case shift_op::lsl:
@@ -1664,9 +1567,7 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
     for (std::size_t i = extract_start; extracted < n.length(); ++i) {
         dest_vregs[dest_idx] = cast(dest_vregs[dest_idx], src_vregs[i].type());
 
-        builder_.bfxil(dest_vregs[dest_idx], src_vregs[i],
-                      immediate_operand(extract_idx, value_type::u8()),
-                      immediate_operand(extract_len, value_type::u8()));
+        builder_.bfxil(dest_vregs[dest_idx], src_vregs[i], extract_idx, extract_len);
         extract_idx = 0;
         extracted += extract_len;
         extract_len = std::min(n.length() - extracted, src_vregs[i].type().element_width());
@@ -1707,9 +1608,7 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
     for (std::size_t i = insert_start; inserted < n.length(); ++i) {
         auto bits_vreg_width = bits_vregs[bits_idx].type().element_width();
         bits_vregs[bits_idx] = cast(bits_vregs[bits_idx], dest_vregs[i].type());
-        builder_.bfi(dest_vregs[i], bits_vregs[bits_idx],
-                     immediate_operand(insert_idx, value_type::u8()),
-                     immediate_operand(insert_len, value_type::u8()));
+        builder_.bfi(dest_vregs[i], bits_vregs[bits_idx], insert_idx, insert_len);
         insert_idx = 0;
         inserted += insert_len;
         insert_len = std::min(n.length() - inserted, bits_vreg_width);

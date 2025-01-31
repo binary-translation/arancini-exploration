@@ -6,6 +6,31 @@
 #include <unordered_set>
 
 using namespace arancini::output::dynamic::arm64;
+using value_type = arancini::ir::value_type;
+
+[[nodiscard]]
+inline std::size_t get_min_bitsize(unsigned long long imm) {
+    return value_types::base_type.element_width() - __builtin_clzll(imm|1);
+}
+
+register_sequence virtual_register_allocator::allocate(ir::value_type type) {
+    std::size_t reg_count = type.nr_elements();
+    auto element_width = type.width();
+    if (element_width > value_types::base_type.width()) {
+        element_width = value_types::base_type.width();
+        reg_count = type.width() / element_width;
+    }
+
+    auto reg_type = ir::value_type(type.type_class(), element_width, 1);
+
+    register_sequence regset;
+    for (std::size_t i = 0; i < reg_count; ++i) {
+        auto reg = register_sequence{register_operand(next_vreg_++, reg_type)};
+        regset.push_back(reg);
+    }
+
+    return regset;
+}
 
 void instruction_builder::spill() {
 }
@@ -42,7 +67,7 @@ void instruction_builder::emit(machine_code_writer &writer) {
     std::uint8_t* encode;
     size = asm_.assemble(instruction_stream.c_str(), &encode);
 
-    logger.debug("Translation:\n{}\n", instruction_stream);
+    logger.debug("Translation (after register allocation):\n{}\n", instruction_stream);
 
     // TODO: write directly
     writer.copy_in(encode, size);
@@ -133,9 +158,9 @@ struct register_hash {
     }
 };
 
-class register_allocator {
+class physical_register_allocator {
 public:
-    register_allocator(system_register_set regset):
+    physical_register_allocator(system_register_set regset):
         regset_(regset)
     { }
 
@@ -199,6 +224,7 @@ bool fulfills_keep(const instruction& instr,
 class implicit_dependency_handler {
 public:
     void satisfy(const register_operand& op) {
+        logger.debug("Implicit dependency on {} satisfied by side-effect write\n", op);
         deps_.erase(op);
     }
 
@@ -289,10 +315,13 @@ void instruction_builder::allocate() {
     // Return to trampoline (x30)
     // Frame Pointer - points to guest registers (x29)
     system_register_set regset{register_set<32>{0x11FFFFFFF}, register_set<32>{0xFFFFFFFFF}};
-    register_allocator reg_alloc{regset};
+    class physical_register_allocator reg_alloc{regset};
 
     branch_liveness_tracker branch_tracker;
     implicit_dependency_handler implicit_dependencies;
+
+    auto instruction_stream = fmt::format("{}", fmt::join(instruction_begin(), instruction_end(), "\n"));
+    logger.debug("Translation (before register allocation):\n{}\n", instruction_stream);
 
 	for (auto it = instructions_.rbegin(); it != instructions_.rend(); it++) {
 		auto &instr = *it;
@@ -322,6 +351,12 @@ void instruction_builder::allocate() {
             // TODO: can't get() be avoided here?
             auto vreg = std::get<register_operand>(op.get());
             logger.debug("Defining register {}\n", vreg);
+
+            if (!vreg.is_virtual() && implicit_dependencies.fulfills(vreg)) {
+                instr.as_keep();
+                implicit_dependencies.satisfy(vreg);
+                continue;
+            }
 
             // Get previous allocations
             if (const auto* prev = reg_alloc.get_allocation(vreg); prev) {
@@ -411,22 +446,22 @@ void instruction_builder::allocate() {
 
         // Kill MOVs
         // TODO: refactor
-        if (instr.opcode().find("mov") != std::string::npos) {
-            logger.debug("Attempting to eliminate copies between the same register\n");
-
-            operand op1 = instr.operands()[0];
-            operand op2 = instr.operands()[1];
-
-            if (auto* reg1 = std::get_if<register_operand>(&op1.get()), *reg2 = std::get_if<register_operand>(&op2.get());
-                    reg1 && reg2)
-            {
-                if (reg1->index() == reg2->index()) {
-                    logger.debug("Killing instruction {} as part of copy optimization\n", instr);
-
-                    instr.kill();
-                }
-            }
-        }
+        // if (instr.opcode().find("mov") != std::string::npos && instr.is_keep()) {
+        //     logger.debug("Attempting to eliminate copies between the same register\n");
+        //
+        //     operand op1 = instr.operands()[0];
+        //     operand op2 = instr.operands()[1];
+        //
+        //     if (auto* reg1 = std::get_if<register_operand>(&op1.get()), *reg2 = std::get_if<register_operand>(&op2.get());
+        //             reg1 && reg2)
+        //     {
+        //         if (reg1->index() == reg2->index()) {
+        //             logger.debug("Killing instruction {} as part of copy optimization\n", instr);
+        //
+        //             instr.kill();
+        //         }
+        //     }
+        // }
 
         if (instr.is_branch())
             branch_tracker.track_branch(instr);

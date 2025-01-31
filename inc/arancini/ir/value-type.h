@@ -28,6 +28,18 @@ public:
 	static value_type f64() { return value_type(value_type_class::floating_point, 64, 1); }
     static value_type f80() { return value_type(value_type_class::floating_point, 80, 1); } // x87 double extended-precision
 
+    template <typename T, typename std::enable_if<std::is_arithmetic_v<T>, int>::type = 0>
+    static value_type from_value(T val) {
+        if constexpr (std::is_integral_v<T>) {
+            if constexpr (std::is_signed_v<T>)
+                return value_type(value_type_class::signed_integer, sizeof(T), 1);
+
+            return value_type(value_type_class::unsigned_integer, sizeof(T), 1);
+        }
+
+        return value_type(value_type_class::floating_point, sizeof(T), 1);
+    }
+
     using size_type = std::size_t;
 
 	static value_type vector(const value_type &underlying_type, size_type nr_elements) {

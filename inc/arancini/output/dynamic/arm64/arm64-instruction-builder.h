@@ -1,16 +1,134 @@
 #pragma once
 
+#include <arancini/ir/port.h>
 #include <arancini/output/dynamic/machine-code-writer.h>
 #include <arancini/output/dynamic/arm64/arm64-instruction.h>
 
 #include <vector>
-#include <algorithm>
 #include <type_traits>
 
 namespace arancini::output::dynamic::arm64 {
 
+class register_sequence {
+public:
+    // TODO: do we need this?
+    register_sequence() = default;
+
+    register_sequence(const register_operand& reg):
+        regs_{reg}
+    { }
+
+    register_sequence(std::initializer_list<register_operand> regs):
+        regs_(regs)
+    { }
+
+    template <typename It>
+    register_sequence(It begin, It end):
+        regs_(begin, end)
+    { }
+
+    operator register_operand() const {
+        [[unlikely]]
+        if (regs_.size() > 1)
+            throw backend_exception("Accessing register set of {} registers as single register",
+                                    regs_.size());
+        return regs_[0];
+    }
+
+    operator std::vector<register_operand>() const {
+        return regs_;
+    }
+
+    [[nodiscard]]
+    register_operand& operator[](std::size_t i) { return regs_[i]; }
+
+    [[nodiscard]]
+    const register_operand& operator[](std::size_t i) const { return regs_[i]; }
+
+    [[nodiscard]]
+    register_operand& front() { return regs_[0]; }
+
+    [[nodiscard]]
+    const register_operand& front() const { return regs_[0]; }
+
+    [[nodiscard]]
+    register_operand& back() { return regs_[regs_.size()]; }
+
+    [[nodiscard]]
+    const register_operand& back() const { return regs_[regs_.size()]; }
+
+    [[nodiscard]]
+    std::size_t size() const { return regs_.size(); }
+
+    void push_back(const register_operand& reg) { regs_.push_back(reg); }
+
+    void push_back(register_operand&& reg) { regs_.push_back(std::move(reg)); }
+private:
+    std::vector<register_operand> regs_;
+};
+
+class virtual_register_allocator {
+public:
+    [[nodiscard]]
+    register_sequence allocate([[maybe_unused]] ir::value_type type);
+
+    void reset() { next_vreg_ = 33; }
+private:
+    std::size_t next_vreg_ = 33; // TODO: formalize this
+
+    bool base_representable(const ir::value_type& type) {
+        return type.width() <= 64; // TODO: formalize this
+    }
+};
+
 class instruction_builder {
 public:
+    struct immediates_upgrade_policy {
+        friend instruction_builder;
+
+        reg_or_imm operator()(const reg_or_imm& op) {
+            if (std::holds_alternative<register_operand>(op.get()))
+                return op;
+
+            const immediate_operand& imm = op;
+            return builder_->move_immediate(imm.value(), imm_type_, reg_type_);
+        }
+    protected:
+        immediates_upgrade_policy(instruction_builder* builder, ir::value_type imm_type, ir::value_type reg_type):
+            builder_(builder),
+            imm_type_(imm_type),
+            reg_type_(reg_type)
+        { }
+    private:
+        instruction_builder* builder_;
+        ir::value_type imm_type_;
+        ir::value_type reg_type_;
+    };
+
+    struct immediates_strict_policy {
+        friend instruction_builder;
+
+        reg_or_imm operator()(const reg_or_imm& op) {
+            if (std::holds_alternative<register_operand>(op.get()))
+                return op;
+
+            const immediate_operand& imm = op;
+            if (!immediate_operand::fits(imm.value(), imm_type_))
+                throw backend_exception("invalid immediate");
+
+            return op;
+        }
+    protected:
+        immediates_strict_policy(instruction_builder* builder, ir::value_type imm_type, ir::value_type reg_type):
+            imm_type_(imm_type)
+        { }
+
+        immediates_strict_policy(ir::value_type imm_type):
+            imm_type_(imm_type)
+        { }
+
+        ir::value_type imm_type_;
+    };
 
 #define ARITH_OP_BASIC(name) \
 	instruction& name(const register_operand &dst, \
@@ -46,7 +164,7 @@ public:
     // SUB
     ARITH_OP(sub);
 
-    // SUBS
+        // SUBS
     ARITH_OP(subs);
 
     // SBC
@@ -55,38 +173,56 @@ public:
     // SBCS
     ARITH_OP(sbcs);
 
+    template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& orr_(const register_operand &dst,
               const register_operand &src1,
               const reg_or_imm &src2) {
+        // TODO: this checks that the immediate is between immr:imms (bits [21:10])
+        // However, for 64-bit orr, we have N:immr:imms, which gives us bits [22:10])
+        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
         return append(instruction("orr", def(dst), use(src1), use(src2)));
     }
 
+    template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& and_(const register_operand &dst,
               const register_operand &src1,
               const reg_or_imm &src2) {
+        // TODO: this checks that the immediate is between immr:imms (bits [21:10])
+        // However, for 64-bit and, we have N:immr:imms, which gives us bits [22:10])
+        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
         return append(instruction("and", def(dst), use(src1), use(src2)));
     }
 
     // TODO: refactor this; there should be only a single version and the comment should be removed
+    template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& ands(const register_operand &dst,
               const register_operand &src1,
               const reg_or_imm &src2) {
-        return append(instruction("ands", def(dst), use(src1), use(src2))
+        // TODO: this checks that the immediate is between immr:imms (bits [21:10])
+        // However, for 64-bit ands, we have N:immr:imms, which gives us bits [22:10])
+        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
+        return append(instruction("ands", def(dst), use(src1), use(immediates_policy(src2)))
                       .implicitly_writes({register_operand(register_operand::nzcv)}));
     }
 
-    instruction& eor_(const register_operand &dst,
-              const register_operand &src1,
-              const reg_or_imm &src2) {
-        return append(instruction("eor", def(dst), use(src1), use(src2)));
+    template <typename ImmediatesPolicy = immediates_upgrade_policy>
+    instruction& eor_(const register_operand &dst, const register_operand &src1, const reg_or_imm &src2) {
+        // TODO: this checks that the immediate is between immr:imms (bits [21:10])
+        // However, for 64-bit eor, we have N:immr:imms, which gives us bits [22:10])
+        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
+        return append(instruction("eor", def(dst), use(src1), use(immediates_policy(src2))));
     }
 
+    template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& not_(const register_operand &dst, const reg_or_imm &src) {
-        return append(instruction("mvn", def(dst), use(src)));
+        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 6), dst.type());
+        return append(instruction("mvn", def(dst), use(immediates_policy(src))));
     }
 
+    template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& neg(const register_operand &dst, const register_operand &src) {
-        return append(instruction("neg", def(dst), use(src)));
+        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 6), dst.type());
+        return append(instruction("neg", def(dst), use(immediates_policy(src))));
     }
 
     instruction& movn(const register_operand &dst,
@@ -98,17 +234,21 @@ public:
     instruction& movz(const register_operand &dst,
               const immediate_operand &src,
               const shift_operand &shift) {
-        return append(instruction("movz", def(dst), use(src), use(shift)));
+        immediates_strict_policy immediates_policy(ir::value_type(ir::value_type_class::unsigned_integer, 16));
+        return append(instruction("movz", def(dst), use(immediates_policy(src)), use(shift)));
     }
 
     instruction& movk(const register_operand &dst,
               const immediate_operand &src,
               const shift_operand &shift) {
-        return append(instruction("movk", use(def(dst)), use(src), use(shift)));
+        immediates_strict_policy immediates_policy(ir::value_type(ir::value_type_class::unsigned_integer, 16));
+        return append(instruction("movk", use(def(dst)), use(immediates_policy(src)), use(shift)));
     }
 
+    template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& mov(const register_operand &dst, const reg_or_imm &src) {
-        return append(instruction("mov", def(dst), use(src)));
+        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
+        return append(instruction("mov", def(dst), use(immediates_policy(src))));
     }
 
     instruction& b(label_operand &dest) {
@@ -154,34 +294,41 @@ public:
         return append(instruction("cmn", use(def(dst)), use(src)));
     }
 
-    instruction& cmp(const register_operand &dst,
-             const reg_or_imm &src) {
-        return append(instruction("cmp", use(dst), use(src))
+    template <typename ImmediatesPolicy = immediates_upgrade_policy>
+    instruction& cmp(const register_operand &dst, const reg_or_imm &src) {
+        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
+        return append(instruction("cmp", use(dst), use(immediates_policy(src)))
                       .implicitly_writes({register_operand(register_operand::nzcv)}));
     }
 
-    instruction& tst(const register_operand &dst,
-             const reg_or_imm &src) {
+    instruction& tst(const register_operand &dst, const reg_or_imm &src) {
         return append(instruction("tst", use(def(dst)), use(src))
                       .implicitly_writes({register_operand(register_operand::nzcv)}));
     }
 
-    instruction& lsl(const register_operand &dst,
-             const register_operand &src1,
-             const reg_or_imm &src2) {
-        return append(instruction("lsl", def(dst), use(src1), use(src2)));
+    template <typename ImmediatesPolicy = immediates_upgrade_policy>
+    instruction& lsl(const register_operand &dst, const register_operand &src1, const reg_or_imm &src2) {
+        std::size_t size = dst.type().element_width() <= 32 ? 4 : 6;
+        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
+        return append(instruction("lsl", def(dst), use(src1), use(immediates_policy(src2))));
     }
 
+    template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& lsr(const register_operand &dst,
              const register_operand &src1,
              const reg_or_imm &src2) {
-        return append(instruction("lsr", def(dst), use(src1), use(src2)));
+        std::size_t size = dst.type().element_width() <= 32 ? 5 : 6;
+        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
+        return append(instruction("lsr", def(dst), use(src1), use(immediates_policy(src2))));
     }
 
+    template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& asr(const register_operand &dst,
              const register_operand &src1,
              const reg_or_imm &src2) {
-        return append(instruction("asr", def(dst), use(src1), use(src2)));
+        std::size_t size = dst.type().element_width() <= 32 ? 5 : 6;
+        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
+        return append(instruction("asr", def(dst), use(src1), use(immediates_policy(src2))));
     }
 
     instruction& csel(const register_operand &dst,
@@ -320,7 +467,7 @@ public:
     }
 
     instruction& ret() {
-        return append(instruction("ret").implicitly_reads({register_operand(register_operand::x0)}));
+        return append(instruction("ret").as_keep().implicitly_reads({register_operand(register_operand::x0)}));
     }
 
     instruction& brk(const immediate_operand &imm) {
@@ -589,8 +736,97 @@ public:
 
     [[nodiscard]]
     const_instruction_stream_iterator instruction_cend() const { return instructions_.cend(); }
+
+    virtual_register_allocator& register_allocator() { return vreg_alloc_; }
+
+    const virtual_register_allocator& register_allocator() const { return vreg_alloc_; }
+
+    [[nodiscard]]
+    inline std::size_t get_min_bitsize(unsigned long long imm) {
+        return value_types::base_type.element_width() - __builtin_clzll(imm|1);
+    }
+
+    template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
+    reg_or_imm move_immediate(T imm, ir::value_type imm_type, ir::value_type reg_type) {
+        [[unlikely]]
+        if (imm_type.is_vector() || imm_type.element_width() > value_types::base_type.element_width())
+            throw backend_exception("Attempting to move immediate {:#x} into unsupported immediate type {}",
+                                     imm, imm_type);
+
+        auto immediate = util::bit_cast_zeros<unsigned long long>(imm);
+        std::size_t actual_size = get_min_bitsize(immediate);
+
+        if (actual_size < imm_type.element_width()) {
+            logger.debug("Immediate {:#x} fits within {} (actual size = {})\n",
+                          imm, imm_type, actual_size);
+            return immediate_operand(imm, imm_type);
+        }
+
+        return move_to_register(imm, reg_type);
+     }
+
+    template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
+    reg_or_imm move_immediate(T imm, ir::value_type imm_type) {
+        ir::value_type reg_type;
+        if (imm_type.element_width() < 32)
+            reg_type = ir::value_type(imm_type.type_class(), 32);
+        else if (imm_type.element_width() > 32)
+            reg_type = ir::value_type(imm_type.type_class(), 64);
+
+        return move_immediate(imm, imm_type, reg_type);
+    }
+
+    template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
+    register_operand move_to_register(T imm, ir::value_type type) {
+        // Sanity checks
+        static_assert (sizeof(T) <= sizeof(std::uint64_t),
+                       "Attempting to move immediate requiring more than 64-bits into register");
+        static_assert (sizeof(std::uint64_t) <= sizeof(unsigned long long),
+                       "ARM DBT expects unsigned long long to be at least as large as 64-bits");
+
+        [[unlikely]]
+        if (type.is_vector())
+            throw backend_exception("Cannot move immediate {} into vector type {}", imm, type);
+
+        // Convert to unsigned long long so that clzll can be used
+        // 1s in sizeof(unsinged long long) - sizeof(imm) upper bits
+        auto immediate = util::bit_cast_zeros<unsigned long long>(imm);
+
+        // Check the actual size of the value
+        std::size_t actual_size = get_min_bitsize(immediate);
+        if (actual_size > type.width()) {
+            logger.warn("Converting value of size {} to size {} by truncation\n",
+                        actual_size, type.element_width());
+            actual_size = type.element_width();
+        }
+
+        // Can be moved in one go
+        // TODO: implement optimization to support more immediates via shifts
+        if (actual_size < 12) {
+            insert_comment("Move immediate {:#x} directly as < 12-bits", immediate);
+            auto reg = vreg_alloc_.allocate(type);
+            mov<immediates_strict_policy>(reg, immediate & 0xFFF);
+            return reg;
+        }
+
+        // Determine how many 16-bit chunks we need to move
+        std::size_t move_count = actual_size / 16 + (actual_size % 16 != 0);
+        logger.debug("Moving value {:#x} requires {} 16-bit moves\n", immediate, move_count);
+
+        // Can be moved in multiple operations
+        // NOTE: this assumes that we're only working with 64-bit registers or smaller
+        auto reg = vreg_alloc_.allocate(type);
+        insert_comment("Move immediate {:#x} > 12-bits with sequence of movz/movk operations", immediate);
+        movz(reg, immediate & 0xFFFF, shift_operand(shift_operand::shift_type::lsl, 0));
+        for (std::size_t i = 1; i < move_count; ++i) {
+            movk(reg, immediate >> (i * 16) & 0xFFFF, shift_operand(shift_operand::shift_type::lsl, i * 16));
+        }
+
+        return reg;
+    }
 private:
 	std::vector<instruction> instructions_;
+    virtual_register_allocator vreg_alloc_;
     std::unordered_map<std::string, std::size_t> label_refcount_;
 
 	instruction& append(const instruction &i) {
@@ -600,5 +836,6 @@ private:
 
     void spill();
 };
+
 } // namespace arancini::output::dynamic::arm64
 

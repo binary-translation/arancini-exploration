@@ -139,16 +139,15 @@ public:
     using value_type = arancini::ir::value_type;
 
     template <typename T, typename std::enable_if<std::is_arithmetic_v<T>, int>::type = 0>
-	immediate_operand(T v, value_type type)
-		: value_(v)
-        , type_(type)
-	{
-        if (type_.is_vector() || type_.element_width() > 64)
-            throw backend_exception("cannot represent vector {} as immediate", type_);
+	immediate_operand(T v, ir::value_type type):
+        value_(v),
+        type_(type)
+	{ }
 
-        if (!fits(v, type))
-            throw backend_exception("specified immediate {} does not fit in width {}", v, type_.width());
-	}
+    template <typename T, typename std::enable_if<std::is_arithmetic_v<T>, int>::type = 0>
+	immediate_operand(T v):
+        immediate_operand(v, value_type::from_value(v))
+	{ }
 
     [[nodiscard]]
     static bool fits(std::uintmax_t v, value_type type) {
@@ -159,13 +158,13 @@ public:
     std::uintmax_t value() const { return value_; }
 
     [[nodiscard]]
-    value_type &type() { return type_; }
+    ir::value_type& type() { return type_; }
 
     [[nodiscard]]
-    const value_type &type() const { return type_; }
+    const ir::value_type& type() const { return type_; }
 private:
     std::uintmax_t value_;
-    value_type type_;
+    ir::value_type type_;
 };
 
 class shift_operand  {
@@ -250,7 +249,7 @@ public:
 
     template<typename T>
 	memory_operand(const T &base,
-                   immediate_operand offset = immediate_operand(0, value_types::u12),
+                   immediate_operand offset = 0,
                    address_mode mode = address_mode::direct)
         : reg_base_(base)
 		, offset_(offset)
@@ -280,7 +279,7 @@ public:
 private:
     register_operand reg_base_;
 
-	immediate_operand offset_ = immediate_operand(0, value_types::u12);
+	immediate_operand offset_ = 0;
 
     address_mode mode_;
 };
