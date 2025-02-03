@@ -51,6 +51,8 @@ void fill_byte_with_bit(instruction_builder& builder, const register_operand& re
 }
 
 register_operand arm64_translation_context::cast(const register_operand &src, value_type type) {
+    if (src.type().element_width() >= type.element_width()) return src;
+
     builder_.insert_comment("Internal cast from {} to {}", src.type(), type);
 
     auto dest = vreg_alloc_.allocate(type);
@@ -1495,8 +1497,8 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 
 void arm64_translation_context::materialise_csel(const csel_node &n) {
     if (n.val().type().is_vector() || n.val().type().element_width() > value_types::base_type.element_width()) {
-        throw backend_exception("Cannot implement conditional selection for \
-                                  vectors and elements widths exceeding 64-bits");
+        throw backend_exception("Cannot implement conditional selection for " \
+                                "vectors and elements widths exceeding 64-bits");
     }
 
     const auto &dest_vreg = vreg_alloc_.allocate(n.val());
@@ -1511,10 +1513,10 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
 }
 
 void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
-    if (n.val().type().is_vector() || n.val().type().element_width() > value_types::base_type.element_width()) {
-        throw backend_exception("Cannot implement bit shifts for \
-                                  vectors and elements widths exceeding 64-bits");
-    }
+    // Generally, cannot implement them for vectors or > 64-bit values
+    [[unlikely]]
+    if (n.val().type().is_vector() || n.val().type().element_width() > value_types::base_type.element_width())
+        throw backend_exception("Cannot implement bit shifts for type {}", n.val().type());
 
     // TODO: refactor this
     const auto& input = materialise_port(n.input());
