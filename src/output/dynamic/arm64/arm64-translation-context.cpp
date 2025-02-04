@@ -761,6 +761,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         // Generic implementation:
         // lhs % rhs = lhs - (rhs * floor(lhs/rhs))
         {
+            builder_.insert_comment("Implementing modulo via division and multiplication");
             auto temp1_regset = vreg_alloc_.allocate(op_type);
             auto temp2_regset = vreg_alloc_.allocate(op_type);
             div_impl(temp1_regset, lhs_regset, rhs_regset);
@@ -1627,6 +1628,7 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
 
     builder_.insert_comment("Extract specific bits into destination");
     for (std::size_t i = extract_start; extracted < n.length(); ++i) {
+        builder_.mov(dest_vregs[dest_idx], 0);
         dest_vregs[dest_idx] = cast(dest_vregs[dest_idx], src_vregs[i].type());
 
         builder_.bfxil(dest_vregs[dest_idx], src_vregs[i], extract_idx, extract_len);

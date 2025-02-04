@@ -554,7 +554,7 @@ struct fmt::formatter<arancini::output::dynamic::arm64::register_operand> {
         if (op.is_virtual()) {
             return fmt::format_to(ctx.out(), "%V{}_{}{}",
                                   op.index(),
-                                  op.type().element_width(),
+                                  op.type(),
                                   op.is_special() ? "_s" : "");
         }
 

@@ -214,9 +214,16 @@ struct register_hash final {
     }
 };
 
+struct register_equal final {
+    bool operator()(const register_operand& r1, const register_operand& r2) const {
+        return r1.index() == r2.index() && r1.type().type_class() == r2.type().type_class()
+                                        && r1.type().nr_elements() == r2.type().nr_elements();
+    }
+};
+
 class physical_register_allocator final {
 public:
-    using register_map = std::unordered_map<register_operand, register_operand, register_hash>;
+    using register_map = std::unordered_map<register_operand, register_operand, register_hash, register_equal>;
 
     physical_register_allocator(system_register_set regset):
         regset_(regset)
@@ -246,9 +253,12 @@ public:
 
     // Lookup
     [[nodiscard]]
-    const register_operand *get_allocation(const register_operand &vreg) const {
-        if (current_allocations_.count(vreg))
-            return &current_allocations_.at(vreg);
+    const register_operand *get_allocation(const register_operand &vreg) {
+        if (current_allocations_.count(vreg)) {
+            auto reg = &current_allocations_.at(vreg);
+            reg->cast(vreg.type());
+            return reg;
+        }
         return nullptr;
     }
 
@@ -267,17 +277,6 @@ public:
     const_iterator cend() const { return current_allocations_.cend(); }
 private:
     system_register_set regset_;
-
-    struct register_type_hash {
-        using value_type = arancini::ir::value_type;
-        std::size_t operator()(const value_type &t) const {
-            using type_class = std::underlying_type_t<arancini::ir::value_type_class>;
-
-            return std::hash<value_type::size_type>{}(t.nr_elements()) ^
-                   std::hash<type_class>{}(static_cast<type_class>(t.type_class()));
-        }
-    };
-
     register_map current_allocations_;
 };
 
@@ -291,7 +290,7 @@ bool fulfills_keep(const instruction& instr,
 class implicit_dependency_handler final {
 public:
     void satisfy(const register_operand& op) {
-        logger.debug("Implicit dependency on {} satisfied by side-effect write\n", op);
+        logger.debug("Implicit dependency on {} satisfied by write\n", op);
         deps_.erase(op);
     }
 
@@ -463,17 +462,19 @@ void instruction_builder::allocate() {
                 continue;
             }
 
+            logger.debug("Current state\n");
+            for (const auto& [reg1, reg2] : reg_alloc) {
+                logger.debug("{} -> {}\n", reg1, reg2);
+            }
+
             // Get previous allocations
             if (const auto* prev = reg_alloc.get_allocation(vreg); prev) {
                 logger.debug("Assign definition {} to existing allocation {}\n",
                              op, *prev);
 
                 // Assign operand to previously allocated register
-                // bool is_use = op.is_use();
                 op = *prev;
-                // op.as_def();
-                // if (is_use)
-                //     op.as_use();
+                op.as_def();
 
                 // Allocation not needed beyond this point
                 // TODO: enable this when backwards branches are working
@@ -497,11 +498,8 @@ void instruction_builder::allocate() {
 
                 logger.debug("Unused definition allocated to {}\n", allocation);
 
-                // bool is_use = op.is_use();
                 op = allocation;
-                // op.as_def();
-                // if (is_use)
-                //     op.as_use();
+                op.as_def();
             } else {
                 logger.debug("Register not allocated - killing instruction\n", op);
                 instr.kill();
@@ -581,10 +579,10 @@ void instruction_builder::allocate() {
     }
 
     // Check that no dangling allocations remained
-    // [[unlikely]]
-    // if (reg_alloc.state() != regset)
-    //     throw backend_exception("Dangling allocations after register allocation:\n{} != {} (ref != actual)",
-    //                             reg_alloc.state(), regset);
+    [[unlikely]]
+    if (reg_alloc.state() != regset)
+        throw backend_exception("Dangling allocations after register allocation:\n{} != {} (ref != actual)",
+                                reg_alloc.state(), regset);
 
     [[unlikely]]
     if (branch_tracker.in_branch_block())

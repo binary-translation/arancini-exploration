@@ -415,10 +415,17 @@ public:
     }
 
     instruction& bfxil(const register_operand &dst,
-               const register_operand &src1,
-               const immediate_operand &lsb,
-               const immediate_operand &width) {
-        return append(instruction("bfxil", use(def(dst)), use(src1), use(lsb), use(width)));
+                       const register_operand &src1,
+                       const immediate_operand &lsb,
+                       const immediate_operand &width)
+    {
+        auto element_size = dst.type().element_width() <= 32 ? 32 : 64;
+        std::size_t bitsize = element_size == 32 ? 5 : 6;
+        immediates_strict_policy policy(ir::value_type(ir::value_type_class::unsigned_integer, bitsize));
+        if (width.value() > element_size - lsb.value())
+            throw backend_exception("Invalid width immediate {} for BFXIL instruction must fit into [1,{}]",
+                                    width, element_size - lsb.value());
+        return append(instruction("bfxil", use(def(dst)), use(src1), use(policy(lsb)), use(width)));
     }
 
     instruction& bfi(const register_operand &dst,
