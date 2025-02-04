@@ -557,7 +557,7 @@ void instruction_builder::allocate() {
 
         // Kill MOVs
         // TODO: refactor
-        if (instr.opcode().find("mov") != std::string::npos && instr.is_keep()) {
+        if (instr.opcode().find("mov") != std::string::npos && !instr.is_keep()) {
             logger.debug("Attempting to eliminate copies between the same register\n");
 
             operand op1 = instr.operands()[0];
