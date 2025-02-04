@@ -1,6 +1,9 @@
 #include <arancini/output/dynamic/arm64/arm64-instruction.h>
 #include <arancini/output/dynamic/arm64/arm64-instruction-builder.h>
 
+#include <fmt/format.h>
+#include <fmt/ranges.h>
+
 #include <bitset>
 #include <unordered_map>
 #include <unordered_set>
@@ -113,8 +116,42 @@ public:
             throw backend_exception("Cannot deallocate unallocated register");
         registers_.flip(idx);
     }
+
+    value_type registers() const { return registers_; }
 private:
     value_type registers_;
+};
+
+template <std::size_t Size>
+bool operator==(const register_set<Size>& rset1, const register_set<Size>& rset2) {
+    return rset1.registers() == rset2.registers();
+}
+
+template <std::size_t Size>
+bool operator!=(const register_set<Size>& rset1, const register_set<Size>& rset2) {
+    return !(rset1 == rset2);
+}
+
+template <std::size_t N>
+struct fmt::formatter<std::bitset<N>> {
+    template <typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(const std::bitset<N>& bitset, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", bitset.to_string());
+    }
+};
+
+template <std::size_t N>
+struct fmt::formatter<register_set<N>> {
+    template <typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(const register_set<N>& regset, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", regset.registers());
+    }
 };
 
 class system_register_set final {
@@ -152,6 +189,25 @@ private:
     }
 };
 
+template <>
+struct fmt::formatter<system_register_set> {
+    template <typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(const system_register_set& regset, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "GPR: {}, FPR: {}", regset.gpr_state(), regset.fpr_state());
+    }
+};
+
+bool operator==(const system_register_set& rset1, const system_register_set& rset2) {
+    return rset1.gpr_state() == rset2.gpr_state() && rset1.fpr_state() == rset2.fpr_state();
+}
+
+bool operator!=(const system_register_set& rset1, const system_register_set& rset2) {
+    return !(rset1 == rset2);
+}
+
 struct register_hash final {
     std::size_t operator()(const register_operand &reg) const {
         return std::hash<std::size_t>{}(reg.index());
@@ -160,6 +216,8 @@ struct register_hash final {
 
 class physical_register_allocator final {
 public:
+    using register_map = std::unordered_map<register_operand, register_operand, register_hash>;
+
     physical_register_allocator(system_register_set regset):
         regset_(regset)
     { }
@@ -175,16 +233,15 @@ public:
         return allocation;
     }
 
-    void deallocate(register_operand reg) {
+    void deallocate(const register_operand& preg) {
         // Do nothing when register not tracked by register reg_alloc
         // TODO: check register reg_alloc behaviour when intermixing hardcoded def() physical registers
         // with use() virtual registers
-        if (current_allocations_.find(reg) == current_allocations_.end()) return;
+        auto& vreg = current_allocations_.at(preg);
+        current_allocations_.erase(vreg);
+        current_allocations_.erase(preg);
 
-        current_allocations_.erase(current_allocations_.at(reg));
-        current_allocations_.erase(reg);
-
-        regset_.deallocate(reg);
+        regset_.deallocate(preg);
     }
 
     // Lookup
@@ -197,6 +254,17 @@ public:
 
     [[nodiscard]]
     system_register_set state() const noexcept { return regset_; }
+
+    using iterator = register_map::iterator;
+    using const_iterator = register_map::const_iterator;
+
+    iterator begin() { return current_allocations_.begin(); }
+    const_iterator begin() const { return current_allocations_.begin(); }
+    const_iterator cbegin() const { return current_allocations_.cbegin(); }
+
+    iterator end() { return current_allocations_.end(); }
+    const_iterator end() const { return current_allocations_.end(); }
+    const_iterator cend() const { return current_allocations_.cend(); }
 private:
     system_register_set regset_;
 
@@ -210,7 +278,6 @@ private:
         }
     };
 
-    using register_map = std::unordered_map<register_operand, register_operand, register_hash>;
     register_map current_allocations_;
 };
 
@@ -236,6 +303,8 @@ public:
     bool fulfills(const register_operand& reg) {
         return deps_.count(reg) != 0;
     }
+
+    bool empty() const { return deps_.empty(); }
 private:
     std::unordered_set<register_operand, register_hash> deps_;
 };
@@ -315,7 +384,7 @@ void instruction_builder::allocate() {
     // Return to trampoline (x30)
     // Frame Pointer - points to guest registers (x29)
     system_register_set regset{register_set<32>{0x11FFFFFFF}, register_set<32>{0xFFFFFFFFF}};
-    class physical_register_allocator reg_alloc{regset};
+    physical_register_allocator reg_alloc{regset};
 
     branch_liveness_tracker branch_tracker;
     implicit_dependency_handler implicit_dependencies;
@@ -323,6 +392,7 @@ void instruction_builder::allocate() {
     auto instruction_stream = fmt::format("{}", fmt::join(instruction_begin(), instruction_end(), "\n"));
     logger.debug("Translation (before register allocation):\n{}\n", instruction_stream);
 
+    bool in_branch_block = false;
 	for (auto it = instructions_.rbegin(); it != instructions_.rend(); it++) {
 		auto &instr = *it;
         bool has_unused_keep = false;
@@ -340,6 +410,41 @@ void instruction_builder::allocate() {
         }
 
         branch_tracker.track_label(instr, label_refcount_);
+
+        // If we just exited a branch block
+        if (in_branch_block && !branch_tracker.in_branch_block()) {
+            logger.debug("Exited branch block; eliminating unassigned loop mappings\n");
+
+            std::unordered_map<register_operand, std::size_t, register_hash> defs;
+            for (const auto& [reg1, reg2] : reg_alloc) {
+                if (reg1.is_virtual())
+                    defs[reg1] = 0;
+            }
+
+            for (const auto& instruction : instructions_) {
+                for (const auto& op : instruction.operands()) {
+                    if (!op.is_def()) continue;
+                    auto& reg = std::get<register_operand>(op.get());
+                    if (reg.is_virtual()) // TODO: should consider physical
+                        defs[reg] += 1;
+                }
+            }
+
+            // Go over defined regs and eliminate those that are not referrenced
+            for (const auto& [vreg, def_count] : defs) {
+                if (!def_count) {
+                    logger.debug("Found undefined virtual register: {}\n", vreg);
+                    auto preg = reg_alloc.get_allocation(vreg);
+                    if (preg) {
+                        logger.debug("Deallocating unassigned loop mapping {} -> {}", vreg, *preg);
+                        reg_alloc.deallocate(*preg);
+                    }
+                }
+            }
+        }
+        in_branch_block = branch_tracker.in_branch_block();
+
+        logger.debug("Current allocation state {}\n", reg_alloc.state());
 
         for (auto& op : instr.operands()) {
             [[unlikely]]
@@ -364,7 +469,11 @@ void instruction_builder::allocate() {
                              op, *prev);
 
                 // Assign operand to previously allocated register
+                // bool is_use = op.is_use();
                 op = *prev;
+                // op.as_def();
+                // if (is_use)
+                //     op.as_use();
 
                 // Allocation not needed beyond this point
                 // TODO: enable this when backwards branches are working
@@ -388,7 +497,11 @@ void instruction_builder::allocate() {
 
                 logger.debug("Unused definition allocated to {}\n", allocation);
 
+                // bool is_use = op.is_use();
                 op = allocation;
+                // op.as_def();
+                // if (is_use)
+                //     op.as_use();
             } else {
                 logger.debug("Register not allocated - killing instruction\n", op);
                 instr.kill();
@@ -433,7 +546,7 @@ void instruction_builder::allocate() {
         }
 
         if (has_unused_keep) {
-			logger.debug("Instruction {} is marked as keep but not referenced below; deallocating operands\n", instr);
+			logger.debug("Instruction {} is marked as keep but not referenced below; deallocating definitions\n", instr);
 
 			for (auto &op : instr.operands()) {
                 if (!op.is_def()) continue;
@@ -446,25 +559,41 @@ void instruction_builder::allocate() {
 
         // Kill MOVs
         // TODO: refactor
-        // if (instr.opcode().find("mov") != std::string::npos && instr.is_keep()) {
-        //     logger.debug("Attempting to eliminate copies between the same register\n");
-        //
-        //     operand op1 = instr.operands()[0];
-        //     operand op2 = instr.operands()[1];
-        //
-        //     if (auto* reg1 = std::get_if<register_operand>(&op1.get()), *reg2 = std::get_if<register_operand>(&op2.get());
-        //             reg1 && reg2)
-        //     {
-        //         if (reg1->index() == reg2->index()) {
-        //             logger.debug("Killing instruction {} as part of copy optimization\n", instr);
-        //
-        //             instr.kill();
-        //         }
-        //     }
-        // }
+        if (instr.opcode().find("mov") != std::string::npos && instr.is_keep()) {
+            logger.debug("Attempting to eliminate copies between the same register\n");
+
+            operand op1 = instr.operands()[0];
+            operand op2 = instr.operands()[1];
+
+            if (auto* reg1 = std::get_if<register_operand>(&op1.get()), *reg2 = std::get_if<register_operand>(&op2.get());
+                    reg1 && reg2)
+            {
+                if (reg1->index() == reg2->index()) {
+                    logger.debug("Killing instruction {} as part of copy optimization\n", instr);
+
+                    instr.kill();
+                }
+            }
+        }
 
         if (instr.is_branch())
             branch_tracker.track_branch(instr);
     }
+
+    // Check that no dangling allocations remained
+    // [[unlikely]]
+    // if (reg_alloc.state() != regset)
+    //     throw backend_exception("Dangling allocations after register allocation:\n{} != {} (ref != actual)",
+    //                             reg_alloc.state(), regset);
+
+    [[unlikely]]
+    if (branch_tracker.in_branch_block())
+        throw backend_exception("Register allocation detected incomplete branch block");
+
+    // [[unlikely]]
+    // if (implicit_dependencies.empty())
+    //     throw backend_exception("Register allocation detected unsatisfied implicit dependencies {}",
+    //                             implicit_dependencies);
+
 }
 

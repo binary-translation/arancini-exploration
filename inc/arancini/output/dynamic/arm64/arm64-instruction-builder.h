@@ -114,7 +114,7 @@ public:
 
             const immediate_operand& imm = op;
             if (!immediate_operand::fits(imm.value(), imm_type_))
-                throw backend_exception("invalid immediate");
+                throw backend_exception("immediate {} cannot fit into {} (strict requirement)");
 
             return op;
         }
@@ -130,74 +130,136 @@ public:
         ir::value_type imm_type_;
     };
 
-#define ARITH_OP_BASIC(name) \
-	instruction& name(const register_operand &dst, \
-                      const register_operand &src1, \
-                      const reg_or_imm &src2) { \
-        return append(instruction(#name, def(dst), use(src1), use(src2)) \
-                      .implicitly_writes({register_operand(register_operand::nzcv)})); \
+	instruction& add(const register_operand &dst,
+                      const register_operand &src1,
+                      const reg_or_imm &src2) {
+        return append(instruction("add", def(dst), use(src1), use(src2)));
     }
 
-#define ARITH_OP_SHIFT(name) \
-    instruction& name(const register_operand &dst, \
+    instruction& add(const register_operand &dst, \
                       const register_operand &src1, \
                       const reg_or_imm &src2, \
                       const shift_operand &shift) { \
-        return append(instruction(#name, def(dst), use(src1), use(src2), use(shift)) \
-                      .implicitly_writes({register_operand(register_operand::nzcv)})); \
+        return append(instruction("add", def(dst), use(src1), use(src2), use(shift)));
     }
 
-// TODO: refactor everything this way
-#define ARITH_OP(name) \
-    ARITH_OP_BASIC(name) \
-    ARITH_OP_SHIFT(name) \
+	instruction& adds(const register_operand &dst,
+                      const register_operand &src1,
+                      const reg_or_imm &src2) {
+        return append(instruction("adds", def(dst), use(src1), use(src2))
+                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+    }
 
-    // ADD
-    ARITH_OP(add);
+    instruction& adds(const register_operand &dst, \
+                      const register_operand &src1, \
+                      const reg_or_imm &src2, \
+                      const shift_operand &shift) { \
+        return append(instruction("adds", def(dst), use(src1), use(src2), use(shift))
+                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+    }
 
-    // ADDS
-    ARITH_OP(adds);
+	instruction& adcs(const register_operand &dst,
+                      const register_operand &src1,
+                      const reg_or_imm &src2) {
+        return append(instruction("adcs", def(dst), use(src1), use(src2))
+                      .implicitly_reads({register_operand(register_operand::nzcv)})
+                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+    }
 
-    // ADCS
-    ARITH_OP(adcs);
+    instruction& adcs(const register_operand &dst, \
+                      const register_operand &src1, \
+                      const reg_or_imm &src2, \
+                      const shift_operand &shift) { \
+        return append(instruction("adcs", def(dst), use(src1), use(src2), use(shift))
+                      .implicitly_reads({register_operand(register_operand::nzcv)})
+                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+    }
 
-    // SUB
-    ARITH_OP(sub);
+	instruction& sub(const register_operand &dst,
+                      const register_operand &src1,
+                      const reg_or_imm &src2) {
+        return append(instruction("sub", def(dst), use(src1), use(src2)));
+    }
 
-        // SUBS
-    ARITH_OP(subs);
+    instruction& sub(const register_operand &dst, \
+                      const register_operand &src1, \
+                      const reg_or_imm &src2, \
+                      const shift_operand &shift) { \
+        return append(instruction("sub", def(dst), use(src1), use(src2), use(shift)));
+    }
 
-    // SBC
-    ARITH_OP(sbc);
+	instruction& subs(const register_operand &dst,
+                      const register_operand &src1,
+                      const reg_or_imm &src2) {
+        return append(instruction("subs", def(dst), use(src1), use(src2))
+                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+    }
 
-    // SBCS
-    ARITH_OP(sbcs);
+    instruction& subs(const register_operand &dst, \
+                      const register_operand &src1, \
+                      const reg_or_imm &src2, \
+                      const shift_operand &shift) { \
+        return append(instruction("subs", def(dst), use(src1), use(src2), use(shift))
+                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+    }
+
+	instruction& sbc(const register_operand &dst,
+                      const register_operand &src1,
+                      const reg_or_imm &src2) {
+        return append(instruction("sbc", def(dst), use(src1), use(src2))
+                      .implicitly_reads({register_operand(register_operand::nzcv)}));
+    }
+
+    instruction& sbc(const register_operand &dst, \
+                      const register_operand &src1, \
+                      const reg_or_imm &src2, \
+                      const shift_operand &shift) { \
+        return append(instruction("sbc", def(dst), use(src1), use(src2), use(shift))
+                      .implicitly_reads({register_operand(register_operand::nzcv)}));
+    }
+
+	instruction& sbcs(const register_operand &dst,
+                      const register_operand &src1,
+                      const reg_or_imm &src2) {
+        return append(instruction("sbcs", def(dst), use(src1), use(src2))
+                      .implicitly_reads({register_operand(register_operand::nzcv)})
+                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+    }
+
+    instruction& sbcs(const register_operand &dst, \
+                      const register_operand &src1, \
+                      const reg_or_imm &src2, \
+                      const shift_operand &shift) { \
+        return append(instruction("sbcs", def(dst), use(src1), use(src2), use(shift))
+                      .implicitly_reads({register_operand(register_operand::nzcv)})
+                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+    }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& orr_(const register_operand &dst,
-              const register_operand &src1,
-              const reg_or_imm &src2) {
+                      const register_operand &src1,
+                      const reg_or_imm &src2) {
         // TODO: this checks that the immediate is between immr:imms (bits [21:10])
         // However, for 64-bit orr, we have N:immr:imms, which gives us bits [22:10])
-        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
-        return append(instruction("orr", def(dst), use(src1), use(src2)));
+        ImmediatesPolicy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
+        return append(instruction("orr", def(dst), use(src1), use(policy(src2))));
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& and_(const register_operand &dst,
-              const register_operand &src1,
-              const reg_or_imm &src2) {
+                      const register_operand &src1,
+                      const reg_or_imm &src2) {
         // TODO: this checks that the immediate is between immr:imms (bits [21:10])
         // However, for 64-bit and, we have N:immr:imms, which gives us bits [22:10])
-        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
-        return append(instruction("and", def(dst), use(src1), use(src2)));
+        ImmediatesPolicy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
+        return append(instruction("and", def(dst), use(src1), use(policy(src2))));
     }
 
     // TODO: refactor this; there should be only a single version and the comment should be removed
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& ands(const register_operand &dst,
-              const register_operand &src1,
-              const reg_or_imm &src2) {
+                      const register_operand &src1,
+                      const reg_or_imm &src2) {
         // TODO: this checks that the immediate is between immr:imms (bits [21:10])
         // However, for 64-bit ands, we have N:immr:imms, which gives us bits [22:10])
         ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
@@ -329,6 +391,15 @@ public:
         std::size_t size = dst.type().element_width() <= 32 ? 5 : 6;
         ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
         return append(instruction("asr", def(dst), use(src1), use(immediates_policy(src2))));
+    }
+
+    instruction& extr(const register_operand &dst,
+                      const register_operand &src1,
+                      const register_operand &src2,
+                      const immediate_operand &shift) {
+        std::size_t size = dst.type().element_width() <= 32 ? 5 : 6;
+        immediates_strict_policy policy(ir::value_type(ir::value_type_class::unsigned_integer, size));
+        return append(instruction("extr", def(dst), use(src1), use(src2), use(policy(shift))));
     }
 
     instruction& csel(const register_operand &dst,
@@ -823,6 +894,12 @@ public:
         }
 
         return reg;
+    }
+
+    void clear() {
+        instructions_.clear();
+        vreg_alloc_.reset();
+        label_refcount_.clear();
     }
 private:
 	std::vector<instruction> instructions_;

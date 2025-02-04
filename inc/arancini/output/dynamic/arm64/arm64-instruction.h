@@ -110,7 +110,10 @@ public:
     ir::value_type type() const { return type_; }
 
     [[nodiscard]]
-    register_index_type index() const { return index_; }
+    register_index_type& index() { return index_; }
+
+    [[nodiscard]]
+    const register_index_type& index() const { return index_; }
 
     // TODO: make sure this is always possible
     void cast(ir::value_type type) { type_ = type; }
@@ -561,7 +564,7 @@ struct fmt::formatter<arancini::output::dynamic::arm64::register_operand> {
         std::string name;
         if (op.type().is_vector()) {
             name = op.type().width() == 128 ? name_vector_neon[op.index()] : name_vector_sve2[op.index()];
-            switch (op.type().width()) {
+            switch (op.type().element_width()) {
             case 8:
                 return fmt::format_to(ctx.out(), "{}.b", name);
             case 16:
@@ -571,7 +574,8 @@ struct fmt::formatter<arancini::output::dynamic::arm64::register_operand> {
             case 64:
                 return fmt::format_to(ctx.out(), "{}.d", name);
             default:
-                throw backend_exception("vectors larger than 64-bit not supported");
+                throw backend_exception("Attempting to generate vector with elements of unsupported size {}",
+                                        op.type().element_width());
             }
         } else if (op.type().is_floating_point()) {
             name =  op.type().element_width() > 32 ? name_float64[op.index()] : name_float32[op.index()];
