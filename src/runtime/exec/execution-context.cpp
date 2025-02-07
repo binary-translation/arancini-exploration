@@ -179,6 +179,8 @@ int execution_context::internal_call(void *cpu_state, int call) {
 	if (call == 1) { // syscall
 		auto x86_state = (x86::x86_cpu_state *)cpu_state;
         util::global_logger.debug("System call number: {}\n", util::copy(x86_state->RAX));
+
+        x86_state->RCX = x86_state->PC;
 		switch (x86_state->RAX) {
 		case 0: // read
 		{
