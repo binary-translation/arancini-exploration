@@ -311,8 +311,8 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     if (type.is_vector() && type.element_width() > value_types::base_type.element_width())
         throw backend_exception("Cannot store vectors with individual elements larger than 64-bits");
 
-    auto &src_vregs = materialise_port(n.value());
-    if (is_flag_port(n.value())) {
+    auto &src = materialise_port(n.value());
+    if (is_flag_port(n.val()) && n.value().owner()->kind() != node_kinds::constant) {
         const auto &src_vreg = flag_map.at(static_cast<reg_offsets>(n.regoff()));
         auto addr = guestreg_memory_operand(n.regoff());
         builder_.strb(src_vreg, addr).add_comment(fmt::format("write flag: {}", n.regname()));
@@ -329,23 +329,23 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     //
     // There should be clear type promotion and type coercion.
     auto comment = fmt::format("write register: {}", n.regname());
-    for (std::size_t i = 0; i < src_vregs.size(); ++i) {
-        if (src_vregs[i].type().width() > n.value().type().width() && n.value().type().width() <= value_types::base_type.element_width())
-            src_vregs[i] = cast(src_vregs[i], n.value().type());
+    for (std::size_t i = 0; i < src.size(); ++i) {
+        if (src[i].type().width() > n.value().type().width() && n.value().type().width() <= value_types::base_type.element_width())
+            src[i] = cast(src[i], n.value().type());
 
-        std::size_t width = src_vregs[i].type().width();
+        std::size_t width = src[i].type().width();
         auto addr = guestreg_memory_operand(n.regoff() + i * width);
         switch (width) {
             case 1:
             case 8:
-                builder_.strb(src_vregs[i], addr).add_comment(comment);
+                builder_.strb(src[i], addr).add_comment(comment);
                 break;
             case 16:
-                builder_.strh(src_vregs[i], addr).add_comment(comment);
+                builder_.strh(src[i], addr).add_comment(comment);
                 break;
             case 32:
             case 64:
-                builder_.str(src_vregs[i], addr).add_comment(comment);
+                builder_.str(src[i], addr).add_comment(comment);
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
@@ -541,6 +541,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
     }
 
     bool sets_flags = true;
+    bool inverse_carry_flag_operation = false;
     const bool is_vector_op = n.val().type().is_vector();
 
     // TODO: Somehow avoid allocating this
@@ -746,6 +747,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             // TODO: make it enabled in those cases
             // builder_.cfinv("invert carry flag (to match x86 semantics)");
         }
+        inverse_carry_flag_operation = true;
         break;
 	case binary_arith_op::mul:
         mul_impl(dest_regset, lhs_regset, rhs_regset);
@@ -794,14 +796,21 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             extend_register(builder_, lhs_regset, op_type);
             extend_register(builder_, rhs_regset, op_type);
         case 32:
+            builder_.orr_(dest_regset, lhs_regset, rhs_regset);
+            builder_.ands(register_operand(register_operand::wzr_sp), dest_regset, dest_regset);
+            break;
         case 64:
             builder_.orr_(dest_regset, lhs_regset, rhs_regset);
+            builder_.ands(register_operand(register_operand::xzr_sp), dest_regset, dest_regset);
             break;
         default:
             throw backend_exception("Unsupported AND operation between {} x {}",
                                     n.lhs().type(), n.rhs().type());
         }
-        builder_.cmp(dest_regset, 0);
+        if (lhs_regset[0].type().element_width() < 64) {
+            unsigned long long mask = ~(~0llu << lhs_regset[0].type().element_width());
+            builder_.and_(dest_regset, dest_regset, builder_.move_to_register(mask, dest_regset[0].type()));
+        }
 		break;
 	case binary_arith_op::band:
         if (is_vector_op) {
@@ -828,6 +837,10 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             throw backend_exception("Unsupported AND operation between {} x {}",
                                     n.lhs().type(), n.rhs().type());
         }
+        if (lhs_regset[0].type().element_width() < 64) {
+            unsigned long long mask = ~(~0llu << lhs_regset[0].type().element_width());
+            builder_.and_(dest_regset, dest_regset, builder_.move_to_register(mask, dest_regset[0].type()));
+        }
 		break;
 	case binary_arith_op::bxor:
         {
@@ -837,11 +850,18 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 builder_.eor_(dest_regset[i], lhs_regset[i], rhs_regset[i]);
 
             // EOR does not set flags
-            // CMP is used to set the flags
-            if (!is_vector_op)
-                builder_.cmp(dest_regset[i-1], 0);
-            else
-                sets_flags = false;
+            // TODO
+            if (is_vector_op) sets_flags = false;
+            else {
+                if (dest_regset[i-1].type().element_width() > 32)
+                    builder_.ands(register_operand(register_operand::xzr_sp), dest_regset[i-1], dest_regset[i-1]);
+                else
+                    builder_.ands(register_operand(register_operand::wzr_sp), dest_regset[i-1], dest_regset[i-1]);
+            }
+        }
+        if (lhs_regset[0].type().element_width() < 64) {
+            unsigned long long mask = ~(~0llu << lhs_regset[0].type().element_width());
+            builder_.and_(dest_regset, dest_regset, builder_.move_to_register(mask, dest_regset[0].type()));
         }
         break;
 	case binary_arith_op::cmpeq:
@@ -856,6 +876,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 .add_comment("compare LHS and RHS to generate condition for conditional set");
         builder_.cset(dest_regset[0], get_cset_type(n.op()))
                 .add_comment("set to 1 if condition is true (based flags from the previous compare)");
+        inverse_carry_flag_operation = true;
 		break;
 	default:
 		throw backend_exception("Unsupported binary arithmetic operation with index {}", util::to_underlying(n.op()));
@@ -872,7 +893,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         // ARM computes flags in the same way as x86 for subtraction
         // EXCEPT for the CF; which is cleared when there is underflow and set otherwise (the
         // opposite behaviour to x86)
-        if (n.op() == binary_arith_op::sub)
+        if (inverse_carry_flag_operation)
             builder_.setcc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
         else
             builder_.setc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
@@ -1412,8 +1433,8 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         }
 
         // Set upper registers to zero
-        builder_.insert_comment("Set upper registers to zero");
         if (dest_vregs.size() > 1) {
+            builder_.insert_comment("Set upper registers to zero");
             for (std::size_t i = src_vregs.size(); i < dest_vregs.size(); ++i)
                 builder_.mov(dest_vregs[i], 0);
         }
