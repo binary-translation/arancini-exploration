@@ -79,8 +79,7 @@ register_operand arm64_translation_context::cast(const register_operand &src, va
     return dest;
 }
 
-memory_operand
-arm64_translation_context::guestreg_memory_operand(int regoff, memory_operand::address_mode mode) {
+memory_operand arm64_translation_context::guest_memory(int regoff, memory_operand::address_mode mode) {
     if (regoff > 255 || regoff < -256) {
         const register_operand& base_vreg = vreg_alloc_.allocate(value_types::addr_type);
         builder_.mov(base_vreg, regoff);
@@ -286,7 +285,7 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
     auto &dest_vregs = vreg_alloc_.allocate(n.val());
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
         std::size_t width = dest_vregs[i].type().width();
-        auto addr = guestreg_memory_operand(n.regoff() + i * width);
+        auto addr = guest_memory(n.regoff() + i * width);
         switch (width) {
             case 1:
             case 8:
@@ -314,7 +313,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     auto &src = materialise_port(n.value());
     if (is_flag_port(n.val()) && n.value().owner()->kind() != node_kinds::constant) {
         const auto &src_vreg = flag_map.at(static_cast<reg_offsets>(n.regoff()));
-        auto addr = guestreg_memory_operand(n.regoff());
+        auto addr = guest_memory(n.regoff());
         builder_.strb(src_vreg, addr).add_comment(fmt::format("write flag: {}", n.regname()));
         return;
     }
@@ -334,7 +333,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
             src[i] = cast(src[i], n.value().type());
 
         std::size_t width = src[i].type().width();
-        auto addr = guestreg_memory_operand(n.regoff() + i * width);
+        auto addr = guest_memory(n.regoff() + i * width);
         switch (width) {
             case 1:
             case 8:
@@ -435,11 +434,12 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
 	if (n.updates_pc() == br_type::call) {
 		ret_ = 3;
 	}
+
 	if (n.updates_pc() == br_type::ret) {
 		ret_ = 4;
 	}
 
-    builder_.str(new_pc_vreg, guestreg_memory_operand(static_cast<int>(reg_offsets::PC)))
+    builder_.str(new_pc_vreg, guest_memory(reg_offsets::PC))
             .add_comment("write program counter");
 }
 
@@ -456,9 +456,9 @@ void arm64_translation_context::materialise_br(const br_node &n) {
 void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
     const auto &cond_vregs = materialise_port(n.cond());
 
-    builder_.cmp(cond_vregs, 1);
+    builder_.cmp(cond_vregs, 0);
     auto label = label_operand(fmt::format("{}_{}", n.target()->name(), instr_cnt_));
-    builder_.beq(label);
+    builder_.bne(label);
 }
 
 void arm64_translation_context::materialise_constant(const constant_node &n) {

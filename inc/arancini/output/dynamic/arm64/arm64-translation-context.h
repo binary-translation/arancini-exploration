@@ -1,6 +1,7 @@
 #pragma once
 
 #include <arancini/ir/value-type.h>
+#include <arancini/input/registers.h>
 #include <arancini/output/dynamic/arm64/arm64-common.h>
 #include <arancini/output/dynamic/arm64/arm64-instruction-builder.h>
 
@@ -80,8 +81,15 @@ private:
         return vreg_alloc_.get(p);
     }
 
-    memory_operand guestreg_memory_operand(int regoff,
-                                           memory_operand::address_mode mode = memory_operand::address_mode::direct);
+    using address_mode = memory_operand::address_mode;
+
+    [[nodiscard]]
+    memory_operand guest_memory(int regoff, address_mode mode = address_mode::direct);
+
+    [[nodiscard]]
+    memory_operand guest_memory(arancini::input::x86::reg_offsets regoff, address_mode mode = address_mode::direct) {
+        return guest_memory(static_cast<int>(regoff), mode);
+    }
 
     void materialise(const ir::node *n);
     void materialise_read_reg(const ir::read_reg_node &n);
