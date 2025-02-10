@@ -447,8 +447,7 @@ void instruction_builder::allocate() {
 
         for (auto& op : instr.operands()) {
             [[unlikely]]
-            if (!op.is_def()) continue;
-            if (op.is_use()) continue;
+            if (!op.is_def() || op.is_use()) continue;
 
             // kill defs first
             // Only registers can be defs
@@ -466,6 +465,8 @@ void instruction_builder::allocate() {
             for (const auto& [reg1, reg2] : reg_alloc) {
                 logger.debug("{} -> {}\n", reg1, reg2);
             }
+
+            if (!vreg.is_virtual()) continue;
 
             // Get previous allocations
             if (const auto* prev = reg_alloc.get_allocation(vreg); prev) {
