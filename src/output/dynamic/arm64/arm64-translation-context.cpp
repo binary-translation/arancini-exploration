@@ -276,12 +276,12 @@ static inline bool is_flag_port(const port &value) {
 void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
     // Sanity check
     auto type = n.val().type();
-    if (type.is_vector() && type.element_width() > value_types::base_type.element_width()) {
-        throw backend_exception("Cannot load vectors with individual elements larger than 64-bits");
-    }
+
+    [[unlikely]]
+    if (type.is_vector() && type.element_width() > value_types::base_type.element_width())
+        throw backend_exception("Cannot load registers of type {}", type);
 
     auto comment = fmt::format("read register: {}", n.regname());
-
     auto &dest_vregs = vreg_alloc_.allocate(n.val());
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
         std::size_t width = dest_vregs[i].type().width();
@@ -299,7 +299,8 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
                 builder_.ldr(dest_vregs[i], addr).add_comment(comment);
                 break;
             default:
-                throw backend_exception("cannot load individual register values larger than 64-bits");
+                throw backend_exception("cannot load individual register values (type: {}) larger than 64-bits",
+                                        type);
         }
     }
 }
@@ -307,14 +308,17 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
 void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     // Sanity check
     auto type = n.val().type();
-    if (type.is_vector() && type.element_width() > value_types::base_type.element_width())
-        throw backend_exception("Cannot store vectors with individual elements larger than 64-bits");
 
-    auto &src = materialise_port(n.value());
+    [[unlikely]]
+    if (type.is_vector() && type.element_width() > value_types::base_type.element_width())
+        throw backend_exception("Cannot store registers of type {}", type);
+
+    // Flags may be set either based on some preceding operation or with a constant
+    // Handle the case when they are generated based on a previous operation here
     if (is_flag_port(n.val()) && n.value().owner()->kind() != node_kinds::constant) {
-        const auto &src_vreg = flag_map.at(static_cast<reg_offsets>(n.regoff()));
-        auto addr = guest_memory(n.regoff());
-        builder_.strb(src_vreg, addr).add_comment(fmt::format("write flag: {}", n.regname()));
+        const auto &source = flag_map.at(static_cast<reg_offsets>(n.regoff()));
+        builder_.strb(source, guest_memory(n.regoff()))
+                     .add_comment(fmt::format("write flag: {}", n.regname()));
         return;
     }
 
@@ -327,10 +331,11 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     // We now down-cast it.
     //
     // There should be clear type promotion and type coercion.
+    auto &src = materialise_port(n.value());
     auto comment = fmt::format("write register: {}", n.regname());
     for (std::size_t i = 0; i < src.size(); ++i) {
-        if (src[i].type().width() > n.value().type().width() && n.value().type().width() <= value_types::base_type.element_width())
-            src[i] = cast(src[i], n.value().type());
+        // if (src[i].type().width() > n.value().type().width() && n.value().type().width() <= value_types::base_type.element_width())
+        //     src[i] = cast(src[i], n.value().type());
 
         std::size_t width = src[i].type().width();
         auto addr = guest_memory(n.regoff() + i * width);
@@ -354,71 +359,71 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
 }
 
 void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
-    const register_operand &addr_vreg = materialise_port(n.address());
-
     // Sanity checks
     auto type = n.val().type();
+
+    [[unlikely]]
     if (type.is_vector() && type.element_width() > value_types::base_type.element_width())
-        throw backend_exception("Cannot load vectors from memory with individual elements larger than 64-bits");
+        throw backend_exception("Cannot load vectors from memory with type {}", type);
 
-    const auto &dest_vregs = vreg_alloc_.allocate(n.val());
+    const auto &dest = vreg_alloc_.allocate(n.val());
+    const register_operand &addr_vreg = materialise_port(n.address());
 
-    auto comment = "read memory";
-    for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
-        std::size_t width = dest_vregs[i].type().width();
+    for (std::size_t i = 0; i < dest.size(); ++i) {
+        std::size_t width = dest[i].type().element_width();
 
         memory_operand mem_op(addr_vreg, i * width);
         switch (width) {
             case 1:
             case 8:
-                builder_.ldrb(dest_vregs[i], mem_op).add_comment(comment);
+                builder_.ldrb(dest[i], mem_op).add_comment("read memory");
                 break;
             case 16:
-                builder_.ldrh(dest_vregs[i], mem_op).add_comment(comment);
+                builder_.ldrh(dest[i], mem_op).add_comment("read memory");
                 break;
             case 32:
             case 64:
-                builder_.ldr(dest_vregs[i], mem_op).add_comment(comment);
+                builder_.ldr(dest[i], mem_op).add_comment("read memory");
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
-                throw backend_exception("Cannot load individual memory values larger than 64-bits");
+                throw backend_exception("Cannot load individual memory values of type {}",
+                                         dest[i].type());
         }
     }
 }
 
 void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
-    const auto &address = materialise_port(n.address());
-
     auto type = n.val().type();
 
     // Sanity check; cannot by definition load a register larger than 64-bit
     // without it being a vector
+    [[unlikely]]
     if (type.is_vector() && type.element_width() > value_types::base_type.element_width())
-        throw backend_exception("Larger than 64-bit integers in vectors not supported by backend");
+        throw backend_exception("Unable to write vectors of type {}", type);
 
-    const auto &src_vregs = materialise_port(n.value());
+    const auto &src = materialise_port(n.value());
 
-    auto comment = "write memory";
-    for (std::size_t i = 0; i < src_vregs.size(); ++i) {
-        std::size_t width = src_vregs[i].type().width();
+    const auto &address = materialise_port(n.address());
+    for (std::size_t i = 0; i < src.size(); ++i) {
+        std::size_t width = src[i].type().width();
 
         memory_operand mem_op(address, i * width);
         switch (width) {
             case 1:
             case 8:
-                builder_.strb(src_vregs[i], mem_op).add_comment(comment);
+                builder_.strb(src[i], mem_op).add_comment("write memory");
                 break;
             case 16:
-                builder_.strh(src_vregs[i], mem_op).add_comment(comment);
+                builder_.strh(src[i], mem_op).add_comment("write memory");
                 break;
             case 32:
             case 64:
-                builder_.str(src_vregs[i], mem_op).add_comment(comment);
+                builder_.str(src[i], mem_op).add_comment("write memory");
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
-                throw backend_exception("cannot write individual memory values larger than 64-bits");
+                throw backend_exception("cannot write individual memory values of type", src[i].type());
         }
     }
 }
@@ -462,15 +467,13 @@ void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
 }
 
 void arm64_translation_context::materialise_constant(const constant_node &n) {
-	const auto &dest_vreg = vreg_alloc_.allocate(n.val());
+	const auto &dest = vreg_alloc_.allocate(n.val());
 
-    if (n.val().type().is_floating_point()) {
-        auto value = n.const_val_f();
-        builder_.mov(dest_vreg, value).add_comment("move float into register");
-    } else {
-        auto value = n.const_val_i();
-        builder_.mov(dest_vreg, value).add_comment("move integer into register");
-    }
+    [[unlikely]]
+    if (n.val().type().is_floating_point())
+        builder_.mov(dest, n.const_val_f()).add_comment("move float into register");
+    else
+        builder_.mov(dest, n.const_val_i()).add_comment("move integer into register");
 }
 
 inline shift_operand extend_register(instruction_builder& builder, const register_operand& reg, arancini::ir::value_type type) {
@@ -1659,42 +1662,62 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
 }
 
 void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n) {
-    auto &bits_vregs = materialise_port(n.bits());
-    const auto &src_vregs  = materialise_port(n.source_value());
-    const auto &dest_vregs = vreg_alloc_.allocate(n.val());
+    auto &insertion_bits = materialise_port(n.bits());
+    const auto &src  = materialise_port(n.source_value());
+    const auto &dest = vreg_alloc_.allocate(n.val());
 
     // Sanity check
-    if (dest_vregs.size() != src_vregs.size())
-        throw backend_exception("Source and destination mismatch for bit insert node");
+    [[unlikely]]
+    if (dest.size() != src.size())
+        throw backend_exception("Source and destination mismatch for bit insert node (dest: {} != src: {}",
+                                dest.size(), src.size());
 
     builder_.insert_comment("Bit insert into destination");
 
     // Copy source to dest
-    builder_.insert_comment("Copy source to destination (insertion will overwrite)");
-    for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
-        builder_.mov(dest_vregs[i], src_vregs[i]);
+    for (std::size_t i = 0; i < dest.size(); ++i) {
+        builder_.mov(dest[i], src[i]).as_keep()
+                    .add_comment("Copy source to destination (insertion will overwrite)");
     }
 
-    auto dest_total_width = total_width(dest_vregs);
-    auto insert_start = n.to() / dest_total_width;
+    // Algorithm:
+    // Need to insert into either one or multiple registers
+    // Situations handled separately
+    std::size_t dest_total_width = n.val().type().width();
+    std::size_t element_width = n.val().type().element_width();
 
-    std::size_t inserted = 0;
-    std::size_t insert_idx = n.to() % dest_vregs[0].type().element_width();
-    std::size_t insert_len = std::min(dest_vregs[0].type().element_width() - insert_idx, n.length() - inserted);
+    std::size_t insert_idx = n.to() % element_width;
+    std::size_t insert_len = std::min(element_width - insert_idx, n.length());
+
+    [[unlikely]]
+    if (insert_len == 0)
+        throw backend_exception("Cannot insert into invalid range [{}:{})", n.to(), n.to()+insert_len);
+
+    builder_.insert_comment("insert specific bits into [{}:{})", n.to(), n.to()+insert_len);
+
+    [[likely]]
+    if (dest.size() == 1) {
+        insertion_bits = cast(insertion_bits, dest[0].type());
+        builder_.bfi(dest, insertion_bits, insert_idx, insert_len-1);
+        return;
+    }
 
     std::size_t bits_idx = 0;
-    std::size_t bits_total_width = total_width(bits_vregs);
+    std::size_t bits_total_width = total_width(insertion_bits);
 
-    builder_.insert_comment("insert specific bits into [{}:{}]", n.to()+insert_len, n.to());
-
-    // TODO: compare between int and std::size_t
+    std::size_t inserted = 0;
+    std::size_t insert_start = n.to() / dest_total_width;
     for (std::size_t i = insert_start; inserted < n.length(); ++i) {
-        auto bits_vreg_width = bits_vregs[bits_idx].type().element_width();
-        bits_vregs[bits_idx] = cast(bits_vregs[bits_idx], dest_vregs[i].type());
-        builder_.bfi(dest_vregs[i], bits_vregs[bits_idx], insert_idx, insert_len);
+        auto bits_vreg_width = insertion_bits[bits_idx].type().element_width();
+        insertion_bits[bits_idx] = cast(insertion_bits[bits_idx], dest[i].type());
+        builder_.bfi(dest[i], insertion_bits[bits_idx], insert_idx, insert_len-1);
         insert_idx = 0;
         inserted += insert_len;
+
         insert_len = std::min(n.length() - inserted, bits_vreg_width);
+        if (insert_len == 0)
+            return;
+
         bits_idx = inserted % bits_total_width;
     }
 }
