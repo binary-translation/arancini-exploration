@@ -181,6 +181,8 @@ int execution_context::internal_call(void *cpu_state, int call) {
         util::global_logger.debug("System call number: {}\n", util::copy(x86_state->RAX));
 
         x86_state->RCX = x86_state->PC;
+        x86_state->R11 = 0x202 | ((x86_state->ZF & 0x1) << 6) | x86_state->CF |
+                                 ((x86_state->SF & 0x1) << 7) | ((x86_state->OF & 0x1) << 11);
 		switch (x86_state->RAX) {
 		case 0: // read
 		{
