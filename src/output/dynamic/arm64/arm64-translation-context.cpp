@@ -1527,20 +1527,18 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 }
 
 void arm64_translation_context::materialise_csel(const csel_node &n) {
-    if (n.val().type().is_vector() || n.val().type().element_width() > value_types::base_type.element_width()) {
-        throw backend_exception("Cannot implement conditional selection for " \
-                                "vectors and elements widths exceeding 64-bits");
-    }
+    [[unlikely]]
+    if (n.val().type().is_vector() || n.val().type().element_width() > value_types::base_type.element_width())
+        throw backend_exception("Cannot implement conditional selection for type {}", n.val().type());
 
-    const auto &dest_vreg = vreg_alloc_.allocate(n.val());
-    const auto &cond_vregs = materialise_port(n.condition());
-    const auto &true_vregs = materialise_port(n.trueval());
-    const auto &false_vregs = materialise_port(n.falseval());
+    const auto &dest = vreg_alloc_.allocate(n.val());
+    const auto &condition = materialise_port(n.condition());
+    const auto &true_var = materialise_port(n.trueval());
+    const auto &false_var = materialise_port(n.falseval());
 
-    /* builder_.brk(immediate_operand(100, 64)); */
-    builder_.cmp(cond_vregs, 0)
+    builder_.cmp(condition, 0)
             .add_comment("compare condition for conditional select");
-    builder_.csel(dest_vreg, true_vregs, false_vregs, cond_operand("NE"));
+    builder_.csel(dest, true_var, false_var, cond_operand("NE"));
 }
 
 void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
