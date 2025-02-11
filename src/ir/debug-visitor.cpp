@@ -137,6 +137,12 @@ void debug_visitor::visit_unary_arith_node(unary_arith_node &n)
 	case unary_arith_op::complement:
 		os_ << "complement ";
 		break;
+	case unary_arith_op::sqrt:
+		os_ << "square root ";
+		break;
+    default:
+        os_ << "unknown";
+        break;
 	}
 
 	os_ << get_port_name(n.lhs()) << std::endl;
