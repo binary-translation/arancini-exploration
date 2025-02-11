@@ -1692,8 +1692,7 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
     // Algorithm:
     // Need to insert into either one or multiple registers
     // Situations handled separately
-    std::size_t dest_total_width = n.val().type().width();
-    std::size_t element_width = n.val().type().element_width();
+    std::size_t element_width = dest[0].type().element_width();
 
     std::size_t insert_idx = n.to() % element_width;
     std::size_t insert_len = std::min(element_width - insert_idx, n.length());
@@ -1715,15 +1714,14 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
     std::size_t bits_total_width = total_width(insertion_bits);
 
     std::size_t inserted = 0;
-    std::size_t insert_start = n.to() / dest_total_width;
+    std::size_t insert_start = n.to() / dest[0].type().element_width();
     for (std::size_t i = insert_start; inserted < n.length(); ++i) {
-        auto bits_vreg_width = insertion_bits[bits_idx].type().element_width();
         insertion_bits[bits_idx] = cast(insertion_bits[bits_idx], dest[i].type());
-        builder_.bfi(dest[i], insertion_bits[bits_idx], insert_idx, insert_len-1);
+        builder_.bfi(dest[i], insertion_bits[bits_idx], insert_idx, insert_len);
         insert_idx = 0;
         inserted += insert_len;
 
-        insert_len = std::min(n.length() - inserted, bits_vreg_width);
+        insert_len = std::min(n.length() - inserted, insertion_bits[bits_idx].type().element_width());
         if (insert_len == 0)
             return;
 

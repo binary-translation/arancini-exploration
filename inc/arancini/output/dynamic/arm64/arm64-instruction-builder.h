@@ -407,8 +407,8 @@ public:
         std::size_t bitsize = element_size == 32 ? 5 : 6;
         immediates_strict_policy policy(ir::value_type(ir::value_type_class::unsigned_integer, bitsize));
         if (width.value() > element_size - lsb.value())
-            throw backend_exception("Invalid width immediate {} for BFXIL instruction must fit into [1,{}]",
-                                    width, element_size - lsb.value());
+            throw backend_exception("Invalid width immediate {} for BFXIL instruction must fit into [1,{}] for lsb",
+                                    width, element_size - lsb.value(), lsb);
         return append(instruction("bfxil", use(def(dst)), use(src1), use(policy(lsb)), use(width)));
     }
 
@@ -421,8 +421,8 @@ public:
         std::size_t bitsize = element_size == 32 ? 5 : 6;
         immediates_strict_policy policy(ir::value_type(ir::value_type_class::unsigned_integer, bitsize));
         if (width.value() > element_size - lsb.value())
-            throw backend_exception("Invalid width immediate {} for UBFX instruction must fit into [1,{}]",
-                                    width, element_size - lsb.value());
+            throw backend_exception("Invalid width immediate {} for UBFX instruction must fit into [1,{}] for lsb",
+                                    width, element_size - lsb.value(), lsb);
         return append(instruction("ubfx", def(dst), use(src1), use(policy(lsb)), use(width)));
     }
 
@@ -435,8 +435,8 @@ public:
         std::size_t bitsize = element_size == 32 ? 5 : 6;
         immediates_strict_policy policy(ir::value_type(ir::value_type_class::unsigned_integer, bitsize));
         if (width.value() > element_size - lsb.value())
-            throw backend_exception("Invalid width immediate {} for BFI instruction must fit into [1,{}]",
-                                    width, element_size - lsb.value());
+            throw backend_exception("Invalid width immediate {} for BFI instruction must fit into [1,{}] for lsb {}",
+                                    width, element_size - lsb.value(), lsb);
         return append(instruction("bfi", use(def(dst)), use(src1), use(lsb), use(width)));
     }
 
