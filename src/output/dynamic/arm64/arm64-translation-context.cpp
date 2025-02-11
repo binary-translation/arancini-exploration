@@ -1637,24 +1637,34 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
     if (dest_vregs.size() > src_vregs.size())
         throw backend_exception("Destination cannot be larger than source for bit extract node");
 
-    auto dest_total_width = total_width(dest_vregs);
-    auto src_total_width = total_width(src_vregs);
-    auto extract_start = n.from() / src_total_width;
+    auto dest_total_width = n.val().type().width();
+    auto reg_extract_start = n.from() / src_vregs[0].type().element_width();
 
-    // TODO: we shouldn't be using ints here
     std::size_t extracted = 0;
-    auto extract_idx = n.from() % src_vregs[0].type().element_width();
-    auto extract_len = std::min(src_vregs[0].type().element_width() - extract_idx, n.length() - extracted);
+    auto reg_extract_idx = n.from() % src_vregs[0].type().element_width();
+    auto extract_len = std::min(src_vregs[0].type().element_width() - reg_extract_idx, n.length());
 
     std::size_t dest_idx = 0;
 
+    for (std::size_t i = 0; i < dest_vregs.size(); ++i)
+        builder_.mov(dest_vregs[i], 0);
+
     builder_.insert_comment("Extract specific bits into destination");
-    for (std::size_t i = extract_start; extracted < n.length(); ++i) {
+    for (std::size_t i = reg_extract_start; extracted < n.length(); ++i) {
+        if (reg_extract_idx == 0 && reg_extract_idx + extract_len == dest_vregs[dest_idx].type().element_width()) {
+            builder_.mov(dest_vregs[dest_idx], src_vregs[i]);
+            reg_extract_idx = 0;
+            extracted += extract_len;
+            extract_len = std::min(n.length() - extracted, src_vregs[i].type().element_width());
+            dest_idx = extracted % dest_total_width;
+            continue;
+        }
+
         builder_.mov(dest_vregs[dest_idx], 0);
         dest_vregs[dest_idx] = cast(dest_vregs[dest_idx], src_vregs[i].type());
 
-        builder_.bfxil(dest_vregs[dest_idx], src_vregs[i], extract_idx, extract_len);
-        extract_idx = 0;
+        builder_.ubfx(dest_vregs[dest_idx], src_vregs[i], reg_extract_idx, extract_len);
+        reg_extract_idx = 0;
         extracted += extract_len;
         extract_len = std::min(n.length() - extracted, src_vregs[i].type().element_width());
         dest_idx = extracted % dest_total_width;
