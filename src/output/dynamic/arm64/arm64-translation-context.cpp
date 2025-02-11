@@ -929,29 +929,24 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
                                 n.val().type(), n.lhs().type(), n.rhs().type());
     }
 
+    bool inverse_carry_flag_operation = true;
     const register_operand& pstate = vreg_alloc_.allocate(register_operand(register_operand::nzcv).type());
     for (std::size_t i = 0; i < dest_regs.size(); ++i) {
         // Set carry flag
         builder_.mrs(pstate, register_operand(register_operand::nzcv));
         builder_.lsl(top_regs[i], top_regs[i], 0x3);
 
-        cast(top_regs[i], pstate.type());
-
+        top_regs[i] = cast(top_regs[i], pstate.type());
         builder_.orr_(pstate, pstate, top_regs[i]);
         builder_.msr(register_operand(register_operand::nzcv), pstate);
 
         switch (n.op()) {
         case ternary_arith_op::adc:
-            {
-                auto shift_op = extend_register(builder_, lhs_regs[0], n.val().type());
-                builder_.adcs(dest_regs[i], lhs_regs[i], rhs_regs[i], shift_op);
-            }
+            builder_.adcs(dest_regs[i], lhs_regs[i], rhs_regs[i]);
             break;
         case ternary_arith_op::sbb:
-            {
-                auto shift_op = extend_register(builder_, lhs_regs[0], n.val().type());
-                builder_.sbcs(dest_regs[i], lhs_regs[i], rhs_regs[i], shift_op);
-            }
+            builder_.sbcs(dest_regs[i], lhs_regs[i], rhs_regs[i]);
+            inverse_carry_flag_operation = true;
             break;
         default:
             throw backend_exception("Unsupported ternary arithmetic operation {}", util::to_underlying(n.op()));
@@ -961,7 +956,10 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
 	builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");
 	builder_.sets(flag_map[reg_offsets::SF]).add_comment("compute flag: SF");
 	builder_.seto(flag_map[reg_offsets::OF]).add_comment("compute flag: OF");
-    builder_.setc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
+    if (inverse_carry_flag_operation)
+        builder_.setcc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
+    else
+        builder_.setc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
 }
 
 void arm64_translation_context::materialise_binary_atomic(const binary_atomic_node &n) {
@@ -1118,7 +1116,8 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             builder_.insert_comment("Atomic addition (load atomically, add and retry if failed)");
 
             auto restart_label = label_operand(fmt::format("restart_{}", instr_cnt_));
-            builder_.label(restart_label).add_comment("set label for jump (needed in case of restarting operation)");
+            builder_.insert_comment("set label for jump (needed in case of restarting operation)");
+            builder_.label(restart_label);
             switch(n.val().type().element_width()) {
             case 1:
             case 8:

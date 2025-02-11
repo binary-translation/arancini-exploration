@@ -6,6 +6,8 @@
 
 #include <vector>
 #include <type_traits>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace arancini::output::dynamic::arm64 {
 
@@ -136,10 +138,10 @@ public:
         return append(instruction("add", def(dst), use(src1), use(src2)));
     }
 
-    instruction& add(const register_operand &dst, \
-                      const register_operand &src1, \
-                      const reg_or_imm &src2, \
-                      const shift_operand &shift) { \
+    instruction& add(const register_operand &dst,
+                      const register_operand &src1,
+                      const reg_or_imm &src2,
+                      const shift_operand &shift) {
         return append(instruction("add", def(dst), use(src1), use(src2), use(shift)));
     }
 
@@ -150,10 +152,10 @@ public:
                       .implicitly_writes({register_operand(register_operand::nzcv)}));
     }
 
-    instruction& adds(const register_operand &dst, \
-                      const register_operand &src1, \
-                      const reg_or_imm &src2, \
-                      const shift_operand &shift) { \
+    instruction& adds(const register_operand &dst,
+                      const register_operand &src1,
+                      const reg_or_imm &src2,
+                      const shift_operand &shift) {
         return append(instruction("adds", def(dst), use(src1), use(src2), use(shift))
                       .implicitly_writes({register_operand(register_operand::nzcv)}));
     }
@@ -166,25 +168,16 @@ public:
                       .implicitly_writes({register_operand(register_operand::nzcv)}));
     }
 
-    instruction& adcs(const register_operand &dst, \
-                      const register_operand &src1, \
-                      const reg_or_imm &src2, \
-                      const shift_operand &shift) { \
-        return append(instruction("adcs", def(dst), use(src1), use(src2), use(shift))
-                      .implicitly_reads({register_operand(register_operand::nzcv)})
-                      .implicitly_writes({register_operand(register_operand::nzcv)}));
-    }
-
 	instruction& sub(const register_operand &dst,
                       const register_operand &src1,
                       const reg_or_imm &src2) {
         return append(instruction("sub", def(dst), use(src1), use(src2)));
     }
 
-    instruction& sub(const register_operand &dst, \
-                      const register_operand &src1, \
-                      const reg_or_imm &src2, \
-                      const shift_operand &shift) { \
+    instruction& sub(const register_operand &dst,
+                      const register_operand &src1,
+                      const reg_or_imm &src2,
+                      const shift_operand &shift) {
         return append(instruction("sub", def(dst), use(src1), use(src2), use(shift)));
     }
 
@@ -195,10 +188,10 @@ public:
                       .implicitly_writes({register_operand(register_operand::nzcv)}));
     }
 
-    instruction& subs(const register_operand &dst, \
-                      const register_operand &src1, \
-                      const reg_or_imm &src2, \
-                      const shift_operand &shift) { \
+    instruction& subs(const register_operand &dst,
+                      const register_operand &src1,
+                      const reg_or_imm &src2,
+                      const shift_operand &shift) {
         return append(instruction("subs", def(dst), use(src1), use(src2), use(shift))
                       .implicitly_writes({register_operand(register_operand::nzcv)}));
     }
@@ -210,10 +203,10 @@ public:
                       .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 
-    instruction& sbc(const register_operand &dst, \
-                      const register_operand &src1, \
-                      const reg_or_imm &src2, \
-                      const shift_operand &shift) { \
+    instruction& sbc(const register_operand &dst,
+                      const register_operand &src1,
+                      const reg_or_imm &src2,
+                      const shift_operand &shift) {
         return append(instruction("sbc", def(dst), use(src1), use(src2), use(shift))
                       .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
@@ -222,15 +215,6 @@ public:
                       const register_operand &src1,
                       const reg_or_imm &src2) {
         return append(instruction("sbcs", def(dst), use(src1), use(src2))
-                      .implicitly_reads({register_operand(register_operand::nzcv)})
-                      .implicitly_writes({register_operand(register_operand::nzcv)}));
-    }
-
-    instruction& sbcs(const register_operand &dst, \
-                      const register_operand &src1, \
-                      const reg_or_imm &src2, \
-                      const shift_operand &shift) { \
-        return append(instruction("sbcs", def(dst), use(src1), use(src2), use(shift))
                       .implicitly_reads({register_operand(register_operand::nzcv)})
                       .implicitly_writes({register_operand(register_operand::nzcv)}));
     }
@@ -443,12 +427,18 @@ public:
     }
 
     instruction& bfi(const register_operand &dst,
-             const register_operand &src1,
-             const immediate_operand &immr,
-             const immediate_operand &imms) {
-        return append(instruction("bfi", use(def(dst)), use(src1), use(immr), use(imms)));
+                     const register_operand &src1,
+                     const immediate_operand &lsb,
+                     const immediate_operand &width)
+    {
+        auto element_size = dst.type().element_width() <= 32 ? 32 : 64;
+        std::size_t bitsize = element_size == 32 ? 5 : 6;
+        immediates_strict_policy policy(ir::value_type(ir::value_type_class::unsigned_integer, bitsize));
+        if (width.value() > element_size - lsb.value())
+            throw backend_exception("Invalid width immediate {} for BFI instruction must fit into [1,{}]",
+                                    width, element_size - lsb.value());
+        return append(instruction("bfi", use(def(dst)), use(src1), use(lsb), use(width)));
     }
-
 
 #define LDR_VARIANTS(name) \
     instruction& name(const register_operand &dest, \
@@ -550,12 +540,12 @@ public:
 
     instruction& mrs(const register_operand &dest,
              const register_operand &src) {
-        return append(instruction("mrs", use(def(dest)), use(def(src))));
+        return append(instruction("mrs", def(dest), use(def(src))));
     }
 
     instruction& msr(const register_operand &dest,
-             const register_operand &src) {
-        return append(instruction("msr", use(def(dest)), use(def(src))));
+                     const register_operand &src) {
+        return append(instruction("msr", def(dest), use(src)));
     }
 
     instruction& ret() {
@@ -566,8 +556,11 @@ public:
         return append(instruction("brk", use(imm)));
     }
 
-    instruction& label(const label_operand &label) {
-        return append(instruction(label));
+    void label(const label_operand &label) {
+        if (!labels_.count(label.name())) {
+            labels_.insert(label.name());
+            append(instruction(label));
+        }
     }
 
 	instruction& setz(const register_operand &dst) {
@@ -926,6 +919,7 @@ private:
 	std::vector<instruction> instructions_;
     virtual_register_allocator vreg_alloc_;
     std::unordered_map<std::string, std::size_t> label_refcount_;
+    std::unordered_set<std::string> labels_;
 
 	instruction& append(const instruction &i) {
         instructions_.push_back(i);
