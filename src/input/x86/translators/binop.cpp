@@ -170,7 +170,7 @@ void binop_translator::do_translate()
     lhs = builder().insert_bitcast(value_type::vector(ty, nr_bits/ty.width()), lhs->val());
     rhs = builder().insert_bitcast(value_type::vector(ty, nr_bits/ty.width()), rhs->val());
 
-    for (int i = 0; i < nr_bits/ty.width(); i++) {
+    for (std::size_t i = 0; i < nr_bits/ty.width(); i++) {
       auto equal = builder().insert_cmpeq(builder().insert_vector_extract(lhs->val(), i)->val(), builder().insert_vector_extract(rhs->val(), i)->val());
       auto res = builder().insert_csel(equal->val(), cst_1->val(), cst_0->val());
       lhs = builder().insert_vector_insert(lhs->val(), i, res->val());

@@ -179,8 +179,7 @@ static std::unordered_map<unsigned long, void *> fn_addrs;
  * Initialises the dynamic runtime for the guest program that is about to be executed.
  */
 extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc, char **argv) {
-    util::global_logger.info("arancini: dbt: initialise\n");
-
+    util::global_logger.info("arancini: dbt: initialise with system configuration:\n{}\n", util::system_config::get());
 
 	// Capture interesting signals, such as SIGSEGV.
 	init_signals();

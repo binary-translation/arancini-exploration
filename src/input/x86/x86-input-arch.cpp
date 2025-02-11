@@ -351,7 +351,7 @@ static translation_result translate_instruction(ir_builder &builder, size_t addr
 		char buffer[64];
 		xed_format_context(da == disassembly_syntax::intel ? XED_SYNTAX_INTEL : XED_SYNTAX_ATT, xedd, buffer, sizeof(buffer) - 1, address, nullptr, 0);
 		disasm = std::string(buffer);
-        util::global_logger.debug("Translating instruction {}\n", disasm);
+        util::global_logger.debug("Lifting instruction {} at address {:#x}\n", disasm, address);
 	}
 
 	auto t = get_translator(builder, xed_decoded_inst_get_iclass(xedd));
@@ -376,8 +376,8 @@ The translator factory is implemented by the get_translator function.
 All the x86 translators implementations can be found in the
 src/input/x86/translators/ folder.
 */
-void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, const void *code, size_t code_size, bool basic_block, const std::string &name)
-{
+// TODO: rename to std::byte
+void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, const void *code, std::size_t code_size, bool basic_block, const std::string &name) {
 	builder.begin_chunk(name);
 
 	initialise_xed();
@@ -387,8 +387,6 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 	static std::size_t nr_chunk = 1;
 
     util::global_logger.info("chunk [{}] @ {:#x} code={} size={}\n", nr_chunk, base_address, fmt::ptr(code), code_size);
-
-	nr_chunk++;
 
     std::size_t offset = 0;
 	std::string disasm;
@@ -403,10 +401,9 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 		xed_decoded_inst_set_input_chip(&xedd, XED_CHIP_ALL);
 
 		auto xed_error = xed_decode(&xedd, &mc[offset], code_size - offset);
-		if (xed_error != XED_ERROR_NONE) {
+		if (xed_error != XED_ERROR_NONE)
 			throw frontend_exception("unable to decode instruction at address {:#x}: {}",
                                      base_address + offset, xed_error_enum_t2str(xed_error));
-		}
 
 		auto length = xed_decoded_inst_get_length(&xedd);
 
@@ -424,7 +421,7 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 
     [[unlikely]]
     if (r == translation_result::noop) {
-        throw frontend_exception("chunk passed to translator contains no instructions");
+        throw frontend_exception("chunk {} passed to translator contains no instructions", nr_chunk);
     }
 
 	if (r == translation_result::normal) {
@@ -435,6 +432,7 @@ void x86_input_arch::translate_chunk(ir_builder &builder, off_t base_address, co
 	}
 
 	builder.end_chunk();
+	nr_chunk++;
 }
 
 void x86_input_arch::gen_wrapper(ir_builder &builder, const native_lib::nlib_function &func)

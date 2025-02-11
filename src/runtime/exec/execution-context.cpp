@@ -7,10 +7,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <ostream>
 #include <pthread.h>
 #include <sched.h>
-#include <utility>
 
 #include <sys/syscall.h>
 #if defined(ARCH_X86_64)
@@ -24,7 +22,6 @@
 #include <asm-generic/ioctls.h>
 #include <asm/stat.h>
 #include <csignal>
-#include <iostream>
 #include <linux/fcntl.h>
 #include <linux/futex.h>
 #include <stdexcept>
@@ -87,16 +84,16 @@ execution_context::~execution_context() {
 	pthread_mutex_destroy(&big_fat_lock);
 }
 
-void *execution_context::add_memory_region(off_t base_address, size_t size, bool ignore_brk)
-{
+void *execution_context::add_memory_region(off_t base_address, size_t size, bool ignore_brk) {
+    [[unlikely]]
 	if ((base_address + size) > memory_size_) {
 		throw std::runtime_error("memory region out of bounds");
 	}
 
-	uintptr_t base_ptr = (uintptr_t)memory_ + base_address;
-	uintptr_t aligned_base_ptr = base_ptr & ~0xfffull;
-	uintptr_t base_ptr_off = base_ptr & 0xfffull;
-	uintptr_t aligned_size = (size + base_ptr_off + 0xfff) & ~0xfffull;
+    std::uintptr_t base_ptr = (uintptr_t)memory_ + base_address;
+	std::uintptr_t aligned_base_ptr = base_ptr & ~0xfffull;
+	std::uintptr_t base_ptr_off = base_ptr & 0xfffull;
+	std::uintptr_t aligned_size = (size + base_ptr_off + 0xfff) & ~0xfffull;
 
     util::global_logger.info("amr: base-pointer={:#x} aligned-base-ptr={:#x} base-ptr-off={:#x} size={} aligned-size={}\n",
                              base_ptr, aligned_base_ptr, base_ptr_off, size, aligned_size);
@@ -135,25 +132,30 @@ std::shared_ptr<execution_thread> execution_context::create_execution_thread()
 }
 
 int execution_context::invoke(void *cpu_state) {
+    [[unlikely]]
     if (!cpu_state) throw std::invalid_argument("invoke() received null CPU state");
 
 	auto et = threads_[cpu_state];
+
+    [[unlikely]]
 	if (!et) throw std::runtime_error("unable to resolve execution thread");
 
 	auto x86_state = (x86::x86_cpu_state *)cpu_state;
-
-    util::global_logger.info("{}\n", util::logging_separator('=')).
-                        info("INVOKE PC = {:#x}\n", util::copy(x86_state->PC)).
-                        info("{}\n", util::logging_separator('='));
-    util::global_logger.info("Registers:\n{}\n", *x86_state).
-                        info("{}\n", util::logging_separator('-'));
+    util::global_logger.info("{}\n", util::logging_separator('='))
+                       .info("INVOKE PC = {:#x}\n", util::copy(x86_state->PC))
+                       .info("{}\n", util::logging_separator('='));
+    util::global_logger.info("Registers:\n{}\n", *x86_state)
+                       .info("{}\n", util::logging_separator('-'));
     // util::global_logger.debug("STACK:\n").
     //                    debug("{}\n", util::logging_separator('-'));
     //auto* memptr = reinterpret_cast<uint64_t*>(get_memory_ptr(0)) + x86_state->RSP;
     //x86::print_stack(std::cerr, memptr, 20);
 
 	pthread_mutex_lock(&big_fat_lock);
+
 	auto txln = te_.get_translation(x86_state->PC);
+
+    [[unlikely]]
 	if (txln == nullptr) {
         util::global_logger.error("Unable to translate\n");
 		pthread_mutex_unlock(&big_fat_lock);
@@ -161,9 +163,8 @@ int execution_context::invoke(void *cpu_state) {
 	}
 
 	// Chain
-	if (et->chain_address_ && util::system_config::get().is_chaining()) {
+	if (util::system_config::get().is_chaining() && et->chain_address_) {
         util::global_logger.info("Chaining previous block to {:#x}\n", util::copy(x86_state->PC));
-
 		te_.chain(et->chain_address_, txln->get_code_ptr());
 	}
 
@@ -176,6 +177,7 @@ int execution_context::invoke(void *cpu_state) {
 }
 
 int execution_context::internal_call(void *cpu_state, int call) {
+    [[likely]]
 	if (call == 1) { // syscall
 		auto x86_state = (x86::x86_cpu_state *)cpu_state;
         util::global_logger.debug("System call number: {}\n", util::copy(x86_state->RAX));
@@ -627,11 +629,17 @@ int execution_context::internal_call(void *cpu_state, int call) {
         util::global_logger.error("Unsupported internal call: {}", call);
 		return 1;
 	}
+
 	return 0;
 }
-std::shared_ptr<execution_thread> execution_context::get_thread(void *cpu_state) { return threads_.at(cpu_state); }
 
+[[nodiscard]]
+std::shared_ptr<execution_thread> execution_context::get_thread(void *cpu_state) {
+    return threads_.at(cpu_state);
+}
+
+[[nodiscard]]
 std::pair<decltype(execution_context::threads_)::const_iterator, decltype(execution_context::threads_)::const_iterator> execution_context::get_thread_range() {
-	return std::make_pair(threads_.cbegin(), threads_.cend());
+        return std::make_pair(threads_.cbegin(), threads_.cend());
 }
 

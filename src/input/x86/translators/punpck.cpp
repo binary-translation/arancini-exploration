@@ -56,7 +56,7 @@ void punpck_translator::do_translate()
 		auto v1 = builder().insert_bitcast(value_type::vector(elt_type, input_size / elt_size), op1->val());
 		auto dst = v0;
 
-    for (int i = 0; i < input_size / elt_size / 2; i++) {
+    for (std::size_t i = 0; i < input_size / elt_size / 2; i++) {
       dst = builder().insert_vector_insert(dst->val(), 2 * i,
                                            builder().insert_vector_extract(v0->val(), i + v0->val().type().nr_elements() / 2)->val());
       dst = builder().insert_vector_insert(dst->val(), 2 * i + 1,
@@ -180,3 +180,4 @@ void punpck_translator::do_translate()
 		throw std::runtime_error("unsupported punpck operation");
 	}
 }
+

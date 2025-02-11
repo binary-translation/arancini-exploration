@@ -1,5 +1,7 @@
 #pragma once
 
+#include <fmt/format.h>
+
 #ifndef ENABLE_GLOBAL_LOGGING
 #define ENABLE_GLOBAL_LOGGING false
 #endif // ENABLE_GLOBAL_LOGGING
@@ -41,7 +43,7 @@ public:
 private:
     bool is_logging_ = false;
     bool is_chaining_ = true;
-    bool is_optimize_flags_ = false;
+    bool is_optimize_flags_ = true;
 
     bool handle_enable_log();
 
@@ -67,4 +69,19 @@ private:
 };
 
 } // namespace util
+
+template <>
+struct fmt::formatter<util::system_config> {
+    template <typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(const util::system_config& sysconf, FormatContext& ctx) const {
+        fmt::format_to(ctx.out(), "Global Log enabled: {}\n", sysconf.is_logging());
+        fmt::format_to(ctx.out(), "Chaining optimization enabled: {}\n", sysconf.is_chaining());
+        fmt::format_to(ctx.out(), "Flag optimization enabled: {}\n", sysconf.is_optimizing_flags());
+
+        return ctx.out();
+    }
+};
 
