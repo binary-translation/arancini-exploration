@@ -21,6 +21,7 @@ target_link_libraries(txlat
                       arancini-input-x86
                       arancini-output-llvm
                       arancini-logger
+                      arancini-util
                       Boost::program_options)
 
 # Copy linker script files
@@ -55,6 +56,6 @@ else ()
     message(FATAL_ERROR "Invalid ARCH specified: valid values are X86_64, AARCH64, RISCV64")
 endif ()
 
-install(TARGETS arancini-core arancini-ir arancini-input-x86 arancini-output-llvm LIBRARY)
+install(TARGETS arancini-core arancini-ir arancini-input-x86 arancini-output-llvm arancini-util LIBRARY)
 install(TARGETS txlat RUNTIME)
 

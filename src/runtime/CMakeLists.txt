@@ -9,7 +9,8 @@ set(RUNTIME_SRCS
         exec/execution-thread.cpp
         exec/execution-context.cpp
 		exec/x86/x86-cpu-state.cpp
-        dbt/translation-engine.cpp)
+        dbt/translation-engine.cpp
+        ../util/system-config.cpp)
 
 set(INCLUDE_PATH ../../inc)
 
@@ -48,13 +49,15 @@ target_link_libraries(arancini-runtime
                       arancini-ir
                       arancini-input-x86
                       arancini-trampoline
-                      arancini-logger)
+                      arancini-logger
+                      arancini-util)
 target_link_libraries(arancini-runtime-static
                       PRIVATE
                       xed
                       arancini-ir-static
                       arancini-input-x86-static
                       arancini-trampoline
-                      arancini-logger)
+                      arancini-logger
+                      arancini-util)
 
 install(TARGETS arancini-runtime LIBRARY)

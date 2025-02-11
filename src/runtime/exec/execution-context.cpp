@@ -161,7 +161,7 @@ int execution_context::invoke(void *cpu_state) {
 	}
 
 	// Chain
-	if (et->chain_address_) {
+	if (et->chain_address_ && util::system_config::get().is_chaining()) {
         util::global_logger.info("Chaining previous block to {:#x}\n", util::copy(x86_state->PC));
 
 		te_.chain(et->chain_address_, txln->get_code_ptr());

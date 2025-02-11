@@ -63,7 +63,7 @@ if(NOT DEFINED ENV{FLAKE_BUILD})
     find_package(XED GLOBAL)
     if (NOT XED_FOUND)
         message("XED not found")
-    
+
         # Try to fetch and build XED
         include(cmake/getXED.cmake)
         get_xed()
@@ -95,6 +95,7 @@ endif ()
 
 # Build core
 add_subdirectory(inc/arancini/util)
+add_subdirectory(src/util)
 add_subdirectory(src/core)
 add_subdirectory(src/ir)
 add_subdirectory(src/input/x86)
