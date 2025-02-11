@@ -27,7 +27,7 @@ void fpu_translator::do_translate()
         break;
     }
     case XED_ICLASS_FLD: {
-        auto dst = read_operand(0); // always st(0)
+        [[maybe_unused]] auto dst = read_operand(0); // always st(0)
         auto val = read_operand(1);
         if (val->val().type().width() == 32)
             val = builder().insert_bitcast(value_type::f32(), val->val());
@@ -86,7 +86,7 @@ void fpu_translator::do_translate()
             val = builder().insert_convert(value_type(value_type_class::floating_point, target_width), val->val());
         }
         write_operand(0, val->val());
-        
+
         // TODO flag management
         break;
     }
@@ -126,7 +126,7 @@ void fpu_translator::do_translate()
         // xed encoding: fsub st(0) st(i)
         auto dst = read_operand(0);
         auto src = read_operand(1);
-        
+
         if (src->val().type().width() == 32)
             src = builder().insert_bitcast(value_type::f32(),src->val());
         else if (src->val().type().width() == 64)
