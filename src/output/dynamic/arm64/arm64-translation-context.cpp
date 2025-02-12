@@ -627,8 +627,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 // CF and OF are set to 1 when lhs * rhs > 64-bits
                 // Otherwise they are set to 0
                 builder_.cmp(dest_regset[1], 0);
-                builder_.setz(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
-                builder_.setz(flag_map[reg_offsets::OF]).add_comment("compute flag: OF");
+                builder_.cset(flag_map[reg_offsets::CF], cond_operand("ne")).add_comment("compute flag: CF");
+                builder_.cset(flag_map[reg_offsets::OF], cond_operand("ne")).add_comment("compute flag: OF");
                 sets_flags = false;
                 break;
             } else {
@@ -929,7 +929,7 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
                                 n.val().type(), n.lhs().type(), n.rhs().type());
     }
 
-    bool inverse_carry_flag_operation = true;
+    bool inverse_carry_flag_operation = false;
     const register_operand& pstate = vreg_alloc_.allocate(register_operand(register_operand::nzcv).type());
     for (std::size_t i = 0; i < dest_regs.size(); ++i) {
         // Set carry flag
@@ -1692,8 +1692,6 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
         throw backend_exception("Source and destination mismatch for bit insert node (dest: {} != src: {}",
                                 dest.size(), src.size());
 
-    builder_.insert_comment("Bit insert into destination");
-
     // Copy source to dest
     for (std::size_t i = 0; i < dest.size(); ++i) {
         builder_.mov(dest[i], src[i]).as_keep()
@@ -1712,12 +1710,12 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
     if (insert_len == 0)
         throw backend_exception("Cannot insert into invalid range [{}:{})", n.to(), n.to()+insert_len);
 
-    builder_.insert_comment("insert specific bits into [{}:{})", n.to(), n.to()+insert_len);
+    builder_.insert_comment("insert specific bits into [{}:{}) with destination of type {}", n.to(), n.to()+insert_len, n.val().type());
 
     [[likely]]
     if (dest.size() == 1) {
         insertion_bits = cast(insertion_bits, dest[0].type());
-        builder_.bfi(dest, insertion_bits, insert_idx, insert_len-1);
+        builder_.bfi(dest, insertion_bits, insert_idx, insert_len);
         return;
     }
 
