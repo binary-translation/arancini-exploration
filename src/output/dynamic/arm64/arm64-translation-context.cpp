@@ -972,7 +972,8 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
     if (addr_regs.size() != 1)
         throw backend_exception("Binary atomic operation address type not supported {}", n.address().type());
     if (dest_vregs.size() != 1 || src_vregs.size() != 1)
-        throw backend_exception("Binary atomic operations not supported for vector type {}", n.rhs().type());
+        throw backend_exception("Binary atomic operations not supported for vector types (src: {} or dest: {}",
+                                n.rhs().type(), n.val().type());
 
     const auto &src_vreg = src_vregs[0];
     const auto &dest_vreg = dest_vregs[0];
