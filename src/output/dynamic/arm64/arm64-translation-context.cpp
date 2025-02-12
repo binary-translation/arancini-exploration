@@ -1805,7 +1805,7 @@ void arm64_translation_context::materialise_read_local(const read_local_node &n)
                                 fmt::ptr(n.local()), n.local()->type());
 
     const auto &dest_vregs = vreg_alloc_.allocate(n.val());
-    const auto &locals = locals_[n.local()];
+    const auto &locals = locals_.at(n.local());
 
     [[unlikely]]
     if (locals.size() != dest_vregs.size())
@@ -1818,13 +1818,13 @@ void arm64_translation_context::materialise_read_local(const read_local_node &n)
 }
 
 void arm64_translation_context::materialise_write_local(const write_local_node &n) {
-    const auto &write_regs = vreg_alloc_.get(n.write_value());
+    const auto &write_regs = materialise_port(n.write_value());
     if (locals_.count(n.local()) == 0) {
         const auto &dest_vregs = vreg_alloc_.allocate(n.val());
         locals_.emplace(n.local(), dest_vregs);
     }
 
-    const auto &dest_vregs = locals_[n.local()];
+    const auto &dest_vregs = locals_.at(n.local());
     if (write_regs.size() != dest_vregs.size())
         throw backend_exception("Write local received mismatched types");
 
