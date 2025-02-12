@@ -1828,7 +1828,9 @@ void arm64_translation_context::materialise_write_local(const write_local_node &
 
     [[unlikely]]
     if (write_regs.size() != dest_vregs.size())
-        throw backend_exception("Write local received mismatched types");
+        throw backend_exception("Write local received mismatched types: {} (register count {}) and {} (register count {})",
+                                 n.write_value().type(), write_regs.size(), n.val().type(), dest_vregs.size());
+
 
     builder_.insert_comment("Write local variable");
     for (std::size_t i = 0; i < dest_vregs.size(); ++i)
