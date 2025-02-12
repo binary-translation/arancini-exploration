@@ -284,8 +284,8 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
     auto comment = fmt::format("read register: {}", n.regname());
     auto &dest_vregs = vreg_alloc_.allocate(n.val());
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
-        std::size_t width = dest_vregs[i].type().width();
-        auto addr = guest_memory(n.regoff() + i * width);
+        auto width = dest_vregs[i].type().element_width();
+        auto addr = guest_memory(n.regoff() + i * (width / 8));
         switch (width) {
             case 1:
             case 8:
@@ -338,7 +338,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
         //     src[i] = cast(src[i], n.value().type());
 
         std::size_t width = src[i].type().width();
-        auto addr = guest_memory(n.regoff() + i * width);
+        auto addr = guest_memory(n.regoff() + i * (width / 8));
         switch (width) {
             case 1:
             case 8:
@@ -372,7 +372,7 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
     for (std::size_t i = 0; i < dest.size(); ++i) {
         std::size_t width = dest[i].type().element_width();
 
-        memory_operand mem_op(addr_vreg, i * width);
+        memory_operand mem_op(addr_vreg, i * (width / 8));
         switch (width) {
             case 1:
             case 8:
@@ -406,9 +406,9 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
 
     const auto &address = materialise_port(n.address());
     for (std::size_t i = 0; i < src.size(); ++i) {
-        std::size_t width = src[i].type().width();
+        std::size_t width = src[i].type().element_width();
 
-        memory_operand mem_op(address, i * width);
+        memory_operand mem_op(address, i * (width / 8));
         switch (width) {
             case 1:
             case 8:
@@ -933,13 +933,15 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
     const register_operand& pstate = vreg_alloc_.allocate(register_operand(register_operand::nzcv).type());
     for (std::size_t i = 0; i < dest_regs.size(); ++i) {
         // Set carry flag
-        builder_.mrs(pstate, register_operand(register_operand::nzcv));
-        builder_.lsl(top_regs[i], top_regs[i], 0x3);
+        // builder_.mrs(pstate, register_operand(register_operand::nzcv));
+        // builder_.lsl(top_regs[i], top_regs[i], 0x3);
+        //
+        // top_regs[i] = cast(top_regs[i], pstate.type());
+        // builder_.orr_(pstate, pstate, top_regs[i]);
+        // builder_.msr(register_operand(register_operand::nzcv), pstate);
 
-        top_regs[i] = cast(top_regs[i], pstate.type());
-        builder_.orr_(pstate, pstate, top_regs[i]);
-        builder_.msr(register_operand(register_operand::nzcv), pstate);
-
+        builder_.cmp(top_regs[i], 0);
+        builder_.sbcs(register_operand(register_operand::wzr_sp), register_operand(register_operand::wzr_sp), register_operand(register_operand::wzr_sp));
         switch (n.op()) {
         case ternary_arith_op::adc:
             builder_.adcs(dest_regs[i], lhs_regs[i], rhs_regs[i]);
@@ -1371,6 +1373,15 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
                                 n.source_value().type().nr_elements(), n.source_value().type().element_width(),
                                 n.val().type().nr_elements(), n.val().type().element_width());
 
+        logger.debug("Casting from {} x {} to {} x {} (internal types)\n",
+                     dest_vregs.size(), dest_vregs[0].type().element_width(),
+                     src_vregs.size(), src_vregs[0].type().element_width());
+        if (dest_vregs.size() == src_vregs.size()) {
+            for (std::size_t i = 0; i < dest_vregs.size(); ++i)
+                builder_.mov(dest_vregs[i], src_vregs[i]);
+            break;
+        }
+
         if (n.val().type().element_width() > n.source_value().type().element_width()) {
             // Destination consists of fewer elements but of larger widths
             std::size_t dest_idx = 0;
@@ -1734,10 +1745,17 @@ void arm64_translation_context::materialise_vector_insert(const vector_insert_no
     const auto &src_vregs = materialise_port(n.source_vector());
     const auto &value_vregs = materialise_port(n.insert_value());
 
+    [[unlikely]]
     if (dest_vregs.size() < src_vregs.size())
         throw backend_exception("Destination vector for vector insert is smaller than source vector");
 
-    std::size_t index = (n.index() * n.insert_value().type().element_width()) / value_types::base_type.element_width();
+    [[unlikely]]
+    if (dest_vregs.size() == 0 || src_vregs.size() == 0 || value_vregs.size() == 0)
+        throw backend_exception("Cannot perform vector insertion with 0-size registers");
+
+    std::size_t index = (n.index() * n.val().type().element_width()) / dest_vregs[0].type().element_width();
+
+    [[unlikely]]
     if (index + value_vregs.size() > dest_vregs.size())
         throw backend_exception("Cannot insert at index {} in destination vector", index);
 
@@ -1745,7 +1763,8 @@ void arm64_translation_context::materialise_vector_insert(const vector_insert_no
     for (std::size_t i = 0; i < src_vregs.size(); ++i)
         builder_.mov(dest_vregs[i], src_vregs[i]);
 
-    builder_.insert_comment("Insert value into destination");
+    builder_.insert_comment("Insert value of type {} into destination at index {}",
+                            n.insert_value().type(), n.index());
     for (std::size_t i = 0; i < value_vregs.size(); ++i) {
         const auto &value_vreg = cast(value_vregs[i], dest_vregs[index + i].type());
         builder_.mov(dest_vregs[index + i], value_vreg);
