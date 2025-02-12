@@ -115,7 +115,7 @@ struct fmt::formatter<arancini::runtime::exec::x86::x86_cpu_state> {
                                                 "ZMM28:   \t{}\n"
                                                 "ZMM29:   \t{}\n"
                                                 "ZMM30:   \t{}\n"
-                                                "ZMM31:   \t{}\n",
+                                                "ZMM31:   \t{}",
                               regs.RAX, regs.RBX, regs.RCX,
                               regs.RDX, regs.RSI, regs.RDI,
                               regs.RBP, regs.RSP, regs.PC,
