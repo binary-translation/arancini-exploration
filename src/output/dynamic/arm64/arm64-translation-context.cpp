@@ -1820,8 +1820,8 @@ void arm64_translation_context::materialise_read_local(const read_local_node &n)
 void arm64_translation_context::materialise_write_local(const write_local_node &n) {
     const auto &write_regs = materialise_port(n.write_value());
     if (locals_.count(n.local()) == 0) {
-        const auto &dest_vregs = vreg_alloc_.allocate(n.val());
-        locals_.emplace(n.local(), dest_vregs);
+        locals_.emplace(n.local(), write_regs);
+        return;
     }
 
     const auto &dest_vregs = locals_[n.local()];
