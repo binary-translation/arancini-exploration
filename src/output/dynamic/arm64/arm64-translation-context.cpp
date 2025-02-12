@@ -967,7 +967,7 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
 void arm64_translation_context::materialise_binary_atomic(const binary_atomic_node &n) {
 	const auto &dest_vregs = vreg_alloc_.get(n.val());
     const auto &src_vregs = materialise_port(n.rhs());
-    const auto &addr_regs = vreg_alloc_.get(n.address());
+    const auto &addr_regs = materialise_port(n.address());
 
     if (addr_regs.size() != 1)
         throw backend_exception("Binary atomic operation address type not supported {}", n.address().type());
