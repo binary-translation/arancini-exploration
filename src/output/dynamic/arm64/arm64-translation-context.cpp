@@ -1592,7 +1592,7 @@ void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
                 auto amount_imm = reinterpret_cast<const constant_node*>(n.amount().owner())->const_val_i();
                 if (amount_imm < 64) {
                     builder_.extr(dest_vreg[0], input[1], input[0], amount_imm);
-                    builder_.lsr(dest_vreg[1], dest_vreg[1], amount);
+                    builder_.lsr(dest_vreg[1], input[1], amount);
                 } else if (amount_imm == 64) {
                     builder_.mov(dest_vreg[0], input[1]);
                     builder_.mov(dest_vreg[1], 0);
