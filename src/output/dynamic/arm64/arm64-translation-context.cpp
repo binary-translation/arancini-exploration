@@ -875,6 +875,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             throw backend_exception("Unsupported comparison between {} x {}",
                                     n.lhs().type(), n.rhs().type());
 
+        rhs_regset[0] = cast(rhs_regset[0], lhs_regset[0].type());
         builder_.cmp(lhs_regset[0], rhs_regset[0])
                 .add_comment("compare LHS and RHS to generate condition for conditional set");
         builder_.cset(dest_regset[0], get_cset_type(n.op()))
