@@ -392,8 +392,8 @@ void instruction_builder::allocate() {
     logger.debug("Translation (before register allocation):\n{}\n", instruction_stream);
 
     bool in_branch_block = false;
-	for (auto it = instructions_.rbegin(); it != instructions_.rend(); it++) {
-		auto &instr = *it;
+	for (auto rit = instructions_.rbegin(); rit != instructions_.rend(); rit++) {
+		auto &instr = *rit;
         bool has_unused_keep = false;
 
         logger.debug("Allocating instruction {}\n", instr);
@@ -420,8 +420,8 @@ void instruction_builder::allocate() {
                     defs[reg1] = 0;
             }
 
-            for (const auto& instruction : instructions_) {
-                for (const auto& op : instruction.operands()) {
+            for (auto it = instructions_.begin(); it != rit.base(); ++it) {
+                for (const auto& op : it->operands()) {
                     if (!op.is_def()) continue;
                     auto& reg = std::get<register_operand>(op.get());
                     if (reg.is_virtual()) // TODO: should consider physical
@@ -435,9 +435,12 @@ void instruction_builder::allocate() {
                     logger.debug("Found undefined virtual register: {}\n", vreg);
                     auto preg = reg_alloc.get_allocation(vreg);
                     if (preg) {
-                        logger.debug("Deallocating unassigned loop mapping {} -> {}", vreg, *preg);
+                        logger.debug("Deallocating unassigned loop mapping {} -> {}\n", vreg, *preg);
                         reg_alloc.deallocate(*preg);
                     }
+                } else {
+                    logger.debug("Keeping virtual register {} allocated because it has {} def counts\n",
+                                 vreg, def_count);
                 }
             }
         }
@@ -477,15 +480,15 @@ void instruction_builder::allocate() {
                 op = *prev;
                 op.as_def();
 
-                // Allocation not needed beyond this point
-                // TODO: enable this when backwards branches are working
-                if (!branch_tracker.in_branch_block())
-                    reg_alloc.deallocate(*prev);
-
                 // If there existed any implicit dependency on the allocated register, we satisfy it
                 implicit_dependencies.satisfy(*prev);
 
-                logger.debug("Register {} available\n", *prev);
+                // Allocation not needed beyond this point
+                // TODO: enable this when backwards branches are working
+                if (!branch_tracker.in_branch_block()) {
+                    reg_alloc.deallocate(*prev);
+                    logger.debug("Register {} available\n", *prev);
+                }
             } else if (instr.is_keep() || implicit_dependencies.fulfills(op)) {
                 // No previous allocation: no users of this definition exist
                 // Need to allocate anyway; since instruction is marked as keep()
