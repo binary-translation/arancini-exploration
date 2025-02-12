@@ -1805,12 +1805,12 @@ void arm64_translation_context::materialise_read_local(const read_local_node &n)
                                 fmt::ptr(n.local()), n.local()->type());
 
     const auto &dest_vregs = vreg_alloc_.allocate(n.val());
-    const auto &locals = locals_.at(n.local());
+    const auto &locals = locals_[n.local()];
 
     [[unlikely]]
     if (locals.size() != dest_vregs.size())
-        throw backend_exception("Read local received mismatched types for locals {} and destination {}",
-                                 n.local()->type(), n.val().type());
+        throw backend_exception("Read local received mismatched types for locals {} (register count {}) and destination {} (register count {})",
+                                 n.local()->type(), locals.size(), n.val().type(), dest_vregs.size());
 
     builder_.insert_comment("Read local variable");
     for (std::size_t i = 0; i < dest_vregs.size(); ++i)
@@ -1824,7 +1824,9 @@ void arm64_translation_context::materialise_write_local(const write_local_node &
         locals_.emplace(n.local(), dest_vregs);
     }
 
-    const auto &dest_vregs = locals_.at(n.local());
+    const auto &dest_vregs = locals_[n.local()];
+
+    [[unlikely]]
     if (write_regs.size() != dest_vregs.size())
         throw backend_exception("Write local received mismatched types");
 
