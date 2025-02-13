@@ -1022,10 +1022,11 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             builder_.ldseth(src_vreg, dest_vreg, mem_addr);
             break;
         case 32:
-            builder_.ldsetw(src_vreg, dest_vreg, mem_addr);
-            break;
         case 64:
-            builder_.ldset(src_vreg, dest_vreg, mem_addr);
+            // builder_.ldset(src_vreg, dest_vreg, mem_addr);
+            builder_.ldr(dest_vreg, mem_addr);
+            builder_.orr_(dest_vreg, dest_vreg, src_vreg);
+            builder_.str(dest_vreg, mem_addr);
             break;
         default:
             throw backend_exception("Atomic LDSET cannot handle sizes > 64-bit");
@@ -1812,7 +1813,7 @@ void arm64_translation_context::materialise_read_local(const read_local_node &n)
         throw backend_exception("Read local received mismatched types for locals {} (register count {}) and destination {} (register count {})",
                                  n.local()->type(), locals.size(), n.val().type(), dest_vregs.size());
 
-    builder_.insert_comment("Read local variable");
+    builder_.insert_comment("Read local variable @{}", fmt::ptr(n.local()));
     for (std::size_t i = 0; i < dest_vregs.size(); ++i)
         builder_.mov(dest_vregs[i], locals[i]);
 }
@@ -1820,10 +1821,11 @@ void arm64_translation_context::materialise_read_local(const read_local_node &n)
 void arm64_translation_context::materialise_write_local(const write_local_node &n) {
     const auto &write_regs = materialise_port(n.write_value());
     if (locals_.count(n.local()) == 0) {
-        locals_.emplace(n.local(), write_regs);
-        return;
+        const auto& dest_vregs = vreg_alloc_.allocate(n.write_value().type());
+        locals_.emplace(n.local(), dest_vregs);
     }
 
+    builder_.insert_comment("Write local variable @{} with register {}", fmt::ptr(n.local()), write_regs[0]);
     const auto &dest_vregs = locals_[n.local()];
 
     [[unlikely]]
@@ -1832,7 +1834,6 @@ void arm64_translation_context::materialise_write_local(const write_local_node &
                                  n.write_value().type(), write_regs.size(), n.val().type(), dest_vregs.size());
 
 
-    builder_.insert_comment("Write local variable");
     for (std::size_t i = 0; i < dest_vregs.size(); ++i)
         builder_.mov(dest_vregs[i], write_regs[i]);
 }

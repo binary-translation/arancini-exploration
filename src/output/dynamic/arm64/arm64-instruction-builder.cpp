@@ -489,7 +489,7 @@ void instruction_builder::allocate() {
                     reg_alloc.deallocate(*prev);
                     logger.debug("Register {} available\n", *prev);
                 }
-            } else if (instr.is_keep() || implicit_dependencies.fulfills(op)) {
+            } else if (instr.is_keep() || implicit_dependencies.fulfills(op) || branch_tracker.in_branch_block()) {
                 // No previous allocation: no users of this definition exist
                 // Need to allocate anyway; since instruction is marked as keep()
                 logger.debug("No previous allocation exists for 'keep' definition {}\n", op);

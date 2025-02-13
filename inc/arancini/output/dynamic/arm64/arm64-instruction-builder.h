@@ -652,7 +652,7 @@ public:
 
 #define AMO_SIZE_VARIANT(name, suffix_type, suffix_size) \
     instruction& name##suffix_type##suffix_size(const register_operand &rm, const register_operand &rt, const memory_operand &mem) { \
-        return append(instruction(#name#suffix_type#suffix_size, use(rm), use(def(rt)), use(mem))); \
+        return append(instruction(#name#suffix_type#suffix_size, use(rm), def(rt), use(mem)).as_keep()); \
     }
 
 #define AMO_SIZE_VARIANTS(name, size) \
