@@ -240,11 +240,28 @@ void binop_translator::do_translate()
 
 		break;
   }
-  case XED_ICLASS_BSR:
-  case XED_ICLASS_BSF: {
+  case XED_ICLASS_BSR: {
     auto src = read_operand(1);
     auto type = src->val().type();
+    //auto src_b = builder().insert_bitcast(value_type::vector(value_type::u1(), type.width()), src->val());
+    auto mask = builder().insert_constant_i(type, 1);
 
+    auto idx = builder().insert_constant_i(type, 0);
+    for (int i = 0; i < type.width(); i++) {
+      auto tmp = builder().insert_and(src->val(), mask->val());
+      auto is_set = builder().insert_cmpeq(tmp->val(), mask->val());
+      idx = builder().insert_csel(is_set->val(), builder().insert_constant_i(type, i)->val(), idx->val());
+      mask = builder().insert_lsl(mask->val(), builder().insert_constant_i(type, 1)->val());
+    }
+    auto is_z = builder().insert_cmpeq(src->val(), builder().insert_constant_i(type, 0)->val());
+    write_reg(reg_offsets::ZF, is_z->val());
+    // either index or undef
+    write_operand(0, idx->val());
+
+    break;
+  }
+  case XED_ICLASS_BSF: {
+    /*
     auto idx = builder().alloc_local(value_type::u64());
     auto mask = builder().alloc_local(type);
     // if src == 0
@@ -294,7 +311,7 @@ void binop_translator::do_translate()
     write_operand(0, builder().insert_constant_i(type, 0)->val());
 	auto end = (br_node *)builder().insert_br(nullptr);
 
-    // fi
+    //
     auto fi_label = builder().insert_label("fi");
     fi_br->add_br_target(fi_label);
 
@@ -307,6 +324,26 @@ void binop_translator::do_translate()
     next->add_br_target(end_label);
     end->add_br_target(end_label2);
 
+    */
+
+    auto src = read_operand(1);
+    auto type = src->val().type();
+    //auto src_b = builder().insert_bitcast(value_type::vector(value_type::u1(), type.width()), src->val());
+    auto mask = builder().insert_constant_i(type, 1<<type.width()-1);
+
+    auto idx = builder().insert_constant_i(type, type.width()-1);
+    for (int i = type.width()-1; i >= 0; i--) {
+      auto tmp = builder().insert_and(src->val(), mask->val());
+      auto is_set = builder().insert_cmpeq(tmp->val(), mask->val());
+      //auto bit = builder().insert_vector_extract(src_b->val(), i);
+      //auto is_set = builder().insert_cmpeq(bit->val(), builder().insert_constant_i(value_type::u1(), 1)->val());
+      idx = builder().insert_csel(is_set->val(), builder().insert_constant_i(type, i)->val(), idx->val());
+      mask = builder().insert_lsr(mask->val(), builder().insert_constant_i(type, 1)->val());
+    }
+    auto is_z = builder().insert_cmpeq(src->val(), builder().insert_constant_i(type, 0)->val());
+    write_reg(reg_offsets::ZF, is_z->val());
+    // either index or undef
+    write_operand(0, idx->val());
 
     break;
   }
