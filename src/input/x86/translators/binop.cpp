@@ -264,10 +264,7 @@ void binop_translator::do_translate()
     } else {
       builder().insert_write_local(idx, builder().insert_constant_u64(0)->val()); // idx := 0
     }
-	auto next = (br_node *)builder().insert_br(nullptr);
     //   while mask & src == 0; do idx--; mask = mask >> 1; done
-	auto while_loop1 = builder().insert_label("while");
-	next->add_br_target(while_loop1);
 	auto while_loop = builder().insert_label("while");
 
 	//       mask & src == 1  -> jump to endif
@@ -302,7 +299,7 @@ void binop_translator::do_translate()
 
     // write result
     write_operand(0, builder().insert_read_local(idx)->val());
-	next = (br_node *)builder().insert_br(nullptr);
+	auto next = (br_node *)builder().insert_br(nullptr);
 
 	auto end_label = builder().insert_label("end");
 	auto end_label2 = builder().insert_label("end");
