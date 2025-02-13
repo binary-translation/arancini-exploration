@@ -336,8 +336,9 @@ public:
 
     // TODO: handle register_set
     instruction& cmn(const register_operand &dst,
-             const reg_or_imm &src) {
-        return append(instruction("cmn", use(def(dst)), use(src)));
+                     const reg_or_imm &src) {
+        return append(instruction("cmn", use(dst), use(src))
+                      .implicitly_writes({register_operand(register_operand::nzcv)}));
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
@@ -361,8 +362,8 @@ public:
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& lsr(const register_operand &dst,
-             const register_operand &src1,
-             const reg_or_imm &src2) {
+                     const register_operand &src1,
+                     const reg_or_imm &src2) {
         std::size_t size = dst.type().element_width() <= 32 ? 5 : 6;
         ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
         return append(instruction("lsr", def(dst), use(src1), use(immediates_policy(src2))));
@@ -370,8 +371,8 @@ public:
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& asr(const register_operand &dst,
-             const register_operand &src1,
-             const reg_or_imm &src2) {
+                     const register_operand &src1,
+                     const reg_or_imm &src2) {
         std::size_t size = dst.type().element_width() <= 32 ? 5 : 6;
         ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
         return append(instruction("asr", def(dst), use(src1), use(immediates_policy(src2))));
@@ -387,15 +388,17 @@ public:
     }
 
     instruction& csel(const register_operand &dst,
-              const register_operand &src1,
-              const register_operand &src2,
-              const cond_operand &cond) {
-        return append(instruction("csel", def(dst), use(src1), use(src2), use(cond)));
+                      const register_operand &src1,
+                      const register_operand &src2,
+                      const cond_operand &cond) {
+        return append(instruction("csel", def(dst), use(src1), use(src2), use(cond))
+                      .implicitly_reads({register_operand(register_operand::x0)}));
     }
 
     instruction& cset(const register_operand &dst,
-              const cond_operand &cond) {
-        return append(instruction("cset", def(dst), use(cond)));
+                      const cond_operand &cond) {
+        return append(instruction("cset", def(dst), use(cond))
+                      .implicitly_reads({register_operand(register_operand::x0)}));
     }
 
     instruction& bfxil(const register_operand &dst,
