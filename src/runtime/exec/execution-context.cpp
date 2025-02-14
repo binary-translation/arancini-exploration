@@ -206,11 +206,16 @@ int execution_context::internal_call(void *cpu_state, int call) {
 		}
 		case 2: // open
 		{
-            util::global_logger.debug("System call: open()\n");
-			auto filename = (uintptr_t)get_memory_ptr((off64_t)x86_state->RDI);
-			uint64_t flags = x86_state->RSI;
-			uint64_t mode = x86_state->RDX;
-			x86_state->RAX = native_syscall(__NR_openat, (uint64_t)AT_FDCWD, filename, flags, mode);
+            off64_t offset = x86_state->RDI;
+            auto filename = reinterpret_cast<std::uintptr_t>(get_memory_ptr(offset));
+            std::uint64_t flags = x86_state->RSI;
+			std::uint64_t mode = x86_state->RDX;
+            std::uint64_t dirfd = AT_FDCWD;
+
+            util::global_logger.debug("System call: openat({}, {}, {}, {})\n",
+                                      dirfd, reinterpret_cast<const char*>(filename), flags, mode);
+
+			x86_state->RAX = native_syscall(__NR_openat, dirfd, filename, flags, mode);
 			break;
 		}
 		case 3: // close
