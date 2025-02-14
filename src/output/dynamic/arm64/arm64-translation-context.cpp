@@ -461,9 +461,8 @@ void arm64_translation_context::materialise_br(const br_node &n) {
 void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
     const auto &cond_vregs = materialise_port(n.cond());
 
-    builder_.cmp(cond_vregs, 0);
     auto label = label_operand(fmt::format("{}_{}", n.target()->name(), instr_cnt_));
-    builder_.bne(label);
+    builder_.cbnz(cond_vregs, label);
 }
 
 void arm64_translation_context::materialise_constant(const constant_node &n) {
@@ -1236,8 +1235,7 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
             builder_.bne(failure_label).add_comment("if loaded value != accumulator branch to failure");
             builder_.stxr(status_reg, src_reg, memory_operand(mem_addr)).add_comment("store if not failure");
             // Compare and also set flags for later
-            builder_.cmp(status_reg, 0);
-            builder_.beq(success_label).add_comment("== 0 represents success storing");
+            builder_.cbz(status_reg, success_label).add_comment("== 0 represents success storing");
             builder_.label(failure_label);
             builder_.mov(acc_reg, current_data_reg).add_comment("move current memory value into accumulator");
             builder_.b(loop_label).add_comment("loop until failure or success");

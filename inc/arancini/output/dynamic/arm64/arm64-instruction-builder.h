@@ -329,6 +329,9 @@ public:
     }
 
     // TODO: check if this allocated correctly
+    // Check reg == 0 and jump if false
+    // Otherwise, continue to the next instruction
+    // Does not affect condition flags (can be used to compare-and-branch with 1 instruction)
     instruction& cbnz(const register_operand &rt, const label_operand &dest) {
         label_refcount_[dest.name()]++;
         return append(instruction("cbnz", use(rt), use(dest)).as_branch());
