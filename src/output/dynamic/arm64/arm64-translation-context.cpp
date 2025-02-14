@@ -969,8 +969,11 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
     const auto &src_vregs = materialise_port(n.rhs());
     const auto &addr_regs = materialise_port(n.address());
 
+    [[unlikely]]
     if (addr_regs.size() != 1)
         throw backend_exception("Binary atomic operation address type not supported {}", n.address().type());
+
+    [[unlikely]]
     if (dest_vregs.size() != 1 || src_vregs.size() != 1)
         throw backend_exception("Binary atomic operations not supported for vector types (src: {} or dest: {})",
                                 n.rhs().type(), n.val().type());
@@ -1012,23 +1015,29 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             builder_.setcc(flag_map[reg_offsets::CF]);
         break;
 	case binary_atomic_op::bor:
-        switch (n.val().type().element_width()) {
-        case 1:
-        case 8:
-            builder_.ldsetb(src_vreg, dest_vreg, mem_addr);
-            break;
-        case 16:
-            builder_.ldseth(src_vreg, dest_vreg, mem_addr);
-            break;
-        case 32:
-        case 64:
-            // builder_.ldset(src_vreg, dest_vreg, mem_addr);
-            builder_.ldr(dest_vreg, mem_addr);
+        if (supports_lse) {
+            switch (n.val().type().element_width()) {
+            case 1:
+            case 8:
+                builder_.ldsetb(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 16:
+                builder_.ldseth(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 32:
+            case 64:
+                builder_.ldset(src_vreg, dest_vreg, mem_addr);
+                break;
+            default:
+                throw backend_exception("Atomic LDSET cannot handle types {} and {}",
+                                        n.val().type(), n.rhs().type());
+            }
+        } else {
+            atomic_block atomic(builder_, instr_cnt_, mem_addr);
+            atomic.start_atomic_block(dest_vreg);
+            const register_operand &status = vreg_alloc_.allocate(value_type::u32());
             builder_.orr_(dest_vreg, dest_vreg, src_vreg);
-            builder_.str(dest_vreg, mem_addr);
-            break;
-        default:
-            throw backend_exception("Atomic LDSET cannot handle sizes > 64-bit");
+            atomic.end_atomic_block(status, dest_vreg);
         }
 		break;
 	case binary_atomic_op::band:
@@ -1230,7 +1239,7 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
             builder_.cmp(current_data_reg, acc_reg).add_comment("compare with accumulator");
             builder_.csel(acc_reg, current_data_reg, acc_reg, cond_operand("NE"))
                      .add_comment("conditionally move current memory value into accumulator");
-            atomic.end_atomic_block(status_reg, src_reg, mem_addr);
+            atomic.end_atomic_block(status_reg, src_reg);
         }
         break;
     default:

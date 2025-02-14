@@ -945,11 +945,42 @@ struct atomic_block {
 
     void start_atomic_block(const register_operand& data_reg) {
         builder_->label(loop_label_);
-        builder_->ldxr(data_reg, mem_addr_).add_comment("load atomically");
+        switch (data_reg.type().element_width()) {
+        case 1:
+        case 8:
+            builder_->ldxrb(data_reg, mem_addr_).add_comment("load atomically");
+            break;
+        case 16:
+            builder_->ldxrh(data_reg, mem_addr_).add_comment("load atomically");
+            break;
+        case 32:
+        case 64:
+            builder_->ldxr(data_reg, mem_addr_).add_comment("load atomically");
+            break;
+        default:
+            throw backend_exception("Cannot load atomically values of type {}",
+                                    data_reg.type());
+        }
     }
 
-    void end_atomic_block(const register_operand& status_reg, const register_operand& src_reg, const memory_operand& mem_addr) {
-        builder_->stxr(status_reg, src_reg, memory_operand(mem_addr)).add_comment("store if not failure");
+    void end_atomic_block(const register_operand& status_reg, const register_operand& src_reg) {
+        builder_->label(loop_label_);
+        switch (src_reg.type().element_width()) {
+        case 1:
+        case 8:
+            builder_->stxrb(status_reg, src_reg, mem_addr_).add_comment("store if not failure");
+            break;
+        case 16:
+            builder_->stxrh(status_reg, src_reg, mem_addr_).add_comment("store if not failure");
+            break;
+        case 32:
+        case 64:
+            builder_->stxr(status_reg, src_reg, mem_addr_).add_comment("store if not failure");
+            break;
+        default:
+            throw backend_exception("Cannot store atomically values of type {}",
+                                    src_reg.type());
+        }
         // Compare and also set flags for later
         builder_->cbz(status_reg, success_label_).add_comment("== 0 represents success storing");
         builder_->b(loop_label_).add_comment("loop until failure or success");
