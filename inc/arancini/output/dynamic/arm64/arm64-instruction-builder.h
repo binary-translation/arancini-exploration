@@ -935,5 +935,32 @@ private:
     void spill();
 };
 
+struct atomic_block {
+    atomic_block(instruction_builder& builder, std::size_t block_id, const memory_operand& mem_addr):
+        mem_addr_(mem_addr),
+        loop_label_(fmt::format("loop_{}", block_id)),
+        success_label_(fmt::format("success_{}", block_id))
+    {
+    }
+
+    void start_atomic_block(const register_operand& data_reg) {
+        builder_->label(loop_label_);
+        builder_->ldxr(data_reg, mem_addr_).add_comment("load atomically");
+    }
+
+    void end_atomic_block(const register_operand& status_reg, const register_operand& src_reg, const memory_operand& mem_addr) {
+        builder_->stxr(status_reg, src_reg, memory_operand(mem_addr)).add_comment("store if not failure");
+        // Compare and also set flags for later
+        builder_->cbz(status_reg, success_label_).add_comment("== 0 represents success storing");
+        builder_->b(loop_label_).add_comment("loop until failure or success");
+        builder_->label(success_label_);
+    }
+
+    memory_operand mem_addr_;
+    label_operand loop_label_;
+    label_operand success_label_;
+    instruction_builder* builder_;
+};
+
 } // namespace arancini::output::dynamic::arm64
 
