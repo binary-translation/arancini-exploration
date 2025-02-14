@@ -212,7 +212,12 @@ int execution_context::internal_call(void *cpu_state, int call) {
 			std::uint64_t mode = x86_state->RDX;
             std::uint64_t dirfd = AT_FDCWD;
 
-            util::global_logger.debug("System call: openat({}, {}, {}, {})\n",
+            // Check for O_LARGEFILE
+            // It's mapped to a different numeric code on Aarch64
+            if (0x8000 & flags)
+                flags = (flags ^ 0x8000) | O_LARGEFILE;
+
+            util::global_logger.debug("System call: openat({:#x}, {}, {:#x}, {})\n",
                                       dirfd, reinterpret_cast<const char*>(filename), flags, mode);
 
 			x86_state->RAX = native_syscall(__NR_openat, dirfd, filename, flags, mode);
