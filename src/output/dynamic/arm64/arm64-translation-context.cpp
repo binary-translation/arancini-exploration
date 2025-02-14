@@ -986,6 +986,8 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
 
     memory_operand mem_addr(addr_regs[0]);
 
+    bool inverse_carry_flag_operation = false;
+
     // FIXME: correct memory ordering?
     // NOTE: not sure if the proper alternative was used (should a/al/l or
     // nothing be used?)
@@ -1015,7 +1017,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             builder_.setcc(flag_map[reg_offsets::CF]);
         break;
 	case binary_atomic_op::bor:
-        if (supports_lse) {
+        if constexpr (supports_lse) {
             switch (n.val().type().element_width()) {
             case 1:
             case 8:
@@ -1038,6 +1040,8 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             const register_operand &status = vreg_alloc_.allocate(value_type::u32());
             builder_.orr_(dest_vreg, dest_vreg, src_vreg);
             atomic.end_atomic_block(status, dest_vreg);
+            builder_.cmp(dest_vreg, 0);
+            inverse_carry_flag_operation = true;
         }
 		break;
 	case binary_atomic_op::band:
@@ -1062,22 +1066,32 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
         }
 		break;
 	case binary_atomic_op::bxor:
-        switch (n.val().type().element_width()) {
-        case 1:
-        case 8:
-            builder_.ldeorb(src_vreg, dest_vreg, mem_addr);
-            break;
-        case 16:
-            builder_.ldeorh(src_vreg, dest_vreg, mem_addr);
-            break;
-        case 32:
-            builder_.ldeorw(src_vreg, dest_vreg, mem_addr);
-            break;
-        case 64:
-            builder_.ldeor(src_vreg, dest_vreg, mem_addr);
-            break;
-        default:
-            throw backend_exception("Atomic LDEOR cannot handle sizes > 64-bit");
+        if constexpr (supports_lse) {
+            switch (n.val().type().element_width()) {
+            case 1:
+            case 8:
+                builder_.ldeorb(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 16:
+                builder_.ldeorh(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 32:
+                builder_.ldeorw(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 64:
+                builder_.ldeor(src_vreg, dest_vreg, mem_addr);
+                break;
+            default:
+                throw backend_exception("Atomic LDEOR cannot handle sizes > 64-bit");
+            }
+        } else {
+            atomic_block atomic(builder_, instr_cnt_, mem_addr);
+            atomic.start_atomic_block(dest_vreg);
+            const register_operand &status = vreg_alloc_.allocate(value_type::u32());
+            builder_.eor_(dest_vreg, dest_vreg, src_vreg);
+            atomic.end_atomic_block(status, dest_vreg);
+            builder_.cmp(dest_vreg, 0);
+            inverse_carry_flag_operation = true;
         }
 		break;
     case binary_atomic_op::btc:
@@ -1201,8 +1215,10 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
 	builder_.sets(flag_map[reg_offsets::SF]).add_comment("write flag: SF");
 	builder_.seto(flag_map[reg_offsets::OF]).add_comment("write flag: OF");
 
-    if (n.op() != binary_atomic_op::sub)
-        builder_.setc(flag_map[reg_offsets::CF]).add_comment("write flag: CF");
+    if (inverse_carry_flag_operation)
+        builder_.setcc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
+    else
+        builder_.setc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
 }
 
 void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_node &n) {

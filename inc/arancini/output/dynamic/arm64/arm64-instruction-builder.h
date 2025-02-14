@@ -939,7 +939,8 @@ struct atomic_block {
     atomic_block(instruction_builder& builder, std::size_t block_id, const memory_operand& mem_addr):
         mem_addr_(mem_addr),
         loop_label_(fmt::format("loop_{}", block_id)),
-        success_label_(fmt::format("success_{}", block_id))
+        success_label_(fmt::format("success_{}", block_id)),
+        builder_(&builder)
     {
     }
 
@@ -964,7 +965,6 @@ struct atomic_block {
     }
 
     void end_atomic_block(const register_operand& status_reg, const register_operand& src_reg) {
-        builder_->label(loop_label_);
         switch (src_reg.type().element_width()) {
         case 1:
         case 8:
