@@ -986,6 +986,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
 
     memory_operand mem_addr(addr_regs[0]);
 
+    bool sets_flags = true;
     bool inverse_carry_flag_operation = false;
 
     // FIXME: correct memory ordering?
@@ -993,28 +994,74 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
     // nothing be used?)
 	switch (n.op()) {
 	case binary_atomic_op::add:
-	case binary_atomic_op::sub:
-        if (n.op() == binary_atomic_op::sub)
-            builder_.neg(src_vreg, src_vreg);
-        switch (n.val().type().element_width()) {
-        case 1:
-        case 8:
-            builder_.ldaddb(src_vreg, dest_vreg, mem_addr);
-            break;
-        case 16:
-            builder_.ldaddh(src_vreg, dest_vreg, mem_addr);
-            break;
-        case 32:
-            builder_.ldaddw(src_vreg, dest_vreg, mem_addr);
-            break;
-        case 64:
-            builder_.ldadd(src_vreg, dest_vreg, mem_addr);
-            break;
-        default:
-            throw backend_exception("Atomic LDADD cannot handle sizes > 64-bit");
+        if constexpr (supports_lse) {
+            switch (n.val().type().element_width()) {
+            case 1:
+            case 8:
+                builder_.ldaddb(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 16:
+                builder_.ldaddh(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 32:
+                builder_.ldaddw(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 64:
+                builder_.ldadd(src_vreg, dest_vreg, mem_addr);
+                break;
+            default:
+                throw backend_exception("Atomic LDADD cannot handle sizes > 64-bit");
+            }
+        } else {
+            atomic_block atomic(builder_, instr_cnt_, mem_addr);
+            atomic.start_atomic_block(dest_vreg);
+            const register_operand &status = vreg_alloc_.allocate(value_type::u32());
+            builder_.adds(dest_vreg, dest_vreg, src_vreg);
+            atomic.end_atomic_block(status, dest_vreg);
         }
-        if (n.op() == binary_atomic_op::sub)
-            builder_.setcc(flag_map[reg_offsets::CF]);
+        break;
+	case binary_atomic_op::sub:
+        if constexpr (supports_lse) {
+            const auto& negated = vreg_alloc_.allocate(n.rhs().type());
+            builder_.neg(negated, src_vreg);
+            switch (n.val().type().element_width()) {
+            case 1:
+            case 8:
+                builder_.ldaddb(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 16:
+                builder_.ldaddh(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 32:
+                builder_.ldaddw(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 64:
+                builder_.ldadd(src_vreg, dest_vreg, mem_addr);
+                break;
+            default:
+                throw backend_exception("Atomic LDADD cannot handle sizes > 64-bit");
+            }
+            builder_.cmp(dest_vreg, 0);
+        } else {
+            atomic_block atomic(builder_, instr_cnt_, mem_addr);
+            atomic.start_atomic_block(dest_vreg);
+            const register_operand &status = vreg_alloc_.allocate(value_type::u32());
+            builder_.subs(dest_vreg, dest_vreg, src_vreg);
+            atomic.end_atomic_block(status, dest_vreg);
+        }
+        inverse_carry_flag_operation = true;
+        break;
+    case binary_atomic_op::xadd:
+        {
+            // TODO: must find a way to make this unique
+            atomic_block atomic(builder_, instr_cnt_, mem_addr);
+            atomic.start_atomic_block(dest_vreg);
+            const register_operand &status = vreg_alloc_.allocate(value_type::u32());
+            const register_operand &old_dest = vreg_alloc_.allocate(n.rhs().type());
+            builder_.adds(dest_vreg, dest_vreg, src_vreg);
+            builder_.mov(src_vreg, old_dest);
+            atomic.end_atomic_block(status, dest_vreg);
+        }
         break;
 	case binary_atomic_op::bor:
         if constexpr (supports_lse) {
@@ -1040,29 +1087,37 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             const register_operand &status = vreg_alloc_.allocate(value_type::u32());
             builder_.orr_(dest_vreg, dest_vreg, src_vreg);
             atomic.end_atomic_block(status, dest_vreg);
-            builder_.cmp(dest_vreg, 0);
-            inverse_carry_flag_operation = true;
         }
+        builder_.cmp(dest_vreg, 0);
+        inverse_carry_flag_operation = true;
 		break;
 	case binary_atomic_op::band:
         // TODO: Not sure if this is correct
-        builder_.not_(src_vreg, src_vreg);
-        switch (n.val().type().element_width()) {
-        case 1:
-        case 8:
-            builder_.ldclrb(src_vreg, dest_vreg, mem_addr);
-            break;
-        case 16:
-            builder_.ldclrh(src_vreg, dest_vreg, mem_addr);
-            break;
-        case 32:
-            builder_.ldclrw(src_vreg, dest_vreg, mem_addr);
-            break;
-        case 64:
-            builder_.ldclr(src_vreg, dest_vreg, mem_addr);
-            break;
-        default:
-            throw backend_exception("Atomic LDCLR cannot handle sizes > 64-bit");
+        if constexpr (supports_lse) {
+            builder_.not_(src_vreg, src_vreg);
+            switch (n.val().type().element_width()) {
+            case 1:
+            case 8:
+                builder_.ldclrb(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 16:
+                builder_.ldclrh(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 32:
+                builder_.ldclrw(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 64:
+                builder_.ldclr(src_vreg, dest_vreg, mem_addr);
+                break;
+            default:
+                throw backend_exception("Atomic LDCLR cannot handle sizes > 64-bit");
+            }
+        } else {
+            atomic_block atomic(builder_, instr_cnt_, mem_addr);
+            atomic.start_atomic_block(dest_vreg);
+            const register_operand &status = vreg_alloc_.allocate(value_type::u32());
+            builder_.ands(dest_vreg, dest_vreg, src_vreg);
+            atomic.end_atomic_block(status, dest_vreg);
         }
 		break;
 	case binary_atomic_op::bxor:
@@ -1090,135 +1145,109 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             const register_operand &status = vreg_alloc_.allocate(value_type::u32());
             builder_.eor_(dest_vreg, dest_vreg, src_vreg);
             atomic.end_atomic_block(status, dest_vreg);
-            builder_.cmp(dest_vreg, 0);
-            inverse_carry_flag_operation = true;
         }
+        builder_.cmp(dest_vreg, 0);
+        inverse_carry_flag_operation = true;
 		break;
     case binary_atomic_op::btc:
-        switch (n.val().type().element_width()) {
-        case 1:
-        case 8:
-            builder_.ldclrb(src_vreg, dest_vreg, mem_addr);
-            break;
-        case 16:
-            builder_.ldclrh(src_vreg, dest_vreg, mem_addr);
-            break;
-        case 32:
-            builder_.ldclrw(src_vreg, dest_vreg, mem_addr);
-            break;
-        case 64:
-            builder_.ldclr(src_vreg, dest_vreg, mem_addr);
-            break;
-        default:
-            throw backend_exception("Atomic LDCLR cannot handle sizes > 64-bit");
+        if constexpr (supports_lse) {
+            switch (n.val().type().element_width()) {
+            case 1:
+            case 8:
+                builder_.ldclrb(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 16:
+                builder_.ldclrh(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 32:
+                builder_.ldclrw(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 64:
+                builder_.ldclr(src_vreg, dest_vreg, mem_addr);
+                break;
+            default:
+                throw backend_exception("Atomic LDCLR cannot handle sizes > 64-bit");
+            }
+        } else {
+            atomic_block atomic(builder_, instr_cnt_, mem_addr);
+            atomic.start_atomic_block(dest_vreg);
+            const register_operand &status = vreg_alloc_.allocate(value_type::u32());
+            builder_.mov(dest_vreg, 0);
+            atomic.end_atomic_block(status, dest_vreg);
         }
+        sets_flags = false;
 		break;
     case binary_atomic_op::bts:
-        switch (n.val().type().element_width()) {
-        case 1:
-        case 8:
-            builder_.ldsetb(src_vreg, dest_vreg, mem_addr);
-            break;
-        case 16:
-            builder_.ldseth(src_vreg, dest_vreg, mem_addr);
-            break;
-        case 32:
-            builder_.ldsetw(src_vreg, dest_vreg, mem_addr);
-            break;
-        case 64:
-            builder_.ldset(src_vreg, dest_vreg, mem_addr);
-            break;
-        default:
-            throw backend_exception("Atomic LDSET cannot handle sizes > 64-bit");
+        if constexpr (supports_lse) {
+            switch (n.val().type().element_width()) {
+            case 1:
+            case 8:
+                builder_.ldsetb(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 16:
+                builder_.ldseth(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 32:
+                builder_.ldsetw(src_vreg, dest_vreg, mem_addr);
+                break;
+            case 64:
+                builder_.ldset(src_vreg, dest_vreg, mem_addr);
+                break;
+            default:
+                throw backend_exception("Atomic LDSET cannot handle sizes > 64-bit");
+            }
+        } else {
+            atomic_block atomic(builder_, instr_cnt_, mem_addr);
+            atomic.start_atomic_block(dest_vreg);
+            const register_operand &status = vreg_alloc_.allocate(value_type::u32());
+            builder_.mov(dest_vreg, 0);
+            atomic.end_atomic_block(status, dest_vreg);
         }
+        sets_flags = false;
 		break;
-    case binary_atomic_op::xadd:
-        // TODO: this is more or less what the slow case would look like
-        // It should be implemented as a wrapper over an operation
-        //
-        // The actual wrapper can be used also for implementing the equivalent of
-        // a lock to enable actual atomicity
-        {
-            // TODO: must find a way to make this unique
-            builder_.insert_comment("Atomic addition (load atomically, add and retry if failed)");
-
-            auto restart_label = label_operand(fmt::format("restart_{}", instr_cnt_));
-            builder_.insert_comment("set label for jump (needed in case of restarting operation)");
-            builder_.label(restart_label);
-            switch(n.val().type().element_width()) {
-            case 1:
-            case 8:
-                builder_.ldaxrb(dest_vreg, mem_addr);
-                break;
-            case 16:
-                builder_.ldaxrh(dest_vreg, mem_addr);
-                break;
-            case 32:
-                builder_.ldaxrw(dest_vreg, mem_addr);
-                break;
-            case 64:
-                builder_.ldaxr(dest_vreg, mem_addr);
-                break;
-            default:
-                throw backend_exception("Atomic XADD not supported for sizes > 64-bit");
-            }
-            builder_.adds(dest_vreg, dest_vreg, src_vreg).add_comment("perform addition with loaded source");
-
-            auto status = vreg_alloc_.allocate(value_type::u32());
-            switch(n.val().type().element_width()) {
-            case 1:
-            case 8:
-                builder_.stlxrb(status, dest_vreg, mem_addr);
-                break;
-            case 16:
-                builder_.stlxrh(status, dest_vreg, mem_addr);
-                break;
-            case 32:
-                builder_.stlxrw(status, dest_vreg, mem_addr);
-                break;
-            case 64:
-                builder_.stlxr(status, dest_vreg, mem_addr);
-                break;
-            default:
-                throw backend_exception("Atomic XADD not supported for sizes > 64-bit");
-            }
-
-            builder_.cbnz(status, restart_label)
-                    .add_comment("write back source or restart operation (by jumping to label)");
-        }
-        break;
     case binary_atomic_op::xchg:
         // TODO: check if this works
-        switch(n.val().type().element_width()) {
-        case 1:
-        case 8:
-            builder_.swpb(dest_vreg, src_vreg, mem_addr);
-            break;
-        case 16:
-            builder_.swph(dest_vreg, src_vreg, mem_addr);
-            break;
-        case 32:
-            builder_.swpw(dest_vreg, src_vreg, mem_addr);
-            break;
-        case 64:
-            builder_.swp(dest_vreg, src_vreg, mem_addr);
-            break;
-        default:
-            throw backend_exception("Atomic XCHG not supported for sizes > 64-bit");
+        if constexpr (supports_lse) {
+            switch(n.val().type().element_width()) {
+            case 1:
+            case 8:
+                builder_.swpb(dest_vreg, src_vreg, mem_addr);
+                break;
+            case 16:
+                builder_.swph(dest_vreg, src_vreg, mem_addr);
+                break;
+            case 32:
+                builder_.swpw(dest_vreg, src_vreg, mem_addr);
+                break;
+            case 64:
+                builder_.swp(dest_vreg, src_vreg, mem_addr);
+                break;
+            default:
+                throw backend_exception("Atomic XCHG not supported for sizes > 64-bit");
+            }
+        } else {
+            atomic_block atomic(builder_, instr_cnt_, mem_addr);
+            atomic.start_atomic_block(dest_vreg);
+            const register_operand &status = vreg_alloc_.allocate(value_type::u32());
+            builder_.mov(dest_vreg, src_vreg);
+            atomic.end_atomic_block(status, dest_vreg);
         }
+        sets_flags = false;
         break;
 	default:
 		throw backend_exception("unsupported binary atomic operation {}", util::to_underlying(n.op()));
 	}
 
-	builder_.setz(flag_map[reg_offsets::ZF]).add_comment("write flag: ZF");
-	builder_.sets(flag_map[reg_offsets::SF]).add_comment("write flag: SF");
-	builder_.seto(flag_map[reg_offsets::OF]).add_comment("write flag: OF");
+    if (sets_flags) {
+        builder_.setz(flag_map[reg_offsets::ZF]).add_comment("write flag: ZF");
+        builder_.sets(flag_map[reg_offsets::SF]).add_comment("write flag: SF");
+        builder_.seto(flag_map[reg_offsets::OF]).add_comment("write flag: OF");
 
-    if (inverse_carry_flag_operation)
-        builder_.setcc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
-    else
-        builder_.setc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
+        if (inverse_carry_flag_operation)
+            builder_.setcc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
+        else
+            builder_.setc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
+    }
 }
 
 void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_node &n) {
