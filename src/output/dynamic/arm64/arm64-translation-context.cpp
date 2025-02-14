@@ -992,6 +992,13 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
     // FIXME: correct memory ordering?
     // NOTE: not sure if the proper alternative was used (should a/al/l or
     // nothing be used?)
+
+    atomic_block atomic(builder_, instr_cnt_, mem_addr);
+    const register_operand& status = vreg_alloc_.allocate(value_type::u32());
+    if constexpr (supports_lse) {
+        atomic.start_atomic_block(dest_vreg);
+    }
+
 	switch (n.op()) {
 	case binary_atomic_op::add:
         if constexpr (supports_lse) {
@@ -1013,11 +1020,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
                 throw backend_exception("Atomic LDADD cannot handle sizes > 64-bit");
             }
         } else {
-            atomic_block atomic(builder_, instr_cnt_, mem_addr);
-            atomic.start_atomic_block(dest_vreg);
-            const register_operand &status = vreg_alloc_.allocate(value_type::u32());
             builder_.adds(dest_vreg, dest_vreg, src_vreg);
-            atomic.end_atomic_block(status, dest_vreg);
         }
         break;
 	case binary_atomic_op::sub:
@@ -1043,24 +1046,16 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
             }
             builder_.cmp(dest_vreg, 0);
         } else {
-            atomic_block atomic(builder_, instr_cnt_, mem_addr);
-            atomic.start_atomic_block(dest_vreg);
-            const register_operand &status = vreg_alloc_.allocate(value_type::u32());
             builder_.subs(dest_vreg, dest_vreg, src_vreg);
-            atomic.end_atomic_block(status, dest_vreg);
         }
         inverse_carry_flag_operation = true;
         break;
     case binary_atomic_op::xadd:
         {
             // TODO: must find a way to make this unique
-            atomic_block atomic(builder_, instr_cnt_, mem_addr);
-            atomic.start_atomic_block(dest_vreg);
-            const register_operand &status = vreg_alloc_.allocate(value_type::u32());
             const register_operand &old_dest = vreg_alloc_.allocate(n.rhs().type());
             builder_.adds(dest_vreg, dest_vreg, src_vreg);
             builder_.mov(src_vreg, old_dest);
-            atomic.end_atomic_block(status, dest_vreg);
         }
         break;
 	case binary_atomic_op::bor:
@@ -1082,11 +1077,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
                                         n.val().type(), n.rhs().type());
             }
         } else {
-            atomic_block atomic(builder_, instr_cnt_, mem_addr);
-            atomic.start_atomic_block(dest_vreg);
-            const register_operand &status = vreg_alloc_.allocate(value_type::u32());
             builder_.orr_(dest_vreg, dest_vreg, src_vreg);
-            atomic.end_atomic_block(status, dest_vreg);
         }
         builder_.cmp(dest_vreg, 0);
         inverse_carry_flag_operation = true;
@@ -1113,11 +1104,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
                 throw backend_exception("Atomic LDCLR cannot handle sizes > 64-bit");
             }
         } else {
-            atomic_block atomic(builder_, instr_cnt_, mem_addr);
-            atomic.start_atomic_block(dest_vreg);
-            const register_operand &status = vreg_alloc_.allocate(value_type::u32());
             builder_.ands(dest_vreg, dest_vreg, src_vreg);
-            atomic.end_atomic_block(status, dest_vreg);
         }
 		break;
 	case binary_atomic_op::bxor:
@@ -1140,11 +1127,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
                 throw backend_exception("Atomic LDEOR cannot handle sizes > 64-bit");
             }
         } else {
-            atomic_block atomic(builder_, instr_cnt_, mem_addr);
-            atomic.start_atomic_block(dest_vreg);
-            const register_operand &status = vreg_alloc_.allocate(value_type::u32());
             builder_.eor_(dest_vreg, dest_vreg, src_vreg);
-            atomic.end_atomic_block(status, dest_vreg);
         }
         builder_.cmp(dest_vreg, 0);
         inverse_carry_flag_operation = true;
@@ -1169,11 +1152,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
                 throw backend_exception("Atomic LDCLR cannot handle sizes > 64-bit");
             }
         } else {
-            atomic_block atomic(builder_, instr_cnt_, mem_addr);
-            atomic.start_atomic_block(dest_vreg);
-            const register_operand &status = vreg_alloc_.allocate(value_type::u32());
             builder_.mov(dest_vreg, 0);
-            atomic.end_atomic_block(status, dest_vreg);
         }
         sets_flags = false;
 		break;
@@ -1197,11 +1176,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
                 throw backend_exception("Atomic LDSET cannot handle sizes > 64-bit");
             }
         } else {
-            atomic_block atomic(builder_, instr_cnt_, mem_addr);
-            atomic.start_atomic_block(dest_vreg);
-            const register_operand &status = vreg_alloc_.allocate(value_type::u32());
             builder_.mov(dest_vreg, 0);
-            atomic.end_atomic_block(status, dest_vreg);
         }
         sets_flags = false;
 		break;
@@ -1226,17 +1201,17 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
                 throw backend_exception("Atomic XCHG not supported for sizes > 64-bit");
             }
         } else {
-            atomic_block atomic(builder_, instr_cnt_, mem_addr);
-            atomic.start_atomic_block(dest_vreg);
-            const register_operand &status = vreg_alloc_.allocate(value_type::u32());
             builder_.mov(dest_vreg, src_vreg);
-            atomic.end_atomic_block(status, dest_vreg);
         }
         sets_flags = false;
         break;
 	default:
 		throw backend_exception("unsupported binary atomic operation {}", util::to_underlying(n.op()));
 	}
+
+    if constexpr (supports_lse) {
+        atomic.end_atomic_block(status, dest_vreg);
+    }
 
     if (sets_flags) {
         builder_.setz(flag_map[reg_offsets::ZF]).add_comment("write flag: ZF");
