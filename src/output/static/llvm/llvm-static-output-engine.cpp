@@ -1219,13 +1219,15 @@ Value *llvm_static_output_engine_impl::materialise_port(IRBuilder<> &builder, Ar
 		if (p.kind() == port_kinds::value)
 			return lower_node(builder, state_arg, pkt, n);
 		if (p.kind() == port_kinds::zero) {
-            auto lhs = lower_port(builder, state_arg, pkt, tan->address());
-            auto rhs = lower_port(builder, state_arg, pkt, tan->rhs());
-            auto top = lower_port(builder, state_arg, pkt, tan->top());
+            //auto lhs = lower_port(builder, state_arg, pkt, tan->address());
+            //auto rhs = lower_port(builder, state_arg, pkt, tan->rhs());
+            //auto top = lower_port(builder, state_arg, pkt, tan->top());
 
-			lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
-            lhs = builder.CreateLoad(rhs->getType(), lhs);
-			return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, top, lhs), types.i8);
+			//lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
+            //lhs = builder.CreateLoad(rhs->getType(), lhs);
+			//return builder.CreateZExt(builder.CreateCmp(CmpInst::Predicate::ICMP_EQ, top, lhs), types.i8);
+		    auto z_reg = reg_to_alloca_.at(reg_offsets::ZF);
+			return builder.CreateLoad(types.i8, z_reg);
 
         }
         // TODO: Flags
@@ -1455,6 +1457,9 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		//lhs = builder.CreateAdd(lhs, builder.CreateLoad(types.i64, gs_reg));
 #endif
 		auto rhs = lower_port(builder, state_arg, pkt, ban->rhs());
+        
+        // find the register rhs came from
+        auto reg_off = ban->rhs().owner()->kind() == node_kinds::read_reg ? ((read_reg_node *)ban->rhs().owner())->regoff() : -1;
 
 		auto existing = node_ports_to_llvm_values_.find(&ban->val());
 		if (existing != node_ports_to_llvm_values_.end())
@@ -1466,29 +1471,50 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		}
 		AtomicRMWInst *out;
 		Value *val;
+        Align align;
+        switch (rhs->getType()->getPrimitiveSizeInBits()) {
+            case 1:
+            case 8: align = Align(1); break;
+            case 16: align = Align(2); break;
+            case 32: align = Align(4); break;
+            case 64: {
+                align = Align(8); 
+                // lock add can extend 32bit immediates to 64bit (rhs)
+                // be conservative with alignment because we cannot figure out the original size
+                if (ban->rhs().owner()->kind() == node_kinds::constant)
+                    align = Align(4);
+            } break;
+        }
 		switch (ban->op()) {
 		case binary_atomic_op::band:
-			out = builder.CreateAtomicRMW(AtomicRMWInst::And, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent);
+			out = builder.CreateAtomicRMW(AtomicRMWInst::And, lhs, rhs, align, AtomicOrdering::SequentiallyConsistent);
 			val = builder.CreateAnd(out, rhs);
 			break;
 		case binary_atomic_op::add:
-			out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent);
+			out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, align, AtomicOrdering::SequentiallyConsistent);
 			val = builder.CreateAdd(out, rhs);
 			break;
 		case binary_atomic_op::sub:
-			out = builder.CreateAtomicRMW(AtomicRMWInst::Sub, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent);
+			out = builder.CreateAtomicRMW(AtomicRMWInst::Sub, lhs, rhs, align, AtomicOrdering::SequentiallyConsistent);
 			val = builder.CreateSub(out, rhs);
 			break;
 		case binary_atomic_op::xadd:
-			//			out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent);
-			throw std::runtime_error("Should not happen");
+			out = builder.CreateAtomicRMW(AtomicRMWInst::Add, lhs, rhs, align, AtomicOrdering::SequentiallyConsistent);
+            if (reg_off != -1) {
+                auto reg = reg_to_alloca_.at((reg_offsets)reg_off);
+                builder.CreateStore(out, reg);
+            }
 			break;
 		case binary_atomic_op::bor:
-			out = builder.CreateAtomicRMW(AtomicRMWInst::Or, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent);
+			out = builder.CreateAtomicRMW(AtomicRMWInst::Or, lhs, rhs, align, AtomicOrdering::SequentiallyConsistent);
 			val = builder.CreateOr(out, rhs);
 			break;
 		case binary_atomic_op::xchg:
-			out = builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, rhs, Align(1), AtomicOrdering::SequentiallyConsistent);
+			out = builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, rhs, align, AtomicOrdering::SequentiallyConsistent);
+            if (reg_off != -1) {
+                auto reg = reg_to_alloca_.at((reg_offsets)reg_off);
+                builder.CreateStore(out, reg);
+            }
 			val = rhs;
 			break;
 		default:
@@ -1529,6 +1555,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
 		auto reg_idx = ((read_reg_node *)rax_node)->regidx();
 		//auto rax_reg = builder.CreateGEP(types.cpu_state, state_arg, { ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32, reg_idx) });
 		auto rax_reg = reg_to_alloca_.at(reg_offsets::RAX);
+		auto z_reg = reg_to_alloca_.at(reg_offsets::ZF);
 
 		Value *out;
 		switch(tan->op()) {
@@ -1544,14 +1571,15 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder, Argument
                 }
 				lhs = builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256));
 				if (e_.fences_) {
-					//builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
+					builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
 				}
 				auto instr = builder.CreateAtomicCmpXchg(lhs, rhs, top, align, AtomicOrdering::SequentiallyConsistent, AtomicOrdering::SequentiallyConsistent);
 				//auto new_rax_val = builder.CreateSelect(builder.CreateExtractValue(instr, 1), rhs, builder.CreateExtractValue(instr, 0));
 				auto new_rax_val = builder.CreateExtractValue(instr, 0);
 				builder.CreateStore(builder.CreateZExt(new_rax_val, types.i64), rax_reg);
+				builder.CreateStore(builder.CreateZExt(builder.CreateExtractValue(instr, 1), types.i8), z_reg);
 				if (e_.fences_) {
-					//builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
+					builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
 				}
 
 				return instr;

@@ -53,7 +53,7 @@ static std::optional<po::variables_map> init_options(int argc, const char *argv[
 		("static-binary", po::value<std::string>()->implicit_value(ARANCINI_LIBDIR)->zero_tokens(),
 			"Link the generated binary statically to the arancini libraries inside this path. Requires to have built the arancini-runtime-static target. "
 			"Default specified by build system.") //
-		("cxx-compiler-path", po::value<std::string>()->default_value("g++"), "Path to C++ compiler to use for translated binary") //
+		("cxx-compiler-path", po::value<std::string>()->default_value("clang"), "Path to C++ compiler to use for translated binary") //
 #else
 		("runtime-lib-path", po::value<std::string>()->required(),
 			"Path to arancini libraries. This txlat is configured to cross translate, so you are"

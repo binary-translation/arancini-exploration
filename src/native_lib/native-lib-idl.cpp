@@ -1,3 +1,4 @@
+#include "arancini/ir/value-type.h"
 #include <arancini/native_lib/native-lib-idl.h>
 #include <arancini/native_lib/native-lib.h>
 
@@ -19,7 +20,7 @@ namespace arancini::native_lib {
 			}
 
 			idl_ast_node &rv = def.children[0];
-			ir::value_type retty = { nlib_tc_to_vt(static_cast<nlib_type_class>(rv.tc)), rv.width }; // is_const ignored
+			ir::value_type retty = { nlib_tc_to_vt(static_cast<nlib_type_class>(rv.tc)), static_cast<ir::value_type::size_type>(rv.width) }; // is_const ignored
 			std::vector<ir::value_type> args {};
 			if (rv.tc == NLTC_CPLX) {
 				retty = ir::value_type::v(); // No actual return value
