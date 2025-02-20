@@ -352,7 +352,7 @@ public:
     }
 
     instruction& tst(const register_operand &dst, const reg_or_imm &src) {
-        return append(instruction("tst", use(def(dst)), use(src))
+        return append(instruction("tst", use(dst), use(src))
                       .implicitly_writes({register_operand(register_operand::nzcv)}));
     }
 
@@ -546,7 +546,7 @@ public:
 
     instruction& mrs(const register_operand &dest,
              const register_operand &src) {
-        return append(instruction("mrs", def(dest), use(def(src))));
+        return append(instruction("mrs", def(dest), use(src)));
     }
 
     instruction& msr(const register_operand &dest,

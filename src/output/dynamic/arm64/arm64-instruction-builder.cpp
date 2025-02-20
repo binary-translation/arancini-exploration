@@ -450,7 +450,7 @@ void instruction_builder::allocate() {
 
         for (auto& op : instr.operands()) {
             [[unlikely]]
-            if (!op.is_def() || op.is_use()) continue;
+            if (!op.is_def()) continue;
 
             // kill defs first
             // Only registers can be defs
@@ -476,6 +476,8 @@ void instruction_builder::allocate() {
                 logger.debug("Assign definition {} to existing allocation {}\n",
                              op, *prev);
 
+                bool is_use = op.is_use();
+
                 // Assign operand to previously allocated register
                 op = *prev;
                 op.as_def();
@@ -485,7 +487,7 @@ void instruction_builder::allocate() {
 
                 // Allocation not needed beyond this point
                 // TODO: enable this when backwards branches are working
-                if (!branch_tracker.in_branch_block()) {
+                if (!branch_tracker.in_branch_block() && !is_use) {
                     reg_alloc.deallocate(*prev);
                     logger.debug("Register {} available\n", *prev);
                 }
