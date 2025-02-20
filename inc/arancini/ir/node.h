@@ -1414,7 +1414,7 @@ struct fmt::formatter<arancini::ir::node_kinds> {
         case node_kinds::read_mem:
             return fmt::format_to(ctx.out(), "read memory node");
         case node_kinds::write_reg:
-            return fmt::format_to(ctx.out(), "write memory node");
+            return fmt::format_to(ctx.out(), "write register node");
         case node_kinds::write_mem:
             return fmt::format_to(ctx.out(), "write memory node");
         case node_kinds::cast:
