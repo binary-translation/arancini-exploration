@@ -224,18 +224,30 @@ private:
 
 class cond_operand final {
 public:
-    cond_operand() = default;
-
-    cond_operand(const std::string &cond):
-        cond_(cond)
-    { }
-
-    [[nodiscard]]
-    std::string& condition() { return cond_; }
+	[[nodiscard]] static cond_operand eq() { return cond_operand("eq"); }
+	[[nodiscard]] static cond_operand ne() { return cond_operand("ne"); }
+	[[nodiscard]] static cond_operand cs() { return cond_operand("cs"); }
+	[[nodiscard]] static cond_operand cc() { return cond_operand("cc"); }
+	[[nodiscard]] static cond_operand mi() { return cond_operand("mi"); }
+	[[nodiscard]] static cond_operand pl() { return cond_operand("pl"); }
+	[[nodiscard]] static cond_operand vs() { return cond_operand("vs"); }
+	[[nodiscard]] static cond_operand vc() { return cond_operand("vc"); }
+	[[nodiscard]] static cond_operand hi() { return cond_operand("hi"); }
+	[[nodiscard]] static cond_operand ls() { return cond_operand("ls"); }
+	[[nodiscard]] static cond_operand ge() { return cond_operand("ge"); }
+	[[nodiscard]] static cond_operand lt() { return cond_operand("lt"); }
+	[[nodiscard]] static cond_operand gt() { return cond_operand("gt"); }
+	[[nodiscard]] static cond_operand le() { return cond_operand("le"); }
+	[[nodiscard]] static cond_operand al() { return cond_operand("al"); }
+	[[nodiscard]] static cond_operand nv() { return cond_operand("nv"); }
 
     [[nodiscard]]
     const std::string& condition() const { return cond_; }
 private:
+    cond_operand(const std::string &cond):
+        cond_(cond)
+    { }
+
     std::string cond_;
 };
 

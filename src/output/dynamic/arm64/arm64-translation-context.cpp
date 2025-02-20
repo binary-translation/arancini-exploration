@@ -504,23 +504,17 @@ inline shift_operand extend_register(instruction_builder& builder, const registe
 
 [[nodiscard]]
 inline cond_operand get_cset_type(binary_arith_op op) {
-    const char *cset_type = nullptr;
     switch(op) {
     case binary_arith_op::cmpeq:
-        cset_type = "eq";
-        break;
+        return cond_operand::eq();
     case binary_arith_op::cmpne:
-        cset_type = "ne";
-        break;
+        return cond_operand::ne();
     case binary_arith_op::cmpgt:
-        cset_type = "gt";
-        break;
+        return cond_operand::gt();
     default:
         throw backend_exception("Unknown binary operation comparison operation type {}",
                                 util::to_underlying(op));
     }
-
-    return cond_operand(cset_type);
 }
 
 void arm64_translation_context::materialise_binary_arith(const binary_arith_node &n) {
@@ -598,8 +592,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 auto compare_regset = vreg_alloc_.allocate(dest_regset[0].type());
                 builder_.mov(compare_regset, 0xFFFF0000);
                 builder_.cmp(compare_regset, dest_regset);
-                builder_.cset(flag_map[reg_offsets::CF], cond_operand("ne")).add_comment("compute flag: CF");
-                builder_.cset(flag_map[reg_offsets::OF], cond_operand("ne")).add_comment("compute flag: OF");
+                builder_.cset(flag_map[reg_offsets::CF], cond_operand::ne()).add_comment("compute flag: CF");
+                builder_.cset(flag_map[reg_offsets::OF], cond_operand::ne()).add_comment("compute flag: OF");
                 sets_flags = false;
             }
             break;
@@ -626,8 +620,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 // CF and OF are set to 1 when lhs * rhs > 64-bits
                 // Otherwise they are set to 0
                 builder_.cmp(dest_regset[1], 0);
-                builder_.cset(flag_map[reg_offsets::CF], cond_operand("ne")).add_comment("compute flag: CF");
-                builder_.cset(flag_map[reg_offsets::OF], cond_operand("ne")).add_comment("compute flag: OF");
+                builder_.cset(flag_map[reg_offsets::CF], cond_operand::ne()).add_comment("compute flag: CF");
+                builder_.cset(flag_map[reg_offsets::OF], cond_operand::ne()).add_comment("compute flag: OF");
                 sets_flags = false;
                 break;
             } else {
@@ -697,7 +691,12 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 		return;
     };
 
-    auto op_type = n.val().type();
+    value_type op_type;
+    if (n.val().type().is_floating_point())
+        op_type = n.val().type();
+    else
+        op_type = value_type(value_type_class::signed_integer, n.val().type().element_width(), n.val().type().nr_elements());
+
     logger.debug("Binary arithmetic node of type {}\n", n.op());
 	switch (n.op()) {
 	case binary_arith_op::add:
@@ -809,6 +808,9 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             throw backend_exception("Unsupported AND operation between {} x {}",
                                     n.lhs().type(), n.rhs().type());
         }
+        builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");
+        builder_.cset(flag_map[reg_offsets::SF], cond_operand::mi()).add_comment("compute flag: SF");
+        sets_flags = false;
         if (lhs_regset[0].type().element_width() < 64) {
             unsigned long long mask = ~(~0llu << lhs_regset[0].type().element_width());
             builder_.and_(dest_regset, dest_regset, builder_.move_to_register(mask, dest_regset[0].type()));
@@ -839,6 +841,9 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             throw backend_exception("Unsupported AND operation between {} x {}",
                                     n.lhs().type(), n.rhs().type());
         }
+        builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");
+        builder_.cset(flag_map[reg_offsets::SF], cond_operand::mi()).add_comment("compute flag: SF");
+        sets_flags = false;
         if (lhs_regset[0].type().element_width() < 64) {
             unsigned long long mask = ~(~0llu << lhs_regset[0].type().element_width());
             builder_.and_(dest_regset, dest_regset, builder_.move_to_register(mask, dest_regset[0].type()));
@@ -861,6 +866,9 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                     builder_.ands(register_operand(register_operand::wzr_sp), dest_regset[i-1], dest_regset[i-1]);
             }
         }
+        builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");
+        builder_.cset(flag_map[reg_offsets::SF], cond_operand::mi()).add_comment("compute flag: SF");
+        sets_flags = false;
         if (lhs_regset[0].type().element_width() < 64) {
             unsigned long long mask = ~(~0llu << lhs_regset[0].type().element_width());
             builder_.and_(dest_regset, dest_regset, builder_.move_to_register(mask, dest_regset[0].type()));
@@ -1257,7 +1265,7 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
             atomic_block atomic{builder_, instr_cnt_, mem_addr};
             atomic.start_atomic_block(current_data_reg);
             builder_.cmp(current_data_reg, acc_reg).add_comment("compare with accumulator");
-            builder_.csel(acc_reg, current_data_reg, acc_reg, cond_operand("NE"))
+            builder_.csel(acc_reg, current_data_reg, acc_reg, cond_operand::ne())
                      .add_comment("conditionally move current memory value into accumulator");
             atomic.end_atomic_block(status_reg, src_reg);
         }
@@ -1572,7 +1580,7 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
 
     builder_.cmp(condition, 0)
             .add_comment("compare condition for conditional select");
-    builder_.csel(dest, true_var, false_var, cond_operand("NE"));
+    builder_.csel(dest, true_var, false_var, cond_operand::ne());
 }
 
 void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {

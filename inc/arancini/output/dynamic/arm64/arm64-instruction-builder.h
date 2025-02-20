@@ -570,26 +570,26 @@ public:
     }
 
 	instruction& setz(const register_operand &dst) {
-        return append(instruction("cset", def(dst), cond_operand("eq"))
+        return append(instruction("cset", def(dst), cond_operand::eq())
                       .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 
 	instruction& sets(const register_operand &dst) {
-        return append(instruction("cset", def(dst), cond_operand("lt"))
+        return append(instruction("cset", def(dst), cond_operand::lt())
                       .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 
 	instruction& setc(const register_operand &dst) {
-        return append(instruction("cset", def(dst), cond_operand("cs"))
+        return append(instruction("cset", def(dst), cond_operand::cs())
                       .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 
 	instruction& setcc(const register_operand &dst) {
-        return append(instruction("cset", def(dst), cond_operand("cc"))
+        return append(instruction("cset", def(dst), cond_operand::cc())
                       .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 	instruction& seto(const register_operand &dst) {
-        return append(instruction("cset", def(dst), cond_operand("vs"))
+        return append(instruction("cset", def(dst), cond_operand::vs())
                       .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 
@@ -896,7 +896,8 @@ public:
         if (actual_size < 12) {
             insert_comment("Move immediate {:#x} directly as < 12-bits", immediate);
             auto reg = vreg_alloc_.allocate(type);
-            mov<immediates_strict_policy>(reg, immediate & 0xFFF);
+            std::uint64_t mask = (1ULL << actual_size) - 1;
+            mov<immediates_strict_policy>(reg, immediate & mask);
             return reg;
         }
 
