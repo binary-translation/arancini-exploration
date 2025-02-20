@@ -94,7 +94,6 @@ void arm64_translation_context::begin_block() {
     ret_ = 0;
     instr_cnt_ = 0;
     builder_ = instruction_builder();
-    materialised_nodes_.clear();
 }
 
 void arm64_translation_context::begin_instruction(off_t address, const std::string &disasm) {
@@ -176,14 +175,17 @@ void arm64_translation_context::lower(const std::shared_ptr<ir::action_node> &n)
 
 void arm64_translation_context::materialise(const ir::node* n) {
     // Invalid node
+    [[unlikely]]
     if (!n)
         throw backend_exception("Received NULL pointer to node when materialising");
 
     // Avoid materialising again
-    if (materialised_nodes_.count(n))
+    if (materialised_nodes_.count(n)) {
+        logger.debug("Already handled {} node with ID: {}; skipping\n", n->kind(), fmt::ptr(n));
         return;
+    }
 
-    logger.debug("Handling {}\n", n->kind());
+    logger.debug("Handling {} with node ID: {}\n", n->kind(), fmt::ptr(n));
     switch (n->kind()) {
     case node_kinds::read_reg:
         materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));
@@ -1699,9 +1701,7 @@ void arm64_translation_context::materialise_bit_extract(const bit_extract_node &
             continue;
         }
 
-        builder_.mov(dest_vregs[dest_idx], 0);
-        dest_vregs[dest_idx] = cast(dest_vregs[dest_idx], src_vregs[i].type());
-
+        dest_vregs[dest_idx].cast(src_vregs[i].type());
         builder_.ubfx(dest_vregs[dest_idx], src_vregs[i], reg_extract_idx, extract_len);
         reg_extract_idx = 0;
         extracted += extract_len;
