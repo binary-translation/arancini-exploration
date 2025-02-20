@@ -84,6 +84,8 @@ struct fmt::formatter<arancini::runtime::exec::x86::x86_cpu_state> {
                                                 "flag SF: \t{:#x}\n"
                                                 "flag PF: \t{:#x}\n"
                                                 "flag DF: \t{:#x}\n"
+                                                "FS:      \t{:#x}\n"
+                                                "GS:      \t{:#x}\n"
                                                 "ZMM0:    \t{}\n"
                                                 "ZMM1:    \t{}\n"
                                                 "ZMM2:    \t{}\n"
@@ -123,7 +125,7 @@ struct fmt::formatter<arancini::runtime::exec::x86::x86_cpu_state> {
                               regs.R11, regs.R12, regs.R13,
                               regs.R14, regs.R15, regs.ZF,
                               regs.CF, regs.OF, regs.SF,
-                              regs.PF, regs.DF,
+                              regs.PF, regs.DF, regs.FS, regs.GS,
                               regs.ZMM0, regs.ZMM1, regs.ZMM2,
                               regs.ZMM3, regs.ZMM4, regs.ZMM5,
                               regs.ZMM6, regs.ZMM7, regs.ZMM8,
