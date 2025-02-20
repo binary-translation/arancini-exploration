@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fmt/format.h>
+#include <fmt/ostream.h>
 
 #include <arancini/ir/default-visitor.h>
 
@@ -57,7 +58,7 @@ private:
 	std::set<node *> seen_;
 
 	void add_node(const node *n, const std::string &label) {
-        fmt::println("N{} [shape=Mrecord, label=\"{}\"", fmt::ptr(n), label);
+        fmt::println(os_, "N{} [shape=Mrecord, label=\"{}\"]", fmt::ptr(n), label);
     }
 
     [[nodiscard]]
@@ -102,17 +103,17 @@ private:
 	void add_edge(const node *from, const node *to, const std::string &colour = "black",
                   const std::string &label = "", const std::string &link = "")
 	{
-        fmt::print("N{} -> N{}", fmt::ptr(from), fmt::ptr(to));
+        fmt::print(os_, "N{} -> N{}", fmt::ptr(from), fmt::ptr(to));
 
 		if (!link.empty())
-            fmt::print(":{}", link);
+            fmt::print(os_, ":{}", link);
 
-        fmt::print(" [color={}", colour);
+        fmt::print(os_, " [color={}", colour);
 
 		if (!label.empty())
-            fmt::print(", label=\"{}\"", label);
+            fmt::print(os_, ", label=\"{}\"", label);
 
-        fmt::println("]");
+        fmt::println(os_, "]");
 	}
 };
 

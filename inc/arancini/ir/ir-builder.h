@@ -259,7 +259,7 @@ public:
 	///         tmp := [mem] + reg
 	///         reg := [mem]
 	///         [mem] := tmp
-	atomic_node *insert_atomic_xadd(port &mem, port &reg) { return create_and_insert<binary_atomic_node>(binary_atomic_op::add, mem, reg); }
+	atomic_node *insert_atomic_xadd(port &mem, port &reg) { return create_and_insert<binary_atomic_node>(binary_atomic_op::xadd, mem, reg); }
 
 	/// @brief atomic exchange
 	/// @param mem: the memory address used in the instruction
