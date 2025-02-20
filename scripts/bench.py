@@ -27,17 +27,19 @@ def main():
     parser.add_argument('name', metavar='n', action="store", nargs='?',
                         help='special name for the symlink', default="latest")
     args = parser.parse_args()
-    linkname = args.name
-    csvfile = setup(linkname)
-
-    config = json.load(open(f'{where}/conf.json'))
-
+    
     if (os.uname().machine.startswith("riscv")):
         arch = "riscv64"
     elif (os.uname().machine.startswith("aarch")):
         arch = "aarch64"
     else:
         arch = "x86_64"
+
+    linkname = args.name
+    csvfile = setup(linkname)
+
+    config = json.load(open(f'{where}/conf.json'))
+
 
     for m in config["machines"]:
         if m["arch"] == arch:
@@ -50,12 +52,14 @@ def main():
     clean(csvfile)
 
 def setup(linkname):
+    global arch
+
     print("Setup ...")
     print(linkname)
     if not os.path.exists("./bench"):
         os.mkdir("bench")
 
-    time_str = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+    time_str = arch+"-"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
     os.mkdir(f"bench/{time_str}")
     if os.path.islink(f"bench/{linkname}"):
         os.remove(f"bench/{linkname}")
@@ -89,27 +93,31 @@ def parse_bench(b, obj):
 def build():
     pass
 
-def do_run(bench, e, env, t):
+def do_run(bench, e, env, t, v):
     global config
+    if v=="-seq" and t!=1:
+        return -1
 
     print(f'Running {bench["name"]} ...')
     start = datetime.now()
     env["ARANCINI_ENABLE_LOG"] = "false";
 
-    cmd = ['taskset', '-c', f'1-{t}']
+    cmd = ['taskset', '-c', f'0-{t-1}']
+    #cmd = ['taskset', '-c', f'1-{t}']
     if e["what"] == "static":
         tx = e["tx"]
-        cmd += ["./"+config["prefixes"][tx]+arch+"/"+bench["name"]+"."+arch]
+        cmd += ["./"+config["prefixes"][tx]+arch+"/"+bench["name"]+v+"."+arch]
     elif e["what"] == "dynamic":
-        cmd += [e["bin"], f'{bench["guest"]}/{bench["name"]}']
+        cmd += e["bin"].split() + [f'{bench["guest"]}/{bench["name"]}{v}']
     else:
-        cmd += [f'{bench["native"]}/{bench["name"]}']
+        cmd += [f'{bench["native"]}/{bench["name"]}{v}']
 
     print(f'Running: {cmd+bench["args"]}')
     try:
         out = sp.run(cmd+bench["args"], capture_output=True, env=env, timeout=1800)
-    except:
-        exit -1
+    except e:
+        return -1
+    print(f'Return: {out.returncode}\n\n')
     end = datetime.now()
     dif = end - start
     if out.returncode != 0:
@@ -124,25 +132,29 @@ def run(csvfile, config):
     fieldnames = [ "benchmark", "emulator", "time", "threads"]
     writer = csv.DictWriter(csvfile, fieldnames)
 
-    threads = [ 2, 4, 8 ]
-
     #TODO: make a real path option for the benchmarks
     prog = "./"+config["prefixes"]["translations"]+arch+"/matrix_multiply."+arch
-    sp.run([prog]+["1024 1024 1"], capture_output=True, timeout=1800) 
+    #sp.run([prog]+["1024 1024 1"], capture_output=True, timeout=1800) 
 
     benchs = config["benchmarks"]["phoenix"]["bins"]
+    versions = [ "-pthread" ]
 
     for b in benchs:
         be = parse_bench(b, config["benchmarks"]["phoenix"])
         for e in config["emulators"]:
+            threads = e["threads"]
             for t in threads:
-                for _ in range(5):
-                    env = os.environ
-                    env["LD_LIBRARY_PATH"] = f'./{config["prefixes"]["results"]}{arch}/lib:./{config["prefixes"]["translations"]}{arch}/'
-                    print(env["LD_LIBRARY_PATH"])
-                    dif = do_run(be, e, env, t)
-                    writer.writerow({"benchmark":be["name"], "emulator":e["name"], "time":str(dif), "threads":f"{t}"})
-                    csvfile.flush()
+                for v in versions:
+                    for _ in range(5):
+                        tx =""
+                        #if "tx" in e.keys():
+                            #tx = f':/{config["prefixes"][{e["tx"]}]}{arch}'
+                        env = os.environ
+                        env["LD_LIBRARY_PATH"] = f'./{config["prefixes"]["results"]}{arch}/lib{tx}'
+                        print(env["LD_LIBRARY_PATH"])
+                        dif = do_run(be, e, env, t, v)
+                        writer.writerow({"benchmark":be["name"]+v, "emulator":e["name"], "time":str(dif), "threads":f"{t}"})
+                        csvfile.flush()
 
 def clean(csvfile):
     pass

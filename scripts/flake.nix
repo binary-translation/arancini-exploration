@@ -198,11 +198,13 @@
 				risotto-tso
 				native_pkgs.flamegraph
 			] ++ native_pkgs.lib.optionals (system == "x86_64-linux") [
+                (native_pkgs.texlive.combine { inherit (native_pkgs.texlive) scheme-small type1cm mlmodern; })
 				(native_pkgs.python3.withPackages (python-pkgs: [
 				python-pkgs.pandas
 				python-pkgs.seaborn
 				python-pkgs.matplotlib
 				python-pkgs.notebook
+                python-pkgs.pylatex
 				]))];
 		};
 	};

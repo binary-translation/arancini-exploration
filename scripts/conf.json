@@ -21,43 +21,17 @@
     ],
     "prefixes": {
             "results": "result-",
-            "translations": "txlat-"
+            "translations": "txlat-",
+            "translations-fast": "txlat-fast-",
+            "tx-df": "txlat-nodeadflags-",
+            "tx-df-fast": "txlat-nodeadflags-fast-",
+            "tx-fm": "txlat-nofencemerge-",
+            "tx-fm-fast": "txlat-nofencemerge-fast-",
+            "lasagne": "mctoll-"
     },
     "benchmarks": {
         "phoenix": {
             "bins": [
-                {
-                    "name": "histogram",
-                    "args": [
-                        { "name": "small.bmp", "type": "datafile" }
-                    ]
-                },
-                {
-                    "name": "kmeans",
-                    "args": []
-                },
-                {
-                    "name": "linear_regression",
-                    "args": [
-                        { "name": "key_file_50MB.txt", "type": "datafile" }
-                    ]
-                },
-                {
-                    "name": "matrix_multiply",
-                    "args": [
-                        { "name": "1024 1024 0", "type": "literal" }
-                    ]
-                },
-                {
-                    "name": "pca",
-                    "args": []
-                },
-                {
-                    "name": "string_match",
-                    "args": [
-                        { "name": "key_file_50MB.txt", "type": "datafile" }
-                    ]
-                },
                 {
                     "name": "word_count",
                     "args": [
@@ -81,27 +55,38 @@
         {
         "name": "native",
         "what": "native",
-        "bin": ""
+        "bin": "",
+        "threads": [1, 2, 4, 8, 16, 32, 64]
         },
         {
         "name": "arancini",
         "what": "static",
-        "tx": "translations"
+        "tx": "translations",
+        "threads": [1, 2, 4, 8, 16, 32, 64]
         },
         {
-        "name": "qemu",
-        "what": "dynamic",
-        "bin": "risotto-qemu"
+        "name": "arancini+nlib",
+        "what": "static",
+        "tx": "translations-fast",
+        "threads": [1, 2, 4, 8, 16, 32, 64]
         },
         {
         "name": "risotto",
         "what": "dynamic",
-        "bin": "risotto"
+        "bin": "risotto",
+        "threads": [16]
         },
         {
-        "name": "risotto-nofence",
+        "name": "risotto+nlib",
         "what": "dynamic",
-        "bin": "risotto-nofence"
+        "bin": "risotto -nlib general.mni.riscv64.long",
+        "threads": [16]
+        },
+        {
+        "name": "lasagne",
+        "what": "static",
+        "tx": "lasagne",
+        "threads": [16]
         }
     ]
 }
