@@ -79,6 +79,7 @@
 					m4
                     flex
                     bison
+					clang_18
 				];
 				buildInputs = with native_pkgs; [
                     fmt
