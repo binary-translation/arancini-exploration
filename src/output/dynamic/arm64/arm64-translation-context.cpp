@@ -1343,20 +1343,17 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 	switch (n.op()) {
 	case cast_op::sx:
         // Sanity check
-        if (n.val().type().element_width() <= n.source_value().type().element_width()) {
+        if (n.val().type().element_width() <= n.source_value().type().element_width())
             throw backend_exception("cannot sign-extend {} to smaller size {}",
                                     n.val().type().element_width(),
                                     n.source_value().type().element_width());
-        }
 
-        builder_.insert_comment("sign-extend from {} x {} to {} x {}",
-                                n.source_value().type().nr_elements(), n.source_value().type().element_width(),
-                                n.val().type().nr_elements(), n.val().type().element_width());
 
         // IDEA:
         // 1. Sign-extend reasonably
         // 2. If dest_value > 64-bit, determine sign
         // 3. Plaster sign all over the upper bits
+        builder_.insert_comment("sign-extend from {} to {}", n.source_value().type(), n.val().type());
         switch (n.source_value().type().element_width()) {
         case 1:
             // 1 -> N
@@ -1411,9 +1408,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         // value of src_vreg
         // A simple mov is sufficient (eliminated anyway by the register
         // allocator)
-        builder_.insert_comment("Bitcast from {} x {} to {} x {}",
-                                n.source_value().type().nr_elements(), n.source_value().type().element_width(),
-                                n.val().type().nr_elements(), n.val().type().element_width());
+        builder_.insert_comment("Bitcast from {} to {}", n.source_value().type(), n.val().type());
 
         logger.debug("Casting from {} x {} to {} x {} (internal types)\n",
                      dest_vregs.size(), dest_vregs[0].type().element_width(),
@@ -1458,47 +1453,44 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         [[unlikely]]
         if (n.val().type().element_width() <= n.source_value().type().element_width())
             throw backend_exception("Cannot zero-extend {} to smaller size {}",
-                                    n.val().type().element_width(),
-                                    n.source_value().type().element_width());
+                                    n.val().type(), n.source_value().type());
 
         builder_.insert_comment("zero-extend from {} to {}", n.source_value().type(), n.val().type());
-        switch (n.source_value().type().element_width()) {
-        case 1:
-        case 3:
-        case 8:
+        if (n.source_value().type().element_width() <= 8) {
             builder_.uxtb(dest_vreg, src_vreg);
-            break;
-        case 16:
+            return;
+        }
+
+        if (n.source_value().type().element_width() <= 16) {
             builder_.uxth(dest_vreg, src_vreg);
-            break;
-        case 32:
+            return;
+        }
+
+        if (n.source_value().type().element_width() <= 32) {
             builder_.uxtw(dest_vreg, src_vreg);
-            break;
-        case 64:
-        case 128:
-        case 256:
-            // Handle separately
+            return;
+        }
+
+        if (n.source_value().type().element_width() <= 256) {
             for (std::size_t i = 0; i < src_vregs.size(); ++i) {
                 builder_.mov(dest_vregs[i], src_vregs[i]);
             }
-            break;
-        default:
-            throw backend_exception("Cannot zero-extend from {} to {}",
-                                    n.source_value().type(), n.val().type());
+
+            // Set upper registers to zero
+            if (dest_vregs.size() > 1) {
+                builder_.insert_comment("Set upper registers to zero");
+                for (std::size_t i = src_vregs.size(); i < dest_vregs.size(); ++i)
+                    builder_.mov(dest_vregs[i], 0);
+            }
+            return;
         }
 
-        // Set upper registers to zero
-        if (dest_vregs.size() > 1) {
-            builder_.insert_comment("Set upper registers to zero");
-            for (std::size_t i = src_vregs.size(); i < dest_vregs.size(); ++i)
-                builder_.mov(dest_vregs[i], 0);
-        }
-        break;
+        throw backend_exception("Cannot zero-extend from {} to {}", n.source_value().type(), n.val().type());
     case cast_op::trunc:
-        if (dest_vreg.type().element_width() > src_vreg.type().element_width()) {
+        [[unlikely]]
+        if (dest_vreg.type().element_width() > src_vreg.type().element_width())
             throw backend_exception("Cannot truncate from {} to large size {}",
-                                    dest_vreg.type().width(), src_vreg.type().width());
-        }
+                                    dest_vreg.type(), src_vreg.type());
 
         for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
             builder_.mov(dest_vregs[i], src_vregs[i]);
@@ -1525,10 +1517,10 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         break;
     case cast_op::convert:
         // convert between integer and float representations
-        if (dest_vregs.size() != 1) {
+        [[unlikely]]
+        if (dest_vregs.size() != 1)
             throw backend_exception("Cannot convert {} because it is larger than 64-bits",
-                                    n.val().type().element_width());
-        }
+                                    n.val().type());
 
         // convert integer to float
         if (n.source_value().type().is_integer() && n.val().type().is_floating_point()) {
