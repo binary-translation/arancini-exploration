@@ -1757,7 +1757,9 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
     std::size_t inserted = 0;
     std::size_t insert_start = n.to() / dest[0].type().element_width();
     for (std::size_t i = insert_start; inserted < n.length(); ++i) {
-        insertion_bits[bits_idx] = cast(insertion_bits[bits_idx], dest[i].type());
+        if (insertion_bits[bits_idx].type().type_class() == dest[i].type().type_class())
+            insertion_bits[bits_idx] = cast(insertion_bits[bits_idx], dest[i].type());
+
         builder_.bfi(dest[i], insertion_bits[bits_idx], insert_idx, insert_len);
         insert_idx = 0;
         inserted += insert_len;
