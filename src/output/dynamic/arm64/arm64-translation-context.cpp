@@ -51,11 +51,30 @@ void fill_byte_with_bit(instruction_builder& builder, const register_operand& re
 }
 
 register_operand arm64_translation_context::cast(const register_operand &src, value_type type) {
+    builder_.insert_comment("Internal cast from {} to {}", src.type(), type);
+
+    if (src.type().type_class() == value_type_class::floating_point && type.type_class() != value_type_class::floating_point) {
+        auto dest = vreg_alloc_.allocate(type);
+        builder_.fmov(dest, src);
+        return dest;
+    }
+
+    if (src.type().type_class() == value_type_class::floating_point && type.type_class() == value_type_class::floating_point) {
+        if (type.element_width() == 64 && src.type().element_width() == 32) {
+            auto dest = vreg_alloc_.allocate(type);
+            builder_.fcvt(dest, src);
+            return dest;
+        }
+
+        if (type.element_width() == 64 && src.type().element_width() == 64)
+            return src;
+
+        throw backend_exception("Cannot internally cast from {} to {}", src.type(), type);
+    }
+
     if (src.type().element_width() >= type.element_width()) {
         return register_operand(src.index(), type);
     }
-
-    builder_.insert_comment("Internal cast from {} to {}", src.type(), type);
 
     if (type.element_width() > 64)
         type = value_type::u64();
@@ -591,8 +610,12 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             case ir::value_type_class::floating_point:
                 // The same fmul is used in both 32-bit and 64-bit multiplication
                 // The actual operation depends on the type of its registers
-                builder_.fmul(dest_regset, lhs_regset, rhs_regset);
-                sets_flags = false;
+                {
+                    auto lhs = cast(lhs_regset, dest_regset[0].type());
+                    auto rhs = cast(rhs_regset, dest_regset[0].type());
+                    builder_.fmul(dest_regset, lhs, rhs);
+                    sets_flags = false;
+                }
                 break;
             default:
                 throw backend_exception("Encounted unknown type class {} for multiplication",
@@ -1410,12 +1433,13 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         // allocator)
         builder_.insert_comment("Bitcast from {} to {}", n.source_value().type(), n.val().type());
 
-        logger.debug("Casting from {} x {} to {} x {} (internal types)\n",
-                     dest_vregs.size(), dest_vregs[0].type().element_width(),
-                     src_vregs.size(), src_vregs[0].type().element_width());
         if (dest_vregs.size() == src_vregs.size()) {
-            for (std::size_t i = 0; i < dest_vregs.size(); ++i)
-                builder_.mov(dest_vregs[i], src_vregs[i]);
+            for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
+                if (n.source_value().type().is_floating_point() || n.val().type().is_floating_point())
+                    builder_.fmov(dest_vregs[i], src_vregs[i]);
+                else
+                    builder_.mov(dest_vregs[i], src_vregs[i]);
+            }
             break;
         }
 
@@ -1746,8 +1770,8 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
 
     [[likely]]
     if (dest.size() == 1) {
-        insertion_bits = cast(insertion_bits, dest[0].type());
-        builder_.bfi(dest, insertion_bits, insert_idx, insert_len);
+        auto out = cast(insertion_bits, dest[0].type());
+        builder_.bfi(dest, out, insert_idx, insert_len);
         return;
     }
 
@@ -1757,10 +1781,9 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
     std::size_t inserted = 0;
     std::size_t insert_start = n.to() / dest[0].type().element_width();
     for (std::size_t i = insert_start; inserted < n.length(); ++i) {
-        if (insertion_bits[bits_idx].type().type_class() == dest[i].type().type_class())
-            insertion_bits[bits_idx] = cast(insertion_bits[bits_idx], dest[i].type());
+        auto out = cast(insertion_bits[bits_idx], dest[i].type());
 
-        builder_.bfi(dest[i], insertion_bits[bits_idx], insert_idx, insert_len);
+        builder_.bfi(dest[i], out, insert_idx, insert_len);
         insert_idx = 0;
         inserted += insert_len;
 

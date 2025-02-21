@@ -497,9 +497,31 @@ public:
     }
 
     instruction& fmul(const register_operand &dest,
-              const register_operand &src1,
-              const register_operand &src2) {
+                      const register_operand &src1,
+                      const register_operand &src2) {
+        if (src1.type().type_class() != ir::value_type_class::floating_point)
+            throw backend_exception("Second operand of fmul must be floating-point instead of {}",
+                                    src1.type());
+        if (src2.type().type_class() != ir::value_type_class::floating_point)
+            throw backend_exception("Third operand of fmul must be floating-point instead of {}",
+                                    src1.type());
         return append(instruction("fmul", def(dest), use(src1), use(src2)));
+    }
+
+    instruction& fmov(const register_operand &dest,
+                      const register_operand &src1) {
+        if (src1.type().type_class() != ir::value_type_class::floating_point && dest.type().type_class() != ir::value_type_class::floating_point)
+            throw backend_exception("Either the first or the second operand of fmov {}, {} must be a floating point register",
+                                    dest.type(), src1.type());
+        return append(instruction("fmov", def(dest), use(src1)));
+    }
+
+    instruction& fcvt(const register_operand &dest,
+                      const register_operand &src1) {
+        if (src1.type().type_class() != ir::value_type_class::floating_point && dest.type().type_class() != ir::value_type_class::floating_point)
+            throw backend_exception("Either the first or the second operand of fcvt {}, {} must be a floating point register",
+                                    dest.type(), src1.type());
+        return append(instruction("fcvt", def(dest), use(src1)));
     }
 
     instruction& sdiv(const register_operand &dest,
