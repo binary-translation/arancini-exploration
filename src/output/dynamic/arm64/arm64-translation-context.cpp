@@ -1455,16 +1455,16 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 		break;
 	case cast_op::zx:
         // Sanity check
-        if (n.val().type().element_width() <= n.source_value().type().element_width()) {
+        [[unlikely]]
+        if (n.val().type().element_width() <= n.source_value().type().element_width())
             throw backend_exception("Cannot zero-extend {} to smaller size {}",
                                     n.val().type().element_width(),
                                     n.source_value().type().element_width());
-        }
 
         builder_.insert_comment("zero-extend from {} to {}", n.source_value().type(), n.val().type());
-
         switch (n.source_value().type().element_width()) {
         case 1:
+        case 3:
         case 8:
             builder_.uxtb(dest_vreg, src_vreg);
             break;
@@ -1483,8 +1483,8 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             }
             break;
         default:
-            throw backend_exception("Cannot sign-extend from size {} to size {}",
-                                    src_vreg.type().width(), dest_vreg.type().width());
+            throw backend_exception("Cannot zero-extend from {} to {}",
+                                    n.source_value().type(), n.val().type());
         }
 
         // Set upper registers to zero

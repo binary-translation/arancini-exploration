@@ -144,6 +144,30 @@ private:
 } // namespace arancini::ir
 
 template <>
+struct fmt::formatter<arancini::ir::value_type_class> {
+    template <typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(arancini::ir::value_type_class vt, FormatContext& ctx) const {
+        using namespace arancini::ir;
+
+		switch (vt) {
+		case value_type_class::none:
+            return fmt::format_to(ctx.out(), "none");
+		case value_type_class::signed_integer:
+            return fmt::format_to(ctx.out(), "signed integer");
+		case value_type_class::unsigned_integer:
+            return fmt::format_to(ctx.out(), "unsigned integer");
+		case value_type_class::floating_point:
+            return fmt::format_to(ctx.out(), "floating point");
+		default:
+            return fmt::format_to(ctx.out(), "unknown");
+		}
+    }
+};
+
+template <>
 struct fmt::formatter<arancini::ir::value_type> {
     template <typename ParseContext>
     constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
