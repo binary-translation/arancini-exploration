@@ -97,9 +97,9 @@ struct fmt::formatter<arancini::ir::port> {
         if (port.targets().empty()) return ctx.out();
 
         auto& targets = port.targets();
-        fmt::format_to(ctx.out(), "{}", *targets.begin());
+        fmt::format_to(ctx.out(), "{}", fmt::ptr(*targets.begin()));
         for (auto it = std::next(targets.begin()); it != targets.end(); ++it) {
-            fmt::format_to(ctx.out(), " {}", *it);
+            fmt::format_to(ctx.out(), " {}", fmt::ptr(*it));
         }
 
         return ctx.out();
