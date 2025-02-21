@@ -307,9 +307,15 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
     }
 }
 
+inline bool is_flag_setter(node_kinds node_kind) {
+    return node_kind == node_kinds::binary_arith || node_kind == node_kinds::ternary_arith ||
+           node_kind == node_kinds::binary_atomic || node_kind == node_kinds::ternary_atomic;
+}
+
 void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     // Sanity check
     auto type = n.val().type();
+    auto &src = materialise_port(n.value());
 
     [[unlikely]]
     if (type.is_vector() && type.element_width() > value_types::base_type.element_width())
@@ -317,10 +323,16 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
 
     // Flags may be set either based on some preceding operation or with a constant
     // Handle the case when they are generated based on a previous operation here
-    if (is_flag_port(n.val()) && n.value().owner()->kind() != node_kinds::constant) {
-        const auto &source = flag_map.at(static_cast<reg_offsets>(n.regoff()));
-        builder_.strb(source, guest_memory(n.regoff()))
-                     .add_comment(fmt::format("write flag: {}", n.regname()));
+    if (is_flag_port(n.value())) {
+        if (is_flag_setter(n.value().owner()->kind())) {
+            const auto &source = flag_map.at(static_cast<reg_offsets>(n.regoff()));
+            builder_.strb(source, guest_memory(n.regoff()))
+                         .add_comment(fmt::format("write flag: {}", n.regname()));
+        } else {
+            src[0].cast(n.value().type());
+            builder_.strb(src[0], guest_memory(n.regoff()))
+                         .add_comment(fmt::format("write flag: {}", n.regname()));
+        }
         return;
     }
 
@@ -333,7 +345,6 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     // We now down-cast it.
     //
     // There should be clear type promotion and type coercion.
-    auto &src = materialise_port(n.value());
     auto comment = fmt::format("write register: {}", n.regname());
     for (std::size_t i = 0; i < src.size(); ++i) {
         // if (src[i].type().width() > n.value().type().width() && n.value().type().width() <= value_types::base_type.element_width())
