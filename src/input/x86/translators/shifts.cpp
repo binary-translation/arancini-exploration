@@ -59,7 +59,30 @@ void shifts_translator::do_translate() {
                         write_reg(reg_offsets::OF, msb->val());
                     }
                 }
-                write_flags(shift, flag_op::update, flag_op::ignore, flag_op::ignore, flag_op::update, flag_op::update, flag_op::ignore);
+
+                // ZF flag set based on result
+                auto is_zero = builder().insert_binop(binary_arith_op::cmpeq, shift->val(), builder().insert_constant_i(shift->val().type(), 0)->val());
+                builder().insert_write_reg(
+                    util::to_underlying(reg_offsets::ZF),
+                    util::to_underlying(reg_idx::ZF),
+                    "ZF",
+                    builder().insert_csel(is_zero->val(),
+                        builder().insert_constant_i(value_type::u1(), 1)->val(),
+                        builder().insert_constant_i(value_type::u1(), 0)->val()
+                    )->val()
+                );
+
+                // SF flag set based on result
+                auto gt_zero = builder().insert_binop(binary_arith_op::cmpgt, shift->val(), builder().insert_constant_i(shift->val().type(), 0)->val());
+                builder().insert_write_reg(
+                    util::to_underlying(reg_offsets::SF),
+                    util::to_underlying(reg_idx::SF),
+                    "SF",
+                    builder().insert_csel(gt_zero->val(),
+                        builder().insert_constant_i(value_type::u1(), 1)->val(),
+                        builder().insert_constant_i(value_type::u1(), 0)->val()
+                    )->val()
+                );
             }
         } else { // shift amount is a register
             auto zero_shift = builder().insert_cmpeq(amt->val(), builder().insert_constant_i(amt->val().type(), 0)->val());
@@ -260,7 +283,7 @@ void shifts_translator::do_translate() {
 
         for (int i = 0; i < nr_splits; i++) {
             auto v = builder().insert_vector_extract(src_vec->val(), i);
-            // TODO: if amt > val width, zero out 
+            // TODO: if amt > val width, zero out
             auto shift = builder().insert_lsr(v->val(), amt->val());
             src_vec = builder().insert_vector_insert(src_vec->val(), i, shift->val());
         }
