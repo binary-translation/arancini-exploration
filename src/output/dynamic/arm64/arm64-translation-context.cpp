@@ -188,15 +188,19 @@ void arm64_translation_context::materialise(const ir::node* n) {
     logger.debug("Handling {} with node ID: {}\n", n->kind(), fmt::ptr(n));
     switch (n->kind()) {
     case node_kinds::read_reg:
+        logger.debug("Handling {}\n", *reinterpret_cast<const read_reg_node*>(n));
         materialise_read_reg(*reinterpret_cast<const read_reg_node*>(n));
         break;
     case node_kinds::write_reg:
+        logger.debug("Handling {}\n", *reinterpret_cast<const write_reg_node*>(n));
         materialise_write_reg(*reinterpret_cast<const write_reg_node*>(n));
         break;
     case node_kinds::read_mem:
+        logger.debug("Handling {}\n", *reinterpret_cast<const read_mem_node*>(n));
         materialise_read_mem(*reinterpret_cast<const read_mem_node*>(n));
         break;
     case node_kinds::write_mem:
+        logger.debug("Handling {}\n", *reinterpret_cast<const write_mem_node*>(n));
         materialise_write_mem(*reinterpret_cast<const write_mem_node*>(n));
         break;
 	case node_kinds::read_pc:
@@ -242,9 +246,11 @@ void arm64_translation_context::materialise(const ir::node* n) {
         materialise_unary_arith(*reinterpret_cast<const unary_arith_node*>(n));
         break;
 	case node_kinds::binary_arith:
+        logger.debug("Handling {}\n", *reinterpret_cast<const binary_arith_node*>(n));
 		materialise_binary_arith(*reinterpret_cast<const binary_arith_node*>(n));
         break;
     case node_kinds::ternary_arith:
+        logger.debug("Handling {}\n", *reinterpret_cast<const ternary_arith_node*>(n));
 		materialise_ternary_arith(*reinterpret_cast<const ternary_arith_node*>(n));
         break;
 	case node_kinds::binary_atomic:
