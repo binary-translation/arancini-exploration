@@ -91,8 +91,18 @@ struct fmt::formatter<arancini::ir::port> {
 
     template <typename FormatContext>
     auto format(const arancini::ir::port& port, FormatContext& ctx) const {
-        return fmt::format_to(ctx.out(), "{} {} {}", port.kind(), fmt::ptr(port.owner()),
-                              fmt::join(port.targets(), " "));
+        fmt::format_to(ctx.out(), "{} {}", port.kind(), fmt::ptr(port.owner()));
+
+        [[unlikely]]
+        if (port.targets().empty()) return ctx.out();
+
+        auto& targets = port.targets();
+        fmt::format_to(ctx.out(), "{}", *targets.begin());
+        for (auto it = std::next(targets.begin()); it != targets.end(); ++it) {
+            fmt::format_to(ctx.out(), " {}", *it);
+        }
+
+        return ctx.out();
     }
 };
 
