@@ -1447,3 +1447,47 @@ struct fmt::formatter<arancini::ir::node_kinds> {
     }
 };
 
+template <>
+struct fmt::formatter<arancini::ir::write_reg_node> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(const arancini::ir::write_reg_node& node, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "write-register {} -> {}", node.value(), node.regname());
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::ir::read_reg_node> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(const arancini::ir::read_reg_node& node, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "read-register {} <- [{}]", node.val(), node.regname());
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::ir::write_mem_node> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(const arancini::ir::write_mem_node& node, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "write-memory {} -> [{}]", node.value(), node.address());
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::ir::read_mem_node> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(const arancini::ir::read_mem_node& node, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "read-memory {} <- [{}]", node.val(), node.address());
+    }
+};
+

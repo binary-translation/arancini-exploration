@@ -128,7 +128,7 @@ public:
 				live_flags_.erase(n.regoff());
 			} else {
 				// if this flag is live, i.e. is read later, we keep the write reg node and mark it dead. Else, we delete it.
-				if (live_flags_.count(n.regoff())) {
+				if (live_flags_.count(n.regoff()) || n.regidx() == static_cast<unsigned long>(input::x86::reg_idx::ZF)) {
 					live_flags_.erase(n.regoff());
 				} else {
 					delete_.push_back((action_node *)&n);
