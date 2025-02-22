@@ -611,7 +611,10 @@ public:
         if (!labels_.count(label.name())) {
             labels_.insert(label.name());
             append(instruction(label));
+            return;
         }
+        logger.debug("Label {} already inserted\nCurrent labels:\n{}",
+                     label, fmt::format("{}", fmt::join(labels_.begin(), labels_.end(), "\n")));
     }
 
 	instruction& setz(const register_operand &dst) {
@@ -966,6 +969,7 @@ public:
         instructions_.clear();
         vreg_alloc_.reset();
         label_refcount_.clear();
+        labels_.clear();
     }
 private:
     assembler asm_;

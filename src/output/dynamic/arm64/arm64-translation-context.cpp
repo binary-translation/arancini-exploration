@@ -112,7 +112,6 @@ memory_operand arm64_translation_context::guest_memory(int regoff, memory_operan
 void arm64_translation_context::begin_block() {
     ret_ = 0;
     instr_cnt_ = 0;
-    builder_ = instruction_builder();
 }
 
 void arm64_translation_context::begin_instruction(off_t address, const std::string &disasm) {
@@ -481,19 +480,25 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
 }
 
 void arm64_translation_context::materialise_label(const label_node &n) {
-    auto label = label_operand(fmt::format("{}_{}", n.name(), instr_cnt_));
+    auto label_name = fmt::format("{}_{}", n.name(), instr_cnt_);
+    logger.debug("Inserting label {}\n", label_name);
+    auto label = label_operand(label_name);
     builder_.label(label);
 }
 
 void arm64_translation_context::materialise_br(const br_node &n) {
-    auto label = label_operand(fmt::format("{}_{}", n.target()->name(), instr_cnt_));
+    auto label_name = fmt::format("{}_{}", n.target()->name(), instr_cnt_);
+    logger.debug("Generating branch to label {}\n", label_name);
+    auto label = label_operand(label_name);
     builder_.b(label);
 }
 
 void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
     const auto &cond_vregs = materialise_port(n.cond());
 
-    auto label = label_operand(fmt::format("{}_{}", n.target()->name(), instr_cnt_));
+    auto label_name = fmt::format("{}_{}", n.target()->name(), instr_cnt_);
+    logger.debug("Generating conditional branch to label {}\n", label_name);
+    auto label = label_operand(label_name);
     builder_.cbnz(cond_vregs, label);
 }
 
