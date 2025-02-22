@@ -53,13 +53,15 @@ void fill_byte_with_bit(instruction_builder& builder, const register_operand& re
 register_operand arm64_translation_context::cast(const register_operand &src, value_type type) {
     builder_.insert_comment("Internal cast from {} to {}", src.type(), type);
 
-    if (src.type().type_class() == value_type_class::floating_point && type.type_class() != value_type_class::floating_point) {
-        auto dest = vreg_alloc_.allocate(type);
-        builder_.fmov(dest, src);
+	if (src.type().type_class() == value_type_class::floating_point &&
+        type.type_class() != value_type_class::floating_point) {
+		auto dest = vreg_alloc_.allocate(type);
+        builder_.fcvtzs(dest, src);
         return dest;
-    }
+	}
 
-    if (src.type().type_class() == value_type_class::floating_point && type.type_class() == value_type_class::floating_point) {
+	if (src.type().type_class() == value_type_class::floating_point &&
+        type.type_class() == value_type_class::floating_point) {
         if (type.element_width() == 64 && src.type().element_width() == 32) {
             auto dest = vreg_alloc_.allocate(type);
             builder_.fcvt(dest, src);
@@ -1832,7 +1834,7 @@ void arm64_translation_context::materialise_vector_insert(const vector_insert_no
 }
 
 void arm64_translation_context::materialise_vector_extract(const vector_extract_node &n) {
-    const auto &dest_vregs = vreg_alloc_.allocate(n.val());
+    auto &dest_vregs = vreg_alloc_.allocate(n.val());
     const auto &src_vregs = materialise_port(n.source_vector());
 
     std::size_t index = (n.index() * n.source_vector().type().element_width()) / value_types::base_type.element_width();
@@ -1842,6 +1844,15 @@ void arm64_translation_context::materialise_vector_extract(const vector_extract_
         throw backend_exception("Cannot extract from index {} in source vector", index);
 
     builder_.insert_comment("Extract vector by copying to destination");
+    if (n.val().type().is_floating_point()) {
+        for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
+            // TODO: wrong
+            dest_vregs[i].cast(src_vregs[index+i].type());
+            builder_.fmov(dest_vregs[i], src_vregs[index+i]);
+        }
+        return;
+    }
+
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
         const auto &src_vreg = cast(src_vregs[index+i], dest_vregs[i].type());
         builder_.mov(dest_vregs[i], src_vreg);
