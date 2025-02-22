@@ -1,5 +1,7 @@
 #pragma once
 
+#include <keystone/keystone.h>
+
 #include <arancini/ir/port.h>
 #include <arancini/output/dynamic/machine-code-writer.h>
 #include <arancini/output/dynamic/arm64/arm64-instruction.h>
@@ -10,6 +12,27 @@
 #include <unordered_set>
 
 namespace arancini::output::dynamic::arm64 {
+
+class assembler {
+public:
+    assembler() {
+        status_ = ks_open(KS_ARCH_ARM64, KS_MODE_LITTLE_ENDIAN, &ks_);
+
+        if (status_ != KS_ERR_OK)
+            throw backend_exception("failed to initialise keystone assembler: {}", ks_strerror(status_));
+    }
+
+    std::size_t assemble(const char *code, unsigned char **out);
+
+    void free(unsigned char* ptr) const { ks_free(ptr); }
+
+    ~assembler() {
+        ks_close(ks_);
+    }
+public:
+    ks_err status_;
+    ks_engine* ks_;
+};
 
 class register_sequence final {
 public:
@@ -945,6 +968,7 @@ public:
         label_refcount_.clear();
     }
 private:
+    assembler asm_;
 	std::vector<instruction> instructions_;
     virtual_register_allocator vreg_alloc_;
     std::unordered_map<std::string, std::size_t> label_refcount_;

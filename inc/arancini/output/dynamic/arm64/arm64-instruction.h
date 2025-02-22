@@ -1,11 +1,9 @@
 #pragma once
 
 #include <fmt/format.h>
-#include <keystone/keystone.h>
 
 #include <arancini/ir/value-type.h>
 #include <arancini/output/dynamic/arm64/arm64-common.h>
-#include <arancini/output/dynamic/machine-code-writer.h>
 
 #include <array>
 #include <cstdint>
@@ -13,29 +11,6 @@
 #include <type_traits>
 
 namespace arancini::output::dynamic::arm64 {
-
-class assembler {
-public:
-    assembler() {
-        status_ = ks_open(KS_ARCH_ARM64, 0, &ks_);
-
-        if (status_ != KS_ERR_OK)
-            throw backend_exception("failed to initialise keystone assembler: {}", ks_strerror(status_));
-    }
-
-    size_t assemble(const char *code, unsigned char **out);
-
-    void free(unsigned char* ptr) const { ks_free(ptr); }
-
-    ~assembler() {
-        ks_close(ks_);
-    }
-private:
-    ks_err status_;
-    ks_engine* ks_;
-};
-
-static assembler asm_;
 
 class register_operand final {
 public:

@@ -8,7 +8,6 @@ function (get_keystone)
     # Set directory variables
     set(Keystone_DIR ${CMAKE_SOURCE_DIR}/lib/keystone)
     set(Keystone_BINARY_DIR ${CMAKE_BINARY_DIR}/keystone-out)
-    set(Keystone_PATCH ${CMAKE_SOURCE_DIR}/keystone-riscv.patch)
     set(Keystone_INCLUDE_PATH ${Keystone_DIR}/include PARENT_SCOPE)
 
     # Fetch keystone from repo
