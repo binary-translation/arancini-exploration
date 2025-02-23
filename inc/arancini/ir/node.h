@@ -711,13 +711,27 @@ private:
 };
 
 enum class binary_arith_op : std::uint8_t {
-	add, sub, mul, div, mod,
-	band, bor, bxor,
-	cmpeq, cmpne, cmpgt,
-	// floating point stuff
-	cmpoeq, cmpolt, cmpole,
-	cmpueq, cmpult, cmpune, cmpunlt, cmpunle,
-	cmpo, cmpu
+	add = 0,
+    sub,
+    mul,
+    div,
+    mod,
+	band,
+    bor,
+    bxor,
+	cmpeq,
+    cmpne,
+    cmpgt,
+	cmpoeq,
+    cmpolt,
+    cmpole,
+	cmpueq,
+    cmpult,
+    cmpune,
+    cmpunlt,
+    cmpunle,
+	cmpo,
+    cmpu
 };
 
 class binary_arith_node : public arith_node {

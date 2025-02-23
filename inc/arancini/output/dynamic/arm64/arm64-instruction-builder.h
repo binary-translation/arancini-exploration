@@ -544,25 +544,34 @@ public:
     }
 
     instruction& fmov(const register_operand &dest,
-                      const register_operand &src1) {
-        if (src1.type().type_class() != ir::value_type_class::floating_point &&
+                      const register_operand &src) {
+        if (src.type().type_class() != ir::value_type_class::floating_point &&
             dest.type().type_class() != ir::value_type_class::floating_point)
         {
             throw backend_exception("Either the first or the second operand of fmov {}, {} must be a floating point register",
-                                    dest.type(), src1.type());
+                                    dest.type(), src.type());
         }
-        return append(instruction("fmov", def(dest), use(src1)));
+        return append(instruction("fmov", def(dest), use(src)));
+    }
+
+    instruction& fmov(const register_operand &dest,
+                      const immediate_operand &src) {
+        if (dest.type().type_class() != ir::value_type_class::floating_point) {
+            throw backend_exception("The first operand of fmov {}, {} must be a floating point register",
+                                    dest.type(), src.type());
+        }
+        return append(instruction("fmov", def(dest), use(src)));
     }
 
     instruction& fcvt(const register_operand &dest,
-                      const register_operand &src1) {
-        if (src1.type().type_class() != ir::value_type_class::floating_point &&
+                      const register_operand &src) {
+        if (src.type().type_class() != ir::value_type_class::floating_point &&
             dest.type().type_class() != ir::value_type_class::floating_point)
         {
             throw backend_exception("Either the first or the second operand of fcvt {}, {} must be a floating point register",
-                                    dest.type(), src1.type());
+                                    dest.type(), src.type());
         }
-        return append(instruction("fcvt", def(dest), use(src1)));
+        return append(instruction("fcvt", def(dest), use(src)));
     }
 
     instruction& fcvtzs(const register_operand &dest, const register_operand &src) {
@@ -577,32 +586,45 @@ public:
 
     instruction& fcvtzu(const register_operand &dest, const register_operand &src) {
         if (src.type().type_class() != ir::value_type_class::floating_point)
-            throw backend_exception("The second operand of fcvtsz {}, {} must be a floating point register",
+            throw backend_exception("The second operand of fcvtzu {}, {} must be a floating point register",
                                     dest.type(), src.type());
         if (dest.type().type_class() == ir::value_type_class::floating_point)
-            throw backend_exception("The first operand of fcvtsz {}, {} must be a GPR",
+            throw backend_exception("The first operand of fcvtzu {}, {} must be a GPR",
                                     dest.type(), src.type());
         return append(instruction("fcvtzu", def(dest), use(src)));
     }
 
     instruction& fcvtas(const register_operand &dest, const register_operand &src) {
         if (src.type().type_class() != ir::value_type_class::floating_point)
-            throw backend_exception("The second operand of fcvtsz {}, {} must be a floating point register",
+            throw backend_exception("The second operand of fcvtas {}, {} must be a floating point register",
                                     dest.type(), src.type());
         if (dest.type().type_class() == ir::value_type_class::floating_point)
-            throw backend_exception("The first operand of fcvtsz {}, {} must be a GPR",
+            throw backend_exception("The first operand of fcvtas {}, {} must be a GPR",
                                     dest.type(), src.type());
         return append(instruction("fcvtas", def(dest), use(src)));
     }
 
     instruction& fcvtau(const register_operand &dest, const register_operand &src) {
         if (src.type().type_class() != ir::value_type_class::floating_point)
-            throw backend_exception("The second operand of fcvtsz {}, {} must be a floating point register",
+            throw backend_exception("The second operand of fcvtau {}, {} must be a floating point register",
                                     dest.type(), src.type());
         if (dest.type().type_class() == ir::value_type_class::floating_point)
-            throw backend_exception("The first operand of fcvtsz {}, {} must be a GPR",
+            throw backend_exception("The first operand of fcvtau {}, {} must be a GPR",
                                     dest.type(), src.type());
         return append(instruction("fcvtau", def(dest), use(src)));
+    }
+
+    // TODO: this also has an immediate variant
+    instruction& fcmp(const register_operand &dest, const register_operand &src) {
+        if (src.type().type_class() != ir::value_type_class::floating_point ||
+            src.type().type_class() != ir::value_type_class::floating_point)
+        {
+            throw backend_exception("The first and second operand of fcmp {}, {} must be a floating point register",
+                                    dest.type(), src.type());
+        }
+
+        return append(instruction("fcmp", def(dest), use(src))
+                      .implicitly_writes({register_operand(register_operand::nzcv)}));
     }
 
     instruction& scvtf(const register_operand &dest,

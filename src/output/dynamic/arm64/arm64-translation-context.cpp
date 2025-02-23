@@ -509,7 +509,7 @@ void arm64_translation_context::materialise_constant(const constant_node &n) {
 
     [[unlikely]]
     if (n.val().type().is_floating_point())
-        builder_.mov(dest, n.const_val_f()).add_comment("move float into register");
+        builder_.fmov(dest, n.const_val_f()).add_comment("move float into register");
     else
         builder_.mov(dest, n.const_val_i()).add_comment("move integer into register");
 }
@@ -544,12 +544,26 @@ inline shift_operand extend_register(instruction_builder& builder, const registe
 [[nodiscard]]
 inline cond_operand get_cset_type(binary_arith_op op) {
     switch(op) {
+	case binary_arith_op::cmpueq:
+	case binary_arith_op::cmpoeq:
     case binary_arith_op::cmpeq:
         return cond_operand::eq();
+	case binary_arith_op::cmpune:
     case binary_arith_op::cmpne:
         return cond_operand::ne();
     case binary_arith_op::cmpgt:
+	case binary_arith_op::cmpunle:
         return cond_operand::gt();
+	case binary_arith_op::cmpole:
+        return cond_operand::le();
+	case binary_arith_op::cmpolt:
+	case binary_arith_op::cmpult:
+	case binary_arith_op::cmpunlt:
+        return cond_operand::lt();
+	case binary_arith_op::cmpo:
+        return cond_operand::vc();
+	case binary_arith_op::cmpu:
+        return cond_operand::vs();
     default:
         throw backend_exception("Unknown binary operation comparison operation type {}",
                                 util::to_underlying(op));
@@ -559,7 +573,7 @@ inline cond_operand get_cset_type(binary_arith_op op) {
 void arm64_translation_context::materialise_binary_arith(const binary_arith_node &n) {
     auto &lhs_regset = materialise_port(n.lhs());
     auto &rhs_regset = materialise_port(n.rhs());
-	const auto &dest_regset = vreg_alloc_.allocate(n.val());
+	auto &dest_regset = vreg_alloc_.allocate(n.val());
 
     // Sanity check
     // Binary operations are defined in the IR with same size inputs and output
@@ -932,8 +946,35 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 .add_comment("set to 1 if condition is true (based flags from the previous compare)");
         inverse_carry_flag_operation = true;
 		break;
+	case binary_arith_op::cmpoeq:
+	case binary_arith_op::cmpolt:
+	case binary_arith_op::cmpole:
+	case binary_arith_op::cmpo:
+	case binary_arith_op::cmpu:
+        builder_.fcmp(lhs_regset, rhs_regset);
+        dest_regset[0].cast(value_type::u64());
+        builder_.cset(dest_regset[0], get_cset_type(n.op()))
+                .add_comment("set to 1 if condition is true (based flags from the previous compare)");
+        break;
+	case binary_arith_op::cmpueq:
+	case binary_arith_op::cmpune:
+	case binary_arith_op::cmpult:
+	case binary_arith_op::cmpunlt:
+	case binary_arith_op::cmpunle:
+        {
+            builder_.fcmp(lhs_regset, rhs_regset);
+            const auto& unordered = vreg_alloc_.allocate(value_type::u64());
+            dest_regset[0].cast(value_type::u64());
+            builder_.cset(dest_regset[0], get_cset_type(n.op()))
+                    .add_comment("set to 1 if condition is true (based flags from the previous compare)");
+            builder_.cset(unordered, cond_operand::vs())
+                    .add_comment("set to 1 if condition is true (based flags from the previous compare)");
+            builder_.orr_(dest_regset[0], dest_regset[0], unordered);
+        }
+        break;
 	default:
-		throw backend_exception("Unsupported binary arithmetic operation with index {}", util::to_underlying(n.op()));
+		throw backend_exception("Unsupported binary arithmetic operation with index {}",
+                                util::to_underlying(n.op()));
 	}
 
     // Flags are set by most arithmetic operations
@@ -1440,14 +1481,19 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         // allocator)
         builder_.insert_comment("Bitcast from {} to {}", n.source_value().type(), n.val().type());
 
+        logger.debug("Bitcasting from {}x{} to {}x{}",
+                     src_vregs.size(), src_vregs[0].type(),
+                     dest_vregs.size(), dest_vregs[0].type());
         if (dest_vregs.size() == src_vregs.size()) {
-            for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
-                if (n.source_value().type().is_floating_point() || n.val().type().is_floating_point())
-                    builder_.fmov(dest_vregs[i], src_vregs[i]);
-                else
-                    builder_.mov(dest_vregs[i], src_vregs[i]);
+            if (n.source_value().type().is_floating_point() || n.val().type().is_floating_point()) {
+                for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
+                        builder_.fmov(dest_vregs[i], src_vregs[i]);
+                return;
             }
-            break;
+
+            for (std::size_t i = 0; i < dest_vregs.size(); ++i)
+                builder_.mov(dest_vregs[i], src_vregs[i]);
+            return;
         }
 
         if (n.val().type().element_width() > n.source_value().type().element_width()) {
