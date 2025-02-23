@@ -837,7 +837,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         }
 		break;
 	case binary_arith_op::bor:
-        if (is_vector_op) {
+        if (is_vector_op || n.val().type().element_width() > 64) {
             for (std::size_t i = 0; i < dest_regset.size(); ++i) {
                 builder_.orr_(dest_regset[i], lhs_regset[i], rhs_regset[i]);
             }
@@ -862,7 +862,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             builder_.ands(register_operand(register_operand::xzr_sp), dest_regset, dest_regset);
             break;
         default:
-            throw backend_exception("Unsupported AND operation between {} x {}",
+            throw backend_exception("Unsupported ORR operation between {} x {}",
                                     n.lhs().type(), n.rhs().type());
         }
         builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");
@@ -874,7 +874,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         }
 		break;
 	case binary_arith_op::band:
-        if (is_vector_op) {
+        if (is_vector_op || n.val().type().element_width() > 64) {
             for (std::size_t i = 0; i < dest_regset.size(); ++i) {
                 builder_.ands(dest_regset[i], lhs_regset[i], rhs_regset[i]);
             }
