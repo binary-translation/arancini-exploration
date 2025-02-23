@@ -233,8 +233,7 @@ struct register_hash final {
 
 struct register_equal final {
     bool operator()(const register_operand& r1, const register_operand& r2) const {
-        return r1.index() == r2.index() && r1.type().type_class() == r2.type().type_class()
-                                        && r1.type().nr_elements() == r2.type().nr_elements();
+        return r1.index() == r2.index() && r1.type().type_class() == r2.type().type_class();
     }
 };
 

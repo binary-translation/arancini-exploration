@@ -44,6 +44,12 @@ public:
         d31
     };
 
+    enum regname_float128 : std::uint8_t {
+        q0, q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q13, q14, q15,
+        q16, q17, q18, q19, q20, q21, q22, q23, q24, q25, q26, q27, q28, q29, q30,
+        q31
+    };
+
     enum regname_vector: std::uint8_t {
         v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15,
         v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30,
@@ -67,6 +73,8 @@ public:
     explicit register_operand(regname_float32 reg): type_(ir::value_type::f32()), index_(reg) { }
 
     explicit register_operand(regname_float64 reg): type_(ir::value_type::f64()), index_(reg) { }
+
+    explicit register_operand(regname_float128 reg): type_(ir::value_type::f128()), index_(reg) { }
 
     explicit register_operand(special reg): special_(true), type_(ir::value_type::u64()), index_(reg) { }
 
@@ -511,6 +519,13 @@ struct fmt::formatter<arancini::output::dynamic::arm64::register_operand> {
             "d31"
         };
 
+        static const char* name_float128[] = {
+            "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10",
+            "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20",
+            "q21", "q22", "q23", "q24", "q25", "q26", "q27", "q28", "q29", "q30",
+            "q31"
+        };
+
         static const char* name_special[] = {
             "nzcv"
         };
@@ -553,19 +568,24 @@ struct fmt::formatter<arancini::output::dynamic::arm64::register_operand> {
             name = op.type().width() == 128 ? name_vector_neon[op.index()] : name_vector_sve2[op.index()];
             switch (op.type().element_width()) {
             case 8:
-                return fmt::format_to(ctx.out(), "{}.b", name);
+                return fmt::format_to(ctx.out(), "{}.1b", name);
             case 16:
-                return fmt::format_to(ctx.out(), "{}.h", name);
+                return fmt::format_to(ctx.out(), "{}.2b", name);
             case 32:
-                return fmt::format_to(ctx.out(), "{}.w", name);
+                return fmt::format_to(ctx.out(), "{}.4b", name);
             case 64:
-                return fmt::format_to(ctx.out(), "{}.d", name);
+                return fmt::format_to(ctx.out(), "{}.8b", name);
             default:
                 throw backend_exception("Attempting to generate vector with elements of unsupported size {}",
                                         op.type().element_width());
             }
         } else if (op.type().is_floating_point()) {
-            name =  op.type().element_width() > 32 ? name_float64[op.index()] : name_float32[op.index()];
+            if (op.type().element_width() <= 32)
+                name = name_float32[op.index()];
+            else if (op.type().element_width() <= 64)
+                name = name_float64[op.index()];
+            else if (op.type().element_width() <= 128)
+                name = name_float128[op.index()];
         } else if (op.type().is_integer()) {
             name =  op.type().element_width() > 32 ? name64[op.index()] : name32[op.index()];
         } else {

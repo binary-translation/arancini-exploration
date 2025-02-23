@@ -1,12 +1,12 @@
 #include <arancini/runtime/dbt/translation.h>
+
+#include <arancini/util/logger.h>
+#include <arancini/util/static-map.h>
+#include <arancini/runtime/exec/native_syscall.h>
 #include <arancini/runtime/exec/execution-context.h>
 #include <arancini/runtime/exec/execution-thread.h>
-#include <arancini/runtime/exec/native_syscall.h>
 #include <arancini/runtime/exec/x86/x86-cpu-state.h>
-#include <arancini/util/logger.h>
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
+
 #include <pthread.h>
 #include <sched.h>
 
@@ -19,14 +19,18 @@
 #define GM_BASE nullptr
 #endif
 
-#include <asm-generic/ioctls.h>
-#include <asm/stat.h>
 #include <csignal>
+#include <sys/uio.h>
+#include <sys/mman.h>
+#include <asm/stat.h>
 #include <linux/fcntl.h>
 #include <linux/futex.h>
+#include <asm-generic/ioctls.h>
+
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <stdexcept>
-#include <sys/mman.h>
-#include <sys/uio.h>
 
 extern "C" int MainLoop(void *);
 
@@ -176,6 +180,26 @@ int execution_context::invoke(void *cpu_state) {
 	return result.exit_code;
 }
 
+static constexpr auto openat_flags = util::static_unordered_map(
+    std::pair<std::uint64_t, std::uint64_t>{static_cast<std::uint64_t>(00000002),static_cast<std::uint64_t>(O_RDWR)},
+    std::pair<std::uint64_t, std::uint64_t>{static_cast<std::uint64_t>(00000200),static_cast<std::uint64_t>(O_EXCL)},
+    std::pair<std::uint64_t, std::uint64_t>{static_cast<std::uint64_t>(00020000),static_cast<std::uint64_t>(FASYNC)},
+    std::pair<std::uint64_t, std::uint64_t>{static_cast<std::uint64_t>(00000100),static_cast<std::uint64_t>(O_CREAT)},
+    std::pair<std::uint64_t, std::uint64_t>{static_cast<std::uint64_t>(00001000),static_cast<std::uint64_t>(O_TRUNC)},
+    std::pair<std::uint64_t, std::uint64_t>{static_cast<std::uint64_t>(00010000),static_cast<std::uint64_t>(O_DSYNC)},
+    std::pair<std::uint64_t, std::uint64_t>{static_cast<std::uint64_t>(00000000),static_cast<std::uint64_t>(O_RDONLY)},
+    std::pair<std::uint64_t, std::uint64_t>{static_cast<std::uint64_t>(00000001),static_cast<std::uint64_t>(O_WRONLY)},
+    std::pair<std::uint64_t, std::uint64_t>{static_cast<std::uint64_t>(00000400),static_cast<std::uint64_t>(O_NOCTTY)},
+    std::pair<std::uint64_t, std::uint64_t>{static_cast<std::uint64_t>(00002000),static_cast<std::uint64_t>(O_APPEND)},
+    std::pair<std::uint64_t, std::uint64_t>{static_cast<std::uint64_t>(00040000),static_cast<std::uint64_t>(O_DIRECT)},
+    std::pair<std::uint64_t, std::uint64_t>{static_cast<std::uint64_t>(00000003),static_cast<std::uint64_t>(O_ACCMODE)},
+    std::pair<std::uint64_t, std::uint64_t>{static_cast<std::uint64_t>(01000000),static_cast<std::uint64_t>(O_NOATIME)},
+    std::pair<std::uint64_t, std::uint64_t>{static_cast<std::uint64_t>(02000000),static_cast<std::uint64_t>(O_CLOEXEC)},
+    std::pair<std::uint64_t, std::uint64_t>{static_cast<std::uint64_t>(00004000),static_cast<std::uint64_t>(O_NONBLOCK)},
+    std::pair<std::uint64_t, std::uint64_t>{static_cast<std::uint64_t>(00400000),static_cast<std::uint64_t>(O_NOFOLLOW)},
+    std::pair<std::uint64_t, std::uint64_t>{static_cast<std::uint64_t>(00100000),static_cast<std::uint64_t>(O_LARGEFILE)},
+    std::pair<std::uint64_t, std::uint64_t>{static_cast<std::uint64_t>(00200000),static_cast<std::uint64_t>(O_DIRECTORY)});
+
 int execution_context::internal_call(void *cpu_state, int call) {
     [[likely]]
 	if (call == 1) { // syscall
@@ -208,14 +232,15 @@ int execution_context::internal_call(void *cpu_state, int call) {
 		{
             off64_t offset = x86_state->RDI;
             auto filename = reinterpret_cast<std::uintptr_t>(get_memory_ptr(offset));
-            std::uint64_t flags = x86_state->RSI;
+            std::uint64_t flags = 0;
 			std::uint64_t mode = x86_state->RDX;
             std::uint64_t dirfd = AT_FDCWD;
 
-            // Check for O_LARGEFILE
-            // It's mapped to a different numeric code on Aarch64
-            if (0x8000 & flags)
-                flags = (flags ^ 0x8000) | O_LARGEFILE;
+            // Map host flags to target flags
+            for (auto [x86_flag, target_flag] : openat_flags) {
+                if (x86_flag & x86_state->RSI)
+                    flags |= target_flag;
+            }
 
             util::global_logger.debug("System call: openat({:#x}, {}, {:#x}, {})\n",
                                       dirfd, reinterpret_cast<const char*>(filename), flags, mode);
@@ -231,26 +256,31 @@ int execution_context::internal_call(void *cpu_state, int call) {
 		case 5: // fstat
 		case 6: // lstat
 		{
-			if (x86_state->RAX == 4) {
-				util::global_logger.debug("System call: stat()\n");
-			} else if (x86_state->RAX == 5) {
-				util::global_logger.debug("System call: fstat()\n");
-			} else {
-				util::global_logger.debug("System call: lstat()\n");
-			}
-			uint64_t fd = x86_state->RDI;
-			auto name = (uintptr_t)get_memory_ptr((off_t)x86_state->RDI);
-
-			uint64_t statp = x86_state->RSI;
+            std::uint64_t fd = x86_state->RDI;
 			struct stat tmp_struct { };
+            auto tmp_struct_ptr = reinterpret_cast<std::uintptr_t>(&tmp_struct);
+			auto name = reinterpret_cast<std::uintptr_t>(get_memory_ptr((off_t)x86_state->RDI));
 
-			uint64_t result;
+            std::uint64_t result;
+            std::uint64_t statp = x86_state->RSI;
 			if (x86_state->RAX == 6) {
-				result = native_syscall(__NR_newfstatat, (unsigned long)AT_FDCWD, (uintptr_t)name, (uintptr_t)&tmp_struct, (unsigned long)AT_SYMLINK_NOFOLLOW);
+				util::global_logger.debug("System call: stat({}, {:#x})\n",
+                                          reinterpret_cast<const char*>(name),
+                                          tmp_struct_ptr);
+
+                unsigned long flag = AT_FDCWD;
+                unsigned long symlink_no_follow = AT_SYMLINK_NOFOLLOW;
+				result = native_syscall(__NR_newfstatat, flag, name, tmp_struct_ptr, symlink_no_follow);
 			} else if (x86_state->RAX == 4) {
-				result = native_syscall(__NR_newfstatat, (unsigned long)AT_FDCWD, (uintptr_t)name, (uintptr_t)&tmp_struct, 0ul);
+				util::global_logger.debug("System call: lstat({}, {:#x})\n",
+                                          reinterpret_cast<const char*>(name),
+                                          tmp_struct_ptr);
+                unsigned long flag = AT_FDCWD;
+				result = native_syscall(__NR_newfstatat, flag, name, tmp_struct_ptr, 0ul);
 			} else {
-				result = native_syscall(__NR_fstat, fd, (uintptr_t)&tmp_struct);
+				util::global_logger.debug("System call: fstat({}, {:#x})\n",
+                                          fd, tmp_struct_ptr);
+				result = native_syscall(__NR_fstat, fd, tmp_struct_ptr);
 			}
 			x86_state->RAX = result;
 

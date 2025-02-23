@@ -908,10 +908,30 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 		break;
 	case binary_arith_op::bxor:
         {
+            if (n.val().type().is_floating_point()) {
+                lhs_regset[0].cast(value_type::vector(value_type::f64(), 2));
+                rhs_regset[0].cast(value_type::vector(value_type::f64(), 2));
+                auto type = dest_regset[0].type();
+                dest_regset[0].cast(value_type::vector(value_type::f64(), 2));
+                builder_.eor_(dest_regset[0], lhs_regset[0], rhs_regset[0]);
+                dest_regset[0].cast(type);
+                std::size_t i = 1;
+                for (; i < dest_regset.size(); ++i) {
+                    lhs_regset[i].cast(value_type::vector(value_type::f64(), 2));
+                    rhs_regset[i].cast(value_type::vector(value_type::f64(), 2));
+                    dest_regset[i].cast(value_type::vector(value_type::f64(), 2));
+                    builder_.eor_(dest_regset[i], lhs_regset[i], rhs_regset[i]);
+                    dest_regset[i].cast(type);
+                }
+                sets_flags = false;
+                break;
+            }
+
             builder_.eor_(dest_regset[0], lhs_regset[0], rhs_regset[0]);
             std::size_t i = 1;
-            for (; i < dest_regset.size(); ++i)
+            for (; i < dest_regset.size(); ++i) {
                 builder_.eor_(dest_regset[i], lhs_regset[i], rhs_regset[i]);
+            }
 
             // EOR does not set flags
             // TODO
@@ -1033,7 +1053,9 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
         // builder_.msr(register_operand(register_operand::nzcv), pstate);
 
         builder_.cmp(top_regs[i], 0);
-        builder_.sbcs(register_operand(register_operand::wzr_sp), register_operand(register_operand::wzr_sp), register_operand(register_operand::wzr_sp));
+        builder_.sbcs(register_operand(register_operand::wzr_sp),
+                      register_operand(register_operand::wzr_sp),
+                      register_operand(register_operand::wzr_sp));
         switch (n.op()) {
         case ternary_arith_op::adc:
             builder_.adcs(dest_regs[i], lhs_regs[i], rhs_regs[i]);
@@ -1087,7 +1109,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
 
     atomic_block atomic(builder_, instr_cnt_, mem_addr);
     const register_operand& status = vreg_alloc_.allocate(value_type::u32());
-    if constexpr (supports_lse) {
+    if constexpr (!supports_lse) {
         atomic.start_atomic_block(dest_vreg);
     }
 
@@ -1301,7 +1323,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
 		throw backend_exception("unsupported binary atomic operation {}", util::to_underlying(n.op()));
 	}
 
-    if constexpr (supports_lse) {
+    if constexpr (!supports_lse) {
         atomic.end_atomic_block(status, dest_vreg);
     }
 
@@ -1481,12 +1503,13 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         // allocator)
         builder_.insert_comment("Bitcast from {} to {}", n.source_value().type(), n.val().type());
 
-        logger.debug("Bitcasting from {}x{} to {}x{}",
+        logger.debug("Bitcasting from {}x{} to {}x{}\n",
                      src_vregs.size(), src_vregs[0].type(),
                      dest_vregs.size(), dest_vregs[0].type());
+
         if (dest_vregs.size() == src_vregs.size()) {
             if (n.source_value().type().is_floating_point() || n.val().type().is_floating_point()) {
-                for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
+                for (std::size_t i = 0; i < dest_vregs.size(); ++i)
                         builder_.fmov(dest_vregs[i], src_vregs[i]);
                 return;
             }
@@ -1601,12 +1624,10 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 
         // convert integer to float
         if (n.source_value().type().is_integer() && n.val().type().is_floating_point()) {
-             if (n.val().type().type_class() == value_type_class::unsigned_integer) {
+             if (n.val().type().type_class() == value_type_class::unsigned_integer)
                 builder_.ucvtf(dest_vreg, src_vreg);
-            } else {
-                // signed
+             else
                 builder_.scvtf(dest_vreg, src_vreg);
-            }
         } else if (n.source_value().type().is_floating_point() && n.val().type().is_integer()) {
             // Handle float/double -> integer conversions
             switch (n.convert_type()) {
@@ -1614,23 +1635,19 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
                 // if float/double -> truncate to int
                 // NOTE: both float/double handled through the same instructions,
                 // only register differ
-                if (n.val().type().type_class() == value_type_class::unsigned_integer) {
+                if (n.val().type().type_class() == value_type_class::unsigned_integer)
                     builder_.fcvtzu(dest_vreg, src_vreg);
-                } else {
-                    // signed
+                else
                     builder_.fcvtzs(dest_vreg, src_vreg);
-                }
                 break;
             case fp_convert_type::round:
                 // if float/double -> round to closest int
                 // NOTE: both float/double handled through the same instructions,
                 // only register differ
-                if (n.val().type().type_class() == value_type_class::unsigned_integer) {
+                if (n.val().type().type_class() == value_type_class::unsigned_integer)
                     builder_.fcvtau(dest_vreg, src_vreg);
-                } else {
-                    // signed
+                else
                     builder_.fcvtas(dest_vreg, src_vreg);
-                }
                 break;
             case fp_convert_type::none:
             default:
@@ -1819,7 +1836,8 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
     if (insert_len == 0)
         throw backend_exception("Cannot insert into invalid range [{}:{})", n.to(), n.to()+insert_len);
 
-    builder_.insert_comment("insert specific bits into [{}:{}) with destination of type {}", n.to(), n.to()+insert_len, n.val().type());
+    builder_.insert_comment("insert specific bits into [{}:{}) with destination of type {}",
+                             n.to(), n.to()+insert_len, n.val().type());
 
     [[likely]]
     if (dest.size() == 1) {
@@ -1910,6 +1928,8 @@ void arm64_translation_context::materialise_internal_call(const internal_call_no
         ret_ = 1;
     } else if (n.fn().name() == "handle_int") {
         ret_ = 2;
+    } else if (n.fn().name() == "hlt") {
+        ret_ = 2;
     } else {
         throw backend_exception("unsupported internal call: {}", n.fn().name());
     }
@@ -1926,7 +1946,8 @@ void arm64_translation_context::materialise_read_local(const read_local_node &n)
 
     [[unlikely]]
     if (locals.size() != dest_vregs.size())
-        throw backend_exception("Read local received mismatched types for locals {} (register count {}) and destination {} (register count {})",
+        throw backend_exception("Read local received mismatched types for locals {}" \
+                                "(register count {}) and destination {} (register count {})",
                                  n.local()->type(), locals.size(), n.val().type(), dest_vregs.size());
 
     builder_.insert_comment("Read local variable @{}", fmt::ptr(n.local()));

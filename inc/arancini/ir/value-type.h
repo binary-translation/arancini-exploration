@@ -27,6 +27,7 @@ public:
 	static value_type f32() { return value_type(value_type_class::floating_point, 32, 1); }
 	static value_type f64() { return value_type(value_type_class::floating_point, 64, 1); }
     static value_type f80() { return value_type(value_type_class::floating_point, 80, 1); } // x87 double extended-precision
+    static value_type f128() { return value_type(value_type_class::floating_point, 128, 1); }
 
     template <typename T, typename std::enable_if<std::is_arithmetic_v<T>, int>::type = 0>
     static value_type from_value(T val) {
