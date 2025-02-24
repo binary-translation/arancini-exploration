@@ -303,13 +303,11 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
     if (type.is_vector() && type.element_width() > value_types::base_type.element_width())
         throw backend_exception("Cannot load registers of type {}", type);
 
-    auto comment = fmt::format("read register: {}", n.regname());
     auto &dest_vregs = vreg_alloc_.allocate(n.val());
-    for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
-        auto width = dest_vregs[i].type().element_width();
-        auto addr = guest_memory(n.regoff() + i * (width / 8));
-        builder_.load(dest_vregs[i], addr).add_comment(comment);
-    }
+
+    builder_.insert_comment("read register: {}", n.regname());
+    auto address = guest_memory(n.regoff()).base_register();
+    builder_.load(dest_vregs, address);
 }
 
 inline bool is_flag_setter(node_kinds node_kind) {
@@ -329,36 +327,21 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     // Flags may be set either based on some preceding operation or with a constant
     // Handle the case when they are generated based on a previous operation here
     if (is_flag_port(n.value())) {
+        builder_.insert_comment("write flag: {}", n.regname());
         if (is_flag_setter(n.value().owner()->kind())) {
             const auto &source = flag_map.at(static_cast<reg_offsets>(n.regoff()));
-            builder_.store(source, guest_memory(n.regoff()))
-                    .add_comment(fmt::format("write flag: {}", n.regname()));
+            builder_.store(source, guest_memory(n.regoff()).base_register());
         } else {
-            src[0].cast(n.value().type());
-            builder_.store(src[0], guest_memory(n.regoff()))
-                    .add_comment(fmt::format("write flag: {}", n.regname()));
+            builder_.insert_comment("write flag: {}", n.regname());
+            builder_.store(src[0], guest_memory(n.regoff()).base_register());
         }
         return;
     }
 
-    // FIXME: horrible hack needed here
-    //
-    // If we have a bit-extract before, we might have casted to a 64-bit type
-    // We then attempt to write a single byte, but that won't work because strb()
-    // requires a 32-bit register.
-    //
-    // We now down-cast it.
-    //
-    // There should be clear type promotion and type coercion.
     auto comment = fmt::format("write register: {}", n.regname());
-    for (std::size_t i = 0; i < src.size(); ++i) {
-        // if (src[i].type().width() > n.value().type().width() && n.value().type().width() <= value_types::base_type.element_width())
-        //     src[i] = cast(src[i], n.value().type());
-
-        std::size_t width = src[i].type().width();
-        auto addr = guest_memory(n.regoff() + i * (width / 8));
-        builder_.store(src[i], addr).add_comment(comment);
-    }
+    auto address = guest_memory(n.regoff()).base_register();
+    builder_.insert_comment("write register: {}", n.regname());
+    builder_.store(src, address);
 }
 
 void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
@@ -370,14 +353,8 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
         throw backend_exception("Cannot load vectors from memory with type {}", type);
 
     const auto &dest = vreg_alloc_.allocate(n.val());
-    const register_operand &addr_vreg = materialise_port(n.address());
-
-    for (std::size_t i = 0; i < dest.size(); ++i) {
-        std::size_t width = dest[i].type().element_width();
-
-        memory_operand mem_op(addr_vreg, i * (width / 8));
-        builder_.load(dest[i], mem_op).add_comment("read memory");
-    }
+    const register_operand &address = materialise_port(n.address());
+    builder_.load(dest, address);
 }
 
 void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
@@ -392,12 +369,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
     const auto &src = materialise_port(n.value());
 
     const auto &address = materialise_port(n.address());
-    for (std::size_t i = 0; i < src.size(); ++i) {
-        std::size_t width = src[i].type().element_width();
-
-        memory_operand mem_op(address, i * (width / 8));
-        builder_.store(src[i], mem_op).add_comment("write memory");
-    }
+    builder_.store(src, address);
 }
 
 void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
@@ -416,8 +388,8 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
 		ret_ = 4;
 	}
 
-    builder_.store(new_pc_vreg, guest_memory(reg_offsets::PC))
-            .add_comment("update program counter");
+    builder_.insert_comment("update program counter");
+    builder_.store(new_pc_vreg, guest_memory(reg_offsets::PC).base_register());
 }
 
 void arm64_translation_context::materialise_label(const label_node &n) {

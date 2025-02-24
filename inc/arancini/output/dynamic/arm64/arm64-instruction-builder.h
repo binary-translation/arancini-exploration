@@ -371,20 +371,32 @@ public:
         return append(assembler::bfi(dst, src1, lsb, width));
     }
 
-    instruction& load(const register_operand& dest, const memory_operand& memory) {
-        if (dest.type().element_width() <= 8)
-            return append(assembler::ldrb(dest, memory));
-        if (dest.type().element_width() <= 16)
-            return append(assembler::ldrh(dest, memory));
-        return append(assembler::ldr(dest, memory));
+    void load(const register_sequence& destination, const register_operand& address) {
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            std::size_t width = destination[i].type().element_width();
+            memory_operand memory(address, i * (width / 8));
+
+            if (destination[i].type().element_width() <= 8)
+                append(assembler::ldrb(destination[i], memory));
+            else if (destination[i].type().element_width() <= 16)
+                append(assembler::ldrh(destination[i], memory));
+            else
+                append(assembler::ldr(destination[i], memory));
+        }
     }
 
-    instruction& store(const register_operand& source, const memory_operand& memory) {
-        if (source.type().element_width() <= 8)
-            return append(assembler::strb(source, memory));
-        if (source.type().element_width() <= 16)
-            return append(assembler::strh(source, memory));
-        return append(assembler::str(source, memory));
+    void store(const register_sequence& source, const register_operand& address) {
+        for (std::size_t i = 0; i < source.size(); ++i) {
+            std::size_t width = source[i].type().element_width();
+
+            memory_operand memory(address, i * (width / 8));
+            if (source[i].type().element_width() <= 8)
+                append(assembler::strb(source, memory));
+            if (source[i].type().element_width() <= 16)
+                append(assembler::strh(source, memory));
+            else
+                append(assembler::str(source, memory));
+        }
     }
 
     instruction& mul(const register_operand &dest,
