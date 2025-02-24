@@ -1017,16 +1017,10 @@ void arm64_translation_context::materialise_unary_arith(const unary_arith_node &
 
     switch (n.op()) {
     case unary_arith_op::bnot:
-        /* builder_.brk(immediate_operand(100, 64)); */
-        if (is_flag_port(n.val()))
-            builder_.eor_(dest_vreg, lhs_vreg, 1);
-        else
-            builder_.complement(dest_vreg, lhs_vreg);
+        builder_.complement(dest_vreg, lhs_vreg);
         break;
     case unary_arith_op::neg:
-        // neg: ~reg + 1 for complement-of-2
-        builder_.complement(dest_vreg, lhs_vreg);
-        builder_.add(dest_vreg, dest_vreg, 1);
+        builder_.negate(dest_vreg, lhs_vreg);
         break;
     default:
         throw backend_exception("Unknown unary operation");

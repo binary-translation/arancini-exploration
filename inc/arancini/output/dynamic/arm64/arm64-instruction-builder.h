@@ -211,12 +211,14 @@ public:
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& complement(const register_operand &dst, const reg_or_imm &src) {
+        // TODO
         ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 6), dst.type());
+        if (dst.type().width() == 1)
+            return append(assembler::eor_(dst, immediates_policy(src), 1));
         return append(assembler::mvn(dst, immediates_policy(src)));
     }
 
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& neg(const register_operand &dst, const register_operand &src) {
+    instruction& negate(const register_operand &dst, const register_operand &src) {
         return append(assembler::neg(dst, src));
     }
 
@@ -686,7 +688,7 @@ public:
                     const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         const auto& negated = vreg_alloc_.allocate(source.type());
-        neg(negated, source);
+        negate(negated, source);
         atomic_add(destination, negated, mem, type);
     }
 
