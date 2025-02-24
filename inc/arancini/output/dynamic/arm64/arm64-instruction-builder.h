@@ -210,7 +210,7 @@ public:
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& not_(const register_operand &dst, const reg_or_imm &src) {
+    instruction& complement(const register_operand &dst, const reg_or_imm &src) {
         ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 6), dst.type());
         return append(assembler::mvn(dst, immediates_policy(src)));
     }
@@ -634,192 +634,193 @@ public:
         }
     }
 
-    void atomic_block(const register_operand &rm, const register_operand &rt,
-                      const memory_operand &mem,
-                      std::function<void()> body,
-                      atomic_types type = atomic_types::exclusive)
+    void atomic_block(const register_operand &data, const memory_operand &mem,
+                      std::function<void()> body, atomic_types type = atomic_types::exclusive)
     {
         const register_operand& status = vreg_alloc_.allocate(ir::value_type::u32());
         auto loop_label = fmt::format("loop_{}", instructions_.size());
         auto success_label = fmt::format("success_{}", instructions_.size());
         label(loop_label);
-        atomic_load(rm, mem);
+        atomic_load(data, mem);
 
         body();
 
-        atomic_store(status, rm, mem).add_comment("store if not failure");
+        atomic_store(status, data, mem).add_comment("store if not failure");
         cbz(status, success_label).add_comment("== 0 represents success storing");
         b(loop_label).add_comment("loop until failure or success");
         label(success_label);
         return;
     }
 
-    void atomic_add(const register_operand &rm, const register_operand &rt,
-                    const memory_operand &mem, atomic_types type = atomic_types::exclusive)
+    void atomic_add(const register_operand& destination, const register_operand& source,
+                    const memory_operand& mem, atomic_types type = atomic_types::exclusive)
     {
 
         if constexpr (!supports_lse) {
-            atomic_block(rm, rt, mem, [this, &rm, &rt]() {
-                adds(rt, rt, rm);
+            atomic_block(destination, mem, [this, &destination, &source]() {
+                adds(destination, source, destination);
             }, type);
         }
 
         if (type == atomic_types::exclusive) {
-            switch (rm.type().element_width()) {
+            switch (destination.type().element_width()) {
             case 8:
-                append(assembler::ldaddb(rm, rt, mem).as_keep());
+                append(assembler::ldaddb(destination, source, mem).as_keep());
                 return;
             case 16:
-                append(assembler::ldaddh(rm, rt, mem).as_keep());
+                append(assembler::ldaddh(destination, source, mem).as_keep());
                 return;
             case 32:
             case 64:
-                append(assembler::ldadd(rm, rt, mem).as_keep());
+                append(assembler::ldadd(destination, source, mem).as_keep());
                 return;
             default:
-                throw backend_exception("Cannot atomically add type {}", rt.type());
+                throw backend_exception("Cannot atomically add type {}", source.type());
             }
         }
 
         // TODO
     }
 
-    void atomic_sub(const register_operand &rm, const register_operand &rt,
+    void atomic_sub(const register_operand &destination, const register_operand &source,
                     const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
-        const auto& negated = vreg_alloc_.allocate(rt.type());
-        neg(negated, rt);
-        atomic_add(rm, negated, mem, type);
+        const auto& negated = vreg_alloc_.allocate(source.type());
+        neg(negated, source);
+        atomic_add(destination, negated, mem, type);
     }
 
-    void atomic_xadd(const register_operand &rm, const register_operand &rt,
+    void atomic_xadd(const register_operand &destination, const register_operand &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
-        const register_operand &old_dest = vreg_alloc_.allocate(rm.type());
-        mov(old_dest, rm);
-        atomic_add(rm, rt, mem, type);
-        mov(rt, old_dest);
+        const register_operand &old = vreg_alloc_.allocate(destination.type());
+        mov(old, destination);
+        atomic_add(destination, source, mem, type);
+        mov(source, old);
     }
 
-    void atomic_clr(const register_operand &rm, const register_operand &rt,
+    void atomic_clr(const register_operand &destination, const register_operand &source,
                     const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
-            atomic_block(rm, rt, mem, [this, &rm, &rt]() {
-                adds(rt, rt, rm);
+            atomic_block(destination, mem, [this, &destination, &source]() {
+                const register_operand& negated = vreg_alloc_.allocate(source.type());
+                complement(negated, source);
+                ands(destination, destination, negated);
             }, type);
         }
 
         if (type == atomic_types::exclusive) {
-            switch (rm.type().element_width()) {
+            switch (destination.type().element_width()) {
             case 8:
-                append(assembler::ldclrb(rm, rt, mem).as_keep());
+                append(assembler::ldclrb(destination, source, mem).as_keep());
                 return;
             case 16:
-                append(assembler::ldclrh(rm, rt, mem).as_keep());
+                append(assembler::ldclrh(destination, source, mem).as_keep());
                 return;
             case 32:
             case 64:
-                append(assembler::ldclr(rm, rt, mem).as_keep());
+                append(assembler::ldclr(destination, source, mem).as_keep());
                 return;
             default:
-                throw backend_exception("Cannot atomically clear type {}", rt.type());
+                throw backend_exception("Cannot atomically clear type {}", source.type());
             }
         }
 
         // TODO
     }
 
-    void atomic_and(const register_operand &rm, const register_operand &rt,
+    void atomic_and(const register_operand &destination, const register_operand &source,
                     const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
-        not_(rt, rt);
-        atomic_clr(rm, rt, mem, type);
+        const auto& complemented = vreg_alloc_.allocate(source.type());
+        complement(complemented, source);
+        atomic_clr(destination, complemented, mem, type);
     }
 
-    void atomic_eor(const register_operand &rm, const register_operand &rt,
+    void atomic_eor(const register_operand &destination, const register_operand &source,
                     const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
-            atomic_block(rm, rt, mem, [this, &rm, &rt]() {
-                eor_(rt, rt, rm);
+            atomic_block(destination, mem, [this, &destination, &source]() {
+                eor_(destination, destination, source);
             }, type);
         }
         if (type == atomic_types::exclusive) {
-            switch (rm.type().element_width()) {
+            switch (destination.type().element_width()) {
             case 8:
-                append(assembler::ldeorb(rm, rt, mem).as_keep());
+                append(assembler::ldeorb(destination, source, mem).as_keep());
                 return;
             case 16:
-                append(assembler::ldeorh(rm, rt, mem).as_keep());
+                append(assembler::ldeorh(destination, source, mem).as_keep());
                 return;
             case 32:
             case 64:
-                append(assembler::ldeor(rm, rt, mem).as_keep());
+                append(assembler::ldeor(destination, source, mem).as_keep());
                 return;
             default:
-                throw backend_exception("Cannot atomically clear type {}", rt.type());
+                throw backend_exception("Cannot atomically clear type {}", source.type());
             }
         }
 
         // TODO
     }
 
-    void atomic_set(const register_operand &rm, const register_operand &rt,
+    void atomic_or(const register_operand &destination, const register_operand &source,
                     const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
-            atomic_block(rm, rt, mem, [this, &rm, &rt]() {
-                orr_(rt, rt, rm);
+            atomic_block(destination, mem, [this, &destination, &source]() {
+                orr_(destination, destination, source);
             }, type);
         }
         if (type == atomic_types::exclusive) {
-            switch (rm.type().element_width()) {
+            switch (destination.type().element_width()) {
             case 8:
-                append(assembler::ldsetb(rm, rt, mem).as_keep());
+                append(assembler::ldsetb(destination, source, mem));
                 return;
             case 16:
-                append(assembler::ldseth(rm, rt, mem).as_keep());
+                append(assembler::ldseth(destination, source, mem));
                 return;
             case 32:
             case 64:
-                append(assembler::ldset(rm, rt, mem).as_keep());
+                append(assembler::ldset(destination, source, mem));
                 return;
             default:
-                throw backend_exception("Cannot atomically clear type {}", rt.type());
+                throw backend_exception("Cannot atomically clear type {}", destination.type());
             }
         }
 
         // TODO
     }
 
-    void atomic_smax(const register_operand &rm, const register_operand &rt,
+    void atomic_smax(const register_operand &destination, const register_operand &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
             throw backend_exception("smax not implemented");
         }
         if (type == atomic_types::exclusive) {
-            switch (rm.type().element_width()) {
+            switch (destination.type().element_width()) {
             case 8:
-                append(assembler::ldsmaxb(rm, rt, mem).as_keep());
+                append(assembler::ldsmaxb(destination, source, mem).as_keep());
                 return;
             case 16:
-                append(assembler::ldsmaxh(rm, rt, mem).as_keep());
+                append(assembler::ldsmaxh(destination, source, mem).as_keep());
                 return;
             case 32:
             case 64:
-                append(assembler::ldsmax(rm, rt, mem).as_keep());
+                append(assembler::ldsmax(destination, source, mem).as_keep());
                 return;
             default:
-                throw backend_exception("Cannot atomically clear type {}", rt.type());
+                throw backend_exception("Cannot atomically clear type {}", source.type());
             }
         }
 
         // TODO
     }
 
-    void atomic_smin(const register_operand &rm, const register_operand &rt,
+    void atomic_smin(const register_operand &rm, const register_operand &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
@@ -828,24 +829,24 @@ public:
         if (type == atomic_types::exclusive) {
             switch (rm.type().element_width()) {
             case 8:
-                append(assembler::ldsminb(rm, rt, mem).as_keep());
+                append(assembler::ldsminb(rm, source, mem).as_keep());
                 return;
             case 16:
-                append(assembler::ldsminh(rm, rt, mem).as_keep());
+                append(assembler::ldsminh(rm, source, mem).as_keep());
                 return;
             case 32:
             case 64:
-                append(assembler::ldsmin(rm, rt, mem).as_keep());
+                append(assembler::ldsmin(rm, source, mem).as_keep());
                 return;
             default:
-                throw backend_exception("Cannot atomically clear type {}", rt.type());
+                throw backend_exception("Cannot atomically clear type {}", source.type());
             }
         }
 
         // TODO
     }
 
-    void atomic_umax(const register_operand &rm, const register_operand &rt,
+    void atomic_umax(const register_operand &rm, const register_operand &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
@@ -855,17 +856,17 @@ public:
         if (type == atomic_types::exclusive) {
             switch (rm.type().element_width()) {
             case 8:
-                append(assembler::ldumaxb(rm, rt, mem).as_keep());
+                append(assembler::ldumaxb(rm, source, mem).as_keep());
                 return;
             case 16:
-                append(assembler::ldumaxh(rm, rt, mem).as_keep());
+                append(assembler::ldumaxh(rm, source, mem).as_keep());
                 return;
             case 32:
             case 64:
-                append(assembler::ldumax(rm, rt, mem).as_keep());
+                append(assembler::ldumax(rm, source, mem).as_keep());
                 return;
             default:
-                throw backend_exception("Cannot atomically clear type {}", rt.type());
+                throw backend_exception("Cannot atomically clear type {}", source.type());
             }
         }
 
@@ -873,58 +874,58 @@ public:
     }
 
 
-    void atomic_umin(const register_operand &rm, const register_operand &rt,
+    void atomic_umin(const register_operand &rm, const register_operand &source,
                             const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
             throw backend_exception("umin not implemented");
-            // atomic_block(rm, rt, mem, [this, &rm, &rt]() {
-            //     adds(rt, rt, rm);
-            // }, type);
         }
         if (type == atomic_types::exclusive) {
             switch (rm.type().element_width()) {
             case 8:
-                append(assembler::lduminb(rm, rt, mem).as_keep());
+                append(assembler::lduminb(rm, source, mem).as_keep());
                 return;
             case 16:
-                append(assembler::lduminh(rm, rt, mem).as_keep());
+                append(assembler::lduminh(rm, source, mem).as_keep());
                 return;
             case 32:
             case 64:
-                append(assembler::ldumin(rm, rt, mem).as_keep());
+                append(assembler::ldumin(rm, source, mem).as_keep());
                 return;
             default:
-                throw backend_exception("Cannot atomically clear type {}", rt.type());
+                throw backend_exception("Cannot atomically clear type {}", source.type());
             }
         }
 
         // TODO
     }
 
-    void atomic_swap(const register_operand &rm, const register_operand &rt,
+    void atomic_swap(const register_operand &destination, const register_operand &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
-            atomic_block(rm, rt, mem, [this, &rm, &rt]() {
-                mov(rm, rt);
+            atomic_block(destination, mem, [this, &destination, &source]() {
+                const auto& old = vreg_alloc_.allocate(destination.type());
+                mov(old, destination);
+                mov(destination, source);
+                mov(source, old);
             }, type);
         }
 
         if (type == atomic_types::exclusive) {
-            switch (rm.type().element_width()) {
+            switch (destination.type().element_width()) {
             case 8:
-                append(assembler::swpb(rm, rt, mem).as_keep());
+                append(assembler::swpb(destination, source, mem).as_keep());
                 return;
             case 16:
-                append(assembler::swph(rm, rt, mem).as_keep());
+                append(assembler::swph(destination, source, mem).as_keep());
                 return;
             case 32:
             case 64:
-                append(assembler::swp(rm, rt, mem).as_keep());
+                append(assembler::swp(destination, source, mem).as_keep());
                 return;
             default:
-                throw backend_exception("Cannot atomically clear type {}", rt.type());
+                throw backend_exception("Cannot atomically clear type {}", source.type());
             }
         }
 
@@ -936,8 +937,11 @@ public:
                         atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
-            cmp(current, acc).add_comment("compare with accumulator");
-            csel(acc, current, acc, cond_operand::ne()).add_comment("conditionally move current memory value into accumulator");
+            atomic_block(current, mem, [this, &current, &acc]() {
+                cmp(current, acc).add_comment("compare with accumulator");
+                csel(acc, current, acc, cond_operand::ne())
+                    .add_comment("conditionally move current memory value into accumulator");
+            }, type);
             return;
         }
 

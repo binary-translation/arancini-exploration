@@ -902,26 +902,14 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
 }
 
 void arm64_translation_context::materialise_binary_atomic(const binary_atomic_node &n) {
-	const auto &dest_vregs = vreg_alloc_.allocate(n.val());
-    const auto &src_vregs = materialise_port(n.rhs());
-    const auto &addr_regs = materialise_port(n.address());
-
-    [[unlikely]]
-    if (addr_regs.size() != 1)
-        throw backend_exception("Binary atomic operation address type not supported {}", n.address().type());
-
-    [[unlikely]]
-    if (dest_vregs.size() != 1 || src_vregs.size() != 1)
-        throw backend_exception("Binary atomic operations not supported for vector types (src: {} or dest: {})",
-                                n.rhs().type(), n.val().type());
-
-    const auto &src_vreg = src_vregs[0];
-    const auto &dest_vreg = dest_vregs[0];
+	const auto &destination = vreg_alloc_.allocate(n.val());
+    const auto &source = materialise_port(n.rhs());
+    const auto &address = materialise_port(n.address());
 
     // No need to handle flags: they are not visible to other PEs
     allocate_flags(vreg_alloc_, flag_map, n);
 
-    memory_operand mem_addr(addr_regs[0]);
+    memory_operand mem_addr(address[0]);
 
     bool sets_flags = true;
     bool inverse_carry_flag_operation = false;
@@ -932,40 +920,40 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
 
 	switch (n.op()) {
 	case binary_atomic_op::add:
-        builder_.atomic_add(src_vreg, dest_vreg, mem_addr);
+        builder_.atomic_add(destination, source, mem_addr);
         break;
 	case binary_atomic_op::sub:
-        builder_.atomic_sub(src_vreg, dest_vreg, mem_addr);
+        builder_.atomic_sub(destination, source, mem_addr);
         inverse_carry_flag_operation = true;
         break;
     case binary_atomic_op::xadd:
-        builder_.atomic_xadd(dest_vreg, dest_vreg, src_vreg);
+        builder_.atomic_xadd(destination, destination, source);
         break;
 	case binary_atomic_op::bor:
-        builder_.atomic_set(src_vreg, dest_vreg, mem_addr);
-        builder_.cmp(dest_vreg, 0);
+        builder_.atomic_or(destination, source, mem_addr);
+        builder_.cmp(destination, 0);
         inverse_carry_flag_operation = true;
 		break;
 	case binary_atomic_op::band:
         // TODO: Not sure if this is correct
-        builder_.atomic_and(src_vreg, dest_vreg, mem_addr);
+        builder_.atomic_and(destination, source, mem_addr);
 		break;
 	case binary_atomic_op::bxor:
-        builder_.atomic_eor(src_vreg, dest_vreg, mem_addr);
-        builder_.cmp(dest_vreg, 0);
+        builder_.atomic_eor(destination, source, mem_addr);
+        builder_.cmp(destination, 0);
         inverse_carry_flag_operation = true;
 		break;
     case binary_atomic_op::btc:
-        builder_.atomic_clr(src_vreg, dest_vreg, mem_addr);
+        builder_.atomic_clr(destination, source, mem_addr);
         sets_flags = false;
 		break;
     case binary_atomic_op::bts:
-        builder_.atomic_set(src_vreg, dest_vreg, mem_addr);
+        builder_.atomic_or(destination, source, mem_addr);
         sets_flags = false;
 		break;
     case binary_atomic_op::xchg:
         // TODO: check if this works
-        builder_.atomic_swap(dest_vreg, src_vreg, mem_addr);
+        builder_.atomic_swap(destination, source, mem_addr);
         sets_flags = false;
         break;
 	default:
@@ -1033,11 +1021,11 @@ void arm64_translation_context::materialise_unary_arith(const unary_arith_node &
         if (is_flag_port(n.val()))
             builder_.eor_(dest_vreg, lhs_vreg, 1);
         else
-            builder_.not_(dest_vreg, lhs_vreg);
+            builder_.complement(dest_vreg, lhs_vreg);
         break;
     case unary_arith_op::neg:
         // neg: ~reg + 1 for complement-of-2
-        builder_.not_(dest_vreg, lhs_vreg);
+        builder_.complement(dest_vreg, lhs_vreg);
         builder_.add(dest_vreg, dest_vreg, 1);
         break;
     default:
