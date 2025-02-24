@@ -371,31 +371,35 @@ public:
         return append(assembler::bfi(dst, src1, lsb, width));
     }
 
-    void load(const register_sequence& destination, const register_operand& address) {
+    void load(const register_sequence& destination, const memory_operand& address) {
         for (std::size_t i = 0; i < destination.size(); ++i) {
-            std::size_t width = destination[i].type().element_width();
-            memory_operand memory(address, i * (width / 8));
-
-            if (destination[i].type().element_width() <= 8)
+            if (destination[i].type().element_width() <= 8) {
+                memory_operand memory(address.base_register(), address.offset().value() + i);
                 append(assembler::ldrb(destination[i], memory));
-            else if (destination[i].type().element_width() <= 16)
+            } else if (destination[i].type().element_width() <= 16) {
+                memory_operand memory(address.base_register(), address.offset().value() + i * 2);
                 append(assembler::ldrh(destination[i], memory));
-            else
+            } else {
+                auto offset = i * (destination[i].type().element_width() < 64 ? 4 : 8);
+                memory_operand memory(address.base_register(), address.offset().value() + offset);
                 append(assembler::ldr(destination[i], memory));
+            }
         }
     }
 
-    void store(const register_sequence& source, const register_operand& address) {
+    void store(const register_sequence& source, const memory_operand& address) {
         for (std::size_t i = 0; i < source.size(); ++i) {
-            std::size_t width = source[i].type().element_width();
-
-            memory_operand memory(address, i * (width / 8));
-            if (source[i].type().element_width() <= 8)
-                append(assembler::strb(source, memory));
-            if (source[i].type().element_width() <= 16)
-                append(assembler::strh(source, memory));
-            else
-                append(assembler::str(source, memory));
+            if (source[i].type().element_width() <= 8) {
+                memory_operand memory(address.base_register(), address.offset().value() + i);
+                append(assembler::strb(source[i], memory));
+            } else if (source[i].type().element_width() <= 16) {
+                memory_operand memory(address.base_register(), address.offset().value() + i * 2);
+                append(assembler::strh(source[i], memory));
+            } else {
+                auto offset = i * (source[i].type().element_width() < 64 ? 4 : 8);
+                memory_operand memory(address.base_register(), address.offset().value() + offset);
+                append(assembler::str(source[i], memory));
+            }
         }
     }
 
@@ -1070,6 +1074,89 @@ public:
         }
 
         return reg;
+    }
+
+    // TODO: this is wrong
+    void extend_to_byte(const register_operand& reg, std::uint8_t idx = 1) {
+        lsl(reg, reg, 8 - idx).add_comment("shift left LSB to set sign bit of byte");
+        asr(reg, reg, 8 - idx).add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
+    }
+
+    register_operand cast(const register_operand &src, ir::value_type type) {
+        insert_comment("Internal cast from {} to {}", src.type(), type);
+
+        if (src.type().type_class() == ir::value_type_class::floating_point &&
+            type.type_class() != ir::value_type_class::floating_point) {
+            auto dest = vreg_alloc_.allocate(type);
+            fcvtzs(dest, src);
+            return dest;
+        }
+
+        if (src.type().type_class() == ir::value_type_class::floating_point &&
+            type.type_class() == ir::value_type_class::floating_point) {
+            if (type.element_width() == 64 && src.type().element_width() == 32) {
+                auto dest = vreg_alloc_.allocate(type);
+                fcvt(dest, src);
+                return dest;
+            }
+
+            if (type.element_width() == 64 && src.type().element_width() == 64)
+                return src;
+
+            throw backend_exception("Cannot internally cast from {} to {}", src.type(), type);
+        }
+
+        if (src.type().element_width() >= type.element_width()) {
+            return register_operand(src.index(), type);
+        }
+
+        if (type.element_width() > 64)
+            type = ir::value_type::u64();
+
+        auto dest = vreg_alloc_.allocate(type);
+        switch (src.type().element_width()) {
+        case 1:
+            extend_to_byte(src, 1);
+        case 8:
+            sxtb(dest, src);
+            break;
+        case 16:
+            sxth(dest, src);
+            break;
+        case 32:
+            sxtw(dest, src);
+            break;
+        default:
+            return src;
+        }
+        return dest;
+    }
+
+    shift_operand extend_register(const register_operand& reg, arancini::ir::value_type type) {
+        auto mod = shift_operand::shift_type::lsl;
+
+        switch (type.element_width()) {
+        case 8:
+            if (type.type_class() == ir::value_type_class::signed_integer) {
+                mod = shift_operand::shift_type::sxtb;
+                sxtb(reg, reg);
+            } else {
+                mod = shift_operand::shift_type::uxtb;
+                uxtb(reg, reg);
+            }
+            break;
+        case 16:
+            if (type.type_class() == ir::value_type_class::signed_integer) {
+                mod = shift_operand::shift_type::sxth;
+                sxth(reg, reg);
+            } else {
+                mod = shift_operand::shift_type::uxth;
+                uxth(reg, reg);
+            }
+            break;
+        }
+
+        return shift_operand(mod, 0);
     }
 
     void clear() {

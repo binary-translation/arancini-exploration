@@ -43,63 +43,6 @@ void allocate_flags(port_register_allocator& allocator, flag_map_type& flag_map,
     flag_map[reg_offsets::CF] = allocator.allocate(n.carry(), value_type::u1());
 }
 
-void fill_byte_with_bit(instruction_builder& builder, const register_operand& reg) {
-    builder.lsl(reg, reg, 7)
-                .add_comment("shift left LSB to set sign bit of byte");
-    builder.asr(reg, reg, 7)
-                .add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
-}
-
-register_operand arm64_translation_context::cast(const register_operand &src, value_type type) {
-    builder_.insert_comment("Internal cast from {} to {}", src.type(), type);
-
-	if (src.type().type_class() == value_type_class::floating_point &&
-        type.type_class() != value_type_class::floating_point) {
-		auto dest = vreg_alloc_.allocate(type);
-        builder_.fcvtzs(dest, src);
-        return dest;
-	}
-
-	if (src.type().type_class() == value_type_class::floating_point &&
-        type.type_class() == value_type_class::floating_point) {
-        if (type.element_width() == 64 && src.type().element_width() == 32) {
-            auto dest = vreg_alloc_.allocate(type);
-            builder_.fcvt(dest, src);
-            return dest;
-        }
-
-        if (type.element_width() == 64 && src.type().element_width() == 64)
-            return src;
-
-        throw backend_exception("Cannot internally cast from {} to {}", src.type(), type);
-    }
-
-    if (src.type().element_width() >= type.element_width()) {
-        return register_operand(src.index(), type);
-    }
-
-    if (type.element_width() > 64)
-        type = value_type::u64();
-
-    auto dest = vreg_alloc_.allocate(type);
-    switch (src.type().element_width()) {
-    case 1:
-        fill_byte_with_bit(builder_, src);
-    case 8:
-        builder_.sxtb(dest, src);
-        break;
-    case 16:
-        builder_.sxth(dest, src);
-        break;
-    case 32:
-        builder_.sxtw(dest, src);
-        break;
-    default:
-        return src;
-    }
-    return dest;
-}
-
 memory_operand arm64_translation_context::guest_memory(int regoff, memory_operand::address_mode mode) {
     if (regoff > 255 || regoff < -256) {
         const register_operand& base_vreg = vreg_alloc_.allocate(value_types::addr_type);
@@ -298,16 +241,15 @@ static inline bool is_flag_port(const port &value) {
 void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
     // Sanity check
     auto type = n.val().type();
+    const auto &dest_vregs = vreg_alloc_.allocate(n.val());
 
     [[unlikely]]
     if (type.is_vector() && type.element_width() > value_types::base_type.element_width())
         throw backend_exception("Cannot load registers of type {}", type);
 
-    auto &dest_vregs = vreg_alloc_.allocate(n.val());
-
     builder_.insert_comment("read register: {}", n.regname());
-    auto address = guest_memory(n.regoff()).base_register();
-    builder_.load(dest_vregs, address);
+
+    builder_.load(dest_vregs, guest_memory(n.regoff()));
 }
 
 inline bool is_flag_setter(node_kinds node_kind) {
@@ -318,7 +260,7 @@ inline bool is_flag_setter(node_kinds node_kind) {
 void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     // Sanity check
     auto type = n.val().type();
-    auto &src = materialise_port(n.value());
+    const auto &source = materialise_port(n.value());
 
     [[unlikely]]
     if (type.is_vector() && type.element_width() > value_types::base_type.element_width())
@@ -329,19 +271,16 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     if (is_flag_port(n.value())) {
         builder_.insert_comment("write flag: {}", n.regname());
         if (is_flag_setter(n.value().owner()->kind())) {
-            const auto &source = flag_map.at(static_cast<reg_offsets>(n.regoff()));
-            builder_.store(source, guest_memory(n.regoff()).base_register());
+            const auto &flag = flag_map.at(static_cast<reg_offsets>(n.regoff()));
+            builder_.store(flag, guest_memory(n.regoff()));
         } else {
-            builder_.insert_comment("write flag: {}", n.regname());
-            builder_.store(src[0], guest_memory(n.regoff()).base_register());
+            builder_.store(source, guest_memory(n.regoff()));
         }
         return;
     }
 
-    auto comment = fmt::format("write register: {}", n.regname());
-    auto address = guest_memory(n.regoff()).base_register();
     builder_.insert_comment("write register: {}", n.regname());
-    builder_.store(src, address);
+    builder_.store(source, guest_memory(n.regoff()));
 }
 
 void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
@@ -423,33 +362,6 @@ void arm64_translation_context::materialise_constant(const constant_node &n) {
         builder_.fmov(dest, n.const_val_f()).add_comment("move float into register");
     else
         builder_.mov(dest, n.const_val_i()).add_comment("move integer into register");
-}
-
-inline shift_operand extend_register(instruction_builder& builder, const register_operand& reg, arancini::ir::value_type type) {
-    auto mod = shift_operand::shift_type::lsl;
-
-    switch (type.element_width()) {
-    case 8:
-        if (type.type_class() == value_type_class::signed_integer) {
-            mod = shift_operand::shift_type::sxtb;
-            builder.sxtb(reg, reg);
-        } else {
-            mod = shift_operand::shift_type::uxtb;
-            builder.uxtb(reg, reg);
-        }
-        break;
-    case 16:
-        if (type.type_class() == value_type_class::signed_integer) {
-            mod = shift_operand::shift_type::sxth;
-            builder.sxth(reg, reg);
-        } else {
-            mod = shift_operand::shift_type::uxth;
-            builder.uxth(reg, reg);
-        }
-        break;
-    }
-
-    return shift_operand(mod, 0);
 }
 
 [[nodiscard]]
@@ -543,8 +455,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 // The same fmul is used in both 32-bit and 64-bit multiplication
                 // The actual operation depends on the type of its registers
                 {
-                    auto lhs = cast(lhs_regset, dest_regset[0].type());
-                    auto rhs = cast(rhs_regset, dest_regset[0].type());
+                    auto lhs = builder_.cast(lhs_regset, dest_regset[0].type());
+                    auto rhs = builder_.cast(rhs_regset, dest_regset[0].type());
                     builder_.fmul(dest_regset, lhs, rhs);
                     sets_flags = false;
                 }
@@ -675,13 +587,13 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 builder_.add(dest_regset[i], lhs_regset[i], rhs_regset[i]);
         } else {
             if (op_type.width() == 1) {
-                fill_byte_with_bit(builder_, lhs_regset);
-                fill_byte_with_bit(builder_, rhs_regset);
+                builder_.extend_to_byte(lhs_regset);
+                builder_.extend_to_byte(rhs_regset);
                 op_type = ir::value_type(op_type.type_class(), 32, 1);
             }
 
             // Scalar addition (including > 64-bits)
-            auto shift_op = extend_register(builder_, lhs_regset[0], op_type);
+            auto shift_op = builder_.extend_register(lhs_regset[0], op_type);
             builder_.adds(dest_regset[0], lhs_regset[0], rhs_regset[0], shift_op);
 
             // Addition for > 64-bits
@@ -699,13 +611,13 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         } else {
             // Flag
             if (op_type.width() == 1) {
-                fill_byte_with_bit(builder_, lhs_regset);
-                fill_byte_with_bit(builder_, rhs_regset);
+                builder_.extend_to_byte(lhs_regset);
+                builder_.extend_to_byte(rhs_regset);
                 op_type = ir::value_type(op_type.type_class(), 32, 1);
             }
 
             // Scalar subtraction (including > 64-bits)
-            auto shift_op = extend_register(builder_, lhs_regset[0], op_type);
+            auto shift_op = builder_.extend_register(lhs_regset[0], op_type);
             builder_.subs(dest_regset[0], lhs_regset[0], rhs_regset[0], shift_op);
 
             // Subtraction for > 64-bits
@@ -758,12 +670,12 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 
         switch (op_type.element_width()) {
         case 1:
-            fill_byte_with_bit(builder_, lhs_regset);
-            fill_byte_with_bit(builder_, rhs_regset);
+            builder_.extend_to_byte(lhs_regset);
+            builder_.extend_to_byte(rhs_regset);
         case 8:
         case 16:
-            extend_register(builder_, lhs_regset, op_type);
-            extend_register(builder_, rhs_regset, op_type);
+            builder_.extend_register(lhs_regset, op_type);
+            builder_.extend_register(rhs_regset, op_type);
         case 32:
             builder_.orr_(dest_regset, lhs_regset, rhs_regset);
             builder_.ands(register_operand(register_operand::wzr_sp), dest_regset, dest_regset);
@@ -795,12 +707,12 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 
         switch (op_type.element_width()) {
         case 1:
-            fill_byte_with_bit(builder_, lhs_regset);
-            fill_byte_with_bit(builder_, rhs_regset);
+            builder_.extend_to_byte(lhs_regset);
+            builder_.extend_to_byte(rhs_regset);
         case 8:
         case 16:
-            extend_register(builder_, lhs_regset, op_type);
-            extend_register(builder_, rhs_regset, op_type);
+            builder_.extend_register(lhs_regset, op_type);
+            builder_.extend_register(rhs_regset, op_type);
         case 32:
         case 64:
             builder_.ands(dest_regset, lhs_regset, rhs_regset);
@@ -870,7 +782,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             throw backend_exception("Unsupported comparison between {} x {}",
                                     n.lhs().type(), n.rhs().type());
 
-        rhs_regset[0] = cast(rhs_regset[0], lhs_regset[0].type());
+        rhs_regset[0] = builder_.cast(rhs_regset[0], lhs_regset[0].type());
         builder_.cmp(lhs_regset[0], rhs_regset[0])
                 .add_comment("compare LHS and RHS to generate condition for conditional set");
         builder_.cset(dest_regset[0], get_cset_type(n.op()))
@@ -959,7 +871,7 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
         // builder_.mrs(pstate, register_operand(register_operand::nzcv));
         // builder_.lsl(top_regs[i], top_regs[i], 0x3);
         //
-        // top_regs[i] = cast(top_regs[i], pstate.type());
+        // top_regs[i] = builder_.cast(top_regs[i], pstate.type());
         // builder_.orr_(pstate, pstate, top_regs[i]);
         // builder_.msr(register_operand(register_operand::nzcv), pstate);
 
@@ -1415,7 +1327,7 @@ void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
     const auto& input = materialise_port(n.input());
 
     auto& amount = materialise_port(n.amount());
-    amount = cast(amount, n.val().type());
+    amount = builder_.cast(amount, n.val().type());
 
     const auto& dest_vreg = vreg_alloc_.allocate(n.val());
 
@@ -1560,7 +1472,7 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
 
     [[likely]]
     if (dest.size() == 1) {
-        auto out = cast(insertion_bits, dest[0].type());
+        auto out = builder_.cast(insertion_bits, dest[0].type());
         builder_.bfi(dest, out, insert_idx, insert_len);
         return;
     }
@@ -1571,7 +1483,7 @@ void arm64_translation_context::materialise_bit_insert(const bit_insert_node &n)
     std::size_t inserted = 0;
     std::size_t insert_start = n.to() / dest[0].type().element_width();
     for (std::size_t i = insert_start; inserted < n.length(); ++i) {
-        auto out = cast(insertion_bits[bits_idx], dest[i].type());
+        auto out = builder_.cast(insertion_bits[bits_idx], dest[i].type());
 
         builder_.bfi(dest[i], out, insert_idx, insert_len);
         insert_idx = 0;
@@ -1611,7 +1523,7 @@ void arm64_translation_context::materialise_vector_insert(const vector_insert_no
     builder_.insert_comment("Insert value of type {} into destination at index {}",
                             n.insert_value().type(), n.index());
     for (std::size_t i = 0; i < value_vregs.size(); ++i) {
-        const auto &value_vreg = cast(value_vregs[i], dest_vregs[index + i].type());
+        const auto &value_vreg = builder_.cast(value_vregs[i], dest_vregs[index + i].type());
         builder_.mov(dest_vregs[index + i], value_vreg);
     }
 }
@@ -1637,7 +1549,7 @@ void arm64_translation_context::materialise_vector_extract(const vector_extract_
     }
 
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
-        const auto &src_vreg = cast(src_vregs[index+i], dest_vregs[i].type());
+        const auto &src_vreg = builder_.cast(src_vregs[index+i], dest_vregs[i].type());
         builder_.mov(dest_vregs[i], src_vreg);
     }
 }

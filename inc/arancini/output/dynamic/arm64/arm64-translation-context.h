@@ -117,8 +117,6 @@ private:
     void materialise_internal_call(const ir::internal_call_node &n);
     void materialise_read_local(const ir::read_local_node &n);
     void materialise_write_local(const ir::write_local_node &n);
-
-    register_operand cast(const register_operand &op, ir::value_type type);
 };
 
 } // namespace arancini::output::dynamic::arm64
