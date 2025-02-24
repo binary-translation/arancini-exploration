@@ -108,7 +108,7 @@ public:
     }
 
     [[nodiscard]]
-    static instruction eor_(const register_operand &dst, const register_operand &src1, const reg_or_imm &src) {
+    static instruction eor(const register_operand &dst, const register_operand &src1, const reg_or_imm &src) {
         // TODO: this checks that the immediate is between immr:imms (bits [21:10])
         // However, for 64-bit eor, we have N:immr:imms, which gives us bits [22:10])
         return instruction("eor", def(dst), use(src1), use(src));

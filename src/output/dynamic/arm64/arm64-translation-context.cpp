@@ -377,41 +377,22 @@ inline cond_operand get_cset_type(binary_arith_op op) {
 }
 
 void arm64_translation_context::materialise_binary_arith(const binary_arith_node &n) {
-    auto &lhs = materialise_port(n.lhs());
-    auto &rhs = materialise_port(n.rhs());
+    const auto &lhs = materialise_port(n.lhs());
+    const auto &rhs = materialise_port(n.rhs());
 	auto &destination = vreg_alloc_.allocate(n.val());
 
     // Sanity check
     // Binary operations are defined in the IR with same size inputs and output
-    [[unlikely]]
-    if (n.lhs().type() != n.rhs().type() || n.lhs().type() != n.val().type()) {
-        throw backend_exception("Binary operations not supported between types {} = {} op {}",
-                                n.val().type(), n.lhs().type(), n.rhs().type());
-    }
-
-    [[unlikely]]
-    if (lhs.size() != rhs.size() || lhs.size() != destination.size()) {
-        throw backend_exception("Binary operations not supported between types {} = {} op {}",
-                                n.val().type(), n.lhs().type(), n.rhs().type());
-    }
-
     bool sets_flags = true;
     bool inverse_carry_flag_operation = false;
-    const bool is_vector_op = n.val().type().is_vector();
 
     builder_.allocate_flags();
-
-    value_type op_type;
-    if (n.val().type().is_floating_point())
-        op_type = n.val().type();
-    else
-        op_type = value_type(value_type_class::signed_integer, n.val().type().element_width(), n.val().type().nr_elements());
 
     logger.debug("Binary arithmetic node of type {}\n", n.op());
 	switch (n.op()) {
 	case binary_arith_op::add:
         // Vector addition
-        if (is_vector_op) {
+        if (n.val().type().is_vector()) {
             sets_flags = false;
             builder_.add(destination, lhs, rhs);
         } else {
@@ -420,7 +401,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         break;
 	case binary_arith_op::sub:
         // Vector subtraction
-        if (is_vector_op) {
+        if (n.val().type().is_vector()) {
             sets_flags = false;
             builder_.sub(destination, lhs, rhs);
             break;
@@ -445,8 +426,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         // lhs % rhs = lhs - (rhs * floor(lhs/rhs))
         {
             builder_.insert_comment("Implementing modulo via division and multiplication");
-            auto temp1 = vreg_alloc_.allocate(op_type);
-            auto temp2 = vreg_alloc_.allocate(op_type);
+            auto temp1 = vreg_alloc_.allocate(n.val().type());
+            auto temp2 = vreg_alloc_.allocate(n.val().type());
             builder_.divide(temp1, lhs, rhs);
             builder_.multiply(temp2, rhs, temp1);
             builder_.subs(destination, lhs, temp2);
@@ -454,134 +435,34 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         }
 		break;
 	case binary_arith_op::bor:
-        if (is_vector_op || n.val().type().element_width() > 64) {
-            for (std::size_t i = 0; i < destination.size(); ++i) {
-                builder_.orr_(destination[i], lhs[i], rhs[i]);
-            }
-            sets_flags = false;
-            break;
-        }
-
-        switch (op_type.element_width()) {
-        case 1:
-            builder_.extend_to_byte(lhs);
-            builder_.extend_to_byte(rhs);
-        case 8:
-        case 16:
-            builder_.extend_register(lhs, op_type);
-            builder_.extend_register(rhs, op_type);
-        case 32:
-            builder_.orr_(destination, lhs, rhs);
-            builder_.ands(register_operand(register_operand::wzr_sp), destination, destination);
-            break;
-        case 64:
-            builder_.orr_(destination, lhs, rhs);
-            builder_.ands(register_operand(register_operand::xzr_sp), destination, destination);
-            break;
-        default:
-            throw backend_exception("Unsupported ORR operation between {} x {}",
-                                    n.lhs().type(), n.rhs().type());
-        }
-        builder_.set_zero_flag();
-        builder_.set_sign_flag(cond_operand::mi());
+        builder_.logical_or(destination, lhs, rhs);
         sets_flags = false;
-        if (lhs[0].type().element_width() < 64) {
-            unsigned long long mask = ~(~0llu << lhs[0].type().element_width());
-            builder_.and_(destination, destination, builder_.move_to_register(mask, destination[0].type()));
-        }
 		break;
 	case binary_arith_op::band:
-        if (is_vector_op || n.val().type().element_width() > 64) {
-            for (std::size_t i = 0; i < destination.size(); ++i) {
-                builder_.ands(destination[i], lhs[i], rhs[i]);
-            }
-            sets_flags = false;
-            break;
-        }
-
-        switch (op_type.element_width()) {
-        case 1:
-            builder_.extend_to_byte(lhs);
-            builder_.extend_to_byte(rhs);
-        case 8:
-        case 16:
-            builder_.extend_register(lhs, op_type);
-            builder_.extend_register(rhs, op_type);
-        case 32:
-        case 64:
-            builder_.ands(destination, lhs, rhs);
-            break;
-        default:
-            throw backend_exception("Unsupported AND operation between {} x {}",
-                                    n.lhs().type(), n.rhs().type());
-        }
-        builder_.set_zero_flag();
-        builder_.set_sign_flag(cond_operand::mi());
+        builder_.ands(destination, lhs, rhs);
         sets_flags = false;
-        if (lhs[0].type().element_width() < 64) {
-            unsigned long long mask = ~(~0llu << lhs[0].type().element_width());
-            builder_.and_(destination, destination, builder_.move_to_register(mask, destination[0].type()));
-        }
 		break;
 	case binary_arith_op::bxor:
-        {
-            if (n.val().type().is_floating_point()) {
-                lhs[0].cast(value_type::vector(value_type::f64(), 2));
-                rhs[0].cast(value_type::vector(value_type::f64(), 2));
-                auto type = destination[0].type();
-                destination[0].cast(value_type::vector(value_type::f64(), 2));
-                builder_.eor_(destination[0], lhs[0], rhs[0]);
-                destination[0].cast(type);
-                std::size_t i = 1;
-                for (; i < destination.size(); ++i) {
-                    lhs[i].cast(value_type::vector(value_type::f64(), 2));
-                    rhs[i].cast(value_type::vector(value_type::f64(), 2));
-                    destination[i].cast(value_type::vector(value_type::f64(), 2));
-                    builder_.eor_(destination[i], lhs[i], rhs[i]);
-                    destination[i].cast(type);
-                }
-                sets_flags = false;
-                break;
-            }
-
-            builder_.eor_(destination[0], lhs[0], rhs[0]);
-            std::size_t i = 1;
-            for (; i < destination.size(); ++i) {
-                builder_.eor_(destination[i], lhs[i], rhs[i]);
-            }
-
-            // EOR does not set flags
-            // TODO
-            if (is_vector_op) sets_flags = false;
-            else {
-                if (destination[i-1].type().element_width() > 32)
-                    builder_.ands(register_operand(register_operand::xzr_sp), destination[i-1], destination[i-1]);
-                else
-                    builder_.ands(register_operand(register_operand::wzr_sp), destination[i-1], destination[i-1]);
-            }
-        }
-        builder_.set_zero_flag();
-        builder_.set_sign_flag(cond_operand::mi());
+        builder_.exclusive_or(destination, lhs, rhs);
         sets_flags = false;
-        if (lhs[0].type().element_width() < 64) {
-            unsigned long long mask = ~(~0llu << lhs[0].type().element_width());
-            builder_.and_(destination, destination, builder_.move_to_register(mask, destination[0].type()));
-        }
         break;
 	case binary_arith_op::cmpeq:
 	case binary_arith_op::cmpne:
 	case binary_arith_op::cmpgt:
         // TODO: this looks wrong
-        if (is_vector_op || destination.size() > 1)
+        if (n.val().type().is_vector() || destination.size() > 1) {
             throw backend_exception("Unsupported comparison between {} x {}",
                                     n.lhs().type(), n.rhs().type());
+        }
 
-        rhs[0] = builder_.cast(rhs[0], lhs[0].type());
-        builder_.cmp(lhs[0], rhs[0])
-                .add_comment("compare LHS and RHS to generate condition for conditional set");
-        builder_.cset(destination[0], get_cset_type(n.op()))
-                .add_comment("set to 1 if condition is true (based flags from the previous compare)");
-        inverse_carry_flag_operation = true;
+        {
+            auto typed_rhs = builder_.cast(rhs[0], lhs[0].type());
+            builder_.cmp(lhs[0], typed_rhs)
+                    .add_comment("compare LHS and RHS to generate condition for conditional set");
+            builder_.cset(destination[0], get_cset_type(n.op()))
+                    .add_comment("set to 1 if condition is true (based flags from the previous compare)");
+            inverse_carry_flag_operation = true;
+        }
 		break;
 	case binary_arith_op::cmpoeq:
 	case binary_arith_op::cmpolt:
@@ -606,7 +487,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                     .add_comment("set to 1 if condition is true (based flags from the previous compare)");
             builder_.cset(unordered, cond_operand::vs())
                     .add_comment("set to 1 if condition is true (based flags from the previous compare)");
-            builder_.orr_(destination[0], destination[0], unordered);
+            builder_.logical_or(destination[0], destination[0], unordered[0]);
         }
         break;
 	default:

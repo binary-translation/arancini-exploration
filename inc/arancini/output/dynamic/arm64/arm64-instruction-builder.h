@@ -134,8 +134,8 @@ public:
               const register_sequence &rhs)
     {
         // TODO: shifts
-        adds(destination[0], lhs[0], rhs[0]);
-        for (std::size_t i = 0; i < destination.size(); ++i) {
+        append(assembler::adds(destination[0], lhs[0], rhs[0]));
+        for (std::size_t i = 1; i < destination.size(); ++i) {
             append(assembler::adcs(destination[i], lhs[i], rhs[i]));
         }
     }
@@ -164,9 +164,7 @@ public:
                      const register_operand &src1,
                      const reg_or_imm &src2,
                      const shift_operand &shift = {}) {
-        if (std::holds_alternative<register_operand>(src2.get()))
-            return append(assembler::sub(dst, src1, register_operand(src2), shift));
-        return append(assembler::sub(dst, src1, immediate_operand(src2), shift));
+        return append(assembler::sub(dst, src1, src2, shift));
     }
 
     void subs(const register_operand &dst,
@@ -182,8 +180,8 @@ public:
               const register_sequence &rhs)
     {
         // TODO: shifts
-        subs(destination[0], lhs[0], rhs[0]);
-        for (std::size_t i = 0; i < destination.size(); ++i) {
+        append(assembler::subs(destination[0], lhs[0], rhs[0]));
+        for (std::size_t i = 1; i < destination.size(); ++i) {
             append(assembler::sbcs(destination[i], lhs[i], rhs[i]));
         }
     }
@@ -211,13 +209,50 @@ public:
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& orr_(const register_operand &dst,
-                      const register_operand &src1,
-                      const reg_or_imm &src2) {
+    instruction& logical_or(const register_operand &dst,
+                            const register_operand &src1,
+                            const reg_or_imm &src2) {
         // TODO: this checks that the immediate is between immr:imms (bits [21:10])
         // However, for 64-bit orr, we have N:immr:imms, which gives us bits [22:10])
         auto src_conv = ImmediatesPolicy(this, ir::value_type::u(12), dst.type())(src2);
         return append(assembler::orr(dst, src1, src_conv));
+    }
+
+    void logical_or(const register_sequence &destination,
+                    const register_sequence &lhs,
+                    const register_sequence &rhs)
+    {
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            switch (destination[0].type().element_width()) {
+            case 1:
+                extend_to_byte(lhs);
+                extend_to_byte(rhs);
+            case 8:
+            case 16:
+                extend_register(lhs, destination[0].type());
+                extend_register(rhs, destination[0].type());
+            case 32:
+                append(assembler::orr(destination, lhs, rhs));
+                break;
+            case 64:
+                append(assembler::orr(destination, lhs, rhs));
+                break;
+            default:
+                throw backend_exception("Unsupported ORR operation");
+            }
+        }
+
+        if (destination.size() == 1) {
+            if (destination[0].type().element_width() < 64)
+                append(assembler::ands(register_operand(register_operand::wzr_sp),
+                                       destination, destination));
+            else
+                append(assembler::ands(register_operand(register_operand::xzr_sp),
+                                       destination, destination));
+
+            set_zero_flag();
+            set_sign_flag(cond_operand::mi());
+        }
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
@@ -241,12 +276,76 @@ public:
         return append(assembler::ands(dst, src1, src_conv));
     }
 
+    void ands(const register_sequence &destination,
+              const register_sequence &lhs,
+              const register_sequence &rhs)
+    {
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            switch (destination[0].type().element_width()) {
+            case 1:
+                extend_to_byte(lhs);
+                extend_to_byte(rhs);
+            case 8:
+            case 16:
+                extend_register(lhs, destination[0].type());
+                extend_register(rhs, destination[0].type());
+            case 32:
+                append(assembler::ands(destination, lhs, rhs));
+                break;
+            case 64:
+                append(assembler::ands(destination, lhs, rhs));
+                break;
+            default:
+                throw backend_exception("Unsupported ORR operation");
+            }
+        }
+
+        set_zero_flag();
+        set_sign_flag(cond_operand::mi());
+    }
+
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& eor_(const register_operand &dst, const register_operand &src1, const reg_or_imm &src2) {
+    instruction& exclusive_or(const register_operand &dst, const register_operand &src1, const reg_or_imm &src2) {
         // TODO: this checks that the immediate is between immr:imms (bits [21:10])
         // However, for 64-bit eor, we have N:immr:imms, which gives us bits [22:10])
         auto src_conv = ImmediatesPolicy(this, ir::value_type::u(12), dst.type())(src2);
-        return append(assembler::eor_(dst, src1, src_conv));
+        return append(assembler::eor(dst, src1, src_conv));
+    }
+
+    void exclusive_or(const register_sequence &destination,
+                      const register_sequence &lhs,
+                      const register_sequence &rhs)
+    {
+        // if (destination[0].type().is_floating_point()) {
+        //     lhs[0].cast(value_type::vector(ir::value_type::f64(), 2));
+        //     rhs[0].cast(value_type::vector(ir::value_type::f64(), 2));
+        //     auto type = destination[0].type();
+        //     destination[0].cast(value_type::vector(value_type::f64(), 2));
+        //     builder_.eor_(destination[0], lhs[0], rhs[0]);
+        //     destination[0].cast(type);
+        //     std::size_t i = 1;
+        //     for (; i < destination.size(); ++i) {
+        //         lhs[i].cast(value_type::vector(value_type::f64(), 2));
+        //         rhs[i].cast(value_type::vector(value_type::f64(), 2));
+        //         destination[i].cast(value_type::vector(value_type::f64(), 2));
+        //         builder_.eor_(destination[i], lhs[i], rhs[i]);
+        //         destination[i].cast(type);
+        //     }
+        //     return;
+        // }
+
+        std::size_t i = 0;
+        for (; i < destination.size(); ++i) {
+            append(assembler::eor(destination[i], lhs[i], rhs[i]));
+        }
+
+        // EOR does not set flags
+        if (i && destination[i-1].type().element_width() > 32)
+            append(assembler::ands(register_operand(register_operand::xzr_sp), destination[i-1], destination[i-1]));
+        else
+            append(assembler::ands(register_operand(register_operand::wzr_sp), destination[i-1], destination[i-1]));
+        set_zero_flag();
+        set_sign_flag(cond_operand::mi());
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
@@ -254,7 +353,7 @@ public:
         // TODO
         ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 6), dst.type());
         if (dst.type().width() == 1)
-            return append(assembler::eor_(dst, immediates_policy(src), 1));
+            return append(assembler::eor(dst, immediates_policy(src), 1));
         return append(assembler::mvn(dst, immediates_policy(src)));
     }
 
@@ -446,12 +545,15 @@ public:
     }
 
     void multiply(register_sequence& destination,
-                  register_sequence& multiplicand,
-                  register_sequence& multiplier)
+                  const register_sequence& multiplicand,
+                  const register_sequence& multiplier)
     {
         [[unlikely]]
-        if (!destination.size())
+        if (!destination.size() || destination.size() > 2 ||
+            destination[0].type().is_floating_point())
+        {
             throw backend_exception("Invalid multiplication");
+        }
 
         // The input and the output have the same size:
         // For 32-bit multiplication: 64-bit output and signed-extended 32-bit values to 64-bit inputs
@@ -459,15 +561,20 @@ public:
         // NOTE: this is very unfortunate
         bool sets_flags = true;
         if (destination.size() == 1) {
-            multiplicand[0].cast(ir::value_type(multiplicand[0].type().type_class(), 32, 1));
-            multiplier[0].cast(ir::value_type(multiplier[0].type().type_class(), 32, 1));
-
             switch (destination[0].type().type_class()) {
             case ir::value_type_class::signed_integer:
-                append(assembler::smull(destination, multiplicand, multiplier));
+                {
+                    auto lhs = cast(multiplicand[0], ir::value_type(multiplicand[0].type().type_class(), 32, 1));
+                    auto rhs = cast(multiplier[0], ir::value_type(multiplier[0].type().type_class(), 32, 1));
+                    append(assembler::smull(destination, lhs, rhs));
+                }
                 break;
             case ir::value_type_class::unsigned_integer:
-                append(assembler::umull(destination, multiplicand, multiplier));
+                {
+                    auto lhs = cast(multiplicand[0], ir::value_type(multiplicand[0].type().type_class(), 32, 1));
+                    auto rhs = cast(multiplier[0], ir::value_type(multiplier[0].type().type_class(), 32, 1));
+                    append(assembler::umull(destination, lhs, rhs));
+                }
                 break;
             case ir::value_type_class::floating_point:
                 // The same fmul is used in both 32-bit and 64-bit multiplication
@@ -496,10 +603,6 @@ public:
             }
             return;
         }
-
-        [[unlikely]]
-        if (destination.size() != 2 || destination[0].type().is_floating_point())
-            throw backend_exception("Cannot multiply types");
 
         [[likely]]
         // Get lower 64 bits
@@ -876,7 +979,7 @@ public:
     {
         if constexpr (!supports_lse) {
             atomic_block(destination, mem, [this, &destination, &source]() {
-                eor_(destination, destination, source);
+                exclusive_or(destination, destination, source);
             }, type);
         }
         if (type == atomic_types::exclusive) {
@@ -904,7 +1007,7 @@ public:
     {
         if constexpr (!supports_lse) {
             atomic_block(destination, mem, [this, &destination, &source]() {
-                orr_(destination, destination, source);
+                logical_or(destination, destination, source);
             }, type);
         }
         if (type == atomic_types::exclusive) {
