@@ -118,7 +118,7 @@ inline bool operator!=(const register_operand& r1, const register_operand& r2) {
 // TODO: ARM uses logical immediates that make determining their encoding completely different than
 // what fits() does
 // TODO: virtual destructor
-class immediate_operand final {
+class immediate_operand {
 public:
     immediate_operand() = default;
 
@@ -168,6 +168,33 @@ public:
         sxth
     };
 
+    [[nodiscard]]
+    static shift_operand lsl(immediate_operand imm) { return shift_operand(shift_type::lsl, imm); }
+
+    [[nodiscard]]
+    static shift_operand lsr(immediate_operand imm) { return shift_operand(shift_type::lsr, imm); }
+
+    [[nodiscard]]
+    static shift_operand asr(immediate_operand imm) { return shift_operand(shift_type::asr, imm); }
+
+    [[nodiscard]]
+    static shift_operand ror(immediate_operand imm) { return shift_operand(shift_type::ror, imm); }
+
+    [[nodiscard]]
+    static shift_operand rrx(immediate_operand imm) { return shift_operand(shift_type::rrx, imm); }
+
+    [[nodiscard]]
+    static shift_operand uxtb(immediate_operand imm) { return shift_operand(shift_type::uxtb, imm); }
+
+    [[nodiscard]]
+    static shift_operand uxth(immediate_operand imm) { return shift_operand(shift_type::uxth, imm); }
+
+    [[nodiscard]]
+    static shift_operand sxtb(immediate_operand imm) { return shift_operand(shift_type::sxtb, imm); }
+
+    [[nodiscard]]
+    static shift_operand sxth(immediate_operand imm) { return shift_operand(shift_type::sxth, imm); }
+
     shift_operand() = default;
 
     shift_operand(shift_type modifier, immediate_operand imm):
@@ -181,8 +208,8 @@ public:
     [[nodiscard]]
     immediate_operand amount() { return amount_; }
 private:
-    shift_type modifier_;
-    immediate_operand amount_;
+    shift_type modifier_ = shift_type::lsl;
+    immediate_operand amount_ = 0;
 };
 
 class label_operand final {

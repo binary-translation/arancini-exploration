@@ -10,24 +10,74 @@ enum class value_type_class : std::uint8_t { none, signed_integer, unsigned_inte
 
 class value_type {
 public:
+    [[nodiscard]]
 	static value_type v() { return value_type(value_type_class::none, 0); }
+
+    [[nodiscard]]
 	static value_type u1() { return value_type(value_type_class::unsigned_integer, 1, 1); }
+
+    [[nodiscard]]
 	static value_type u8() { return value_type(value_type_class::unsigned_integer, 8, 1); }
+
+    [[nodiscard]]
 	static value_type u16() { return value_type(value_type_class::unsigned_integer, 16, 1); }
+
+    [[nodiscard]]
 	static value_type u32() { return value_type(value_type_class::unsigned_integer, 32, 1); }
+
+    [[nodiscard]]
 	static value_type u64() { return value_type(value_type_class::unsigned_integer, 64, 1); }
+
+    [[nodiscard]]
 	static value_type u128() { return value_type(value_type_class::unsigned_integer, 128, 1); }
+
+
+	[[nodiscard]]
 	static value_type u256() { return value_type(value_type_class::unsigned_integer, 256, 1); }
+
+	[[nodiscard]]
 	static value_type u512() { return value_type(value_type_class::unsigned_integer, 512, 1); }
+
+	[[nodiscard]]
 	static value_type s8() { return value_type(value_type_class::signed_integer, 8, 1); }
+
+	[[nodiscard]]
 	static value_type s16() { return value_type(value_type_class::signed_integer, 16, 1); }
+
+	[[nodiscard]]
 	static value_type s32() { return value_type(value_type_class::signed_integer, 32, 1); }
+
+	[[nodiscard]]
 	static value_type s64() { return value_type(value_type_class::signed_integer, 64, 1); }
+
+	[[nodiscard]]
 	static value_type s128() { return value_type(value_type_class::signed_integer, 128, 1); }
+
+	[[nodiscard]]
 	static value_type f32() { return value_type(value_type_class::floating_point, 32, 1); }
+
+	[[nodiscard]]
 	static value_type f64() { return value_type(value_type_class::floating_point, 64, 1); }
+
+	[[nodiscard]]
     static value_type f80() { return value_type(value_type_class::floating_point, 80, 1); } // x87 double extended-precision
+    [[nodiscard]]
     static value_type f128() { return value_type(value_type_class::floating_point, 128, 1); }
+
+    [[nodiscard]]
+    static value_type u(std::size_t size) {
+        return value_type{value_type_class::unsigned_integer, size, 1};
+    }
+
+    [[nodiscard]]
+    static value_type s(std::size_t size) {
+        return value_type{value_type_class::signed_integer, size, 1};
+    }
+
+    [[nodiscard]]
+    static value_type f(std::size_t size) {
+        return value_type{value_type_class::floating_point, size, 1};
+    }
 
     template <typename T, typename std::enable_if<std::is_arithmetic_v<T>, int>::type = 0>
     static value_type from_value(T val) {
