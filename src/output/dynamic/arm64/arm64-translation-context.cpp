@@ -26,23 +26,6 @@ static constexpr bool supports_lse = false;
 
 using arancini::input::x86::reg_offsets;
 
-// TODO: should be replaced with static_map data structure
-using flag_map_type = std::unordered_map<reg_offsets, register_operand>;
-static flag_map_type flag_map {
-	{ reg_offsets::ZF, {} },
-	{ reg_offsets::CF, {} },
-	{ reg_offsets::OF, {} },
-	{ reg_offsets::SF, {} },
-};
-
-template <typename NodeType>
-void allocate_flags(port_register_allocator& allocator, flag_map_type& flag_map, const NodeType& n) {
-    flag_map[reg_offsets::ZF] = allocator.allocate(n.zero(), value_type::u1());
-    flag_map[reg_offsets::SF] = allocator.allocate(n.negative(), value_type::u1());
-    flag_map[reg_offsets::OF] = allocator.allocate(n.overflow(), value_type::u1());
-    flag_map[reg_offsets::CF] = allocator.allocate(n.carry(), value_type::u1());
-}
-
 memory_operand arm64_translation_context::guest_memory(int regoff, memory_operand::address_mode mode) {
     if (regoff > 255 || regoff < -256) {
         const register_operand& base_vreg = vreg_alloc_.allocate(value_types::addr_type);
@@ -271,7 +254,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     if (is_flag_port(n.value())) {
         builder_.insert_comment("write flag: {}", n.regname());
         if (is_flag_setter(n.value().owner()->kind())) {
-            const auto &flag = flag_map.at(static_cast<reg_offsets>(n.regoff()));
+            const auto &flag = builder_.flag_map().at(static_cast<reg_offsets>(n.regoff()));
             builder_.store(flag, guest_memory(n.regoff()));
         } else {
             builder_.store(source, guest_memory(n.regoff()));
@@ -416,8 +399,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
     bool inverse_carry_flag_operation = false;
     const bool is_vector_op = n.val().type().is_vector();
 
-    // TODO: Somehow avoid allocating this
-    allocate_flags(vreg_alloc_, flag_map, n);
+    builder_.allocate_flags();
 
     auto mul_impl = [&](const register_sequence& dest_regset,
                         register_sequence& lhs_regset,
@@ -472,8 +454,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 auto compare_regset = vreg_alloc_.allocate(dest_regset[0].type());
                 builder_.mov(compare_regset, 0xFFFF0000);
                 builder_.cmp(compare_regset, dest_regset);
-                builder_.cset(flag_map[reg_offsets::CF], cond_operand::ne()).add_comment("compute flag: CF");
-                builder_.cset(flag_map[reg_offsets::OF], cond_operand::ne()).add_comment("compute flag: OF");
+                builder_.cset(builder_.zero_flag(), cond_operand::ne()).add_comment("compute flag: CF");
+                builder_.cset(builder_.overflow_flag(), cond_operand::ne()).add_comment("compute flag: OF");
                 sets_flags = false;
             }
             break;
@@ -500,8 +482,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 // CF and OF are set to 1 when lhs * rhs > 64-bits
                 // Otherwise they are set to 0
                 builder_.cmp(dest_regset[1], 0);
-                builder_.cset(flag_map[reg_offsets::CF], cond_operand::ne()).add_comment("compute flag: CF");
-                builder_.cset(flag_map[reg_offsets::OF], cond_operand::ne()).add_comment("compute flag: OF");
+                builder_.cset(builder_.carry_flag(), cond_operand::ne()).add_comment("compute flag: CF");
+                builder_.cset(builder_.overflow_flag(), cond_operand::ne()).add_comment("compute flag: OF");
                 sets_flags = false;
                 break;
             } else {
@@ -688,8 +670,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             throw backend_exception("Unsupported ORR operation between {} x {}",
                                     n.lhs().type(), n.rhs().type());
         }
-        builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");
-        builder_.cset(flag_map[reg_offsets::SF], cond_operand::mi()).add_comment("compute flag: SF");
+        builder_.set_zero_flag();
+        builder_.set_sign_flag(cond_operand::mi());
         sets_flags = false;
         if (lhs_regset[0].type().element_width() < 64) {
             unsigned long long mask = ~(~0llu << lhs_regset[0].type().element_width());
@@ -721,8 +703,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             throw backend_exception("Unsupported AND operation between {} x {}",
                                     n.lhs().type(), n.rhs().type());
         }
-        builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");
-        builder_.cset(flag_map[reg_offsets::SF], cond_operand::mi()).add_comment("compute flag: SF");
+        builder_.set_zero_flag();
+        builder_.set_sign_flag(cond_operand::mi());
         sets_flags = false;
         if (lhs_regset[0].type().element_width() < 64) {
             unsigned long long mask = ~(~0llu << lhs_regset[0].type().element_width());
@@ -766,8 +748,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                     builder_.ands(register_operand(register_operand::wzr_sp), dest_regset[i-1], dest_regset[i-1]);
             }
         }
-        builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");
-        builder_.cset(flag_map[reg_offsets::SF], cond_operand::mi()).add_comment("compute flag: SF");
+        builder_.set_zero_flag();
+        builder_.set_sign_flag(cond_operand::mi());
         sets_flags = false;
         if (lhs_regset[0].type().element_width() < 64) {
             unsigned long long mask = ~(~0llu << lhs_regset[0].type().element_width());
@@ -824,23 +806,11 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
     // But not operations on vectors
     [[likely]]
     if (sets_flags) {
-        builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");
-        builder_.sets(flag_map[reg_offsets::SF]).add_comment("compute flag: SF");
-        builder_.seto(flag_map[reg_offsets::OF]).add_comment("compute flag: OF");
-
-        // ARM computes flags in the same way as x86 for subtraction
-        // EXCEPT for the CF; which is cleared when there is underflow and set otherwise (the
-        // opposite behaviour to x86)
-        if (inverse_carry_flag_operation)
-            builder_.setcc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
-        else
-            builder_.setc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
+        builder_.set_flags(inverse_carry_flag_operation);
     }
 }
 
 void arm64_translation_context::materialise_ternary_arith(const ternary_arith_node &n) {
-    allocate_flags(vreg_alloc_, flag_map, n);
-
     const auto& lhs = materialise_port(n.lhs());
     const auto& rhs = materialise_port(n.rhs());
     const auto& top = materialise_port(n.top());
@@ -859,24 +829,13 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
         throw backend_exception("Unsupported ternary arithmetic operation {}", util::to_underlying(n.op()));
     }
 
-	builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");
-	builder_.sets(flag_map[reg_offsets::SF]).add_comment("compute flag: SF");
-	builder_.seto(flag_map[reg_offsets::OF]).add_comment("compute flag: OF");
-    if (inverse_carry_flag_operation)
-        builder_.setcc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
-    else
-        builder_.setc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
+    builder_.set_and_allocate_flags(inverse_carry_flag_operation);
 }
 
 void arm64_translation_context::materialise_binary_atomic(const binary_atomic_node &n) {
 	const auto &destination = vreg_alloc_.allocate(n.val());
     const auto &source = materialise_port(n.rhs());
-    const auto &address = materialise_port(n.address());
-
-    // No need to handle flags: they are not visible to other PEs
-    allocate_flags(vreg_alloc_, flag_map, n);
-
-    memory_operand mem_addr(address[0]);
+    const register_operand &address = materialise_port(n.address());
 
     bool sets_flags = true;
     bool inverse_carry_flag_operation = false;
@@ -887,40 +846,40 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
 
 	switch (n.op()) {
 	case binary_atomic_op::add:
-        builder_.atomic_add(destination, source, mem_addr);
+        builder_.atomic_add(destination, source, address);
         break;
 	case binary_atomic_op::sub:
-        builder_.atomic_sub(destination, source, mem_addr);
+        builder_.atomic_sub(destination, source, address);
         inverse_carry_flag_operation = true;
         break;
     case binary_atomic_op::xadd:
         builder_.atomic_xadd(destination, destination, source);
         break;
 	case binary_atomic_op::bor:
-        builder_.atomic_or(destination, source, mem_addr);
+        builder_.atomic_or(destination, source, address);
         builder_.cmp(destination, 0);
         inverse_carry_flag_operation = true;
 		break;
 	case binary_atomic_op::band:
         // TODO: Not sure if this is correct
-        builder_.atomic_and(destination, source, mem_addr);
+        builder_.atomic_and(destination, source, address);
 		break;
 	case binary_atomic_op::bxor:
-        builder_.atomic_eor(destination, source, mem_addr);
+        builder_.atomic_eor(destination, source, address);
         builder_.cmp(destination, 0);
         inverse_carry_flag_operation = true;
 		break;
     case binary_atomic_op::btc:
-        builder_.atomic_clr(destination, source, mem_addr);
+        builder_.atomic_clr(destination, source, address);
         sets_flags = false;
 		break;
     case binary_atomic_op::bts:
-        builder_.atomic_or(destination, source, mem_addr);
+        builder_.atomic_or(destination, source, address);
         sets_flags = false;
 		break;
     case binary_atomic_op::xchg:
         // TODO: check if this works
-        builder_.atomic_swap(destination, source, mem_addr);
+        builder_.atomic_swap(destination, source, address);
         sets_flags = false;
         break;
 	default:
@@ -928,14 +887,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
 	}
 
     if (sets_flags) {
-        builder_.setz(flag_map[reg_offsets::ZF]).add_comment("write flag: ZF");
-        builder_.sets(flag_map[reg_offsets::SF]).add_comment("write flag: SF");
-        builder_.seto(flag_map[reg_offsets::OF]).add_comment("write flag: OF");
-
-        if (inverse_carry_flag_operation)
-            builder_.setcc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
-        else
-            builder_.setc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
+        builder_.set_and_allocate_flags(inverse_carry_flag_operation);
     }
 }
 
@@ -943,51 +895,39 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
     // Destination register only used for storing return code of STXR (a 32-bit value)
     // Since STXR expects a 32-bit register; we directly allocate a 32-bit one
     // NOTE: we're only going to use it afterwards for a comparison and an increment
-    const register_operand &current_data_reg = vreg_alloc_.allocate(n.val(), n.rhs().type());
+    const register_operand &destination = vreg_alloc_.allocate(n.val(), n.rhs().type());
 
-    const register_operand &acc_reg = materialise_port(n.rhs());
-    const register_operand &src_reg = materialise_port(n.top());
-    const register_operand &addr_reg = materialise_port(n.address());
-
-    allocate_flags(vreg_alloc_, flag_map, n);
+    const register_operand &accumulator = materialise_port(n.rhs());
+    const register_operand &source = materialise_port(n.top());
+    const register_operand &address = materialise_port(n.address());
 
     // CMPXCHG:
     // dest_reg = mem[addr];
-    // if (dest_reg != acc_reg) acc_reg = dest_reg;
-    // else try mem[addr] = src_reg;
+    // if (dest_reg != accumulator) accumulator = dest_reg;
+    // else try mem[addr] = source;
     //      if (failed) goto beginning
     // end
-    auto mem_addr = memory_operand(addr_reg);
     switch (n.op()) {
     case ternary_atomic_op::cmpxchg:
-        builder_.atomic_cmpxchg(current_data_reg, acc_reg, src_reg, mem_addr);
+        builder_.atomic_cmpxchg(destination, accumulator, source, address);
         break;
     default:
 		throw backend_exception("unsupported binary atomic operation {}", util::to_underlying(n.op()));
     }
 
-    builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");
-    builder_.sets(flag_map[reg_offsets::SF]).add_comment("compute flag: SF");
-    builder_.seto(flag_map[reg_offsets::OF]).add_comment("compute flag: OF");
-    builder_.setc(flag_map[reg_offsets::CF]).add_comment("compute flag: CF");
+    builder_.set_and_allocate_flags(false);
 }
 
 void arm64_translation_context::materialise_unary_arith(const unary_arith_node &n) {
-    const auto &dest_vregs = vreg_alloc_.allocate(n.val());
-    const auto &lhs_vregs = materialise_port(n.lhs());
-
-    if (dest_vregs.size() != 1 || lhs_vregs.size() != 1)
-        throw backend_exception("Unary arithmetic node does not support operations > 64-bit");
-
-    const auto &dest_vreg = dest_vregs[0];
-    const auto &lhs_vreg = lhs_vregs[0];
+    const register_operand &destination = vreg_alloc_.allocate(n.val());
+    const register_operand &lhs = materialise_port(n.lhs());
 
     switch (n.op()) {
     case unary_arith_op::bnot:
-        builder_.complement(dest_vreg, lhs_vreg);
+        builder_.complement(destination, lhs);
         break;
     case unary_arith_op::neg:
-        builder_.negate(dest_vreg, lhs_vreg);
+        builder_.negate(destination, lhs);
         break;
     default:
         throw backend_exception("Unknown unary operation");

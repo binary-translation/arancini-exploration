@@ -3,6 +3,7 @@
 #include <keystone/keystone.h>
 
 #include <arancini/ir/port.h>
+#include <arancini/input/registers.h>
 #include <arancini/output/dynamic/machine-code-writer.h>
 #include <arancini/output/dynamic/arm64/arm64-assembler.h>
 
@@ -84,6 +85,9 @@ private:
         return type.width() <= 64; // TODO: formalize this
     }
 };
+
+using reg_offsets = arancini::input::x86::reg_offsets;
+using flag_map_type = std::unordered_map<reg_offsets, register_operand>;
 
 class instruction_builder final {
 public:
@@ -536,25 +540,6 @@ public:
         }
         logger.debug("Label {} already inserted\nCurrent labels:\n{}",
                      label, fmt::format("{}", fmt::join(labels_.begin(), labels_.end(), "\n")));
-    }
-
-	instruction& setz(const register_operand &dst) {
-        return append(assembler::cset(dst, cond_operand::eq()));
-    }
-
-	instruction& sets(const register_operand &dst) {
-        return append(assembler::cset(dst, cond_operand::lt()));
-    }
-
-	instruction& setc(const register_operand &dst) {
-        return append(assembler::cset(dst, cond_operand::cs()));
-    }
-
-	instruction& setcc(const register_operand &dst) {
-        return append(assembler::cset(dst, cond_operand::cc()));
-    }
-	instruction& seto(const register_operand &dst) {
-        return append(assembler::cset(dst, cond_operand::vs()));
     }
 
     instruction& cfinv() {
@@ -1183,6 +1168,82 @@ public:
         return shift_operand(mod, 0);
     }
 
+	instruction& setz(const register_operand &dst) {
+        return append(assembler::cset(dst, cond_operand::eq()));
+    }
+
+	void set_zero_flag(const register_operand &destination = flag_map_[reg_offsets::ZF]) {
+        append(assembler::cset(destination, cond_operand::eq())).add_comment("compute flag: ZF");
+    }
+
+    [[nodiscard]]
+    const register_operand& zero_flag() const { return flag_map_[reg_offsets::ZF]; }
+
+    [[nodiscard]]
+    const register_operand& sign_flag() const { return flag_map_[reg_offsets::SF]; }
+
+    [[nodiscard]]
+    const register_operand& overflow_flag() const { return flag_map_[reg_offsets::OF]; }
+
+    [[nodiscard]]
+    const register_operand& carry_flag() const { return flag_map_[reg_offsets::CF]; }
+
+	instruction& sets(const register_operand &dst) {
+        return append(assembler::cset(dst, cond_operand::lt()));
+    }
+
+	void set_sign_flag(const cond_operand& cond = cond_operand::lt(),
+                       const register_operand &destination = flag_map_[reg_offsets::SF])
+    {
+        append(assembler::cset(destination, cond)).add_comment("compute flag: SF");
+    }
+
+	instruction& setc(const register_operand &dst) {
+        return append(assembler::cset(dst, cond_operand::cs()));
+    }
+
+	instruction& setcc(const register_operand &dst) {
+        return append(assembler::cset(dst, cond_operand::cc()));
+    }
+
+	void set_carry_flag(const cond_operand& cond = cond_operand::cs(),
+                        const register_operand &destination = flag_map_[reg_offsets::CF])
+    {
+        append(assembler::cset(destination, cond));
+    }
+
+	instruction& seto(const register_operand &dst) {
+        return append(assembler::cset(dst, cond_operand::vs()));
+    }
+
+	void set_overflow_flag(const cond_operand& cond = cond_operand::vs(),
+                           const register_operand &destination = flag_map_[reg_offsets::OF])
+    {
+        append(assembler::cset(destination, cond));
+    }
+
+    void allocate_flags() {
+        flag_map_[reg_offsets::ZF] = vreg_alloc_.allocate(ir::value_type::u1());
+        flag_map_[reg_offsets::SF] = vreg_alloc_.allocate(ir::value_type::u1());
+        flag_map_[reg_offsets::OF] = vreg_alloc_.allocate(ir::value_type::u1());
+        flag_map_[reg_offsets::CF] = vreg_alloc_.allocate(ir::value_type::u1());
+    }
+
+    void set_flags(bool inverse_cf) {
+        set_zero_flag();
+        set_sign_flag();
+        set_overflow_flag();
+        if (inverse_cf)
+            set_carry_flag(cond_operand::cc());
+        else
+            set_carry_flag();
+    }
+
+    void set_and_allocate_flags(bool inverse_cf) {
+        allocate_flags();
+        set_flags(inverse_cf);
+    }
+
 	instruction& append(const instruction &i) {
         instructions_.push_back(i);
         return instructions_.back();
@@ -1194,6 +1255,12 @@ public:
         label_refcount_.clear();
         labels_.clear();
     }
+
+    [[nodiscard]]
+    flag_map_type& flag_map() { return flag_map_; }
+
+    [[nodiscard]]
+    const flag_map_type& flag_map() const { return flag_map_; }
 private:
     assembler asm_;
     constexpr static bool supports_lse = false;
@@ -1202,7 +1269,16 @@ private:
     std::unordered_map<std::string, std::size_t> label_refcount_;
     std::unordered_set<std::string> labels_;
 
+    static flag_map_type flag_map_;
+
     void spill();
+};
+
+inline flag_map_type instruction_builder::flag_map_ = {
+    { reg_offsets::ZF, {} },
+    { reg_offsets::CF, {} },
+    { reg_offsets::OF, {} },
+    { reg_offsets::SF, {} },
 };
 
 } // namespace arancini::output::dynamic::arm64
