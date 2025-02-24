@@ -113,23 +113,31 @@ public:
         ir::value_type reg_type_;
     };
 
-	instruction& add(const register_operand &dst,
+	void add(const register_operand &destination,
                       const register_operand &src1,
                       const reg_or_imm &src2,
                       const shift_operand &shift = {}) {
-        if (std::holds_alternative<register_operand>(src2.get()))
-            return append(assembler::add(dst, src1, register_operand(src2), shift));
-        return append(assembler::add(dst, src1, immediate_operand(src2), shift));
+        append(assembler::add(destination, src1, src2, shift));
     }
 
 
-    instruction& adds(const register_operand &dst,
+    instruction& adds(const register_operand &destination,
                       const register_operand &src1,
                       const reg_or_imm &src2,
-                      const shift_operand &shift = {}) {
-        if (std::holds_alternative<register_operand>(src2.get()))
-            return append(assembler::adds(dst, src1, register_operand(src2), shift));
-        return append(assembler::adds(dst, src1, immediate_operand(src2), shift));
+                      const shift_operand &shift = {})
+    {
+        return append(assembler::adds(destination, src1, src2, shift));
+    }
+
+    void adds(const register_sequence &destination,
+              const register_sequence &lhs,
+              const register_sequence &rhs)
+    {
+        // TODO: shifts
+        adds(destination[0], lhs[0], rhs[0]);
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            append(assembler::adcs(destination[i], lhs[i], rhs[i]));
+        }
     }
 
 	instruction& adc(const register_operand &dst,
@@ -161,13 +169,23 @@ public:
         return append(assembler::sub(dst, src1, immediate_operand(src2), shift));
     }
 
-    instruction& subs(const register_operand &dst,
-                      const register_operand &src1,
-                      const reg_or_imm &src2,
-                      const shift_operand &shift = {}) {
-        if (std::holds_alternative<register_operand>(src2.get()))
-            return append(assembler::subs(dst, src1, register_operand(src2), shift));
-        return append(assembler::subs(dst, src1, immediate_operand(src2), shift));
+    void subs(const register_operand &dst,
+              const register_operand &src1,
+              const reg_or_imm &src2,
+              const shift_operand &shift = {})
+    {
+        append(assembler::subs(dst, src1, src2, shift));
+    }
+
+    void subs(const register_sequence &destination,
+              const register_sequence &lhs,
+              const register_sequence &rhs)
+    {
+        // TODO: shifts
+        subs(destination[0], lhs[0], rhs[0]);
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            append(assembler::sbcs(destination[i], lhs[i], rhs[i]));
+        }
     }
 
 	instruction& sbc(const register_operand &dst,
@@ -425,6 +443,116 @@ public:
                 append(assembler::str(source[i], memory));
             }
         }
+    }
+
+    void multiply(register_sequence& destination,
+                  register_sequence& multiplicand,
+                  register_sequence& multiplier)
+    {
+        [[unlikely]]
+        if (!destination.size())
+            throw backend_exception("Invalid multiplication");
+
+        // The input and the output have the same size:
+        // For 32-bit multiplication: 64-bit output and signed-extended 32-bit values to 64-bit inputs
+        // For 64-bit multiplication: 64-bit output and signed-extended 64-bit values to 128-bit inputs
+        // NOTE: this is very unfortunate
+        bool sets_flags = true;
+        if (destination.size() == 1) {
+            multiplicand[0].cast(ir::value_type(multiplicand[0].type().type_class(), 32, 1));
+            multiplier[0].cast(ir::value_type(multiplier[0].type().type_class(), 32, 1));
+
+            switch (destination[0].type().type_class()) {
+            case ir::value_type_class::signed_integer:
+                append(assembler::smull(destination, multiplicand, multiplier));
+                break;
+            case ir::value_type_class::unsigned_integer:
+                append(assembler::umull(destination, multiplicand, multiplier));
+                break;
+            case ir::value_type_class::floating_point:
+                // The same fmul is used in both 32-bit and 64-bit multiplication
+                // The actual operation depends on the type of its registers
+                {
+                    auto multiplicand_conv = cast(multiplicand, destination[0].type());
+                    auto multiplier_conv = cast(multiplier, destination[0].type());
+                    append(assembler::fmul(destination, multiplicand_conv, multiplier_conv));
+                    sets_flags = false;
+                }
+                break;
+            default:
+                throw backend_exception("Encounted unknown type class {} for multiplication",
+                                        util::to_underlying(destination[0].type().type_class()));
+            }
+            // TODO: need to compute CF and OF
+            // CF and OF are set to 1 when multiplicand * multiplier > 64-bits
+            // Otherwise they are set to 0
+            if (sets_flags) {
+                auto compare_regset = vreg_alloc_.allocate(destination[0].type());
+                mov(compare_regset, 0xFFFF0000);
+                cmp(compare_regset, destination);
+                set_carry_flag(cond_operand::ne());
+                set_overflow_flag(cond_operand::ne());
+                sets_flags = false;
+            }
+            return;
+        }
+
+        [[unlikely]]
+        if (destination.size() != 2 || destination[0].type().is_floating_point())
+            throw backend_exception("Cannot multiply types");
+
+        [[likely]]
+        // Get lower 64 bits
+        append(assembler::mul(destination[0], multiplicand[0], multiplier[0]));
+
+        // Get upper 64 bits
+        switch (destination[1].type().type_class()) {
+        case ir::value_type_class::signed_integer:
+            append(assembler::smulh(destination[1], multiplicand[0], multiplier[0]));
+            break;
+        case ir::value_type_class::unsigned_integer:
+            append(assembler::umulh(destination[1], multiplicand[0], multiplier[0]));
+            break;
+        default:
+            throw backend_exception("Encounted unknown type class {} for multiplication",
+                                    util::to_underlying(destination[1].type().type_class()));
+        }
+
+        // TODO: need to compute CF and OF
+        // CF and OF are set to 1 when multiplicand * multiplier > 64-bits
+        // Otherwise they are set to 0
+        append(assembler::cmp(destination[1], 0));
+        set_carry_flag(cond_operand::ne());
+        set_overflow_flag(cond_operand::ne());
+
+        return;
+    }
+
+    void divide(const register_sequence& destination,
+                        const register_sequence& dividend,
+                        const register_sequence& divider)
+    {
+        if (destination.size() > 1)
+            throw backend_exception("Division not supported for types larger than 128-bits");
+
+        // The input and the output have the same size:
+        // For 64-bit division: 64-bit input dividend/divisor and 64-bit output but 32-bit division
+        // For 128-bit multiplication: 128-bit input dividend/divisor and 128-bit output but 64-bit division
+        // NOTE: this is very unfortunate
+        // NOTE: we'll need to handle separetely floats
+        switch (destination[0].type().type_class()) {
+        case ir::value_type_class::signed_integer:
+            append(assembler::sdiv(destination, dividend, divider));
+            break;
+        case ir::value_type_class::unsigned_integer:
+            append(assembler::udiv(destination, dividend, divider));
+            break;
+        default:
+            throw backend_exception("Encounted unknown type class {} for division",
+                                    util::to_underlying(destination[0].type().type_class()));
+        }
+
+		return;
     }
 
     instruction& mul(const register_operand &dest,
