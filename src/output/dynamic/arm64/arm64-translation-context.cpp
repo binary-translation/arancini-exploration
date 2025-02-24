@@ -598,7 +598,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 
             // Addition for > 64-bits
             for (std::size_t i = 1; i < dest_regset.size(); ++i)
-                builder_.adcs(dest_regset[i], lhs_regset[i], rhs_regset[i]);
+                builder_.append(assembler::adcs(dest_regset[i], lhs_regset[i], rhs_regset[i]));
         }
         break;
 	case binary_arith_op::sub:
@@ -622,7 +622,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 
             // Subtraction for > 64-bits
             for (std::size_t i = 1; i < dest_regset.size(); ++i)
-                builder_.sbcs(dest_regset[i], lhs_regset[i], rhs_regset[i]);
+                builder_.append(assembler::sbcs(dest_regset[i], lhs_regset[i], rhs_regset[i]));
 
             // This is only available with the +flagm architecture option
             // TODO: make it enabled in those cases
@@ -653,7 +653,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             // NOTE: no register extensions needed; since mod operates on >= 64-bit virtual registers only
             builder_.subs(dest_regset[0], lhs_regset[0], temp2_regset[0]);
             for (std::size_t i = 1; i < dest_regset.size(); ++i) {
-                builder_.sbcs(dest_regset[i], lhs_regset[i], temp2_regset[i]);
+                builder_.append(assembler::sbcs(dest_regset[i], lhs_regset[i], temp2_regset[i]));
             }
 
             sets_flags = false;
@@ -841,55 +841,22 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 void arm64_translation_context::materialise_ternary_arith(const ternary_arith_node &n) {
     allocate_flags(vreg_alloc_, flag_map, n);
 
-	const auto &dest_regs = vreg_alloc_.allocate(n.val());
-    const auto &lhs_regs = materialise_port(n.lhs());
-    const auto &rhs_regs = materialise_port(n.rhs());
-    auto &top_regs = materialise_port(n.top());
-
-    // Sanity check
-    // Binary operations are defined in the IR with same size inputs and output
-    [[unlikely]]
-    if (n.lhs().type() != n.rhs().type() || n.lhs().type() != n.val().type()
-                                         || n.lhs().type() != n.top().type())
-    {
-        throw backend_exception("Binary operations not supported between types {} = {} op {}",
-                                n.val().type(), n.lhs().type(), n.rhs().type());
-    }
-
-    [[unlikely]]
-    if (lhs_regs.size() != rhs_regs.size() || lhs_regs.size() != dest_regs.size()
-                                           || lhs_regs.size() != top_regs.size())
-    {
-        throw backend_exception("Binary operations not supported between types {} = {} op {}",
-                                n.val().type(), n.lhs().type(), n.rhs().type());
-    }
+    const auto& lhs = materialise_port(n.lhs());
+    const auto& rhs = materialise_port(n.rhs());
+    const auto& top = materialise_port(n.top());
+	const auto& destination = vreg_alloc_.allocate(n.val());
 
     bool inverse_carry_flag_operation = false;
-    const register_operand& pstate = vreg_alloc_.allocate(register_operand(register_operand::nzcv).type());
-    for (std::size_t i = 0; i < dest_regs.size(); ++i) {
-        // Set carry flag
-        // builder_.mrs(pstate, register_operand(register_operand::nzcv));
-        // builder_.lsl(top_regs[i], top_regs[i], 0x3);
-        //
-        // top_regs[i] = builder_.cast(top_regs[i], pstate.type());
-        // builder_.orr_(pstate, pstate, top_regs[i]);
-        // builder_.msr(register_operand(register_operand::nzcv), pstate);
-
-        builder_.cmp(top_regs[i], 0);
-        builder_.sbcs(register_operand(register_operand::wzr_sp),
-                      register_operand(register_operand::wzr_sp),
-                      register_operand(register_operand::wzr_sp));
-        switch (n.op()) {
-        case ternary_arith_op::adc:
-            builder_.adcs(dest_regs[i], lhs_regs[i], rhs_regs[i]);
-            break;
-        case ternary_arith_op::sbb:
-            builder_.sbcs(dest_regs[i], lhs_regs[i], rhs_regs[i]);
-            inverse_carry_flag_operation = true;
-            break;
-        default:
-            throw backend_exception("Unsupported ternary arithmetic operation {}", util::to_underlying(n.op()));
-        }
+    switch (n.op()) {
+    case ternary_arith_op::adc:
+        builder_.adcs(destination, top, lhs, rhs);
+        break;
+    case ternary_arith_op::sbb:
+        builder_.sbcs(destination, top, lhs, rhs);
+        inverse_carry_flag_operation = true;
+        break;
+    default:
+        throw backend_exception("Unsupported ternary arithmetic operation {}", util::to_underlying(n.op()));
     }
 
 	builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");

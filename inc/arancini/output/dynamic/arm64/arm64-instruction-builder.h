@@ -134,16 +134,24 @@ public:
         return append(assembler::adc(dst, src1, register_operand(src2)));
     }
 
-	instruction& adcs(const register_operand &dst,
-                      const register_operand &src1,
-                      const register_operand &src2) {
-        return append(assembler::adcs(dst, src1, src2));
+	void adcs(const register_sequence& destination,
+              const register_sequence& top,
+              const register_sequence& lhs,
+              const register_sequence& rhs)
+    {
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            append(assembler::cmp(top[i], 0));
+            append(assembler::sbcs(register_operand(register_operand::wzr_sp),
+                 register_operand(register_operand::wzr_sp),
+                 register_operand(register_operand::wzr_sp)));
+            append(assembler::adcs(destination[i], lhs[i], rhs[i]));
+        }
     }
 
     instruction& sub(const register_operand &dst,
-                      const register_operand &src1,
-                      const reg_or_imm &src2,
-                      const shift_operand &shift = {}) {
+                     const register_operand &src1,
+                     const reg_or_imm &src2,
+                     const shift_operand &shift = {}) {
         if (std::holds_alternative<register_operand>(src2.get()))
             return append(assembler::sub(dst, src1, register_operand(src2), shift));
         return append(assembler::sub(dst, src1, immediate_operand(src2), shift));
@@ -164,10 +172,20 @@ public:
         return append(assembler::sbc(dst, src1, register_operand(src2)));
     }
 
-	instruction& sbcs(const register_operand &dst,
-                      const register_operand &src1,
-                      const register_operand &src2) {
-        return append(assembler::sbc(dst, src1, src2));
+	void sbcs(const register_sequence& destination,
+              const register_sequence& top,
+              const register_sequence& lhs,
+              const register_sequence& rhs)
+    {
+        if (destination.size() != top.size() || top.size() != lhs.size() || lhs.size() != rhs.size())
+            throw backend_exception("Cannot perform subtract with borrow for given types");
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            append(assembler::cmp(top[i], 0));
+            append(assembler::sbcs(register_operand(register_operand::wzr_sp),
+                 register_operand(register_operand::wzr_sp),
+                 register_operand(register_operand::wzr_sp)));
+            append(assembler::sbcs(destination[i], lhs[i], rhs[i]));
+        }
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
@@ -1165,6 +1183,11 @@ public:
         return shift_operand(mod, 0);
     }
 
+	instruction& append(const instruction &i) {
+        instructions_.push_back(i);
+        return instructions_.back();
+    }
+
     void clear() {
         instructions_.clear();
         vreg_alloc_.reset();
@@ -1178,11 +1201,6 @@ private:
     virtual_register_allocator vreg_alloc_;
     std::unordered_map<std::string, std::size_t> label_refcount_;
     std::unordered_set<std::string> labels_;
-
-	instruction& append(const instruction &i) {
-        instructions_.push_back(i);
-        return instructions_.back();
-    }
 
     void spill();
 };
