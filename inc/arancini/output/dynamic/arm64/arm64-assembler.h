@@ -386,11 +386,7 @@ public:
 
     [[nodiscard]]
     static instruction fmov(const register_operand &dest, const reg_or_imm &src) {
-        [[unlikely]]
-        if (dest.type().type_class() != ir::value_type_class::floating_point) {
-            throw backend_exception("First operand of fmov must be floating-point register instead of {}",
-                                    dest.type());
-        }
+        // TODO: missing checks
         check_immediate_size(src, ir::value_type::f(8));
         return instruction("fmov", def(dest), use(src));
     }
