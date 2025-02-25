@@ -333,14 +333,17 @@ public:
         //     }
         //     return;
         // }
+        if (destination.size() == 0) return;
 
         std::size_t i = 0;
         for (; i < destination.size(); ++i) {
             append(assembler::eor(destination[i], lhs[i], rhs[i]));
         }
 
+        if (destination[0].type().is_floating_point()) return;
+
         // EOR does not set flags
-        if (i && destination[i-1].type().element_width() > 32)
+        if (destination[i-1].type().element_width() > 32)
             append(assembler::ands(register_operand(register_operand::xzr_sp), destination[i-1], destination[i-1]));
         else
             append(assembler::ands(register_operand(register_operand::wzr_sp), destination[i-1], destination[i-1]));
