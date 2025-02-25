@@ -254,7 +254,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     if (is_flag_port(n.value())) {
         builder_.insert_comment("write flag: {}", n.regname());
         if (is_flag_setter(n.value().owner()->kind())) {
-            const auto &flag = builder_.flag_map().at(static_cast<reg_offsets>(n.regoff()));
+            const auto &flag = builder_.flag(static_cast<reg_offsets>(n.regoff()));
             builder_.store(flag, guest_memory(n.regoff()));
         } else {
             builder_.store(source, guest_memory(n.regoff()));

@@ -512,35 +512,6 @@ public:
     }
 
     [[nodiscard]]
-	static instruction setz(const register_operand &dst) {
-        return instruction("cset", def(dst), cond_operand::eq())
-                           .implicitly_reads({register_operand(register_operand::nzcv)});
-    }
-
-    [[nodiscard]]
-	static instruction sets(const register_operand &dst) {
-        return instruction("cset", def(dst), cond_operand::lt())
-                           .implicitly_reads({register_operand(register_operand::nzcv)});
-    }
-
-    [[nodiscard]]
-	static instruction setc(const register_operand &dst) {
-        return instruction("cset", def(dst), cond_operand::cs())
-                      .implicitly_reads({register_operand(register_operand::nzcv)});
-    }
-
-    [[nodiscard]]
-	static instruction setcc(const register_operand &dst) {
-        return instruction("cset", def(dst), cond_operand::cc())
-                      .implicitly_reads({register_operand(register_operand::nzcv)});
-    }
-    [[nodiscard]]
-	static instruction seto(const register_operand &dst) {
-        return instruction("cset", def(dst), cond_operand::vs())
-                      .implicitly_reads({register_operand(register_operand::nzcv)});
-    }
-
-    [[nodiscard]]
     static instruction cfinv() {
         return instruction("cfinv");
     }

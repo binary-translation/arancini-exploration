@@ -1399,14 +1399,6 @@ public:
         return shift_operand(mod, 0);
     }
 
-	instruction& setz(const register_operand &dst) {
-        return append(assembler::cset(dst, cond_operand::eq()));
-    }
-
-	void set_zero_flag(const register_operand &destination = flag_map_[reg_offsets::ZF]) {
-        append(assembler::cset(destination, cond_operand::eq())).add_comment("compute flag: ZF");
-    }
-
     [[nodiscard]]
     const register_operand& zero_flag() const { return flag_map_[reg_offsets::ZF]; }
 
@@ -1419,8 +1411,11 @@ public:
     [[nodiscard]]
     const register_operand& carry_flag() const { return flag_map_[reg_offsets::CF]; }
 
-	instruction& sets(const register_operand &dst) {
-        return append(assembler::cset(dst, cond_operand::lt()));
+    [[nodiscard]]
+    const register_operand& flag(reg_offsets flag_offset) const { return flag_map_[flag_offset]; }
+
+	void set_zero_flag(const register_operand &destination = flag_map_[reg_offsets::ZF]) {
+        append(assembler::cset(destination, cond_operand::eq())).add_comment("compute flag: ZF");
     }
 
 	void set_sign_flag(const cond_operand& cond = cond_operand::lt(),
@@ -1429,22 +1424,10 @@ public:
         append(assembler::cset(destination, cond)).add_comment("compute flag: SF");
     }
 
-	instruction& setc(const register_operand &dst) {
-        return append(assembler::cset(dst, cond_operand::cs()));
-    }
-
-	instruction& setcc(const register_operand &dst) {
-        return append(assembler::cset(dst, cond_operand::cc()));
-    }
-
 	void set_carry_flag(const cond_operand& cond = cond_operand::cs(),
                         const register_operand &destination = flag_map_[reg_offsets::CF])
     {
         append(assembler::cset(destination, cond));
-    }
-
-	instruction& seto(const register_operand &dst) {
-        return append(assembler::cset(dst, cond_operand::vs()));
     }
 
 	void set_overflow_flag(const cond_operand& cond = cond_operand::vs(),
@@ -1486,12 +1469,6 @@ public:
         label_refcount_.clear();
         labels_.clear();
     }
-
-    [[nodiscard]]
-    flag_map_type& flag_map() { return flag_map_; }
-
-    [[nodiscard]]
-    const flag_map_type& flag_map() const { return flag_map_; }
 private:
     assembler asm_;
     constexpr static bool supports_lse = false;
