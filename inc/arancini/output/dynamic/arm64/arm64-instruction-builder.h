@@ -14,23 +14,30 @@
 
 namespace arancini::output::dynamic::arm64 {
 
-class register_sequence final {
+class variable final {
 public:
     // TODO: do we need this?
-    register_sequence() = default;
+    variable() = default;
 
-    register_sequence(const register_operand& reg):
+    variable(const register_operand& reg):
         regs_{reg}
     { }
 
-    register_sequence(std::initializer_list<register_operand> regs):
-        regs_(regs)
+    variable(std::initializer_list<register_operand> regs):
+        variable(regs.begin(), regs.end())
     { }
 
     template <typename It>
-    register_sequence(It begin, It end):
+    variable(It begin, It end):
         regs_(begin, end)
-    { }
+    {
+        if (regs_.empty()) return;
+        auto type = regs_[0].type();
+        for (std::size_t i = 1; i < regs_.size(); ++i) {
+            if (regs_[i].type() != type)
+                throw backend_exception("Cannot construct register sequence from registers of different types");
+        }
+    }
 
     operator register_operand() const {
         [[unlikely]]
@@ -65,6 +72,12 @@ public:
     [[nodiscard]]
     std::size_t size() const { return regs_.size(); }
 
+    [[nodiscard]]
+    ir::value_type type() const {
+        if (regs_.size() == 1) return regs_[0].type();
+        return ir::value_type::vector(regs_[0].type(), regs_.size());
+    }
+
     void push_back(const register_operand& reg) { regs_.push_back(reg); }
 
     void push_back(register_operand&& reg) { regs_.push_back(std::move(reg)); }
@@ -75,7 +88,7 @@ private:
 class virtual_register_allocator final {
 public:
     [[nodiscard]]
-    register_sequence allocate([[maybe_unused]] ir::value_type type);
+    variable allocate([[maybe_unused]] ir::value_type type);
 
     void reset() { next_vreg_ = 33; }
 private:
@@ -114,12 +127,26 @@ public:
     };
 
 	void add(const register_operand &destination,
-                      const register_operand &src1,
-                      const reg_or_imm &src2,
-                      const shift_operand &shift = {}) {
+             const register_operand &src1,
+             const reg_or_imm &src2,
+             const shift_operand &shift = {}) {
         append(assembler::add(destination, src1, src2, shift));
     }
 
+	void add(const variable &destination,
+             const variable &src1,
+             const variable &src2) {
+        // TODO: checks
+        // TODO: implement via vector
+        if (destination.type().is_vector()) {
+            for (std::size_t i = 0; i < destination.size(); ++i) {
+                append(assembler::add(destination, src1, src2));
+            }
+            return;
+        }
+
+        adds(destination, src1, src2);
+    }
 
     instruction& adds(const register_operand &destination,
                       const register_operand &src1,
@@ -129,9 +156,9 @@ public:
         return append(assembler::adds(destination, src1, src2, shift));
     }
 
-    void adds(const register_sequence &destination,
-              const register_sequence &lhs,
-              const register_sequence &rhs)
+    void adds(const variable &destination,
+              const variable &lhs,
+              const variable &rhs)
     {
         // TODO: shifts
         append(assembler::adds(destination[0], lhs[0], rhs[0]));
@@ -146,10 +173,10 @@ public:
         return append(assembler::adc(dst, src1, register_operand(src2)));
     }
 
-	void adcs(const register_sequence& destination,
-              const register_sequence& top,
-              const register_sequence& lhs,
-              const register_sequence& rhs)
+	void adcs(const variable& destination,
+              const variable& top,
+              const variable& lhs,
+              const variable& rhs)
     {
         for (std::size_t i = 0; i < destination.size(); ++i) {
             append(assembler::cmp(top[i], 0));
@@ -175,9 +202,9 @@ public:
         append(assembler::subs(dst, src1, src2, shift));
     }
 
-    void subs(const register_sequence &destination,
-              const register_sequence &lhs,
-              const register_sequence &rhs)
+    void subs(const variable &destination,
+              const variable &lhs,
+              const variable &rhs)
     {
         // TODO: shifts
         append(assembler::subs(destination[0], lhs[0], rhs[0]));
@@ -192,10 +219,10 @@ public:
         return append(assembler::sbc(dst, src1, register_operand(src2)));
     }
 
-	void sbcs(const register_sequence& destination,
-              const register_sequence& top,
-              const register_sequence& lhs,
-              const register_sequence& rhs)
+	void sbcs(const variable& destination,
+              const variable& top,
+              const variable& lhs,
+              const variable& rhs)
     {
         if (destination.size() != top.size() || top.size() != lhs.size() || lhs.size() != rhs.size())
             throw backend_exception("Cannot perform subtract with borrow for given types");
@@ -218,9 +245,9 @@ public:
         return append(assembler::orr(dst, src1, src_conv));
     }
 
-    void logical_or(const register_sequence &destination,
-                    const register_sequence &lhs,
-                    const register_sequence &rhs)
+    void logical_or(const variable &destination,
+                    const variable &lhs,
+                    const variable &rhs)
     {
         for (std::size_t i = 0; i < destination.size(); ++i) {
             switch (destination[0].type().element_width()) {
@@ -276,9 +303,9 @@ public:
         return append(assembler::ands(dst, src1, src_conv));
     }
 
-    void ands(const register_sequence &destination,
-              const register_sequence &lhs,
-              const register_sequence &rhs)
+    void ands(const variable &destination,
+              const variable &lhs,
+              const variable &rhs)
     {
         for (std::size_t i = 0; i < destination.size(); ++i) {
             switch (destination[0].type().element_width()) {
@@ -312,9 +339,9 @@ public:
         return append(assembler::eor(dst, src1, src_conv));
     }
 
-    void exclusive_or(const register_sequence &destination,
-                      const register_sequence &lhs,
-                      const register_sequence &rhs)
+    void exclusive_or(const variable &destination,
+                      const variable &lhs,
+                      const variable &rhs)
     {
         // if (destination[0].type().is_floating_point()) {
         //     lhs[0].cast(value_type::vector(ir::value_type::f64(), 2));
@@ -515,7 +542,7 @@ public:
         return append(assembler::bfi(dst, src1, lsb, width));
     }
 
-    void load(const register_sequence& destination, const memory_operand& address) {
+    void load(const variable& destination, const memory_operand& address) {
         for (std::size_t i = 0; i < destination.size(); ++i) {
             if (destination[i].type().element_width() <= 8) {
                 memory_operand memory(address.base_register(), address.offset().value() + i);
@@ -531,7 +558,7 @@ public:
         }
     }
 
-    void store(const register_sequence& source, const memory_operand& address) {
+    void store(const variable& source, const memory_operand& address) {
         for (std::size_t i = 0; i < source.size(); ++i) {
             if (source[i].type().element_width() <= 8) {
                 memory_operand memory(address.base_register(), address.offset().value() + i);
@@ -547,9 +574,9 @@ public:
         }
     }
 
-    void multiply(register_sequence& destination,
-                  const register_sequence& multiplicand,
-                  const register_sequence& multiplier)
+    void multiply(variable& destination,
+                  const variable& multiplicand,
+                  const variable& multiplier)
     {
         [[unlikely]]
         if (!destination.size() || destination.size() > 2 ||
@@ -634,9 +661,9 @@ public:
         return;
     }
 
-    void divide(const register_sequence& destination,
-                        const register_sequence& dividend,
-                        const register_sequence& divider)
+    void divide(const variable& destination,
+                const variable& dividend,
+                const variable& divider)
     {
         if (destination.size() > 1)
             throw backend_exception("Division not supported for types larger than 128-bits");
@@ -662,14 +689,14 @@ public:
     }
 
     instruction& mul(const register_operand &dest,
-             const register_operand &src1,
-             const register_operand &src2) {
+                     const register_operand &src1,
+                     const register_operand &src2) {
         return append(assembler::mul(dest, src1, src2));
     }
 
     instruction& smulh(const register_operand &dest,
-               const register_operand &src1,
-               const register_operand &src2) {
+                       const register_operand &src1,
+                       const register_operand &src2) {
         return append(assembler::smulh(dest, src1, src2));
     }
 

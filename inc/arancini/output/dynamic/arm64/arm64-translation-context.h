@@ -21,27 +21,34 @@ public:
     { }
 
     [[nodiscard]]
-    register_sequence allocate(ir::value_type type) {
+    variable allocate(ir::value_type type) {
         return regalloc_->allocate(type);
     }
 
-    register_sequence& allocate(const ir::port& p) {
+    variable& allocate(const ir::port& p) {
         port_to_vreg_[&p] = regalloc_->allocate(p.type());
         return port_to_vreg_[&p];
     }
 
-	register_sequence &allocate(const ir::port &p, ir::value_type type) {
+	variable &allocate(const ir::port &p, ir::value_type type) {
         port_to_vreg_[&p] = regalloc_->allocate(type);
 		return port_to_vreg_[&p];
 	}
 
     [[nodiscard]]
-    register_sequence& get(const ir::port& p) { return port_to_vreg_[&p]; }
+    variable& get(const ir::port& p) { return port_to_vreg_[&p]; }
+
+    [[nodiscard]]
+    variable& get_or_allocate(const ir::port& p) {
+        if (port_to_vreg_.count(&p))
+            return port_to_vreg_[&p];
+        return allocate(p);
+    }
 
     void reset() { regalloc_->reset(); port_to_vreg_.clear(); }
 private:
     virtual_register_allocator* regalloc_;
-	std::unordered_map<const ir::port *, register_sequence> port_to_vreg_;
+	std::unordered_map<const ir::port *, variable> port_to_vreg_;
 };
 
 class arm64_translation_context final : public translation_context {
@@ -76,7 +83,14 @@ private:
     std::string current_instruction_disasm_;
 
     [[nodiscard]]
-    register_sequence& materialise_port(const ir::port &p) {
+    variable& materialise_port(const ir::port &p) {
+        materialise(p.owner());
+        return vreg_alloc_.get(p);
+    }
+
+    [[nodiscard]]
+    variable& materialise_port(const ir::value_type& type, const ir::port &p) {
+        vreg_alloc_.allocate(p, type);
         materialise(p.owner());
         return vreg_alloc_.get(p);
     }
