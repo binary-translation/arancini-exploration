@@ -429,7 +429,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             auto typed_rhs = builder_.cast(rhs[0], lhs[0].type());
             builder_.comparison(lhs[0], typed_rhs)
                     .add_comment("compare LHS and RHS to generate condition for conditional set");
-            builder_.cset(destination[0], get_cset_type(n.op()))
+            builder_.append(assembler::cset(destination[0], get_cset_type(n.op())))
                     .add_comment("set to 1 if condition is true (based flags from the previous compare)");
             inverse_carry_flag_operation = true;
         }
@@ -440,7 +440,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 	case binary_arith_op::cmpo:
 	case binary_arith_op::cmpu:
         builder_.comparison(lhs, rhs);
-        builder_.cset(destination[0], get_cset_type(n.op()))
+        builder_.append(assembler::cset(destination[0], get_cset_type(n.op())))
                 .add_comment("set to 1 if condition is true (based flags from the previous compare)");
         break;
 	case binary_arith_op::cmpueq:
@@ -451,9 +451,9 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         {
             builder_.comparison(lhs, rhs);
             const value& unordered = vreg_alloc_.allocate(value_type::u64());
-            builder_.cset(destination[0], get_cset_type(n.op()))
+            builder_.append(assembler::cset(destination[0], get_cset_type(n.op())))
                     .add_comment("set to 1 if condition is true (based flags from the previous compare)");
-            builder_.cset(unordered, cond_operand::vs())
+            builder_.append(assembler::cset(unordered, cond_operand::vs()))
                     .add_comment("set to 1 if condition is true (based flags from the previous compare)");
             builder_.logical_or(destination[0], destination[0], unordered[0]);
         }

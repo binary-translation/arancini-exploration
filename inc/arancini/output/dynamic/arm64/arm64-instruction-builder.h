@@ -190,6 +190,53 @@ public:
         ir::value_type reg_type_;
     };
 
+    void load(const value& destination, const memory_operand& address) {
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            if (destination[i].type().element_width() <= 8) {
+                memory_operand memory(address.base_register(), address.offset().value() + i);
+                append(assembler::ldrb(destination[i], memory));
+            } else if (destination[i].type().element_width() <= 16) {
+                memory_operand memory(address.base_register(), address.offset().value() + i * 2);
+                append(assembler::ldrh(destination[i], memory));
+            } else {
+                auto offset = i * (destination[i].type().element_width() < 64 ? 4 : 8);
+                memory_operand memory(address.base_register(), address.offset().value() + offset);
+                append(assembler::ldr(destination[i], memory));
+            }
+        }
+    }
+
+    void load(const variable& destination, const memory_operand& address) {
+        [[unlikely]]
+        if (destination.type().is_vector())
+            throw backend_exception("Cannot handle vector loads");
+
+        load(value(destination), address);
+    }
+
+    void store(const value& source, const memory_operand& address) {
+        for (std::size_t i = 0; i < source.size(); ++i) {
+            if (source[i].type().element_width() <= 8) {
+                memory_operand memory(address.base_register(), address.offset().value() + i);
+                append(assembler::strb(source[i], memory));
+            } else if (source[i].type().element_width() <= 16) {
+                memory_operand memory(address.base_register(), address.offset().value() + i * 2);
+                append(assembler::strh(source[i], memory));
+            } else {
+                auto offset = i * (source[i].type().element_width() < 64 ? 4 : 8);
+                memory_operand memory(address.base_register(), address.offset().value() + offset);
+                append(assembler::str(source[i], memory));
+            }
+        }
+    }
+
+    void store(const variable& source, const memory_operand& address) {
+        if (source.type().is_vector())
+            throw backend_exception("Cannot handle vector stores");
+
+        store(source[0], address);
+    }
+
 	void add(const variable &destination, const variable &lhs, const variable &rhs) {
         // TODO: checks
         // TODO: implement via vector
@@ -221,7 +268,7 @@ public:
               const variable& rhs)
     {
         for (std::size_t i = 0; i < destination.size(); ++i) {
-            append(assembler::cmp(top[i], 0));
+            comparison(top[i], 0);
             append(assembler::sbcs(register_operand(register_operand::wzr_sp),
                  register_operand(register_operand::wzr_sp),
                  register_operand(register_operand::wzr_sp)));
@@ -638,6 +685,12 @@ public:
         return append(assembler::b(target).as_branch());
     }
 
+    // TODO
+    instruction& conditional_branch(const label_operand& target, const cond_operand& condition) {
+        label_refcount_[target.name()]++;
+        return append(assembler::b(target).as_branch());
+    }
+
     instruction& b(const label_operand &dest) {
         label_refcount_[dest.name()]++;
         return append(assembler::b(dest).as_branch());
@@ -676,22 +729,6 @@ public:
         return append(assembler::cbnz(rt, dest));
     }
 
-    // TODO: handle register_sequence
-    instruction& cmn(const register_operand &dst,
-                     const reg_or_imm &src) {
-        return append(assembler::cmn(dst, src));
-    }
-
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& cmp(const register_operand &dst, const reg_or_imm &src) {
-        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
-        return append(assembler::cmp(dst, immediates_policy(src)));
-    }
-
-    instruction& fcmp(const register_operand &dest, const register_operand &src) {
-        return append(assembler::fcmp(dest, src));
-    }
-
     instruction& comparison(const value& lhs, const value& rhs) {
         if (lhs.type().is_floating_point()) {
             return append(assembler::fcmp(lhs, rhs));
@@ -708,19 +745,6 @@ public:
         immediates_upgrade_policy upgrade(this, ir::value_type(ir::value_type_class::unsigned_integer, 12),
                                           lhs.type());
         return append(assembler::cmp(lhs, upgrade(rhs)));
-    }
-
-    instruction& tst(const register_operand &dst, const reg_or_imm &src) {
-        if (std::holds_alternative<register_operand>(src.get()))
-            return append(assembler::tst(dst, register_operand(src)));
-        return append(assembler::tst(dst, immediate_operand(src)));
-    }
-
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& lsl(const register_operand &dst, const register_operand &src1, const reg_or_imm &src2) {
-        std::size_t size = dst.type().element_width() <= 32 ? 4 : 6;
-        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
-        return append(assembler::lsl(dst, src1, immediates_policy(src2)));
     }
 
     void left_shift(const value& destination, const value& input, const value& amount) {
@@ -752,66 +776,12 @@ public:
         append(assembler::asr(destination, input, amount));
     }
 
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& lsr(const register_operand &dst,
-                     const register_operand &src1,
-                     const reg_or_imm &src2) {
-        std::size_t size = dst.type().element_width() <= 32 ? 5 : 6;
-        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
-        return append(assembler::lsr(dst, src1, immediates_policy(src2)));
-    }
-
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& asr(const register_operand &dst,
-                     const register_operand &src1,
-                     const reg_or_imm &src2) {
-        std::size_t size = dst.type().element_width() <= 32 ? 5 : 6;
-        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
-        return append(assembler::asr(dst, src1, immediates_policy(src2)));
-    }
-
-    instruction& extr(const register_operand &dst,
-                      const register_operand &src1,
-                      const register_operand &src2,
-                      const immediate_operand &shift) {
-        return append(assembler::extr(dst, src1, src2, shift));
-    }
-
     instruction& conditional_select(const value &destination,
                                     const value &lhs,
                                     const value &rhs,
                                     const cond_operand &cond)
     {
         return append(assembler::csel(destination, lhs, rhs, cond));
-    }
-
-    instruction& cset(const register_operand &dst,
-                      const cond_operand &cond) {
-        return append(assembler::cset(dst, cond));
-    }
-
-    instruction& bfxil(const register_operand &dst,
-                       const register_operand &src1,
-                       const immediate_operand &lsb,
-                       const immediate_operand &width)
-    {
-        return append(assembler::bfxil(dst, src1, lsb, width));
-    }
-
-    instruction& ubfx(const register_operand &dst,
-                      const register_operand &src1,
-                      const immediate_operand &lsb,
-                      const immediate_operand &width)
-    {
-        return append(assembler::ubfx(dst, src1, lsb, width));
-    }
-
-    instruction& bfi(const register_operand &dst,
-                     const register_operand &src1,
-                     const immediate_operand &lsb,
-                     const immediate_operand &width)
-    {
-        return append(assembler::bfi(dst, src1, lsb, width));
     }
 
     void bit_insert(const value& destination, const value& source,
@@ -854,52 +824,6 @@ public:
         }
 
         bit_extract(value(destination), value(source), from, length);
-    }
-
-    void load(const value& destination, const memory_operand& address) {
-        for (std::size_t i = 0; i < destination.size(); ++i) {
-            if (destination[i].type().element_width() <= 8) {
-                memory_operand memory(address.base_register(), address.offset().value() + i);
-                append(assembler::ldrb(destination[i], memory));
-            } else if (destination[i].type().element_width() <= 16) {
-                memory_operand memory(address.base_register(), address.offset().value() + i * 2);
-                append(assembler::ldrh(destination[i], memory));
-            } else {
-                auto offset = i * (destination[i].type().element_width() < 64 ? 4 : 8);
-                memory_operand memory(address.base_register(), address.offset().value() + offset);
-                append(assembler::ldr(destination[i], memory));
-            }
-        }
-    }
-
-    void load(const variable& destination, const memory_operand& address) {
-        if (destination.type().is_vector())
-            throw backend_exception("Cannot handle vector stores");
-
-        load(destination[0], address);
-    }
-
-    void store(const value& source, const memory_operand& address) {
-        for (std::size_t i = 0; i < source.size(); ++i) {
-            if (source[i].type().element_width() <= 8) {
-                memory_operand memory(address.base_register(), address.offset().value() + i);
-                append(assembler::strb(source[i], memory));
-            } else if (source[i].type().element_width() <= 16) {
-                memory_operand memory(address.base_register(), address.offset().value() + i * 2);
-                append(assembler::strh(source[i], memory));
-            } else {
-                auto offset = i * (source[i].type().element_width() < 64 ? 4 : 8);
-                memory_operand memory(address.base_register(), address.offset().value() + offset);
-                append(assembler::str(source[i], memory));
-            }
-        }
-    }
-
-    void store(const variable& source, const memory_operand& address) {
-        if (source.type().is_vector())
-            throw backend_exception("Cannot handle vector stores");
-
-        store(source[0], address);
     }
 
     void multiply(const value& destination,
@@ -954,7 +878,7 @@ public:
             if (sets_flags) {
                 auto compare_regset = vreg_alloc_.allocate(destination[0].type());
                 move_to_register(compare_regset, 0xFFFF0000);
-                cmp(compare_regset, destination);
+                comparison(compare_regset, destination);
                 set_carry_flag(cond_operand::ne());
                 set_overflow_flag(cond_operand::ne());
                 sets_flags = false;
@@ -1499,7 +1423,7 @@ public:
     {
         if constexpr (!supports_lse) {
             atomic_block(current, mem, [this, &current, &acc]() {
-                cmp(current, acc).add_comment("compare with accumulator");
+                comparison(current, acc);
                 append(assembler::csel(acc, current, acc, cond_operand::ne()))
                       .add_comment("conditionally move current memory value into accumulator");
             }, type);
@@ -1645,8 +1569,10 @@ public:
 
     // TODO: this is wrong
     void extend_to_byte(const register_operand& reg, std::uint8_t idx = 1) {
-        lsl(reg, reg, 8 - idx).add_comment("shift left LSB to set sign bit of byte");
-        asr(reg, reg, 8 - idx).add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
+        append(assembler::lsl(reg, reg, 8 - idx))
+              .add_comment("shift left LSB to set sign bit of byte");
+        append(assembler::asr(reg, reg, 8 - idx))
+              .add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
     }
 
     value cast(const value &src, ir::value_type type) {
