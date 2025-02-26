@@ -1,8 +1,10 @@
 #pragma once
 
+#include "arancini/output/dynamic/arm64/arm64-instruction.h"
 #include <keystone/keystone.h>
 
 #include <arancini/ir/port.h>
+#include <arancini/ir/node.h>
 #include <arancini/input/registers.h>
 #include <arancini/output/dynamic/machine-code-writer.h>
 #include <arancini/output/dynamic/arm64/arm64-assembler.h>
@@ -14,13 +16,70 @@
 
 namespace arancini::output::dynamic::arm64 {
 
+using register_sequence = std::vector<register_operand>;
+
+class value final {
+public:
+    value(const register_operand& reg):
+        regset_({reg}),
+        type_(reg.type())
+    { }
+
+    value(const register_sequence& regs, ir::value_type type):
+        regset_(regs),
+        type_(type)
+    { }
+
+    [[nodiscard]]
+    operator register_operand() const {
+        [[unlikely]]
+        if (regset_.size() > 1)
+            throw backend_exception("Cannot convert value of type {} to register",
+                                    type_);
+        return regset_[0];
+    }
+
+    operator register_sequence() const {
+        return regset_;
+    }
+
+    [[nodiscard]]
+    ir::value_type type() const { return type_; }
+
+    [[nodiscard]]
+    register_operand& operator[](std::size_t i) { return regset_[i]; }
+
+    [[nodiscard]]
+    const register_operand& operator[](std::size_t i) const { return regset_[i]; }
+
+    [[nodiscard]]
+    register_operand& front() { return regset_[0]; }
+
+    [[nodiscard]]
+    const register_operand& front() const { return regset_[0]; }
+
+    [[nodiscard]]
+    register_operand& back() { return regset_[regset_.size()]; }
+
+    [[nodiscard]]
+    const register_operand& back() const { return regset_[regset_.size()]; }
+
+    [[nodiscard]]
+    std::size_t size() const { return regset_.size(); }
+    // TODO: make sure this is always possible
+    // void cast(ir::value_type type) { type_ = type; }
+private:
+    register_sequence regset_;
+    ir::value_type type_;
+};
+
 class variable final {
 public:
     // TODO: do we need this?
     variable() = default;
 
-    variable(const register_operand& reg):
-        regs_{reg}
+    variable(const value& reg):
+        values_{reg}
     { }
 
     variable(std::initializer_list<register_operand> regs):
@@ -29,71 +88,72 @@ public:
 
     template <typename It>
     variable(It begin, It end):
-        regs_(begin, end)
+        values_(begin, end)
     {
-        if (regs_.empty()) return;
-        auto type = regs_[0].type();
-        for (std::size_t i = 1; i < regs_.size(); ++i) {
-            if (regs_[i].type() != type)
+        if (values_.empty()) return;
+        auto type = values_[0].type();
+        for (std::size_t i = 1; i < values_.size(); ++i) {
+            if (values_[i].type() != type)
                 throw backend_exception("Cannot construct register sequence from registers of different types");
         }
     }
 
-    operator register_operand() const {
+    operator value() const {
         [[unlikely]]
-        if (regs_.size() > 1)
+        if (values_.size() > 1)
             throw backend_exception("Accessing register set of {} registers as single register",
-                                    regs_.size());
-        return regs_[0];
+                                    values_.size());
+        return values_[0];
     }
 
-    operator std::vector<register_operand>() const {
-        return regs_;
+    operator std::vector<value>() const {
+        return values_;
     }
 
     [[nodiscard]]
-    register_operand& operator[](std::size_t i) { return regs_[i]; }
+    value& operator[](std::size_t i) { return values_[i]; }
 
     [[nodiscard]]
-    const register_operand& operator[](std::size_t i) const { return regs_[i]; }
+    const value& operator[](std::size_t i) const { return values_[i]; }
 
     [[nodiscard]]
-    register_operand& front() { return regs_[0]; }
+    value& front() { return values_[0]; }
 
     [[nodiscard]]
-    const register_operand& front() const { return regs_[0]; }
+    const value& front() const { return values_[0]; }
 
     [[nodiscard]]
-    register_operand& back() { return regs_[regs_.size()]; }
+    value& back() { return values_[values_.size()]; }
 
     [[nodiscard]]
-    const register_operand& back() const { return regs_[regs_.size()]; }
+    const value& back() const { return values_[values_.size()]; }
 
     [[nodiscard]]
-    std::size_t size() const { return regs_.size(); }
+    std::size_t size() const { return values_.size(); }
 
     [[nodiscard]]
     ir::value_type type() const {
-        if (regs_.size() == 1) return regs_[0].type();
-        return ir::value_type::vector(regs_[0].type(), regs_.size());
+        if (values_.size() == 1) return values_[0].type();
+        return ir::value_type::vector(values_[0].type(), values_.size());
     }
 
-    void push_back(const register_operand& reg) { regs_.push_back(reg); }
+    void push_back(const register_operand& reg) { values_.push_back(reg); }
 
-    void push_back(register_operand&& reg) { regs_.push_back(std::move(reg)); }
+    void push_back(register_operand&& reg) { values_.push_back(std::move(reg)); }
 private:
-    std::vector<register_operand> regs_;
+    std::vector<value> values_;
 };
 
 class virtual_register_allocator final {
 public:
     [[nodiscard]]
-    variable allocate([[maybe_unused]] ir::value_type type);
+    value allocate(ir::value_type type);
 
     void reset() { next_vreg_ = 33; }
 private:
     std::size_t next_vreg_ = 33; // TODO: formalize this
 
+    // TODO: shouldn't be using pointers here
     bool base_representable(const ir::value_type& type) {
         return type.width() <= 64; // TODO: formalize this
     }
@@ -101,6 +161,10 @@ private:
 
 using reg_offsets = arancini::input::x86::reg_offsets;
 using flag_map_type = std::unordered_map<reg_offsets, register_operand>;
+
+inline bool is_bignum(ir::value_type type) {
+    return type.element_width() > 64;
+}
 
 class instruction_builder final {
 public:
@@ -126,51 +190,29 @@ public:
         ir::value_type reg_type_;
     };
 
-	void add(const register_operand &destination,
-             const register_operand &src1,
-             const reg_or_imm &src2,
-             const shift_operand &shift = {}) {
-        append(assembler::add(destination, src1, src2, shift));
-    }
-
-	void add(const variable &destination,
-             const variable &src1,
-             const variable &src2) {
+	void add(const variable &destination, const variable &lhs, const variable &rhs) {
         // TODO: checks
         // TODO: implement via vector
         if (destination.type().is_vector()) {
             for (std::size_t i = 0; i < destination.size(); ++i) {
-                append(assembler::add(destination, src1, src2));
+                append(assembler::add(destination[i], lhs[i], rhs[i]));
             }
             return;
         }
 
-        adds(destination, src1, src2);
+        [[unlikely]]
+        if (is_bignum(destination.type()))
+            return adds(destination, lhs, rhs);
+
+        append(assembler::add(destination[0], lhs[0], rhs[0]));
     }
 
-    instruction& adds(const register_operand &destination,
-                      const register_operand &src1,
-                      const reg_or_imm &src2,
-                      const shift_operand &shift = {})
-    {
-        return append(assembler::adds(destination, src1, src2, shift));
-    }
-
-    void adds(const variable &destination,
-              const variable &lhs,
-              const variable &rhs)
-    {
+    void adds(const value &destination, const value &lhs, const value &rhs) {
         // TODO: shifts
         append(assembler::adds(destination[0], lhs[0], rhs[0]));
         for (std::size_t i = 1; i < destination.size(); ++i) {
             append(assembler::adcs(destination[i], lhs[i], rhs[i]));
         }
-    }
-
-	instruction& adc(const register_operand &dst,
-                      const register_operand &src1,
-                      const register_operand &src2) {
-        return append(assembler::adc(dst, src1, register_operand(src2)));
     }
 
 	void adcs(const variable& destination,
@@ -187,42 +229,40 @@ public:
         }
     }
 
-    instruction& sub(const register_operand &dst,
-                     const register_operand &src1,
-                     const reg_or_imm &src2,
-                     const shift_operand &shift = {}) {
-        return append(assembler::sub(dst, src1, src2, shift));
+    void sub(const variable &destination,
+             const variable &lhs,
+             const variable &rhs)
+    {
+        if (destination.type().is_vector()) {
+            for (std::size_t i = 0; i < destination.size(); ++i) {
+                for (std::size_t i = 0; i < destination.size(); ++i) {
+                    append(assembler::sub(destination[i], lhs[i], rhs[i]));
+                }
+            }
+        }
+
+        [[unlikely]]
+        if (is_bignum(destination.type())) {
+            return subs(destination, lhs, rhs);
+        }
+
+        append(assembler::sub(destination[0], lhs[0], rhs[0]));
     }
 
-    void subs(const register_operand &dst,
-              const register_operand &src1,
-              const reg_or_imm &src2,
-              const shift_operand &shift = {})
+    void subs(const value &destination,
+              const value &lhs,
+              const value &rhs)
     {
-        append(assembler::subs(dst, src1, src2, shift));
-    }
-
-    void subs(const variable &destination,
-              const variable &lhs,
-              const variable &rhs)
-    {
-        // TODO: shifts
         append(assembler::subs(destination[0], lhs[0], rhs[0]));
         for (std::size_t i = 1; i < destination.size(); ++i) {
             append(assembler::sbcs(destination[i], lhs[i], rhs[i]));
         }
     }
 
-	instruction& sbc(const register_operand &dst,
-                      const register_operand &src1,
-                      const register_operand &src2) {
-        return append(assembler::sbc(dst, src1, register_operand(src2)));
-    }
-
-	void sbcs(const variable& destination,
-              const variable& top,
-              const variable& lhs,
-              const variable& rhs)
+	void sbcs(const value& destination,
+              const value& top,
+              const value& lhs,
+              const value& rhs)
     {
         if (destination.size() != top.size() || top.size() != lhs.size() || lhs.size() != rhs.size())
             throw backend_exception("Cannot perform subtract with borrow for given types");
@@ -235,78 +275,83 @@ public:
         }
     }
 
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& logical_or(const register_operand &dst,
-                            const register_operand &src1,
-                            const reg_or_imm &src2) {
-        // TODO: this checks that the immediate is between immr:imms (bits [21:10])
-        // However, for 64-bit orr, we have N:immr:imms, which gives us bits [22:10])
-        auto src_conv = ImmediatesPolicy(this, ir::value_type::u(12), dst.type())(src2);
-        return append(assembler::orr(dst, src1, src_conv));
+    void logical_or(const value& destination,
+                    const value& lhs,
+                    const value& rhs)
+    {
+        if (is_bignum(destination.type())) {
+            for (std::size_t i = 0; i < destination.size(); ++i) {
+                append(assembler::orr(destination[i], lhs[i], rhs[i]));
+            }
+            return;
+        }
+
+        switch (destination.type().element_width()) {
+        case 1:
+            extend_to_byte(lhs);
+            extend_to_byte(rhs);
+        case 8:
+        case 16:
+            extend_register(lhs, destination[0].type());
+            extend_register(rhs, destination[0].type());
+        case 32:
+            append(assembler::orr(destination, lhs, rhs));
+            break;
+        case 64:
+            append(assembler::orr(destination, lhs, rhs));
+            break;
+        default:
+            throw backend_exception("Unsupported ORR operation");
+        }
+
+        if (destination[0].type().element_width() < 64)
+            append(assembler::ands(register_operand(register_operand::wzr_sp),
+                                   destination, destination));
+        else
+            append(assembler::ands(register_operand(register_operand::xzr_sp),
+                                   destination, destination));
+
+        set_zero_flag();
+        set_sign_flag(cond_operand::mi());
     }
 
     void logical_or(const variable &destination,
                     const variable &lhs,
                     const variable &rhs)
     {
-        for (std::size_t i = 0; i < destination.size(); ++i) {
-            switch (destination[0].type().element_width()) {
-            case 1:
-                extend_to_byte(lhs);
-                extend_to_byte(rhs);
-            case 8:
-            case 16:
-                extend_register(lhs, destination[0].type());
-                extend_register(rhs, destination[0].type());
-            case 32:
-                append(assembler::orr(destination, lhs, rhs));
-                break;
-            case 64:
-                append(assembler::orr(destination, lhs, rhs));
-                break;
-            default:
-                throw backend_exception("Unsupported ORR operation");
+        if (destination.type().is_vector()) {
+            for (std::size_t i = 0; i < destination.size(); ++i) {
+                append(assembler::orr(destination[i], lhs[i], rhs[i]));
             }
+            return;
         }
 
-        if (destination.size() == 1) {
-            if (destination[0].type().element_width() < 64)
-                append(assembler::ands(register_operand(register_operand::wzr_sp),
-                                       destination, destination));
-            else
-                append(assembler::ands(register_operand(register_operand::xzr_sp),
-                                       destination, destination));
-
-            set_zero_flag();
-            set_sign_flag(cond_operand::mi());
-        }
+        logical_or(destination[0], lhs[0], rhs[0]);
     }
 
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& and_(const register_operand &dst,
-                      const register_operand &src1,
-                      const reg_or_imm &src2) {
-        // TODO: this checks that the immediate is between immr:imms (bits [21:10])
-        // However, for 64-bit and, we have N:immr:imms, which gives us bits [22:10])
-        auto src_conv = ImmediatesPolicy(this, ir::value_type::u(12), dst.type())(src2);
-        return append(assembler::and_(dst, src1, src_conv));
-    }
-
-    // TODO: refactor this; there should be only a single version and the comment should be removed
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& ands(const register_operand &dst,
-                      const register_operand &src1,
-                      const reg_or_imm &src2) {
-        // TODO: this checks that the immediate is between immr:imms (bits [21:10])
-        // However, for 64-bit ands, we have N:immr:imms, which gives us bits [22:10])
-        auto src_conv = ImmediatesPolicy(this, ir::value_type::u(12), dst.type())(src2);
-        return append(assembler::ands(dst, src1, src_conv));
-    }
-
-    void ands(const variable &destination,
-              const variable &lhs,
-              const variable &rhs)
+    void logical_and(const variable &destination,
+                     const variable &lhs,
+                     const variable &rhs)
     {
+        if (destination.type().is_vector()) {
+            for (std::size_t i = 0; i < destination.size(); ++i) {
+                append(assembler::and_(destination[i], lhs[i], rhs[i]));
+            }
+            return;
+        }
+
+        ands(destination[0], lhs[0], rhs[0]);
+    }
+
+    void ands(const value &destination,
+              const value &lhs,
+              const value &rhs)
+    {
+        [[unlikely]]
+        if (is_bignum(destination.type()))
+            throw backend_exception("Cannot perform ands {}, {}, {}",
+                                    destination.type(), lhs.type(), rhs.type());
+
         for (std::size_t i = 0; i < destination.size(); ++i) {
             switch (destination[0].type().element_width()) {
             case 1:
@@ -331,18 +376,7 @@ public:
         set_sign_flag(cond_operand::mi());
     }
 
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& exclusive_or(const register_operand &dst, const register_operand &src1, const reg_or_imm &src2) {
-        // TODO: this checks that the immediate is between immr:imms (bits [21:10])
-        // However, for 64-bit eor, we have N:immr:imms, which gives us bits [22:10])
-        auto src_conv = ImmediatesPolicy(this, ir::value_type::u(12), dst.type())(src2);
-        return append(assembler::eor(dst, src1, src_conv));
-    }
-
-    void exclusive_or(const variable &destination,
-                      const variable &lhs,
-                      const variable &rhs)
-    {
+    void exclusive_or(const value &destination, const value &lhs, const value &rhs) {
         // if (destination[0].type().is_floating_point()) {
         //     lhs[0].cast(value_type::vector(ir::value_type::f64(), 2));
         //     rhs[0].cast(value_type::vector(ir::value_type::f64(), 2));
@@ -360,26 +394,41 @@ public:
         //     }
         //     return;
         // }
-        if (destination.size() == 0) return;
+        if (destination.type().is_floating_point())
+            throw backend_exception("floating-point exclusive-or not implemented");
 
-        std::size_t i = 0;
-        for (; i < destination.size(); ++i) {
+        for (std::size_t i = 0; i < destination.size(); ++i) {
             append(assembler::eor(destination[i], lhs[i], rhs[i]));
         }
 
-        if (destination[0].type().is_floating_point()) return;
+        if (destination.size() == 1) {
+            if (destination[0].type().element_width() > 32)
+                append(assembler::ands(register_operand(register_operand::xzr_sp), destination[0], destination[0]));
+            else
+                append(assembler::ands(register_operand(register_operand::wzr_sp), destination[0], destination[0]));
+            set_zero_flag();
+            set_sign_flag(cond_operand::mi());
+        }
+    }
 
-        // EOR does not set flags
-        if (destination[i-1].type().element_width() > 32)
-            append(assembler::ands(register_operand(register_operand::xzr_sp), destination[i-1], destination[i-1]));
-        else
-            append(assembler::ands(register_operand(register_operand::wzr_sp), destination[i-1], destination[i-1]));
-        set_zero_flag();
-        set_sign_flag(cond_operand::mi());
+    void exclusive_or(const variable &destination,
+                      const variable &lhs,
+                      const variable &rhs)
+    {
+        if (destination.size() == 0) return;
+
+        if (destination.type().is_vector()) {
+            for (std::size_t i = 0; i < destination.size(); ++i) {
+                append(assembler::eor(destination[i], lhs[i], rhs[i]));
+            }
+            return;
+        }
+
+        exclusive_or(value(destination), value(lhs), value(rhs));
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& complement(const register_operand &dst, const reg_or_imm &src) {
+    instruction& complement(const value &dst, const reg_or_imm &src) {
         // TODO
         ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 6), dst.type());
         if (dst.type().width() == 1)
@@ -387,35 +436,206 @@ public:
         return append(assembler::mvn(dst, immediates_policy(src)));
     }
 
-    instruction& negate(const register_operand &dst, const register_operand &src) {
+    instruction& negate(const value &dst, const value &src) {
         return append(assembler::neg(dst, src));
     }
 
-    instruction& movn(const register_operand &dst,
-                      const immediate_operand &src,
-                      const shift_operand &shift) {
-        return append(assembler::movn(dst, src, shift));
+    // TODO: expand this to include all move_to_register logic
+    // TODO: move_to_register() expects equal sizes
+    // TODO: extend() will extend
+    instruction& move_to_register(const value &destination, const immediate_operand &immediate) {
+        if (destination.type().is_floating_point()) {
+            return append(assembler::fmov(destination, immediate));
+        }
+
+        immediates_upgrade_policy upgrade(this, ir::value_type(ir::value_type_class::unsigned_integer, 12),
+                                          destination.type());
+        auto src_conv = upgrade(immediate);
+        return append(assembler::mov(destination, src_conv));
     }
 
-    instruction& movz(const register_operand &dst,
-                      const immediate_operand &src,
-                      const shift_operand &shift) {
-        return append(assembler::movz(dst, src, shift));
+    instruction& move_to_register(const variable &destination, const variable &source) {
+        // TODO:
+        if (destination.type().is_floating_point()) {
+            return append(assembler::fmov(destination[0], source[0]));
+        }
+
+        return append(assembler::mov(destination[0], source[0]));
     }
 
-    instruction& movk(const register_operand &dst,
-                      const immediate_operand &src,
-                      const shift_operand &shift) {
-        return append(assembler::movk(dst, src, shift));
+    void zero_extend(const value& destination, const value& source) {
+        if (source.type().element_width() <= 8) {
+            append(assembler::uxtb(destination, source));
+            return;
+        }
+
+        if (source.type().element_width() <= 16) {
+            append(assembler::uxth(destination, source));
+            return;
+        }
+
+        if (source.type().element_width() <= 32) {
+            append(assembler::uxtw(destination, source));
+            return;
+        }
+
+        if (source.type().element_width() <= 256) {
+            for (std::size_t i = 0; i < source.size(); ++i) {
+                move_to_register(destination, source);
+            }
+
+            // Set upper registers to zero
+            if (destination.size() > 1) {
+                insert_comment("Set upper registers to zero");
+                for (std::size_t i = source.size(); i < destination.size(); ++i)
+                    move_to_register(destination[i], 0);
+            }
+            return;
+        }
     }
 
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& mov(const register_operand &dst, const reg_or_imm &src) {
-        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
-        auto src_conv = immediates_policy(src);
-        if (std::holds_alternative<register_operand>(src_conv.get()))
-            return append(assembler::mov(dst, register_operand(src_conv)));
-        return append(assembler::mov(dst, immediate_operand(src_conv)));
+    void sign_extend(const value& destination, const value& source) {
+        // Sanity check
+        if (destination.type().width() <= source.type().width())
+            throw backend_exception("Cannot sign-extend {} to smaller size {}",
+                                    destination.type(), source.type());
+        // IDEA:
+        // 1. Sign-extend reasonably
+        // 2. If dest_value > 64-bit, determine sign
+        // 3. Plaster sign all over the upper bits
+        insert_comment("sign-extend from {} to {}", source.type(), destination.type());
+        if (source.type().width() < 8) {
+            // 1 -> N
+            // sign-extend to 1 byte
+            // sign-extend the rest
+            // TODO: this is likely wrong
+            append(assembler::lsl(destination, source, 7))
+                    .add_comment("shift left LSB to set sign bit of byte");
+            append(assembler::sxtb(destination, destination).add_comment("sign-extend"));
+            append(assembler::asr(destination, destination, 7))
+                  .add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
+
+            return;
+        }
+
+        if (source.type().width() == 8) {
+            append(assembler::sxtb(destination, source));
+            return;
+        }
+
+        if (source.type().width() == 16) {
+            append(assembler::sxth(destination, source));
+            return;
+        }
+
+        if (source.type().width() == 32) {
+            append(assembler::sxtw(destination, source));
+            return;
+        }
+
+        if (source.type().width() == 32) {
+            append(assembler::sxtw(destination, source));
+            return;
+        }
+
+        move_to_register(destination, source);
+    }
+
+    void bitcast(const variable& destination, const variable& source) {
+        // Simply change the meaning of the bit pattern
+        // dest_vreg is set to the desired type already, but it must have the
+        // value of src_vreg
+        // A simple mov is sufficient (eliminated anyway by the register
+        // allocator)
+        insert_comment("Bitcast from {} to {}", source.type(), destination.type());
+
+        if (destination.type().is_vector() || source.type().is_vector()) {
+            if (destination.type().element_width() > source.type().element_width()) {
+                // Destination consists of fewer elements but of larger widths
+                std::size_t dest_idx = 0;
+                std::size_t dest_pos = 0;
+                for (std::size_t i = 0; i < source.size(); ++i) {
+                    left_shift(source[i], source[i], dest_pos % destination.type().element_width());
+                    move_to_register(destination[dest_idx], source);
+
+                    dest_pos += source[i].type().width();
+                    dest_idx = (dest_pos / destination[dest_idx].type().width());
+                }
+            } else if (destination.type().element_width() < source.type().element_width()) {
+                // Destination consists of more elements but of smaller widths
+                std::size_t src_idx = 0;
+                std::size_t src_pos = 0;
+                for (std::size_t i = 0; i < destination.size(); ++i) {
+                    const auto& src_vreg = vreg_alloc_.allocate(destination[i].type());
+                    move_to_register(src_vreg, source[src_idx]);
+                    append(assembler::lsl(src_vreg, src_vreg, src_pos % source.type().element_width()));
+                    move_to_register(destination[i], src_vreg);
+
+                    src_pos += source[i].type().width();
+                    src_idx = (src_pos / source[src_idx].type().width());
+                }
+            } else {
+                for (std::size_t i = 0; i < destination.size(); ++i)
+                    move_to_register(destination[i], source[i]);
+            }
+
+            return;
+        }
+
+        move_to_register(destination, source);
+    }
+
+    void convert(const value& destination, const value& source, ir::fp_convert_type trunc_type) {
+        constexpr auto uint_type = ir::value_type_class::unsigned_integer;
+
+        // convert integer to float
+        if (source.type().is_integer() && destination.type().is_floating_point()) {
+             if (destination.type().type_class() == uint_type)
+                append(assembler::ucvtf(destination, source));
+             else
+                append(assembler::scvtf(destination, source));
+        } else if (source.type().is_floating_point() && destination.type().is_integer()) {
+            // Handle float/double -> integer conversions
+            switch (trunc_type) {
+                case ir::fp_convert_type::trunc:
+                // if float/double -> truncate to int
+                // NOTE: both float/double handled through the same instructions,
+                // only register differ
+                if (destination.type().type_class() == uint_type)
+                    append(assembler::fcvtzu(destination, source));
+                else
+                    append(assembler::fcvtzs(destination, source));
+                break;
+            case ir::fp_convert_type::round:
+                // if float/double -> round to closest int
+                // NOTE: both float/double handled through the same instructions,
+                // only register differ
+                if (destination.type().type_class() == uint_type)
+                    append(assembler::fcvtau(destination, source));
+                else
+                    append(assembler::fcvtas(destination, source));
+                break;
+            case ir::fp_convert_type::none:
+            default:
+                throw backend_exception("Cannot handle truncation type: {}", util::to_underlying(trunc_type));
+            }
+        } else {
+            // converting between different represenations of integers/floating
+            // point numbers
+            //
+            // Destination virtual register set to the correct type upon creation
+            // TODO: need to handle different-sized types?
+            move_to_register(destination, source);
+        }
+    }
+
+    void truncate(const variable& destination, const variable& source) {
+
+    }
+
+    instruction& branch(const label_operand& target) {
+        label_refcount_[target.name()]++;
+        return append(assembler::b(target).as_branch());
     }
 
     instruction& b(const label_operand &dest) {
@@ -442,7 +662,7 @@ public:
     // Check reg == 0 and jump if true
     // Otherwise, continue to the next instruction
     // Does not affect condition flags (can be used to compare-and-branch with 1 instruction)
-    instruction& cbz(const register_operand &reg, const label_operand &label) {
+    instruction& cbz(const value &reg, const label_operand &label) {
         label_refcount_[label.name()]++;
         return append(assembler::cbz(reg, label));
     }
@@ -451,12 +671,12 @@ public:
     // Check reg == 0 and jump if false
     // Otherwise, continue to the next instruction
     // Does not affect condition flags (can be used to compare-and-branch with 1 instruction)
-    instruction& cbnz(const register_operand &rt, const label_operand &dest) {
+    instruction& cbnz(const value &rt, const label_operand &dest) {
         label_refcount_[dest.name()]++;
         return append(assembler::cbnz(rt, dest));
     }
 
-    // TODO: handle register_set
+    // TODO: handle register_sequence
     instruction& cmn(const register_operand &dst,
                      const reg_or_imm &src) {
         return append(assembler::cmn(dst, src));
@@ -466,6 +686,28 @@ public:
     instruction& cmp(const register_operand &dst, const reg_or_imm &src) {
         ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
         return append(assembler::cmp(dst, immediates_policy(src)));
+    }
+
+    instruction& fcmp(const register_operand &dest, const register_operand &src) {
+        return append(assembler::fcmp(dest, src));
+    }
+
+    instruction& comparison(const value& lhs, const value& rhs) {
+        if (lhs.type().is_floating_point()) {
+            return append(assembler::fcmp(lhs, rhs));
+        }
+
+        return append(assembler::cmp(lhs, rhs));
+    }
+
+    instruction& comparison(const value& lhs, const immediate_operand& rhs) {
+        [[unlikely]]
+        if (lhs.type().is_floating_point())
+            backend_exception("Cannot compare floating-point register with immediates");
+
+        immediates_upgrade_policy upgrade(this, ir::value_type(ir::value_type_class::unsigned_integer, 12),
+                                          lhs.type());
+        return append(assembler::cmp(lhs, upgrade(rhs)));
     }
 
     instruction& tst(const register_operand &dst, const reg_or_imm &src) {
@@ -479,6 +721,35 @@ public:
         std::size_t size = dst.type().element_width() <= 32 ? 4 : 6;
         ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
         return append(assembler::lsl(dst, src1, immediates_policy(src2)));
+    }
+
+    void left_shift(const value& destination, const value& input, const value& amount) {
+        append(assembler::lsl(destination, input, amount));
+    }
+
+    void left_shift(const value& destination, const value& input, const immediate_operand& amount) {
+        append(assembler::lsl(destination, input, amount));
+    }
+
+    void logical_right_shift(const value& destination, const value& input, const value& amount) {
+        append(assembler::lsr(destination, input, amount));
+
+        // {
+        //     auto amount_imm = reinterpret_cast<const constant_node*>(n.amount().owner())->const_val_i();
+        //     if (amount_imm < 64) {
+        //         builder_.extr(dest_vreg[0], input[1], input[0], amount_imm);
+        //         builder_.lsr(dest_vreg[1], input[1], amount);
+        //     } else if (amount_imm == 64) {
+        //         builder_.mov(dest_vreg[0], input[1]);
+        //         builder_.mov(dest_vreg[1], 0);
+        //     } else {
+        //         throw backend_exception("Unsupported logical right-shift operation with amount {}", amount_imm);
+        //     }
+        // }
+    }
+
+    void arithmetic_right_shift(const value& destination, const value& input, const value& amount) {
+        append(assembler::asr(destination, input, amount));
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
@@ -506,11 +777,12 @@ public:
         return append(assembler::extr(dst, src1, src2, shift));
     }
 
-    instruction& csel(const register_operand &dst,
-                      const register_operand &src1,
-                      const register_operand &src2,
-                      const cond_operand &cond) {
-        return append(assembler::csel(dst, src1, src2, cond));
+    instruction& conditional_select(const value &destination,
+                                    const value &lhs,
+                                    const value &rhs,
+                                    const cond_operand &cond)
+    {
+        return append(assembler::csel(destination, lhs, rhs, cond));
     }
 
     instruction& cset(const register_operand &dst,
@@ -542,7 +814,49 @@ public:
         return append(assembler::bfi(dst, src1, lsb, width));
     }
 
-    void load(const variable& destination, const memory_operand& address) {
+    void bit_insert(const value& destination, const value& source,
+                    const value& insert_bits, std::size_t to, std::size_t length) {
+        [[likely]]
+        if (destination.size() == 1) {
+            // auto out = builder_.cast(insertion_bits, dest[0].type());
+            move_to_register(destination, source);
+            append(assembler::bfi(destination, insert_bits, to, length));
+            return;
+        }
+    }
+
+    void bit_insert(const variable& destination, const variable& source,
+                    const variable& insert_bits, std::size_t to, std::size_t length) {
+        if (destination.type().is_vector()) {
+            throw backend_exception("TODO");
+            return;
+        }
+
+        bit_insert(value(destination), value(source), value(insert_bits), to, length);
+    }
+
+    void bit_extract(const value& destination, const value& source,
+                     std::size_t from, std::size_t length) {
+        [[likely]]
+        if (destination.size() == 1) {
+            // auto out = builder_.cast(insertion_bits, dest[0].type());
+            move_to_register(destination, source);
+            append(assembler::ubfx(destination, source, from, length));
+            return;
+        }
+    }
+
+    void bit_extract(const variable& destination, const variable& source,
+                     std::size_t from, std::size_t length) {
+        if (destination.type().is_vector()) {
+            throw backend_exception("TODO");
+            return;
+        }
+
+        bit_extract(value(destination), value(source), from, length);
+    }
+
+    void load(const value& destination, const memory_operand& address) {
         for (std::size_t i = 0; i < destination.size(); ++i) {
             if (destination[i].type().element_width() <= 8) {
                 memory_operand memory(address.base_register(), address.offset().value() + i);
@@ -558,7 +872,14 @@ public:
         }
     }
 
-    void store(const variable& source, const memory_operand& address) {
+    void load(const variable& destination, const memory_operand& address) {
+        if (destination.type().is_vector())
+            throw backend_exception("Cannot handle vector stores");
+
+        load(destination[0], address);
+    }
+
+    void store(const value& source, const memory_operand& address) {
         for (std::size_t i = 0; i < source.size(); ++i) {
             if (source[i].type().element_width() <= 8) {
                 memory_operand memory(address.base_register(), address.offset().value() + i);
@@ -574,9 +895,16 @@ public:
         }
     }
 
-    void multiply(variable& destination,
-                  const variable& multiplicand,
-                  const variable& multiplier)
+    void store(const variable& source, const memory_operand& address) {
+        if (source.type().is_vector())
+            throw backend_exception("Cannot handle vector stores");
+
+        store(source[0], address);
+    }
+
+    void multiply(const value& destination,
+                  const value& multiplicand,
+                  const value& multiplier)
     {
         [[unlikely]]
         if (!destination.size() || destination.size() > 2 ||
@@ -625,7 +953,7 @@ public:
             // Otherwise they are set to 0
             if (sets_flags) {
                 auto compare_regset = vreg_alloc_.allocate(destination[0].type());
-                mov(compare_regset, 0xFFFF0000);
+                move_to_register(compare_regset, 0xFFFF0000);
                 cmp(compare_regset, destination);
                 set_carry_flag(cond_operand::ne());
                 set_overflow_flag(cond_operand::ne());
@@ -661,9 +989,9 @@ public:
         return;
     }
 
-    void divide(const variable& destination,
-                const variable& dividend,
-                const variable& divider)
+    void divide(const value& destination,
+                const value& dividend,
+                const value& divider)
     {
         if (destination.size() > 1)
             throw backend_exception("Division not supported for types larger than 128-bits");
@@ -761,10 +1089,6 @@ public:
     }
 
     // TODO: this also has an immediate variant
-    instruction& fcmp(const register_operand &dest, const register_operand &src) {
-        return append(assembler::fcmp(dest, src));
-    }
-
     instruction& scvtf(const register_operand &dest,
                const register_operand &src) {
         return append(assembler::scvtf(dest, src));
@@ -805,35 +1129,6 @@ public:
 
     instruction& cfinv() {
         return append(assembler::cfinv());
-    }
-
-    instruction& sxtb(const register_operand &dst, const register_operand &src) {
-        return append(assembler::sxtb(dst, src));
-    }
-
-    instruction& sxth(const register_operand &dst, const register_operand &src) {
-        return append(assembler::sxth(dst, src));
-    }
-
-    instruction& sxtw(const register_operand &dst, const register_operand &src) {
-        return append(assembler::sxtw(dst, src));
-    }
-
-    instruction& uxtb(const register_operand &dst, const register_operand &src) {
-        return append(assembler::uxtb(dst, src));
-    }
-
-    instruction& uxth(const register_operand &dst, const register_operand &src) {
-        return append(assembler::uxth(dst, src));
-    }
-
-    instruction& uxtw(const register_operand &dst, const register_operand &src) {
-        return append(assembler::uxtw(dst, src));
-    }
-
-    instruction& cas(const register_operand &dst, const register_operand &src,
-                     const memory_operand &mem_addr) {
-        return append(assembler::cas(dst, src, mem_addr).as_keep());
     }
 
     enum class atomic_types : std::uint8_t {
@@ -918,7 +1213,7 @@ public:
         return;
     }
 
-    void atomic_add(const register_operand& destination, const register_operand& source,
+    void atomic_add(const value& destination, const value& source,
                     const memory_operand& mem, atomic_types type = atomic_types::exclusive)
     {
 
@@ -948,7 +1243,7 @@ public:
         // TODO
     }
 
-    void atomic_sub(const register_operand &destination, const register_operand &source,
+    void atomic_sub(const value &destination, const value &source,
                     const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         const auto& negated = vreg_alloc_.allocate(source.type());
@@ -956,21 +1251,21 @@ public:
         atomic_add(destination, negated, mem, type);
     }
 
-    void atomic_xadd(const register_operand &destination, const register_operand &source,
+    void atomic_xadd(const value &destination, const value &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
-        const register_operand &old = vreg_alloc_.allocate(destination.type());
-        mov(old, destination);
+        const value &old = vreg_alloc_.allocate(destination.type());
+        append(assembler::mov(old, destination));
         atomic_add(destination, source, mem, type);
-        mov(source, old);
+        append(assembler::mov(source, old));
     }
 
-    void atomic_clr(const register_operand &destination, const register_operand &source,
+    void atomic_clr(const value &destination, const value &source,
                     const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
             atomic_block(destination, mem, [this, &destination, &source]() {
-                const register_operand& negated = vreg_alloc_.allocate(source.type());
+                const value& negated = vreg_alloc_.allocate(source.type());
                 complement(negated, source);
                 ands(destination, destination, negated);
             }, type);
@@ -996,7 +1291,7 @@ public:
         // TODO
     }
 
-    void atomic_and(const register_operand &destination, const register_operand &source,
+    void atomic_and(const value &destination, const value &source,
                     const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         const auto& complemented = vreg_alloc_.allocate(source.type());
@@ -1004,8 +1299,8 @@ public:
         atomic_clr(destination, complemented, mem, type);
     }
 
-    void atomic_eor(const register_operand &destination, const register_operand &source,
-                    const memory_operand &mem, atomic_types type = atomic_types::exclusive)
+    void atomic_eor(const value &destination, const value &source,
+                    const value &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
             atomic_block(destination, mem, [this, &destination, &source]() {
@@ -1032,8 +1327,8 @@ public:
         // TODO
     }
 
-    void atomic_or(const register_operand &destination, const register_operand &source,
-                    const memory_operand &mem, atomic_types type = atomic_types::exclusive)
+    void atomic_or(const value &destination, const value &source,
+                    const value &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
             atomic_block(destination, mem, [this, &destination, &source]() {
@@ -1060,7 +1355,7 @@ public:
         // TODO
     }
 
-    void atomic_smax(const register_operand &destination, const register_operand &source,
+    void atomic_smax(const value &destination, const value &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
@@ -1086,7 +1381,7 @@ public:
         // TODO
     }
 
-    void atomic_smin(const register_operand &rm, const register_operand &source,
+    void atomic_smin(const value &rm, const value &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
@@ -1112,7 +1407,7 @@ public:
         // TODO
     }
 
-    void atomic_umax(const register_operand &rm, const register_operand &source,
+    void atomic_umax(const value &rm, const value &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
@@ -1140,7 +1435,7 @@ public:
     }
 
 
-    void atomic_umin(const register_operand &rm, const register_operand &source,
+    void atomic_umin(const value &rm, const value &source,
                             const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
@@ -1166,15 +1461,15 @@ public:
         // TODO
     }
 
-    void atomic_swap(const register_operand &destination, const register_operand &source,
+    void atomic_swap(const value &destination, const value &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
             atomic_block(destination, mem, [this, &destination, &source]() {
                 const auto& old = vreg_alloc_.allocate(destination.type());
-                mov(old, destination);
-                mov(destination, source);
-                mov(source, old);
+                append(assembler::mov(old, destination));
+                append(assembler::mov(destination, source));
+                append(assembler::mov(source, old));
             }, type);
         }
 
@@ -1198,23 +1493,24 @@ public:
         // TODO
     }
 
-    void atomic_cmpxchg(const register_operand& current, const register_operand &acc,
-                        const register_operand &src, const memory_operand &mem,
+    void atomic_cmpxchg(const value& current, const value &acc,
+                        const value &src, const memory_operand &mem,
                         atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
             atomic_block(current, mem, [this, &current, &acc]() {
                 cmp(current, acc).add_comment("compare with accumulator");
-                csel(acc, current, acc, cond_operand::ne())
-                    .add_comment("conditionally move current memory value into accumulator");
+                append(assembler::csel(acc, current, acc, cond_operand::ne()))
+                      .add_comment("conditionally move current memory value into accumulator");
             }, type);
             return;
         }
 
         insert_comment("Atomic CMPXCHG using CAS (enabled on systems with LSE support");
-        cas(acc, src, mem).add_comment("write source to memory if source == accumulator, accumulator = source");
-        cmp(acc, 0);
-        mov(current, acc);
+        append(assembler::cas(acc, src, mem))
+               .add_comment("write source to memory if source == accumulator, accumulator = source");
+        append(assembler::cmp(acc, 0));
+        append(assembler::mov(current, acc));
 
         // TODO
     }
@@ -1326,7 +1622,7 @@ public:
             std::uint64_t mask = (1ULL << actual_size) - 1;
             // mov<immediates_strict_policy>(reg, immediate & mask);
             // TODO: fix
-            mov(reg, immediate & mask);
+            move_to_register(reg, immediate & mask);
             return reg;
         }
 
@@ -1338,9 +1634,10 @@ public:
         // NOTE: this assumes that we're only working with 64-bit registers or smaller
         auto reg = vreg_alloc_.allocate(type);
         insert_comment("Move immediate {:#x} > 12-bits with sequence of movz/movk operations", immediate);
-        movz(reg, immediate & 0xFFFF, shift_operand(shift_operand::shift_type::lsl, 0));
+        append(assembler::movz(reg, immediate & 0xFFFF, shift_operand()));
         for (std::size_t i = 1; i < move_count; ++i) {
-            movk(reg, immediate >> (i * 16) & 0xFFFF, shift_operand(shift_operand::shift_type::lsl, i * 16));
+            auto imm_chunk = immediate >> (i * 16) & 0xFFFF;
+            append(assembler::movk(reg, imm_chunk, shift_operand(shift_operand::shift_type::lsl, i * 16)));
         }
 
         return reg;
@@ -1352,7 +1649,7 @@ public:
         asr(reg, reg, 8 - idx).add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
     }
 
-    register_operand cast(const register_operand &src, ir::value_type type) {
+    value cast(const value &src, ir::value_type type) {
         insert_comment("Internal cast from {} to {}", src.type(), type);
 
         if (src.type().type_class() == ir::value_type_class::floating_point &&
@@ -1377,7 +1674,7 @@ public:
         }
 
         if (src.type().element_width() >= type.element_width()) {
-            return register_operand(src.index(), type);
+            return register_operand(src[0].index(), type);
         }
 
         if (type.element_width() > 64)
@@ -1388,13 +1685,13 @@ public:
         case 1:
             extend_to_byte(src, 1);
         case 8:
-            sxtb(dest, src);
+            append(assembler::sxtb(dest, src));
             break;
         case 16:
-            sxth(dest, src);
+            append(assembler::sxth(dest, src));
             break;
         case 32:
-            sxtw(dest, src);
+            append(assembler::sxtw(dest, src));
             break;
         default:
             return src;
@@ -1409,19 +1706,19 @@ public:
         case 8:
             if (type.type_class() == ir::value_type_class::signed_integer) {
                 mod = shift_operand::shift_type::sxtb;
-                sxtb(reg, reg);
+                append(assembler::sxtb(reg, reg));
             } else {
                 mod = shift_operand::shift_type::uxtb;
-                uxtb(reg, reg);
+                append(assembler::uxtb(reg, reg));
             }
             break;
         case 16:
             if (type.type_class() == ir::value_type_class::signed_integer) {
                 mod = shift_operand::shift_type::sxth;
-                sxth(reg, reg);
+                append(assembler::sxth(reg, reg));
             } else {
                 mod = shift_operand::shift_type::uxth;
-                uxth(reg, reg);
+                append(assembler::uxth(reg, reg));
             }
             break;
         }

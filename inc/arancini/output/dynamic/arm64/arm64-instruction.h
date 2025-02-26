@@ -81,7 +81,9 @@ public:
     register_operand(register_index_type index, ir::value_type type):
         type_(type),
         index_(index)
-    { }
+    {
+        // TODO: more stringent checks
+    }
 
     [[nodiscard]]
     bool is_special() const { return special_; }

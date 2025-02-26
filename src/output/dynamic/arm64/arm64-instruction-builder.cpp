@@ -33,7 +33,7 @@ inline std::size_t get_min_bitsize(unsigned long long imm) {
     return value_types::base_type.element_width() - __builtin_clzll(imm|1);
 }
 
-variable virtual_register_allocator::allocate(ir::value_type type) {
+value virtual_register_allocator::allocate(ir::value_type type) {
     std::size_t reg_count = type.nr_elements();
     auto element_width = type.width();
     if (element_width > value_types::base_type.width()) {
@@ -43,13 +43,13 @@ variable virtual_register_allocator::allocate(ir::value_type type) {
 
     auto reg_type = ir::value_type(type.type_class(), element_width, 1);
 
-    variable var;
+    register_sequence regset;
     for (std::size_t i = 0; i < reg_count; ++i) {
-        auto reg = variable{register_operand(next_vreg_++, reg_type)};
-        var.push_back(reg);
+        auto reg = register_operand(next_vreg_++, reg_type);
+        regset.push_back(reg);
     }
 
-    return var;
+    return value(regset, type);
 }
 
 void instruction_builder::spill() {
