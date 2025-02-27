@@ -33,7 +33,11 @@ inline std::size_t get_min_bitsize(unsigned long long imm) {
     return value_types::base_type.element_width() - __builtin_clzll(imm|1);
 }
 
-value virtual_register_allocator::allocate(ir::value_type type) {
+scalar virtual_register_allocator::allocate_scalar(ir::value_type type) {
+    if (type.is_vector()) {
+        throw backend_exception("Cannot handle vectors");
+    }
+
     std::size_t reg_count = type.nr_elements();
     auto element_width = type.width();
     if (element_width > value_types::base_type.width()) {
@@ -49,7 +53,21 @@ value virtual_register_allocator::allocate(ir::value_type type) {
         regset.push_back(reg);
     }
 
-    return value(regset, type);
+    return scalar(regset, type);
+}
+
+vector virtual_register_allocator::allocate_vector(ir::value_type type) {
+    if (!type.is_vector()) {
+        throw backend_exception("Cannot allocator scalar type {} as vector", type);
+    }
+
+    throw backend_exception("Cannot allocate as vector yet");
+}
+
+variable virtual_register_allocator::allocate(ir::value_type type) {
+    if (type.is_vector())
+        return allocate_vector(type);
+    return allocate_scalar(type);
 }
 
 void instruction_builder::spill() {

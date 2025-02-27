@@ -16,22 +16,42 @@
 
 namespace arancini::output::dynamic::arm64 {
 
+class variable;
+
 using register_sequence = std::vector<register_operand>;
 
-class value final {
+class scalar final {
 public:
-    value(const register_operand& reg):
+    scalar() = default;
+
+    scalar(const register_operand& reg):
         regset_({reg}),
         type_(reg.type())
-    { }
+    {
+        // check_type(type_);
+    }
 
-    value(const register_sequence& regs, ir::value_type type):
+    scalar(const register_sequence& regs, ir::value_type type):
         regset_(regs),
         type_(type)
-    { }
+    {
+        [[unlikely]]
+        if (type_.is_vector())
+            throw backend_exception("cannot construct value from vector");
+
+        if (regset_.empty()) return;
+
+        auto element_type = regset_[0].type();
+        for (std::size_t i = 1; i < regset_.size(); ++i) {
+            if (regset_[i].type() != element_type)
+                throw backend_exception("Cannot construct register sequence from registers of different types");
+        }
+    }
+
+    scalar(const variable& var);
 
     [[nodiscard]]
-    operator register_operand() const {
+    operator const register_operand&() const {
         [[unlikely]]
         if (regset_.size() > 1)
             throw backend_exception("Cannot convert value of type {} to register",
@@ -39,7 +59,22 @@ public:
         return regset_[0];
     }
 
-    operator register_sequence() const {
+    [[nodiscard]]
+    operator register_operand&() {
+        [[unlikely]]
+        if (regset_.size() > 1)
+            throw backend_exception("Cannot convert value of type {} to register",
+                                    type_);
+        return regset_[0];
+    }
+
+    [[nodiscard]]
+    operator register_sequence&() {
+        return regset_;
+    }
+
+    [[nodiscard]]
+    operator const register_sequence&() const {
         return regset_;
     }
 
@@ -73,81 +108,153 @@ private:
     ir::value_type type_;
 };
 
+class vector final {
+public:
+    vector() = default;
+
+    vector(const register_operand& reg):
+        regset_({reg}),
+        type_(reg.type())
+    {
+        [[unlikely]]
+        if (!type_.is_vector())
+            throw backend_exception("cannot construct vector from non-vector");
+    }
+
+    vector(const register_sequence& regs, ir::value_type type):
+        regset_(regs),
+        type_(type)
+    {
+        [[unlikely]]
+        if (!type_.is_vector())
+            throw backend_exception("cannot construct vector from non-vector");
+    }
+
+    vector(const variable& var);
+
+    [[nodiscard]]
+    operator const register_operand&() const {
+        [[unlikely]]
+        if (regset_.size() > 1)
+            throw backend_exception("Cannot convert value of type {} to register",
+                                    type_);
+        return regset_[0];
+    }
+
+    [[nodiscard]]
+    operator register_operand&() {
+        [[unlikely]]
+        if (regset_.size() > 1)
+            throw backend_exception("Cannot convert value of type {} to register",
+                                    type_);
+        return regset_[0];
+    }
+
+    [[nodiscard]]
+    operator register_sequence&() {
+        return regset_;
+    }
+
+    [[nodiscard]]
+    operator const register_sequence&() const {
+        return regset_;
+    }
+
+    [[nodiscard]]
+    bool vector_backed() const { return regset_.size() == 1; }
+
+    [[nodiscard]]
+    ir::value_type type() const { return type_; }
+
+    [[nodiscard]]
+    register_operand& operator[](std::size_t i) { return regset_[i]; }
+
+    [[nodiscard]]
+    const register_operand& operator[](std::size_t i) const { return regset_[i]; }
+
+    [[nodiscard]]
+    register_operand& front() { return regset_[0]; }
+
+    [[nodiscard]]
+    const register_operand& front() const { return regset_[0]; }
+
+    [[nodiscard]]
+    register_operand& back() { return regset_[regset_.size()]; }
+
+    [[nodiscard]]
+    const register_operand& back() const { return regset_[regset_.size()]; }
+
+    [[nodiscard]]
+    std::size_t size() const { return regset_.size(); }
+private:
+    register_sequence regset_;
+    ir::value_type type_;
+};
+
+using value = std::variant<scalar, vector>;
+
 class variable final {
 public:
-    // TODO: do we need this?
+    using scalar_type = class scalar;
+    using vector_type = class vector;
+
     variable() = default;
 
-    variable(const value& reg):
-        values_{reg}
+    variable(const scalar& scalar):
+        value_{scalar}
     { }
 
-    variable(std::initializer_list<register_operand> regs):
-        variable(regs.begin(), regs.end())
+    variable(const vector& vector):
+        value_{vector}
     { }
 
-    template <typename It>
-    variable(It begin, It end):
-        values_(begin, end)
-    {
-        if (values_.empty()) return;
-        auto type = values_[0].type();
-        for (std::size_t i = 1; i < values_.size(); ++i) {
-            if (values_[i].type() != type)
-                throw backend_exception("Cannot construct register sequence from registers of different types");
-        }
+    operator scalar_type&() {
+        return std::get<scalar_type>(value_);
     }
 
-    operator value() const {
-        [[unlikely]]
-        if (values_.size() > 1)
-            throw backend_exception("Accessing register set of {} registers as single register",
-                                    values_.size());
-        return values_[0];
+    operator const scalar_type&() const {
+        return std::get<scalar_type>(value_);
     }
 
-    operator std::vector<value>() const {
-        return values_;
+    operator vector_type&() {
+        return std::get<vector_type>(value_);
+    }
+
+    operator const vector_type&() const {
+        return std::get<vector_type>(value_);
     }
 
     [[nodiscard]]
-    value& operator[](std::size_t i) { return values_[i]; }
+    scalar_type& as_scalar() { return std::get<scalar_type>(value_); }
 
     [[nodiscard]]
-    const value& operator[](std::size_t i) const { return values_[i]; }
+    const scalar_type& as_scalar() const { return std::get<scalar_type>(value_); }
 
     [[nodiscard]]
-    value& front() { return values_[0]; }
+    vector_type& as_vector() { return std::get<vector_type>(value_); }
 
     [[nodiscard]]
-    const value& front() const { return values_[0]; }
+    const vector_type& as_vector() const { return std::get<vector_type>(value_); }
 
-    [[nodiscard]]
-    value& back() { return values_[values_.size()]; }
-
-    [[nodiscard]]
-    const value& back() const { return values_[values_.size()]; }
-
-    [[nodiscard]]
-    std::size_t size() const { return values_.size(); }
-
-    [[nodiscard]]
     ir::value_type type() const {
-        if (values_.size() == 1) return values_[0].type();
-        return ir::value_type::vector(values_[0].type(), values_.size());
+        if (std::holds_alternative<scalar_type>(value_))
+            return std::get<scalar_type>(value_).type();
+        return std::get<vector_type>(value_).type();
     }
-
-    void push_back(const register_operand& reg) { values_.push_back(reg); }
-
-    void push_back(register_operand&& reg) { values_.push_back(std::move(reg)); }
 private:
-    std::vector<value> values_;
+    std::variant<scalar_type, vector_type> value_;
 };
 
 class virtual_register_allocator final {
 public:
     [[nodiscard]]
-    value allocate(ir::value_type type);
+    variable allocate(ir::value_type type);
+
+    [[nodiscard]]
+    scalar allocate_scalar(ir::value_type type);
+
+    [[nodiscard]]
+    vector allocate_vector(ir::value_type type);
 
     void reset() { next_vreg_ = 33; }
 private:
@@ -168,29 +275,7 @@ inline bool is_bignum(ir::value_type type) {
 
 class instruction_builder final {
 public:
-    struct immediates_upgrade_policy final {
-        friend instruction_builder;
-
-        reg_or_imm operator()(const reg_or_imm& op) {
-            if (std::holds_alternative<register_operand>(op.get()))
-                return op;
-
-            const immediate_operand& imm = op;
-            return builder_->move_immediate(imm.value(), imm_type_, reg_type_);
-        }
-    protected:
-        immediates_upgrade_policy(instruction_builder* builder, ir::value_type imm_type, ir::value_type reg_type):
-            builder_(builder),
-            imm_type_(imm_type),
-            reg_type_(reg_type)
-        { }
-    private:
-        instruction_builder* builder_;
-        ir::value_type imm_type_;
-        ir::value_type reg_type_;
-    };
-
-    void load(const value& destination, const memory_operand& address) {
+    void load(const scalar& destination, const memory_operand& address) {
         for (std::size_t i = 0; i < destination.size(); ++i) {
             if (destination[i].type().element_width() <= 8) {
                 memory_operand memory(address.base_register(), address.offset().value() + i);
@@ -211,10 +296,10 @@ public:
         if (destination.type().is_vector())
             throw backend_exception("Cannot handle vector loads");
 
-        load(value(destination), address);
+        load(destination.as_scalar(), address);
     }
 
-    void store(const value& source, const memory_operand& address) {
+    void store(const scalar& source, const memory_operand& address) {
         for (std::size_t i = 0; i < source.size(); ++i) {
             if (source[i].type().element_width() <= 8) {
                 memory_operand memory(address.base_register(), address.offset().value() + i);
@@ -234,39 +319,44 @@ public:
         if (source.type().is_vector())
             throw backend_exception("Cannot handle vector stores");
 
-        store(source[0], address);
+        store(source.as_scalar(), address);
     }
 
-	void add(const variable &destination, const variable &lhs, const variable &rhs) {
-        // TODO: checks
-        // TODO: implement via vector
-        if (destination.type().is_vector()) {
+
+    void add(const vector& destination, const vector& lhs, const vector& rhs) {
+        if (destination.vector_backed() && lhs.vector_backed() && rhs.vector_backed()) {
+            append(assembler::add(destination[0], lhs[0], rhs[0]));
+        } else {
             for (std::size_t i = 0; i < destination.size(); ++i) {
                 append(assembler::add(destination[i], lhs[i], rhs[i]));
             }
+        }
+    }
+
+	void add(const variable &destination, const variable &lhs, const variable &rhs) {
+        if (destination.type().is_vector()) {
+            add(destination.as_vector(), lhs.as_vector(), rhs.as_vector());
             return;
         }
 
         [[unlikely]]
         if (is_bignum(destination.type()))
-            return adds(destination, lhs, rhs);
+            return adds(destination.as_scalar(), lhs.as_scalar(), rhs.as_scalar());
 
-        append(assembler::add(destination[0], lhs[0], rhs[0]));
+        append(assembler::add(destination.as_scalar(), lhs.as_scalar(), rhs.as_scalar()));
     }
 
-    void adds(const value &destination, const value &lhs, const value &rhs) {
-        // TODO: shifts
+    void adds(const scalar &destination, const scalar &lhs, const scalar &rhs) {
         append(assembler::adds(destination[0], lhs[0], rhs[0]));
         for (std::size_t i = 1; i < destination.size(); ++i) {
             append(assembler::adcs(destination[i], lhs[i], rhs[i]));
         }
     }
 
-	void adcs(const variable& destination,
-              const variable& top,
-              const variable& lhs,
-              const variable& rhs)
+	void adcs(const scalar& destination, const scalar& top,
+              const scalar& lhs, const scalar& rhs)
     {
+        // TODO
         for (std::size_t i = 0; i < destination.size(); ++i) {
             comparison(top[i], 0);
             append(assembler::sbcs(register_operand(register_operand::wzr_sp),
@@ -276,29 +366,33 @@ public:
         }
     }
 
-    void sub(const variable &destination,
-             const variable &lhs,
-             const variable &rhs)
-    {
+    void sub(const vector &destination, const vector &lhs, const vector &rhs) {
+        if (destination.vector_backed() && lhs.vector_backed() && rhs.vector_backed()) {
+            append(assembler::sub(destination, lhs, rhs));
+            return;
+        }
+
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            append(assembler::sub(destination[i], lhs[i], rhs[i]));
+        }
+    }
+
+    void sub(const variable &destination, const variable &lhs, const variable &rhs) {
         if (destination.type().is_vector()) {
-            for (std::size_t i = 0; i < destination.size(); ++i) {
-                for (std::size_t i = 0; i < destination.size(); ++i) {
-                    append(assembler::sub(destination[i], lhs[i], rhs[i]));
-                }
-            }
+            return sub(destination.as_vector(), lhs.as_vector(), rhs.as_vector());
         }
 
         [[unlikely]]
         if (is_bignum(destination.type())) {
-            return subs(destination, lhs, rhs);
+            return subs(destination.as_scalar(), lhs.as_scalar(), rhs.as_scalar());
         }
 
-        append(assembler::sub(destination[0], lhs[0], rhs[0]));
+        append(assembler::sub(destination.as_scalar(), lhs.as_scalar(), rhs.as_scalar()));
     }
 
-    void subs(const value &destination,
-              const value &lhs,
-              const value &rhs)
+    void subs(const scalar &destination,
+              const scalar &lhs,
+              const scalar &rhs)
     {
         append(assembler::subs(destination[0], lhs[0], rhs[0]));
         for (std::size_t i = 1; i < destination.size(); ++i) {
@@ -306,13 +400,12 @@ public:
         }
     }
 
-	void sbcs(const value& destination,
-              const value& top,
-              const value& lhs,
-              const value& rhs)
+	void sbcs(const scalar& destination, const scalar& top,
+              const scalar& lhs, const scalar& rhs)
     {
         if (destination.size() != top.size() || top.size() != lhs.size() || lhs.size() != rhs.size())
             throw backend_exception("Cannot perform subtract with borrow for given types");
+
         for (std::size_t i = 0; i < destination.size(); ++i) {
             append(assembler::cmp(top[i], 0));
             append(assembler::sbcs(register_operand(register_operand::wzr_sp),
@@ -322,10 +415,7 @@ public:
         }
     }
 
-    void logical_or(const value& destination,
-                    const value& lhs,
-                    const value& rhs)
-    {
+    void logical_or(const scalar& destination, const scalar& lhs, const scalar& rhs) {
         if (is_bignum(destination.type())) {
             for (std::size_t i = 0; i < destination.size(); ++i) {
                 append(assembler::orr(destination[i], lhs[i], rhs[i]));
@@ -333,25 +423,13 @@ public:
             return;
         }
 
-        switch (destination.type().element_width()) {
-        case 1:
-            extend_to_byte(lhs);
-            extend_to_byte(rhs);
-        case 8:
-        case 16:
-            extend_register(lhs, destination[0].type());
-            extend_register(rhs, destination[0].type());
-        case 32:
-            append(assembler::orr(destination, lhs, rhs));
-            break;
-        case 64:
-            append(assembler::orr(destination, lhs, rhs));
-            break;
-        default:
-            throw backend_exception("Unsupported ORR operation");
-        }
+        const auto& lhs_extended = vreg_alloc_.allocate_scalar(destination.type());
+        const auto& rhs_extended = vreg_alloc_.allocate_scalar(destination.type());
+        sign_extend(lhs_extended, lhs);
+        sign_extend(rhs_extended, rhs);
+        append(assembler::orr(destination, lhs, rhs));
 
-        if (destination[0].type().element_width() < 64)
+        if (destination.type().width() < 64)
             append(assembler::ands(register_operand(register_operand::wzr_sp),
                                    destination, destination));
         else
@@ -362,37 +440,28 @@ public:
         set_sign_flag(cond_operand::mi());
     }
 
-    void logical_or(const variable &destination,
-                    const variable &lhs,
-                    const variable &rhs)
-    {
-        if (destination.type().is_vector()) {
-            for (std::size_t i = 0; i < destination.size(); ++i) {
-                append(assembler::orr(destination[i], lhs[i], rhs[i]));
-            }
+    void logical_or(const vector &destination, const vector &lhs, const vector &rhs) {
+        if (destination.vector_backed() && lhs.vector_backed() && rhs.vector_backed()) {
+            append(assembler::orr(destination, lhs, rhs));
             return;
         }
 
-        logical_or(destination[0], lhs[0], rhs[0]);
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            append(assembler::orr(destination[i], lhs[i], rhs[i]));
+        }
     }
 
-    void logical_and(const variable &destination,
-                     const variable &lhs,
-                     const variable &rhs)
-    {
+    void logical_or(const variable &destination, const variable &lhs, const variable &rhs) {
         if (destination.type().is_vector()) {
-            for (std::size_t i = 0; i < destination.size(); ++i) {
-                append(assembler::and_(destination[i], lhs[i], rhs[i]));
-            }
-            return;
+            return logical_or(destination.as_vector(), lhs.as_vector(), rhs.as_vector());
         }
 
-        ands(destination[0], lhs[0], rhs[0]);
+        logical_or(destination.as_scalar(), lhs.as_scalar(), rhs.as_scalar());
     }
 
-    void ands(const value &destination,
-              const value &lhs,
-              const value &rhs)
+    void ands(const scalar &destination,
+              const scalar &lhs,
+              const scalar &rhs)
     {
         [[unlikely]]
         if (is_bignum(destination.type()))
@@ -402,8 +471,8 @@ public:
         for (std::size_t i = 0; i < destination.size(); ++i) {
             switch (destination[0].type().element_width()) {
             case 1:
-                extend_to_byte(lhs);
-                extend_to_byte(rhs);
+                sign_extend_to_byte(lhs);
+                sign_extend_to_byte(rhs);
             case 8:
             case 16:
                 extend_register(lhs, destination[0].type());
@@ -423,27 +492,40 @@ public:
         set_sign_flag(cond_operand::mi());
     }
 
-    void exclusive_or(const value &destination, const value &lhs, const value &rhs) {
-        // if (destination[0].type().is_floating_point()) {
-        //     lhs[0].cast(value_type::vector(ir::value_type::f64(), 2));
-        //     rhs[0].cast(value_type::vector(ir::value_type::f64(), 2));
-        //     auto type = destination[0].type();
-        //     destination[0].cast(value_type::vector(value_type::f64(), 2));
-        //     builder_.eor_(destination[0], lhs[0], rhs[0]);
-        //     destination[0].cast(type);
-        //     std::size_t i = 1;
-        //     for (; i < destination.size(); ++i) {
-        //         lhs[i].cast(value_type::vector(value_type::f64(), 2));
-        //         rhs[i].cast(value_type::vector(value_type::f64(), 2));
-        //         destination[i].cast(value_type::vector(value_type::f64(), 2));
-        //         builder_.eor_(destination[i], lhs[i], rhs[i]);
-        //         destination[i].cast(type);
-        //     }
-        //     return;
-        // }
-        if (destination.type().is_floating_point())
-            throw backend_exception("floating-point exclusive-or not implemented");
+    void logical_and(const vector &destination, const vector &lhs, const vector &rhs) {
+        if (destination.vector_backed() && lhs.vector_backed() && rhs.vector_backed()) {
+            append(assembler::and_(destination, lhs, rhs));
+            return;
+        }
 
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            append(assembler::and_(destination[i], lhs[i], rhs[i]));
+        }
+    }
+
+    void logical_and(const variable &destination,
+                     const variable &lhs,
+                     const variable &rhs)
+    {
+        if (destination.type().is_vector()) {
+            return logical_and(destination.as_vector(), lhs.as_vector(), rhs.as_vector());
+        }
+
+        ands(destination.as_scalar(), lhs.as_scalar(), rhs.as_scalar());
+    }
+
+    void exclusive_or(const vector &destination, const vector &lhs, const vector &rhs) {
+        if (destination.vector_backed() && lhs.vector_backed() && rhs.vector_backed()) {
+            append(assembler::eor(destination, lhs, rhs));
+            return;
+        }
+
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            append(assembler::eor(destination[i], lhs[i], rhs[i]));
+        }
+    }
+
+    void exclusive_or(const scalar &destination, const scalar &lhs, const scalar &rhs) {
         for (std::size_t i = 0; i < destination.size(); ++i) {
             append(assembler::eor(destination[i], lhs[i], rhs[i]));
         }
@@ -458,59 +540,261 @@ public:
         }
     }
 
-    void exclusive_or(const variable &destination,
-                      const variable &lhs,
-                      const variable &rhs)
-    {
-        if (destination.size() == 0) return;
-
+    void exclusive_or(const variable &destination, const variable &lhs, const variable &rhs) {
         if (destination.type().is_vector()) {
-            for (std::size_t i = 0; i < destination.size(); ++i) {
-                append(assembler::eor(destination[i], lhs[i], rhs[i]));
-            }
+            exclusive_or(destination.as_vector(), lhs.as_vector(), rhs.as_vector());
             return;
         }
 
-        exclusive_or(value(destination), value(lhs), value(rhs));
+        exclusive_or(destination.as_scalar(), lhs.as_scalar(), rhs.as_scalar());
     }
 
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& complement(const value &dst, const reg_or_imm &src) {
-        // TODO
-        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 6), dst.type());
-        if (dst.type().width() == 1)
-            return append(assembler::eor(dst, immediates_policy(src), 1));
-        return append(assembler::mvn(dst, immediates_policy(src)));
+    void complement(const scalar &destination, const scalar &source) {
+        [[unlikely]]
+        if (destination.size() != source.size())
+            throw backend_exception("Cannot complement {} to {}",
+                                    destination.type(), source.type());
+
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            append(assembler::mvn(destination, source));
+        }
     }
 
-    instruction& negate(const value &dst, const value &src) {
-        return append(assembler::neg(dst, src));
-    }
+    void complement(const vector &destination, const vector &source) {
+        [[unlikely]]
+        if (destination.size() != source.size())
+            throw backend_exception("Cannot complement {} to {}",
+                                    destination.type(), source.type());
 
-    // TODO: expand this to include all move_to_register logic
-    // TODO: move_to_register() expects equal sizes
-    // TODO: extend() will extend
-    instruction& move_to_register(const value &destination, const immediate_operand &immediate) {
-        if (destination.type().is_floating_point()) {
-            return append(assembler::fmov(destination, immediate));
+        if (destination.vector_backed() && source.vector_backed()) {
+            append(assembler::mvn(destination, source));
+            return;
         }
 
-        immediates_upgrade_policy upgrade(this, ir::value_type(ir::value_type_class::unsigned_integer, 12),
-                                          destination.type());
-        auto src_conv = upgrade(immediate);
-        return append(assembler::mov(destination, src_conv));
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            append(assembler::mvn(destination[i], source[i]));
+        }
     }
 
-    instruction& move_to_register(const variable &destination, const variable &source) {
-        // TODO:
-        if (destination.type().is_floating_point()) {
-            return append(assembler::fmov(destination[0], source[0]));
+    void complement(const variable &destination, const variable &source) {
+        if (destination.type().is_vector() && destination.type().is_vector()) {
+            complement(destination.as_vector(), source.as_vector());
+            return;
         }
 
-        return append(assembler::mov(destination[0], source[0]));
+        complement(destination.as_scalar(), source.as_scalar());
     }
 
-    void zero_extend(const value& destination, const value& source) {
+    void negate(const scalar &destination, const scalar &source) {
+        [[unlikely]]
+        if (destination.size() != source.size())
+            throw backend_exception("Cannot complement {} to {}",
+                                    destination.type(), source.type());
+
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            append(assembler::neg(destination, source));
+        }
+    }
+
+    void negate(const vector &destination, const vector &source) {
+        [[unlikely]]
+        if (destination.size() != source.size())
+            throw backend_exception("Cannot complement {} to {}",
+                                    destination.type(), source.type());
+
+        if (destination.vector_backed() && source.vector_backed()) {
+            append(assembler::neg(destination, source));
+        }
+
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            append(assembler::neg(destination[i], source[i]));
+        }
+    }
+
+    void negate(const variable &destination, const variable &source) {
+        if (destination.type().is_vector() && source.type().is_vector())
+            return negate(destination.as_vector(), source.as_vector());
+
+        return negate(destination.as_scalar(), source.as_scalar());
+    }
+
+    void move_to_variable(const scalar& destination, const scalar& source) {
+        [[unlikely]]
+        if (destination.size() != source.size())
+            throw backend_exception("Cannot move type {} to {}", destination.type(), source.type());
+
+        if (destination.type().is_floating_point()) {
+            append(assembler::fmov(destination, source));
+        }
+
+        if (is_bignum(destination.type())) {
+            throw backend_exception("Cannot move between bignums");
+        }
+
+        append(assembler::mov(destination, source));
+    }
+
+    void move_to_variable(const variable &destination, const variable &source) {
+        if (destination.type().is_vector()) {
+            throw backend_exception("Cannot move between vectors");
+        }
+
+        if (source.type().is_vector()) {
+            throw backend_exception("Cannot move between vectors");
+        }
+
+        move_to_variable(destination.as_scalar(), source.as_scalar());
+    }
+
+    void move_to_variable(const scalar& destination, const immediate_operand& imm) {
+        [[unlikely]]
+        if (destination.type().is_vector())
+            throw backend_exception("Cannot move immediate type {} to vector type {}",
+                                    imm.type(), destination.type());
+
+        // Convert to unsigned long long so that clzll can be used
+        // 1s in sizeof(unsinged long long) - sizeof(imm) upper bits
+        auto immediate = util::bit_cast_zeros<unsigned long long>(imm.value());
+
+        // Check the actual size of the scalar
+        std::size_t actual_size = std::min(get_min_bitsize(immediate), destination.type().width());
+
+        // TODO: why do we attempt to write too large immediates?
+        // if (actual_size > destination.type().width())
+        //     throw backend_exception("Truncating large immediate value {} by storing in type {}",
+        //                             imm, destination.type());
+
+        // Can be moved in one go
+        // TODO: implement optimization to support more immediates via shifts
+        if (actual_size < 12) {
+            insert_comment("Move immediate {:#x} directly as < 12-bits", immediate);
+            std::uint64_t mask = (1ULL << actual_size) - 1;
+            append(assembler::mov(destination, immediate & mask));
+            return;
+        }
+
+        // Can be moved in multiple operations
+        // NOTE: this assumes that we're only working with 64-bit registers or smaller
+        // Determine how many 16-bit chunks we need to move
+        std::size_t move_count = actual_size / 16 + (actual_size % 16 != 0);
+        insert_comment("Move immediate {:#x} > 12-bits with sequence of movz/movk operations",
+                       immediate);
+        append(assembler::movz(destination, immediate & 0xFFFF, shift_operand()));
+        for (std::size_t i = 1; i < move_count; ++i) {
+            auto imm_chunk = immediate >> (i * 16) & 0xFFFF;
+            append(assembler::movk(destination, imm_chunk, shift_operand::lsl(i * 16)));
+        }
+    }
+
+    reg_or_imm move_immediate(const immediate_operand& immediate, ir::value_type reg_type) {
+        [[unlikely]]
+        if (immediate.type().is_vector() || immediate.type().element_width() > 64)
+            throw backend_exception("Attempting to move vector immediate {}", immediate);
+
+        auto imm_val = util::bit_cast_zeros<unsigned long long>(immediate.value());
+
+        std::size_t actual_size = get_min_bitsize(imm_val);
+        if (actual_size < immediate.type().element_width()) {
+            return immediate_operand(imm_val, immediate.type());
+        }
+
+        const auto& destination = vreg_alloc_.allocate_scalar(reg_type);
+        move_to_variable(destination, immediate);
+
+        return destination;
+     }
+
+    template <typename T, std::enable_if_t<std::is_arithmetic_v<T>, int> = 0>
+    reg_or_imm move_immediate(T imm, ir::value_type imm_type) {
+        ir::value_type reg_type;
+        if (imm_type.element_width() < 32)
+            reg_type = ir::value_type(imm_type.type_class(), 32);
+        else if (imm_type.element_width() > 32)
+            reg_type = ir::value_type(imm_type.type_class(), 64);
+
+        immediate_operand immediate(imm, imm_type);
+        return move_immediate(immediate, reg_type);
+    }
+
+    scalar cast(const scalar &src, ir::value_type type) {
+        insert_comment("Internal cast from {} to {}", src.type(), type);
+
+        if (src.type().type_class() == ir::value_type_class::floating_point &&
+            type.type_class() != ir::value_type_class::floating_point) {
+            auto dest = vreg_alloc_.allocate_scalar(type);
+            append(assembler::fcvtzs(dest, src));
+            return dest;
+        }
+
+        if (src.type().type_class() == ir::value_type_class::floating_point &&
+            type.type_class() == ir::value_type_class::floating_point) {
+            if (type.element_width() == 64 && src.type().element_width() == 32) {
+                auto dest = vreg_alloc_.allocate_scalar(type);
+                append(assembler::fcvt(dest, src));
+                return dest;
+            }
+
+            if (type.element_width() == 64 && src.type().element_width() == 64)
+                return src;
+
+            throw backend_exception("Cannot internally cast from {} to {}", src.type(), type);
+        }
+
+        if (src.type().element_width() >= type.element_width()) {
+            return register_operand(src[0].index(), type);
+        }
+
+        if (type.element_width() > 64)
+            type = ir::value_type::u64();
+
+        auto dest = vreg_alloc_.allocate(type).as_scalar();
+        switch (src.type().element_width()) {
+        case 1:
+            sign_extend_to_byte(src, 1);
+        case 8:
+            append(assembler::sxtb(dest, src));
+            break;
+        case 16:
+            append(assembler::sxth(dest, src));
+            break;
+        case 32:
+            append(assembler::sxtw(dest, src));
+            break;
+        default:
+            return src;
+        }
+        return dest;
+    }
+
+    shift_operand extend_register(const register_operand& reg, arancini::ir::value_type type) {
+        auto mod = shift_operand::shift_type::lsl;
+
+        switch (type.element_width()) {
+        case 8:
+            if (type.type_class() == ir::value_type_class::signed_integer) {
+                mod = shift_operand::shift_type::sxtb;
+                append(assembler::sxtb(reg, reg));
+            } else {
+                mod = shift_operand::shift_type::uxtb;
+                append(assembler::uxtb(reg, reg));
+            }
+            break;
+        case 16:
+            if (type.type_class() == ir::value_type_class::signed_integer) {
+                mod = shift_operand::shift_type::sxth;
+                append(assembler::sxth(reg, reg));
+            } else {
+                mod = shift_operand::shift_type::uxth;
+                append(assembler::uxth(reg, reg));
+            }
+            break;
+        }
+
+        return shift_operand(mod, 0);
+    }
+
+
+    void zero_extend(const scalar& destination, const scalar& source) {
         if (source.type().element_width() <= 8) {
             append(assembler::uxtb(destination, source));
             return;
@@ -528,70 +812,77 @@ public:
 
         if (source.type().element_width() <= 256) {
             for (std::size_t i = 0; i < source.size(); ++i) {
-                move_to_register(destination, source);
+                move_to_variable(destination, source);
             }
 
             // Set upper registers to zero
             if (destination.size() > 1) {
                 insert_comment("Set upper registers to zero");
                 for (std::size_t i = source.size(); i < destination.size(); ++i)
-                    move_to_register(destination[i], 0);
+                    move_to_variable(destination[i], 0);
             }
             return;
         }
     }
 
-    void sign_extend(const value& destination, const value& source) {
+    // TODO: this is wrong
+    // TODO: merge into wider sign_extend logic
+    void sign_extend_to_byte(const register_operand& reg, std::uint8_t from_idx = 1) {
+        // append(assembler::lsl(reg, reg, 8 - idx))
+        //       .add_comment("shift left LSB to set sign bit of byte");
+        // append(assembler::asr(reg, reg, 8 - idx))
+        //       .add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
+    }
+
+    void sign_extend(const scalar& destination, const scalar& source) {
+        if (destination.type().width() == source.type().width())
+            return;
+
         // Sanity check
-        if (destination.type().width() <= source.type().width())
+        // TODO: more missing sanity checks
+        if (destination.type().width() < source.type().width())
             throw backend_exception("Cannot sign-extend {} to smaller size {}",
                                     destination.type(), source.type());
+
+        std::size_t current_extension_bytes = 0;
+
         // IDEA:
         // 1. Sign-extend reasonably
-        // 2. If dest_value > 64-bit, determine sign
+        // 2. If dest_scalar > 64-bit, determine sign
         // 3. Plaster sign all over the upper bits
         insert_comment("sign-extend from {} to {}", source.type(), destination.type());
         if (source.type().width() < 8) {
-            // 1 -> N
-            // sign-extend to 1 byte
-            // sign-extend the rest
-            // TODO: this is likely wrong
-            append(assembler::lsl(destination, source, 7))
-                    .add_comment("shift left LSB to set sign bit of byte");
-            append(assembler::sxtb(destination, destination).add_comment("sign-extend"));
-            append(assembler::asr(destination, destination, 7))
-                  .add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
-
-            return;
-        }
-
-        if (source.type().width() == 8) {
+            if (destination.type().width() >= 32) {
+                append(assembler::lsl(destination[0], source, 7))
+                        .add_comment("shift left LSB to set sign bit of byte");
+                append(assembler::sxtb(destination[0], destination[0]).add_comment("sign-extend"));
+                append(assembler::asr(destination[0], destination[0], 7))
+                      .add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
+            } else {
+                backend_exception("Not implemented");
+            }
+        } else if (source.type().width() <= 8) {
             append(assembler::sxtb(destination, source));
-            return;
-        }
-
-        if (source.type().width() == 16) {
+        } else if (source.type().width() <= 16) {
             append(assembler::sxth(destination, source));
-            return;
-        }
-
-        if (source.type().width() == 32) {
+        } else if (source.type().width() <= 32) {
             append(assembler::sxtw(destination, source));
-            return;
         }
 
-        if (source.type().width() == 32) {
-            append(assembler::sxtw(destination, source));
-            return;
-        }
+        current_extension_bytes += destination[0].type().width();
 
-        move_to_register(destination, source);
+        if (current_extension_bytes >= destination.type().width())
+            return;
+
+        // Sets the upper bits to 1
+        for (std::size_t i = 1; i < destination.size(); ++i)
+            append(assembler::asr(destination[i], destination[0], 63));
     }
 
-    void bitcast(const variable& destination, const variable& source) {
+    void bitcast(const scalar& destination, const scalar& source) {
         // Simply change the meaning of the bit pattern
         // dest_vreg is set to the desired type already, but it must have the
-        // value of src_vreg
+        // scalar of src_vreg
         // A simple mov is sufficient (eliminated anyway by the register
         // allocator)
         insert_comment("Bitcast from {} to {}", source.type(), destination.type());
@@ -603,7 +894,7 @@ public:
                 std::size_t dest_pos = 0;
                 for (std::size_t i = 0; i < source.size(); ++i) {
                     left_shift(source[i], source[i], dest_pos % destination.type().element_width());
-                    move_to_register(destination[dest_idx], source);
+                    move_to_variable(destination[dest_idx], source);
 
                     dest_pos += source[i].type().width();
                     dest_idx = (dest_pos / destination[dest_idx].type().width());
@@ -614,25 +905,25 @@ public:
                 std::size_t src_pos = 0;
                 for (std::size_t i = 0; i < destination.size(); ++i) {
                     const auto& src_vreg = vreg_alloc_.allocate(destination[i].type());
-                    move_to_register(src_vreg, source[src_idx]);
-                    append(assembler::lsl(src_vreg, src_vreg, src_pos % source.type().element_width()));
-                    move_to_register(destination[i], src_vreg);
+                    move_to_variable(src_vreg.as_scalar(), source[src_idx]);
+                    append(assembler::lsl(src_vreg.as_scalar(), src_vreg.as_scalar(), src_pos % source.type().element_width()));
+                    move_to_variable(destination[i], src_vreg.as_scalar());
 
                     src_pos += source[i].type().width();
                     src_idx = (src_pos / source[src_idx].type().width());
                 }
             } else {
                 for (std::size_t i = 0; i < destination.size(); ++i)
-                    move_to_register(destination[i], source[i]);
+                    move_to_variable(destination[i], source[i]);
             }
 
             return;
         }
 
-        move_to_register(destination, source);
+        move_to_variable(destination, source);
     }
 
-    void convert(const value& destination, const value& source, ir::fp_convert_type trunc_type) {
+    void convert(const scalar& destination, const scalar& source, ir::fp_convert_type trunc_type) {
         constexpr auto uint_type = ir::value_type_class::unsigned_integer;
 
         // convert integer to float
@@ -672,7 +963,7 @@ public:
             //
             // Destination virtual register set to the correct type upon creation
             // TODO: need to handle different-sized types?
-            move_to_register(destination, source);
+            move_to_variable(destination, source);
         }
     }
 
@@ -715,7 +1006,7 @@ public:
     // Check reg == 0 and jump if true
     // Otherwise, continue to the next instruction
     // Does not affect condition flags (can be used to compare-and-branch with 1 instruction)
-    instruction& cbz(const value &reg, const label_operand &label) {
+    instruction& cbz(const scalar &reg, const label_operand &label) {
         label_refcount_[label.name()]++;
         return append(assembler::cbz(reg, label));
     }
@@ -724,12 +1015,12 @@ public:
     // Check reg == 0 and jump if false
     // Otherwise, continue to the next instruction
     // Does not affect condition flags (can be used to compare-and-branch with 1 instruction)
-    instruction& cbnz(const value &rt, const label_operand &dest) {
+    instruction& cbnz(const scalar &rt, const label_operand &dest) {
         label_refcount_[dest.name()]++;
         return append(assembler::cbnz(rt, dest));
     }
 
-    instruction& comparison(const value& lhs, const value& rhs) {
+    instruction& comparison(const scalar& lhs, const scalar& rhs) {
         if (lhs.type().is_floating_point()) {
             return append(assembler::fcmp(lhs, rhs));
         }
@@ -737,25 +1028,24 @@ public:
         return append(assembler::cmp(lhs, rhs));
     }
 
-    instruction& comparison(const value& lhs, const immediate_operand& rhs) {
+    instruction& comparison(const scalar& lhs, const immediate_operand& rhs) {
         [[unlikely]]
         if (lhs.type().is_floating_point())
             backend_exception("Cannot compare floating-point register with immediates");
 
-        immediates_upgrade_policy upgrade(this, ir::value_type(ir::value_type_class::unsigned_integer, 12),
-                                          lhs.type());
-        return append(assembler::cmp(lhs, upgrade(rhs)));
+        auto rhs_value = move_immediate(rhs.value(), ir::value_type::u(12));
+        return append(assembler::cmp(lhs, rhs_value));
     }
 
-    void left_shift(const value& destination, const value& input, const value& amount) {
+    void left_shift(const scalar& destination, const scalar& input, const scalar& amount) {
         append(assembler::lsl(destination, input, amount));
     }
 
-    void left_shift(const value& destination, const value& input, const immediate_operand& amount) {
+    void left_shift(const scalar& destination, const scalar& input, const immediate_operand& amount) {
         append(assembler::lsl(destination, input, amount));
     }
 
-    void logical_right_shift(const value& destination, const value& input, const value& amount) {
+    void logical_right_shift(const scalar& destination, const scalar& input, const scalar& amount) {
         append(assembler::lsr(destination, input, amount));
 
         // {
@@ -772,24 +1062,24 @@ public:
         // }
     }
 
-    void arithmetic_right_shift(const value& destination, const value& input, const value& amount) {
+    void arithmetic_right_shift(const scalar& destination, const scalar& input, const scalar& amount) {
         append(assembler::asr(destination, input, amount));
     }
 
-    instruction& conditional_select(const value &destination,
-                                    const value &lhs,
-                                    const value &rhs,
+    instruction& conditional_select(const scalar &destination,
+                                    const scalar &lhs,
+                                    const scalar &rhs,
                                     const cond_operand &cond)
     {
         return append(assembler::csel(destination, lhs, rhs, cond));
     }
 
-    void bit_insert(const value& destination, const value& source,
-                    const value& insert_bits, std::size_t to, std::size_t length) {
+    void bit_insert(const scalar& destination, const scalar& source,
+                    const scalar& insert_bits, std::size_t to, std::size_t length) {
         [[likely]]
         if (destination.size() == 1) {
             // auto out = builder_.cast(insertion_bits, dest[0].type());
-            move_to_register(destination, source);
+            move_to_variable(destination, source);
             append(assembler::bfi(destination, insert_bits, to, length));
             return;
         }
@@ -802,15 +1092,15 @@ public:
             return;
         }
 
-        bit_insert(value(destination), value(source), value(insert_bits), to, length);
+        bit_insert(destination.as_scalar(), source.as_scalar(), insert_bits.as_scalar(), to, length);
     }
 
-    void bit_extract(const value& destination, const value& source,
+    void bit_extract(const scalar& destination, const scalar& source,
                      std::size_t from, std::size_t length) {
         [[likely]]
         if (destination.size() == 1) {
             // auto out = builder_.cast(insertion_bits, dest[0].type());
-            move_to_register(destination, source);
+            move_to_variable(destination, source);
             append(assembler::ubfx(destination, source, from, length));
             return;
         }
@@ -823,12 +1113,12 @@ public:
             return;
         }
 
-        bit_extract(value(destination), value(source), from, length);
+        bit_extract(destination.as_scalar(), source.as_scalar(), from, length);
     }
 
-    void multiply(const value& destination,
-                  const value& multiplicand,
-                  const value& multiplier)
+    void multiply(const scalar& destination,
+                  const scalar& multiplicand,
+                  const scalar& multiplier)
     {
         [[unlikely]]
         if (!destination.size() || destination.size() > 2 ||
@@ -838,8 +1128,8 @@ public:
         }
 
         // The input and the output have the same size:
-        // For 32-bit multiplication: 64-bit output and signed-extended 32-bit values to 64-bit inputs
-        // For 64-bit multiplication: 64-bit output and signed-extended 64-bit values to 128-bit inputs
+        // For 32-bit multiplication: 64-bit output and signed-extended 32-bit scalars to 64-bit inputs
+        // For 64-bit multiplication: 64-bit output and signed-extended 64-bit scalars to 128-bit inputs
         // NOTE: this is very unfortunate
         bool sets_flags = true;
         if (destination.size() == 1) {
@@ -876,8 +1166,8 @@ public:
             // CF and OF are set to 1 when multiplicand * multiplier > 64-bits
             // Otherwise they are set to 0
             if (sets_flags) {
-                auto compare_regset = vreg_alloc_.allocate(destination[0].type());
-                move_to_register(compare_regset, 0xFFFF0000);
+                const auto& compare_regset = vreg_alloc_.allocate_scalar(destination[0].type());
+                move_to_variable(compare_regset, 0xFFFF0000);
                 comparison(compare_regset, destination);
                 set_carry_flag(cond_operand::ne());
                 set_overflow_flag(cond_operand::ne());
@@ -913,9 +1203,9 @@ public:
         return;
     }
 
-    void divide(const value& destination,
-                const value& dividend,
-                const value& divider)
+    void divide(const scalar& destination,
+                const scalar& dividend,
+                const scalar& divider)
     {
         if (destination.size() > 1)
             throw backend_exception("Division not supported for types larger than 128-bits");
@@ -938,99 +1228,6 @@ public:
         }
 
 		return;
-    }
-
-    instruction& mul(const register_operand &dest,
-                     const register_operand &src1,
-                     const register_operand &src2) {
-        return append(assembler::mul(dest, src1, src2));
-    }
-
-    instruction& smulh(const register_operand &dest,
-                       const register_operand &src1,
-                       const register_operand &src2) {
-        return append(assembler::smulh(dest, src1, src2));
-    }
-
-    instruction& smull(const register_operand &dest,
-               const register_operand &src1,
-               const register_operand &src2) {
-        return append(assembler::smull(dest, src1, src2));
-    }
-
-    instruction& umulh(const register_operand &dest,
-               const register_operand &src1,
-               const register_operand &src2) {
-        return append(assembler::umulh(dest, src1, src2));
-    }
-
-    instruction& umull(const register_operand &dest,
-               const register_operand &src1,
-               const register_operand &src2) {
-        return append(assembler::umull(dest, src1, src2));
-    }
-
-    instruction& sdiv(const register_operand &dest,
-              const register_operand &src1,
-              const register_operand &src2) {
-        return append(assembler::sdiv(dest, src1, src2));
-    }
-
-    instruction& udiv(const register_operand &dest,
-              const register_operand &src1,
-              const register_operand &src2) {
-        return append(assembler::udiv(dest, src1, src2));
-    }
-
-    instruction& fmul(const register_operand &dest,
-                      const register_operand &src1,
-                      const register_operand &src2) {
-        return append(assembler::fmul(dest, src1, src2));
-    }
-
-    instruction& fmov(const register_operand &dest, const reg_or_imm &src) {
-        return append(assembler::fmov(dest, src));
-    }
-
-    instruction& fcvt(const register_operand &dest, const register_operand &src) {
-        return append(assembler::fcvt(dest, src));
-    }
-
-    instruction& fcvtzs(const register_operand &dest, const register_operand &src) {
-        return append(assembler::fcvtzs(dest, src));
-    }
-
-    instruction& fcvtzu(const register_operand &dest, const register_operand &src) {
-        return append(assembler::fcvtzu(dest, src));
-    }
-
-    instruction& fcvtas(const register_operand &dest, const register_operand &src) {
-        return append(assembler::fcvtas(dest, src));
-    }
-
-    instruction& fcvtau(const register_operand &dest, const register_operand &src) {
-        return append(assembler::fcvtau(dest, src));
-    }
-
-    // TODO: this also has an immediate variant
-    instruction& scvtf(const register_operand &dest,
-               const register_operand &src) {
-        return append(assembler::scvtf(dest, src));
-    }
-
-    instruction& ucvtf(const register_operand &dest,
-               const register_operand &src) {
-        return append(assembler::ucvtf(dest, src));
-    }
-
-    instruction& mrs(const register_operand &dest,
-             const register_operand &src) {
-        return append(assembler::mrs(dest, src));
-    }
-
-    instruction& msr(const register_operand &dest,
-                     const register_operand &src) {
-        return append(assembler::msr(dest, src));
     }
 
     instruction& ret() {
@@ -1122,7 +1319,7 @@ public:
     void atomic_block(const register_operand &data, const memory_operand &mem,
                       std::function<void()> body, atomic_types type = atomic_types::exclusive)
     {
-        const register_operand& status = vreg_alloc_.allocate(ir::value_type::u32());
+        const auto& status = vreg_alloc_.allocate(ir::value_type::u32());
         auto loop_label = fmt::format("loop_{}", instructions_.size());
         auto success_label = fmt::format("success_{}", instructions_.size());
         label(loop_label);
@@ -1130,14 +1327,14 @@ public:
 
         body();
 
-        atomic_store(status, data, mem).add_comment("store if not failure");
-        cbz(status, success_label).add_comment("== 0 represents success storing");
+        atomic_store(status.as_scalar(), data, mem).add_comment("store if not failure");
+        cbz(status.as_scalar(), success_label).add_comment("== 0 represents success storing");
         b(loop_label).add_comment("loop until failure or success");
         label(success_label);
         return;
     }
 
-    void atomic_add(const value& destination, const value& source,
+    void atomic_add(const scalar& destination, const scalar& source,
                     const memory_operand& mem, atomic_types type = atomic_types::exclusive)
     {
 
@@ -1167,29 +1364,29 @@ public:
         // TODO
     }
 
-    void atomic_sub(const value &destination, const value &source,
+    void atomic_sub(const scalar &destination, const scalar &source,
                     const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         const auto& negated = vreg_alloc_.allocate(source.type());
-        negate(negated, source);
-        atomic_add(destination, negated, mem, type);
+        negate(negated.as_scalar(), source);
+        atomic_add(destination, negated.as_scalar(), mem, type);
     }
 
-    void atomic_xadd(const value &destination, const value &source,
+    void atomic_xadd(const scalar &destination, const scalar &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
-        const value &old = vreg_alloc_.allocate(destination.type());
+        const scalar &old = vreg_alloc_.allocate_scalar(destination.type());
         append(assembler::mov(old, destination));
         atomic_add(destination, source, mem, type);
         append(assembler::mov(source, old));
     }
 
-    void atomic_clr(const value &destination, const value &source,
+    void atomic_clr(const scalar &destination, const scalar &source,
                     const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
             atomic_block(destination, mem, [this, &destination, &source]() {
-                const value& negated = vreg_alloc_.allocate(source.type());
+                const scalar& negated = vreg_alloc_.allocate_scalar(source.type());
                 complement(negated, source);
                 ands(destination, destination, negated);
             }, type);
@@ -1215,16 +1412,16 @@ public:
         // TODO
     }
 
-    void atomic_and(const value &destination, const value &source,
+    void atomic_and(const scalar &destination, const scalar &source,
                     const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
-        const auto& complemented = vreg_alloc_.allocate(source.type());
+        const auto& complemented = vreg_alloc_.allocate_scalar(source.type());
         complement(complemented, source);
         atomic_clr(destination, complemented, mem, type);
     }
 
-    void atomic_eor(const value &destination, const value &source,
-                    const value &mem, atomic_types type = atomic_types::exclusive)
+    void atomic_eor(const scalar &destination, const scalar &source,
+                    const scalar &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
             atomic_block(destination, mem, [this, &destination, &source]() {
@@ -1251,8 +1448,8 @@ public:
         // TODO
     }
 
-    void atomic_or(const value &destination, const value &source,
-                    const value &mem, atomic_types type = atomic_types::exclusive)
+    void atomic_or(const scalar &destination, const scalar &source,
+                    const scalar &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
             atomic_block(destination, mem, [this, &destination, &source]() {
@@ -1279,7 +1476,7 @@ public:
         // TODO
     }
 
-    void atomic_smax(const value &destination, const value &source,
+    void atomic_smax(const scalar &destination, const scalar &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
@@ -1305,7 +1502,7 @@ public:
         // TODO
     }
 
-    void atomic_smin(const value &rm, const value &source,
+    void atomic_smin(const scalar &rm, const scalar &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
@@ -1331,7 +1528,7 @@ public:
         // TODO
     }
 
-    void atomic_umax(const value &rm, const value &source,
+    void atomic_umax(const scalar &rm, const scalar &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
@@ -1359,7 +1556,7 @@ public:
     }
 
 
-    void atomic_umin(const value &rm, const value &source,
+    void atomic_umin(const scalar &rm, const scalar &source,
                             const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
@@ -1385,12 +1582,12 @@ public:
         // TODO
     }
 
-    void atomic_swap(const value &destination, const value &source,
+    void atomic_swap(const scalar &destination, const scalar &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
             atomic_block(destination, mem, [this, &destination, &source]() {
-                const auto& old = vreg_alloc_.allocate(destination.type());
+                const auto& old = vreg_alloc_.allocate_scalar(destination.type());
                 append(assembler::mov(old, destination));
                 append(assembler::mov(destination, source));
                 append(assembler::mov(source, old));
@@ -1417,15 +1614,15 @@ public:
         // TODO
     }
 
-    void atomic_cmpxchg(const value& current, const value &acc,
-                        const value &src, const memory_operand &mem,
+    void atomic_cmpxchg(const scalar& current, const scalar &acc,
+                        const scalar &src, const memory_operand &mem,
                         atomic_types type = atomic_types::exclusive)
     {
         if constexpr (!supports_lse) {
             atomic_block(current, mem, [this, &current, &acc]() {
                 comparison(current, acc);
                 append(assembler::csel(acc, current, acc, cond_operand::ne()))
-                      .add_comment("conditionally move current memory value into accumulator");
+                      .add_comment("conditionally move current memory scalar into accumulator");
             }, type);
             return;
         }
@@ -1437,6 +1634,65 @@ public:
         append(assembler::mov(current, acc));
 
         // TODO
+    }
+
+    [[nodiscard]]
+    const register_operand& zero_flag() const { return flag_map_[reg_offsets::ZF]; }
+
+    [[nodiscard]]
+    const register_operand& sign_flag() const { return flag_map_[reg_offsets::SF]; }
+
+    [[nodiscard]]
+    const register_operand& overflow_flag() const { return flag_map_[reg_offsets::OF]; }
+
+    [[nodiscard]]
+    const register_operand& carry_flag() const { return flag_map_[reg_offsets::CF]; }
+
+    [[nodiscard]]
+    const register_operand& flag(reg_offsets flag_offset) const { return flag_map_[flag_offset]; }
+
+	void set_zero_flag(const register_operand &destination = flag_map_[reg_offsets::ZF]) {
+        append(assembler::cset(destination, cond_operand::eq())).add_comment("compute flag: ZF");
+    }
+
+	void set_sign_flag(const cond_operand& cond = cond_operand::lt(),
+                       const register_operand &destination = flag_map_[reg_offsets::SF])
+    {
+        append(assembler::cset(destination, cond)).add_comment("compute flag: SF");
+    }
+
+	void set_carry_flag(const cond_operand& cond = cond_operand::cs(),
+                        const register_operand &destination = flag_map_[reg_offsets::CF])
+    {
+        append(assembler::cset(destination, cond)).add_comment("compute flag: CF");
+    }
+
+	void set_overflow_flag(const cond_operand& cond = cond_operand::vs(),
+                           const register_operand &destination = flag_map_[reg_offsets::OF])
+    {
+        append(assembler::cset(destination, cond)).add_comment("compute flag: OV");
+    }
+
+    void allocate_flags() {
+        flag_map_[reg_offsets::ZF] = vreg_alloc_.allocate(ir::value_type::u1()).as_scalar();
+        flag_map_[reg_offsets::SF] = vreg_alloc_.allocate(ir::value_type::u1()).as_scalar();
+        flag_map_[reg_offsets::OF] = vreg_alloc_.allocate(ir::value_type::u1()).as_scalar();
+        flag_map_[reg_offsets::CF] = vreg_alloc_.allocate(ir::value_type::u1()).as_scalar();
+    }
+
+    void set_flags(bool inverse_cf) {
+        set_zero_flag();
+        set_sign_flag();
+        set_overflow_flag();
+        if (inverse_cf)
+            set_carry_flag(cond_operand::cc());
+        else
+            set_carry_flag();
+    }
+
+    void set_and_allocate_flags(bool inverse_cf) {
+        allocate_flags();
+        set_flags(inverse_cf);
     }
 
     template <typename... Args>
@@ -1479,237 +1735,6 @@ public:
 
     const virtual_register_allocator& register_allocator() const { return vreg_alloc_; }
 
-    [[nodiscard]]
-    inline std::size_t get_min_bitsize(unsigned long long imm) {
-        return value_types::base_type.element_width() - __builtin_clzll(imm|1);
-    }
-
-    template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
-    reg_or_imm move_immediate(T imm, ir::value_type imm_type, ir::value_type reg_type) {
-        [[unlikely]]
-        if (imm_type.is_vector() || imm_type.element_width() > value_types::base_type.element_width())
-            throw backend_exception("Attempting to move immediate {:#x} into unsupported immediate type {}",
-                                     imm, imm_type);
-
-        auto immediate = util::bit_cast_zeros<unsigned long long>(imm);
-        std::size_t actual_size = get_min_bitsize(immediate);
-
-        if (actual_size < imm_type.element_width()) {
-            logger.debug("Immediate {:#x} fits within {} (actual size = {})\n",
-                          imm, imm_type, actual_size);
-            return immediate_operand(imm, imm_type);
-        }
-
-        return move_to_register(imm, reg_type);
-     }
-
-    template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
-    reg_or_imm move_immediate(T imm, ir::value_type imm_type) {
-        ir::value_type reg_type;
-        if (imm_type.element_width() < 32)
-            reg_type = ir::value_type(imm_type.type_class(), 32);
-        else if (imm_type.element_width() > 32)
-            reg_type = ir::value_type(imm_type.type_class(), 64);
-
-        return move_immediate(imm, imm_type, reg_type);
-    }
-
-    template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
-    register_operand move_to_register(T imm, ir::value_type type) {
-        // Sanity checks
-        static_assert (sizeof(T) <= sizeof(std::uint64_t),
-                       "Attempting to move immediate requiring more than 64-bits into register");
-        static_assert (sizeof(std::uint64_t) <= sizeof(unsigned long long),
-                       "ARM DBT expects unsigned long long to be at least as large as 64-bits");
-
-        [[unlikely]]
-        if (type.is_vector())
-            throw backend_exception("Cannot move immediate {} into vector type {}", imm, type);
-
-        // Convert to unsigned long long so that clzll can be used
-        // 1s in sizeof(unsinged long long) - sizeof(imm) upper bits
-        auto immediate = util::bit_cast_zeros<unsigned long long>(imm);
-
-        // Check the actual size of the value
-        std::size_t actual_size = get_min_bitsize(immediate);
-        if (actual_size > type.width()) {
-            logger.warn("Converting value of size {} to size {} by truncation\n",
-                        actual_size, type.element_width());
-            actual_size = type.element_width();
-        }
-
-        // Can be moved in one go
-        // TODO: implement optimization to support more immediates via shifts
-        if (actual_size < 12) {
-            insert_comment("Move immediate {:#x} directly as < 12-bits", immediate);
-            auto reg = vreg_alloc_.allocate(type);
-            std::uint64_t mask = (1ULL << actual_size) - 1;
-            // mov<immediates_strict_policy>(reg, immediate & mask);
-            // TODO: fix
-            move_to_register(reg, immediate & mask);
-            return reg;
-        }
-
-        // Determine how many 16-bit chunks we need to move
-        std::size_t move_count = actual_size / 16 + (actual_size % 16 != 0);
-        logger.debug("Moving value {:#x} requires {} 16-bit moves\n", immediate, move_count);
-
-        // Can be moved in multiple operations
-        // NOTE: this assumes that we're only working with 64-bit registers or smaller
-        auto reg = vreg_alloc_.allocate(type);
-        insert_comment("Move immediate {:#x} > 12-bits with sequence of movz/movk operations", immediate);
-        append(assembler::movz(reg, immediate & 0xFFFF, shift_operand()));
-        for (std::size_t i = 1; i < move_count; ++i) {
-            auto imm_chunk = immediate >> (i * 16) & 0xFFFF;
-            append(assembler::movk(reg, imm_chunk, shift_operand(shift_operand::shift_type::lsl, i * 16)));
-        }
-
-        return reg;
-    }
-
-    // TODO: this is wrong
-    void extend_to_byte(const register_operand& reg, std::uint8_t idx = 1) {
-        append(assembler::lsl(reg, reg, 8 - idx))
-              .add_comment("shift left LSB to set sign bit of byte");
-        append(assembler::asr(reg, reg, 8 - idx))
-              .add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
-    }
-
-    value cast(const value &src, ir::value_type type) {
-        insert_comment("Internal cast from {} to {}", src.type(), type);
-
-        if (src.type().type_class() == ir::value_type_class::floating_point &&
-            type.type_class() != ir::value_type_class::floating_point) {
-            auto dest = vreg_alloc_.allocate(type);
-            fcvtzs(dest, src);
-            return dest;
-        }
-
-        if (src.type().type_class() == ir::value_type_class::floating_point &&
-            type.type_class() == ir::value_type_class::floating_point) {
-            if (type.element_width() == 64 && src.type().element_width() == 32) {
-                auto dest = vreg_alloc_.allocate(type);
-                fcvt(dest, src);
-                return dest;
-            }
-
-            if (type.element_width() == 64 && src.type().element_width() == 64)
-                return src;
-
-            throw backend_exception("Cannot internally cast from {} to {}", src.type(), type);
-        }
-
-        if (src.type().element_width() >= type.element_width()) {
-            return register_operand(src[0].index(), type);
-        }
-
-        if (type.element_width() > 64)
-            type = ir::value_type::u64();
-
-        auto dest = vreg_alloc_.allocate(type);
-        switch (src.type().element_width()) {
-        case 1:
-            extend_to_byte(src, 1);
-        case 8:
-            append(assembler::sxtb(dest, src));
-            break;
-        case 16:
-            append(assembler::sxth(dest, src));
-            break;
-        case 32:
-            append(assembler::sxtw(dest, src));
-            break;
-        default:
-            return src;
-        }
-        return dest;
-    }
-
-    shift_operand extend_register(const register_operand& reg, arancini::ir::value_type type) {
-        auto mod = shift_operand::shift_type::lsl;
-
-        switch (type.element_width()) {
-        case 8:
-            if (type.type_class() == ir::value_type_class::signed_integer) {
-                mod = shift_operand::shift_type::sxtb;
-                append(assembler::sxtb(reg, reg));
-            } else {
-                mod = shift_operand::shift_type::uxtb;
-                append(assembler::uxtb(reg, reg));
-            }
-            break;
-        case 16:
-            if (type.type_class() == ir::value_type_class::signed_integer) {
-                mod = shift_operand::shift_type::sxth;
-                append(assembler::sxth(reg, reg));
-            } else {
-                mod = shift_operand::shift_type::uxth;
-                append(assembler::uxth(reg, reg));
-            }
-            break;
-        }
-
-        return shift_operand(mod, 0);
-    }
-
-    [[nodiscard]]
-    const register_operand& zero_flag() const { return flag_map_[reg_offsets::ZF]; }
-
-    [[nodiscard]]
-    const register_operand& sign_flag() const { return flag_map_[reg_offsets::SF]; }
-
-    [[nodiscard]]
-    const register_operand& overflow_flag() const { return flag_map_[reg_offsets::OF]; }
-
-    [[nodiscard]]
-    const register_operand& carry_flag() const { return flag_map_[reg_offsets::CF]; }
-
-    [[nodiscard]]
-    const register_operand& flag(reg_offsets flag_offset) const { return flag_map_[flag_offset]; }
-
-	void set_zero_flag(const register_operand &destination = flag_map_[reg_offsets::ZF]) {
-        append(assembler::cset(destination, cond_operand::eq())).add_comment("compute flag: ZF");
-    }
-
-	void set_sign_flag(const cond_operand& cond = cond_operand::lt(),
-                       const register_operand &destination = flag_map_[reg_offsets::SF])
-    {
-        append(assembler::cset(destination, cond)).add_comment("compute flag: SF");
-    }
-
-	void set_carry_flag(const cond_operand& cond = cond_operand::cs(),
-                        const register_operand &destination = flag_map_[reg_offsets::CF])
-    {
-        append(assembler::cset(destination, cond));
-    }
-
-	void set_overflow_flag(const cond_operand& cond = cond_operand::vs(),
-                           const register_operand &destination = flag_map_[reg_offsets::OF])
-    {
-        append(assembler::cset(destination, cond));
-    }
-
-    void allocate_flags() {
-        flag_map_[reg_offsets::ZF] = vreg_alloc_.allocate(ir::value_type::u1());
-        flag_map_[reg_offsets::SF] = vreg_alloc_.allocate(ir::value_type::u1());
-        flag_map_[reg_offsets::OF] = vreg_alloc_.allocate(ir::value_type::u1());
-        flag_map_[reg_offsets::CF] = vreg_alloc_.allocate(ir::value_type::u1());
-    }
-
-    void set_flags(bool inverse_cf) {
-        set_zero_flag();
-        set_sign_flag();
-        set_overflow_flag();
-        if (inverse_cf)
-            set_carry_flag(cond_operand::cc());
-        else
-            set_carry_flag();
-    }
-
-    void set_and_allocate_flags(bool inverse_cf) {
-        allocate_flags();
-        set_flags(inverse_cf);
-    }
 
 	instruction& append(const instruction &i) {
         instructions_.push_back(i);
@@ -1733,6 +1758,11 @@ private:
     static flag_map_type flag_map_;
 
     void spill();
+
+    [[nodiscard]]
+    inline std::size_t get_min_bitsize(unsigned long long imm) {
+        return value_types::base_type.element_width() - __builtin_clzll(imm|1);
+    }
 };
 
 inline flag_map_type instruction_builder::flag_map_ = {

@@ -28,10 +28,10 @@ using arancini::input::x86::reg_offsets;
 
 memory_operand arm64_translation_context::guest_memory(int regoff, memory_operand::address_mode mode) {
     if (regoff > 255 || regoff < -256) {
-        const value& base = vreg_alloc_.allocate(value_types::addr_type);
-        builder_.move_to_register(base, regoff);
-        builder_.add(base, base, value(context_block_reg));
-        return memory_operand(base, 0, mode);
+        const auto& base = vreg_alloc_.allocate(value_types::addr_type);
+        builder_.move_to_variable(base, regoff);
+        builder_.add(base, base, context_block_reg);
+        return memory_operand(base.as_scalar(), 0, mode);
     } else {
         return memory_operand(context_block_reg, regoff, mode);
     }
@@ -84,7 +84,7 @@ void arm64_translation_context::end_block() {
 
         // These instructions can be inserted after register allocation, since they do not depend on
         // virtual registers and only def()
-        builder_.move_to_register(dbt_retval_register, ret_);
+        builder_.move_to_variable(dbt_retval_register, ret_);
 
         // Return value in x0 = 0;
         builder_.ret();
@@ -254,19 +254,20 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
 
 void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
     const auto& destination = vreg_alloc_.get_or_allocate(n.val());
-    const value &address = materialise_port(n.address());
-    builder_.load(destination, memory_operand(address));
+    const auto &address = materialise_port(n.address());
+    builder_.load(destination, memory_operand(address.as_scalar()));
 }
 
 void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
     const auto &src = materialise_port(n.value());
-    const value &address = materialise_port(n.address());
-    builder_.store(src, memory_operand(address));
+    const auto &address = materialise_port(n.address());
+    builder_.store(src, memory_operand(address.as_scalar()));
 }
 
 void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
 	auto destination = vreg_alloc_.allocate(n.val());
-    builder_.move_to_register(destination, this_pc_).add_comment("read program counter");
+    builder_.insert_comment("read program counter");
+    builder_.move_to_variable(destination, this_pc_);
 }
 
 void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
@@ -312,9 +313,9 @@ void arm64_translation_context::materialise_constant(const constant_node &n) {
 
     [[unlikely]]
     if (n.val().type().is_floating_point())
-        builder_.move_to_register(destination, n.const_val_f());
+        builder_.move_to_variable(destination, n.const_val_f());
     else
-        builder_.move_to_register(destination, n.const_val_i());
+        builder_.move_to_variable(destination, n.const_val_i());
 }
 
 [[nodiscard]]
@@ -420,19 +421,19 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 	case binary_arith_op::cmpne:
 	case binary_arith_op::cmpgt:
         // TODO: this looks wrong
-        if (n.val().type().is_vector() || destination.size() > 1) {
-            throw backend_exception("Unsupported comparison between {} x {}",
-                                    n.lhs().type(), n.rhs().type());
-        }
-
-        {
-            auto typed_rhs = builder_.cast(rhs[0], lhs[0].type());
-            builder_.comparison(lhs[0], typed_rhs)
-                    .add_comment("compare LHS and RHS to generate condition for conditional set");
-            builder_.append(assembler::cset(destination[0], get_cset_type(n.op())))
-                    .add_comment("set to 1 if condition is true (based flags from the previous compare)");
-            inverse_carry_flag_operation = true;
-        }
+        // if (n.val().type().is_vector() || destination.size() > 1) {
+        //     throw backend_exception("Unsupported comparison between {} x {}",
+        //                             n.lhs().type(), n.rhs().type());
+        // }
+        //
+        // {
+        //     auto typed_rhs = builder_.cast(rhs[0], lhs[0].type());
+        //     builder_.comparison(lhs[0], typed_rhs)
+        //             .add_comment("compare LHS and RHS to generate condition for conditional set");
+        //     builder_.append(assembler::cset(destination[0], get_cset_type(n.op())))
+        //             .add_comment("set to 1 if condition is true (based flags from the previous compare)");
+        //     inverse_carry_flag_operation = true;
+        // }
 		break;
 	case binary_arith_op::cmpoeq:
 	case binary_arith_op::cmpolt:
@@ -440,23 +441,23 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 	case binary_arith_op::cmpo:
 	case binary_arith_op::cmpu:
         builder_.comparison(lhs, rhs);
-        builder_.append(assembler::cset(destination[0], get_cset_type(n.op())))
-                .add_comment("set to 1 if condition is true (based flags from the previous compare)");
+        // builder_.append(assembler::cset(destination[0], get_cset_type(n.op())))
+        //         .add_comment("set to 1 if condition is true (based flags from the previous compare)");
         break;
 	case binary_arith_op::cmpueq:
 	case binary_arith_op::cmpune:
 	case binary_arith_op::cmpult:
 	case binary_arith_op::cmpunlt:
 	case binary_arith_op::cmpunle:
-        {
-            builder_.comparison(lhs, rhs);
-            const value& unordered = vreg_alloc_.allocate(value_type::u64());
-            builder_.append(assembler::cset(destination[0], get_cset_type(n.op())))
-                    .add_comment("set to 1 if condition is true (based flags from the previous compare)");
-            builder_.append(assembler::cset(unordered, cond_operand::vs()))
-                    .add_comment("set to 1 if condition is true (based flags from the previous compare)");
-            builder_.logical_or(destination[0], destination[0], unordered[0]);
-        }
+        // {
+        //     builder_.comparison(lhs, rhs);
+        //     const value& unordered = vreg_alloc_.allocate(value_type::u64());
+        //     builder_.append(assembler::cset(destination[0], get_cset_type(n.op())))
+        //             .add_comment("set to 1 if condition is true (based flags from the previous compare)");
+        //     builder_.append(assembler::cset(unordered, cond_operand::vs()))
+        //             .add_comment("set to 1 if condition is true (based flags from the previous compare)");
+        //     builder_.logical_or(destination[0], destination[0], unordered[0]);
+        // }
         break;
 	default:
 		throw backend_exception("Unsupported binary arithmetic operation with index {}",
@@ -472,10 +473,10 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 }
 
 void arm64_translation_context::materialise_ternary_arith(const ternary_arith_node &n) {
-    const auto& lhs = materialise_port(n.lhs());
-    const auto& rhs = materialise_port(n.rhs());
-    const auto& top = materialise_port(n.top());
-	const auto& destination = vreg_alloc_.allocate(n.val());
+    const auto& lhs = materialise_port(n.lhs()).as_scalar();
+    const auto& rhs = materialise_port(n.rhs()).as_scalar();
+    const auto& top = materialise_port(n.top()).as_scalar();
+	const auto& destination = vreg_alloc_.allocate(n.val()).as_scalar();
 
     bool inverse_carry_flag_operation = false;
     switch (n.op()) {
@@ -494,9 +495,9 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
 }
 
 void arm64_translation_context::materialise_binary_atomic(const binary_atomic_node &n) {
-	const auto &destination = vreg_alloc_.allocate(n.val());
-    const auto &source = materialise_port(n.rhs());
-    const value &address = materialise_port(n.address());
+	const auto &destination = vreg_alloc_.allocate(n.val()).as_scalar();
+    const auto &source = materialise_port(n.rhs()).as_scalar();
+    const auto &address = materialise_port(n.address()).as_scalar();
 
     bool sets_flags = true;
     bool inverse_carry_flag_operation = false;
@@ -552,10 +553,10 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
     // Destination register only used for storing return code of STXR (a 32-bit value)
     // Since STXR expects a 32-bit register; we directly allocate a 32-bit one
     // NOTE: we're only going to use it afterwards for a comparison and an increment
-    const value &destination = vreg_alloc_.allocate(n.val(), n.rhs().type());
-    const value &accumulator = materialise_port(n.rhs());
-    const value &source = materialise_port(n.top());
-    const value &address = materialise_port(n.address());
+    const scalar &destination = vreg_alloc_.allocate(n.val(), n.rhs().type());
+    const scalar &accumulator = materialise_port(n.rhs());
+    const scalar &source = materialise_port(n.top());
+    const scalar &address = materialise_port(n.address());
 
     switch (n.op()) {
     case ternary_atomic_op::cmpxchg:
@@ -569,8 +570,8 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
 }
 
 void arm64_translation_context::materialise_unary_arith(const unary_arith_node &n) {
-    const value &destination = vreg_alloc_.allocate(n.val());
-    const value &lhs = materialise_port(n.lhs());
+    const scalar &destination = vreg_alloc_.allocate(n.val());
+    const scalar &lhs = materialise_port(n.lhs());
 
     switch (n.op()) {
     case unary_arith_op::bnot:
@@ -612,10 +613,10 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 }
 
 void arm64_translation_context::materialise_csel(const csel_node &n) {
-    const value &dest = vreg_alloc_.allocate(n.val());
-    const value &condition = materialise_port(n.condition());
-    const value &true_var = materialise_port(n.trueval());
-    const value &false_var = materialise_port(n.falseval());
+    const scalar &dest = vreg_alloc_.allocate(n.val());
+    const scalar &condition = materialise_port(n.condition());
+    const scalar &true_var = materialise_port(n.trueval());
+    const scalar &false_var = materialise_port(n.falseval());
 
     builder_.comparison(condition, 0)
             .add_comment("compare condition for conditional select");
@@ -715,7 +716,7 @@ void arm64_translation_context::materialise_read_local(const read_local_node &n)
     const auto &local_variable = locals_[n.local()];
 
     builder_.insert_comment("Read local variable @{}", fmt::ptr(n.local()));
-    builder_.move_to_register(destination, local_variable);
+    builder_.move_to_variable(destination, local_variable);
 }
 
 void arm64_translation_context::materialise_write_local(const write_local_node &n) {
@@ -728,6 +729,6 @@ void arm64_translation_context::materialise_write_local(const write_local_node &
     const auto &local_variable = locals_[n.local()];
 
     builder_.insert_comment("Write local variable @{}", fmt::ptr(n.local()));
-    builder_.move_to_register(local_variable, source);
+    builder_.move_to_variable(local_variable, source);
 }
 

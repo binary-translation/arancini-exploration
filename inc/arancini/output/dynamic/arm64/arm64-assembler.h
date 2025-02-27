@@ -7,6 +7,24 @@
 
 namespace arancini::output::dynamic::arm64 {
 
+class general_purpose_register {
+public:
+    general_purpose_register(const register_operand& reg):
+        reg_(reg)
+    {
+        if (reg.type().is_vector() || reg.type().is_floating_point())
+            throw backend_exception("Cannot specify GPR as type", reg.type());
+    }
+
+    [[nodiscard]]
+    operator register_operand&() { return reg_; }
+
+    [[nodiscard]]
+    operator const register_operand&() const { return reg_; }
+private:
+    register_operand reg_;
+};
+
 class assembler {
 public:
     assembler() {
@@ -134,12 +152,35 @@ public:
     [[nodiscard]]
     static instruction movz(const register_operand &dst, const immediate_operand &src, const shift_operand &shift) {
         check_immediate_size(src, ir::value_type::u16());
+
+        [[unlikely]]
+        if (shift.amount().value() != 0 && shift.amount().value() != 16)
+            throw backend_exception("Expected '{}' with optional integer 0 or 16; not {}",
+                                    shift, shift.amount());
+
         return instruction("movz", def(dst), use(src), use(shift));
     }
 
     [[nodiscard]]
-    static instruction movk(const register_operand &dst, const immediate_operand &src, const shift_operand &shift) {
+    static instruction movk(const register_operand &dst, const immediate_operand &src,
+                            const shift_operand &shift)
+    {
         check_immediate_size(src, ir::value_type::u16());
+
+        if (dst.type().is_vector() || dst.type().is_floating_point())
+            throw backend_exception("Cannot specify GPR as type", dst.type());
+
+        if (dst.type().width() == 32) {
+            if (shift.amount().value() != 0 && shift.amount().value() != 16 && dst.type().width() == 32)
+                throw backend_exception("Expected '{}' with optional integer 0 or 16; not {}",
+                                        shift, shift.amount());
+        } else {
+            if (shift.amount().value() != 0 && shift.amount().value() != 16 &&
+                shift.amount().value() != 32 && shift.amount().value() != 48)
+                throw backend_exception("Expected '{}' with optional integer 0, 16, 32 or 48; not {}",
+                                        shift, shift.amount());
+        }
+
         return instruction("movk", use(def(dst)), use(src), use(shift));
     }
 

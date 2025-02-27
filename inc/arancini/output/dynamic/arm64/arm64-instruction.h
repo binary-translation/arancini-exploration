@@ -208,7 +208,10 @@ public:
     shift_type modifier() { return modifier_; }
 
     [[nodiscard]]
-    immediate_operand amount() { return amount_; }
+    immediate_operand& amount() { return amount_; }
+
+    [[nodiscard]]
+    const immediate_operand& amount() const { return amount_; }
 private:
     shift_type modifier_ = shift_type::lsl;
     immediate_operand amount_ = 0;
