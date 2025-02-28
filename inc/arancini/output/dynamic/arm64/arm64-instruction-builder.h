@@ -28,24 +28,14 @@ public:
         regset_({reg}),
         type_(reg.type())
     {
-        // check_type(type_);
+        check_type(regset_, type_);
     }
 
     scalar(const register_sequence& regs, ir::value_type type):
         regset_(regs),
         type_(type)
     {
-        [[unlikely]]
-        if (type_.is_vector())
-            throw backend_exception("cannot construct value from vector");
-
-        if (regset_.empty()) return;
-
-        auto element_type = regset_[0].type();
-        for (std::size_t i = 1; i < regset_.size(); ++i) {
-            if (regset_[i].type() != element_type)
-                throw backend_exception("Cannot construct register sequence from registers of different types");
-        }
+        check_type(regset_, type_);
     }
 
     scalar(const variable& var);
@@ -106,6 +96,24 @@ public:
 private:
     register_sequence regset_;
     ir::value_type type_;
+
+    static void check_type(const register_sequence& regseq, ir::value_type type) {
+        [[unlikely]]
+        if (type.is_vector())
+            throw backend_exception("cannot construct scalar from vector");
+
+        if (regseq.empty()) return;
+
+        auto element_type = regseq[0].type();
+        for (std::size_t i = 1; i < regseq.size(); ++i) {
+            if (regseq[i].type() != element_type)
+                throw backend_exception("Cannot construct register sequence from registers of different types");
+        }
+
+        [[unlikely]]
+        if (element_type.is_vector())
+            throw backend_exception("cannot construct scalar from register {}", regseq[0].type());
+    }
 };
 
 class vector final {
@@ -189,6 +197,25 @@ public:
 private:
     register_sequence regset_;
     ir::value_type type_;
+
+    static void check_type(const register_sequence& regseq, ir::value_type type) {
+        [[unlikely]]
+        if (!type.is_vector())
+            throw backend_exception("cannot construct vector from scalar");
+
+        if (regseq.empty()) return;
+
+        auto element_type = regseq[0].type();
+        for (std::size_t i = 1; i < regseq.size(); ++i) {
+            [[unlikely]]
+            if (regseq[i].type() != element_type)
+                throw backend_exception("Cannot construct register sequence from registers of different types");
+        }
+
+        [[unlikely]]
+        if (!element_type.is_vector())
+            throw backend_exception("Cannot construct vector from register {}", regseq[0]);
+    }
 };
 
 using value = std::variant<scalar, vector>;
@@ -1010,6 +1037,9 @@ public:
     void left_shift(const scalar& destination, const scalar& input, const scalar& amount) {
         [[unlikely]]
         if (is_bignum(destination.type())) {
+            // Need to handle two cases:
+            // 1. Input is GPR/FPR
+            // 2. Input is also big scalar
             throw backend_exception("Cannot perform logical left shift with big scalar {}",
                                     destination.type());
         }
@@ -1077,20 +1107,32 @@ public:
                               move_immediate(amount.value(), ir::value_type::u(bitsize))));
     }
 
-    instruction& conditional_select(const scalar &destination,
-                                    const scalar &lhs,
-                                    const scalar &rhs,
-                                    const cond_operand &cond)
+    instruction& conditional_select(const scalar &destination, const scalar &lhs,
+                                    const scalar &rhs, const cond_operand &condition)
     {
-        return append(assembler::csel(destination, lhs, rhs, cond));
+        [[unlikely]]
+        if (destination.size() != lhs.size() || lhs.size() != rhs.size())
+            throw backend_exception("Cannot conditionally select between types {} = {} ? {} : {}",
+                                    destination.type(), condition, lhs, rhs);
+
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            append(assembler::csel(destination[i], lhs[i], rhs[i], condition));
+        }
     }
 
     void bit_insert(const scalar& destination, const scalar& source,
-                    const scalar& insert_bits, std::size_t to, std::size_t length) {
+                    const scalar& insert_bits, std::size_t to, std::size_t length)
+    {
+        [[unlikely]]
+        if (destination.type() != source.type())
+            throw backend_exception("Cannot insert bits from source {} incompatible with destination {}",
+                                    source, destination);
+
+        move_to_variable(destination, source);
+
         [[likely]]
         if (destination.size() == 1) {
             // auto out = builder_.cast(insertion_bits, dest[0].type());
-            move_to_variable(destination, source);
             append(assembler::bfi(destination, insert_bits, to, length));
             return;
         }
