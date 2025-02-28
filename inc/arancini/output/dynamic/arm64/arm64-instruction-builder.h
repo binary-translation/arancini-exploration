@@ -974,7 +974,7 @@ public:
     }
 
     void truncate(const variable& destination, const variable& source) {
-        throw backend_exception("Cannot handle bitcast");
+        throw backend_exception("Cannot handle truncation");
     }
 
     instruction& branch(const label_operand& target) {
@@ -1042,7 +1042,13 @@ public:
 
     void left_shift(const scalar& destination, const scalar& input, const scalar& amount) {
         [[unlikely]]
+        if (destination.type() != input.type())
+            throw backend_exception("Cannot left-shift between different types");
+
+        [[unlikely]]
         if (is_bignum(destination.type())) {
+
+
             // Need to handle two cases:
             // 1. Input is GPR/FPR
             // 2. Input is also big scalar
@@ -1053,11 +1059,50 @@ public:
         append(assembler::lsl(destination, input, amount));
     }
 
-    void left_shift(const scalar& destination, const scalar& input, const immediate_operand& amount) {
+    void left_shift(const scalar& destination, const scalar& input, const immediate_operand& shift_amount) {
         [[unlikely]]
+        if (destination.type() != input.type())
+            throw backend_exception("Cannot left-shift between different types");
+
+        immediate_operand amount = shift_amount;
+        std::size_t first_non_zero = 0;
         if (is_bignum(destination.type())) {
-            throw backend_exception("Cannot perform logical left shift with big scalar {}",
-                                    destination.type());
+            // Multiple of 64
+            move_to_variable(destination, 0);
+
+            if ((amount.value() % 64) == 0 || amount.value() > 64) {
+                auto multiple = amount.value() / 64;
+                for (std::size_t i = multiple; i < destination.size(); ++i)
+                    move_to_variable(destination[i], input[i - multiple]);
+
+                if ((amount.value() % 64) == 0) return;
+
+                amount = amount.value() - (multiple * 64);
+                first_non_zero = multiple;
+                // NOTE: now we know that we have a shift amount < 64
+            }
+
+            auto temporary = vreg_alloc_.allocate_scalar(input.type());
+            if (amount.value() < 64) {
+                std::size_t extract_start = 64 - amount.value();
+
+                auto element_size = destination.type().element_width() <= 32 ? 32 : 64;
+                auto bitsize = element_size == 32 ? 5 : 6;
+                auto amount_var = move_immediate(amount.value(), ir::value_type::u(bitsize));
+
+                for (std::size_t i = first_non_zero; i < destination.size() - 1; ++i) {
+                    bit_extract(temporary[i], input[i], extract_start, amount.value());
+                }
+
+                for (std::size_t i = first_non_zero; i < destination.size(); ++i) {
+                    append(assembler::lsl(destination[i], input[i], amount_var));
+                }
+
+                for (std::size_t i = first_non_zero; i < destination.size() - 1; ++i) {
+                    bit_insert(destination[i], destination[i], temporary[i+1], 0, amount.value());
+                }
+                return;
+            }
         }
 
         auto element_size = destination.type().element_width() <= 32 ? 32 : 64;
@@ -1113,13 +1158,13 @@ public:
                               move_immediate(amount.value(), ir::value_type::u(bitsize))));
     }
 
-    instruction& conditional_select(const scalar &destination, const scalar &lhs,
-                                    const scalar &rhs, const cond_operand &condition)
+    void conditional_select(const scalar &destination, const scalar &lhs,
+                            const scalar &rhs, const cond_operand &condition)
     {
         [[unlikely]]
         if (destination.size() != lhs.size() || lhs.size() != rhs.size())
             throw backend_exception("Cannot conditionally select between types {} = {} ? {} : {}",
-                                    destination.type(), condition, lhs, rhs);
+                                    destination.type(), condition, lhs.type(), rhs.type());
 
         for (std::size_t i = 0; i < destination.size(); ++i) {
             append(assembler::csel(destination[i], lhs[i], rhs[i], condition));
@@ -1132,7 +1177,7 @@ public:
         [[unlikely]]
         if (destination.type() != source.type())
             throw backend_exception("Cannot insert bits from source {} incompatible with destination {}",
-                                    source, destination);
+                                    source.type(), destination.type());
 
         move_to_variable(destination, source);
 

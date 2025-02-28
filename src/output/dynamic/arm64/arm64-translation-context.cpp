@@ -632,30 +632,22 @@ void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
 
     // TODO: refactor this
     const auto& input = materialise_port(n.input());
-
-    auto& amount = materialise_port(n.amount());
-    // amount = builder_.cast(amount, n.val().type());
-
-    const auto& dest_vreg = vreg_alloc_.allocate(n.val());
+    const auto& amount = materialise_port(n.amount());
+    const auto& destination = vreg_alloc_.allocate(n.val());
 
     switch (n.op()) {
     case shift_op::lsl:
-        builder_.left_shift(dest_vreg, input, amount);
+        builder_.left_shift(destination, input, amount);
         break;
     case shift_op::lsr:
-        builder_.logical_right_shift(dest_vreg, input, amount);
+        builder_.logical_right_shift(destination, input, amount);
         break;
     case shift_op::asr:
-        builder_.arithmetic_right_shift(dest_vreg, input, amount);
+        builder_.arithmetic_right_shift(destination, input, amount);
         break;
     default:
         throw backend_exception("Unsupported shift operation: {}", n.op());
     }
-}
-
-// TODO: this should be part of the variable
-static inline std::size_t total_width(const std::vector<register_operand> &vec) {
-    return std::ceil(vec.size() * vec[0].type().element_width());
 }
 
 void arm64_translation_context::materialise_bit_extract(const bit_extract_node &n) {
