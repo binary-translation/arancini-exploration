@@ -450,10 +450,8 @@ public:
             return;
         }
 
-        const auto& lhs_extended = vreg_alloc_.allocate_scalar(destination.type());
-        const auto& rhs_extended = vreg_alloc_.allocate_scalar(destination.type());
-        sign_extend(lhs_extended, lhs);
-        sign_extend(rhs_extended, rhs);
+        auto lhs_extended = sign_extend(lhs, destination.type());
+        auto rhs_extended = sign_extend(rhs, destination.type());
         append(assembler::orr(destination, lhs_extended, rhs_extended));
 
         if (destination.type().width() < 64)
@@ -493,10 +491,8 @@ public:
                                     destination.type(), lhs.type(), rhs.type());
 
         for (std::size_t i = 0; i < destination.size(); ++i) {
-            auto lhs_extended = vreg_alloc_.allocate_scalar(destination[i].type());
-            auto rhs_extended = vreg_alloc_.allocate_scalar(destination[i].type());
-            sign_extend(lhs_extended, lhs[i]);
-            sign_extend(rhs_extended, rhs[i]);
+        auto lhs_extended = sign_extend(lhs[i], destination.type());
+        auto rhs_extended = sign_extend(rhs[i], destination.type());
             append(assembler::ands(destination[i], lhs_extended, rhs_extended));
         }
 
@@ -753,9 +749,7 @@ public:
         if (type.element_width() > 64)
             type = ir::value_type::u64();
 
-        auto destination = vreg_alloc_.allocate(type).as_scalar();
-        sign_extend(destination, src);
-        return destination;
+        return sign_extend(src, type);
     }
 
     shift_operand extend_register(const register_operand& reg, arancini::ir::value_type type) {
@@ -824,6 +818,12 @@ public:
             move_to_variable(destination[i], 0);
     }
 
+    scalar zero_extend(const scalar& source, ir::value_type type) {
+        const auto& destination = vreg_alloc_.allocate_scalar(type);
+        zero_extend(destination, source);
+        return destination;
+    }
+
     void sign_extend(const scalar& destination, const scalar& source) {
         if (destination.type().width() == source.type().width()) {
             move_to_variable(destination, source);
@@ -869,6 +869,12 @@ public:
         // Sets the upper bits to 1
         for (std::size_t i = 1; i < destination.size(); ++i)
             append(assembler::asr(destination[i], destination[0], 63));
+    }
+
+    scalar sign_extend(const scalar& source, ir::value_type type) {
+        const auto& destination = vreg_alloc_.allocate_scalar(type);
+        sign_extend(destination, source);
+        return destination;
     }
 
     void bitcast(const scalar& destination, const scalar& source) {
