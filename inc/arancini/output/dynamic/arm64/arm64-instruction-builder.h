@@ -686,6 +686,24 @@ public:
         }
     }
 
+    scalar copy(const scalar& source) {
+        auto destination = vreg_alloc_.allocate_scalar(source.type());
+        move_to_variable(destination, source);
+        return destination;
+    }
+
+    vector copy(const vector& source) {
+        auto destination = vreg_alloc_.allocate_vector(source.type());
+        move_to_variable(destination, source);
+        return destination;
+    }
+
+    variable copy(const variable& source) {
+        auto destination = vreg_alloc_.allocate(source.type());
+        move_to_variable(destination, source);
+        return destination;
+    }
+
     reg_or_imm move_immediate(const immediate_operand& immediate, ir::value_type reg_type) {
         [[unlikely]]
         if (immediate.type().is_vector() || immediate.type().element_width() > 64)
@@ -1179,11 +1197,55 @@ public:
             throw backend_exception("Cannot insert bits from source {} incompatible with destination {}",
                                     source.type(), destination.type());
 
+        [[unlikely]]
+        if (insert_bits.type().width() > destination.type().width())
+            throw backend_exception("Cannot insert value of type {} to destination {}",
+                                    insert_bits.type(), destination.type());
+
         move_to_variable(destination, source);
+
+        if (is_bignum(destination.type())) {
+            // Cases:
+            // 1. Insert register to register of big scalar
+            // 2. Insert register to location of big scalar
+            // 3. Insert from big scalar to another big scalar (register to register)
+            // 4. Insert from big scalar to another big scalar (register to location)
+
+            auto to_idx = to / 64;
+            auto end_idx = (to + length) / 64;
+            if (to_idx != end_idx) {
+                std::size_t bits_inserted = 0;
+                std::size_t reg_insert_idx = to % 64;
+                std::size_t reg_insert_len = std::min(64 - to, length);
+
+                auto insert_source = copy(insert_bits);
+                for (std::size_t i = to_idx; i < destination.size(); ++i) {
+                    auto bits_idx = bits_inserted / insert_bits.type().width();
+                    append(assembler::bfi(destination[i], insert_source[bits_idx], reg_insert_idx, reg_insert_len));
+                    reg_insert_len = std::min(std::size_t(64), length);
+                    length -= reg_insert_len;
+                    bits_inserted += reg_insert_len;
+                    if (bits_inserted / insert_bits.type().width() == bits_idx) {
+                        logical_right_shift(insert_source[bits_idx], insert_source[bits_idx], reg_insert_len);
+                    }
+
+                    reg_insert_idx = 0;
+                }
+                return;
+            }
+
+            // Insertion does not span multiple registers
+            [[unlikely]]
+            if (insert_bits.size() != 1)
+                throw backend_exception("Cannot insert type {} into [{}:{})",
+                                        insert_bits.type(), to, to + length);
+
+            append(assembler::bfi(destination[to_idx], insert_bits, to % 64, length));
+            return;
+        }
 
         [[likely]]
         if (destination.size() == 1) {
-            // auto out = builder_.cast(insertion_bits, dest[0].type());
             append(assembler::bfi(destination, insert_bits, to, length));
             return;
         }

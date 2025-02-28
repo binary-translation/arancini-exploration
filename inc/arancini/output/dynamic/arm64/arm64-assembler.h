@@ -346,6 +346,14 @@ public:
         if (!fits)
             throw backend_exception("Invalid width immediate {} for BFI static instruction must fit into [1,{}] for lsb {}",
                                     width, element_size - lsb.value(), lsb);
+
+        [[unlikely]]
+        if (!(is_integer_scalar_of_width(dst.type(), 32) && is_integer_scalar_of_width(src1.type(), 32)) &&
+           (!(is_integer_scalar_of_width(dst.type(), 64) && is_integer_scalar_of_width(src1.type(), 64))))
+        {
+           throw backend_exception("Invalid types for bfi {}, {}, {}, {}", dst.type(), src1.type(), lsb, width);
+        }
+
         return instruction("bfi", use(def(dst)), use(src1), use(lsb), use(width));
     }
 
