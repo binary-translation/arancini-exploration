@@ -239,31 +239,50 @@ private:
 
 class cond_operand final {
 public:
-	[[nodiscard]] static cond_operand eq() { return cond_operand("eq"); }
-	[[nodiscard]] static cond_operand ne() { return cond_operand("ne"); }
-	[[nodiscard]] static cond_operand cs() { return cond_operand("cs"); }
-	[[nodiscard]] static cond_operand cc() { return cond_operand("cc"); }
-	[[nodiscard]] static cond_operand mi() { return cond_operand("mi"); }
-	[[nodiscard]] static cond_operand pl() { return cond_operand("pl"); }
-	[[nodiscard]] static cond_operand vs() { return cond_operand("vs"); }
-	[[nodiscard]] static cond_operand vc() { return cond_operand("vc"); }
-	[[nodiscard]] static cond_operand hi() { return cond_operand("hi"); }
-	[[nodiscard]] static cond_operand ls() { return cond_operand("ls"); }
-	[[nodiscard]] static cond_operand ge() { return cond_operand("ge"); }
-	[[nodiscard]] static cond_operand lt() { return cond_operand("lt"); }
-	[[nodiscard]] static cond_operand gt() { return cond_operand("gt"); }
-	[[nodiscard]] static cond_operand le() { return cond_operand("le"); }
-	[[nodiscard]] static cond_operand al() { return cond_operand("al"); }
-	[[nodiscard]] static cond_operand nv() { return cond_operand("nv"); }
+    enum class conditions {
+        eq,
+        ne,
+        cs,
+        cc,
+        mi,
+        pl,
+        vs,
+        vc,
+        hi,
+        ls,
+        ge,
+        lt,
+        gt,
+        le,
+        al,
+        nv
+    };
+
+	[[nodiscard]] static cond_operand eq() { return cond_operand(conditions::eq); }
+	[[nodiscard]] static cond_operand ne() { return cond_operand(conditions::ne); }
+	[[nodiscard]] static cond_operand cs() { return cond_operand(conditions::cs); }
+	[[nodiscard]] static cond_operand cc() { return cond_operand(conditions::cc); }
+	[[nodiscard]] static cond_operand mi() { return cond_operand(conditions::mi); }
+	[[nodiscard]] static cond_operand pl() { return cond_operand(conditions::pl); }
+	[[nodiscard]] static cond_operand vs() { return cond_operand(conditions::vs); }
+	[[nodiscard]] static cond_operand vc() { return cond_operand(conditions::vc); }
+	[[nodiscard]] static cond_operand hi() { return cond_operand(conditions::hi); }
+	[[nodiscard]] static cond_operand ls() { return cond_operand(conditions::ls); }
+	[[nodiscard]] static cond_operand ge() { return cond_operand(conditions::ge); }
+	[[nodiscard]] static cond_operand lt() { return cond_operand(conditions::lt); }
+	[[nodiscard]] static cond_operand gt() { return cond_operand(conditions::gt); }
+	[[nodiscard]] static cond_operand le() { return cond_operand(conditions::le); }
+	[[nodiscard]] static cond_operand al() { return cond_operand(conditions::al); }
+	[[nodiscard]] static cond_operand nv() { return cond_operand(conditions::nv); }
 
     [[nodiscard]]
-    const std::string& condition() const { return cond_; }
-private:
-    cond_operand(const std::string &cond):
+    conditions condition() const { return cond_; }
+
+    cond_operand(conditions cond):
         cond_(cond)
     { }
-
-    std::string cond_;
+private:
+    conditions cond_;
 };
 
 // TODO: replace indexing with enum
@@ -674,35 +693,94 @@ struct fmt::formatter<arancini::output::dynamic::arm64::immediate_operand> {
 };
 
 template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::shift_operand::shift_type> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(arancini::output::dynamic::arm64::shift_operand::shift_type type, FormatContext& ctx) const {
+        switch (type) {
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::none:
+            return fmt::format_to(ctx.out(), "");
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::lsl:
+            return fmt::format_to(ctx.out(), "LSL");
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::lsr:
+            return fmt::format_to(ctx.out(), "LSR");
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::asr:
+            return fmt::format_to(ctx.out(), "ASR");
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::ror:
+            return fmt::format_to(ctx.out(), "ROR");
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::rrx:
+            return fmt::format_to(ctx.out(), "RRX");
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::uxtb:
+            return fmt::format_to(ctx.out(), "UXTB");
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::uxth:
+            return fmt::format_to(ctx.out(), "UXTH");
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::sxtb:
+            return fmt::format_to(ctx.out(), "SXTB");
+        case arancini::output::dynamic::arm64::shift_operand::shift_type::sxth:
+            return fmt::format_to(ctx.out(), "SXTH");
+        default:
+            throw arancini::output::dynamic::arm64::backend_exception("Unknown shift type");
+        }
+    }
+};
+
+template <>
 struct fmt::formatter<arancini::output::dynamic::arm64::shift_operand> {
     template <typename FormatContext>
     constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
 
     template <typename FormatContext>
     auto format(arancini::output::dynamic::arm64::shift_operand shift, FormatContext& ctx) const {
-        switch (shift.modifier()) {
-        case arancini::output::dynamic::arm64::shift_operand::shift_type::none:
+        if (shift.modifier() == arancini::output::dynamic::arm64::shift_operand::shift_type::none)
             return fmt::format_to(ctx.out(), "{}", shift.amount());
-        case arancini::output::dynamic::arm64::shift_operand::shift_type::lsl:
-            return fmt::format_to(ctx.out(), "LSL {}", shift.amount());
-        case arancini::output::dynamic::arm64::shift_operand::shift_type::lsr:
-            return fmt::format_to(ctx.out(), "LSR {}", shift.amount());
-        case arancini::output::dynamic::arm64::shift_operand::shift_type::asr:
-            return fmt::format_to(ctx.out(), "ASR {}", shift.amount());
-        case arancini::output::dynamic::arm64::shift_operand::shift_type::ror:
-            return fmt::format_to(ctx.out(), "ROR {}", shift.amount());
-        case arancini::output::dynamic::arm64::shift_operand::shift_type::rrx:
-            return fmt::format_to(ctx.out(), "RRX {}", shift.amount());
-        case arancini::output::dynamic::arm64::shift_operand::shift_type::uxtb:
-            return fmt::format_to(ctx.out(), "UXTB {}", shift.amount());
-        case arancini::output::dynamic::arm64::shift_operand::shift_type::uxth:
-            return fmt::format_to(ctx.out(), "UXTH {}", shift.amount());
-        case arancini::output::dynamic::arm64::shift_operand::shift_type::sxtb:
-            return fmt::format_to(ctx.out(), "SXTB {}", shift.amount());
-        case arancini::output::dynamic::arm64::shift_operand::shift_type::sxth:
-            return fmt::format_to(ctx.out(), "SXTH {}", shift.amount());
+        return fmt::format_to(ctx.out(), "{} {}", shift.modifier(), shift.amount());
+    }
+};
+
+template <>
+struct fmt::formatter<arancini::output::dynamic::arm64::cond_operand::conditions> {
+    template <typename FormatContext>
+    constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(arancini::output::dynamic::arm64::cond_operand::conditions cond, FormatContext& ctx) const {
+        switch (cond) {
+        case arancini::output::dynamic::arm64::cond_operand::conditions::eq:
+            return fmt::format_to(ctx.out(), "eq");
+        case arancini::output::dynamic::arm64::cond_operand::conditions::ne:
+            return fmt::format_to(ctx.out(), "ne");
+        case arancini::output::dynamic::arm64::cond_operand::conditions::cs:
+            return fmt::format_to(ctx.out(), "cs");
+        case arancini::output::dynamic::arm64::cond_operand::conditions::cc:
+            return fmt::format_to(ctx.out(), "cc");
+        case arancini::output::dynamic::arm64::cond_operand::conditions::mi:
+            return fmt::format_to(ctx.out(), "mi");
+        case arancini::output::dynamic::arm64::cond_operand::conditions::pl:
+            return fmt::format_to(ctx.out(), "pl");
+        case arancini::output::dynamic::arm64::cond_operand::conditions::vs:
+            return fmt::format_to(ctx.out(), "vs");
+        case arancini::output::dynamic::arm64::cond_operand::conditions::vc:
+            return fmt::format_to(ctx.out(), "vc");
+        case arancini::output::dynamic::arm64::cond_operand::conditions::hi:
+            return fmt::format_to(ctx.out(), "hi");
+        case arancini::output::dynamic::arm64::cond_operand::conditions::ls:
+            return fmt::format_to(ctx.out(), "ls");
+        case arancini::output::dynamic::arm64::cond_operand::conditions::ge:
+            return fmt::format_to(ctx.out(), "ge");
+        case arancini::output::dynamic::arm64::cond_operand::conditions::lt:
+            return fmt::format_to(ctx.out(), "lt");
+        case arancini::output::dynamic::arm64::cond_operand::conditions::gt:
+            return fmt::format_to(ctx.out(), "gt");
+        case arancini::output::dynamic::arm64::cond_operand::conditions::le:
+            return fmt::format_to(ctx.out(), "le");
+        case arancini::output::dynamic::arm64::cond_operand::conditions::al:
+            return fmt::format_to(ctx.out(), "al");
+        case arancini::output::dynamic::arm64::cond_operand::conditions::nv:
+            return fmt::format_to(ctx.out(), "nv");
         default:
-            throw arancini::output::dynamic::arm64::backend_exception("Unknown shift operand type");
+            throw arancini::output::dynamic::arm64::backend_exception("Unknown condition type");
         }
     }
 };
@@ -713,8 +791,8 @@ struct fmt::formatter<arancini::output::dynamic::arm64::cond_operand> {
     constexpr auto parse(FormatContext& ctx) { return ctx.begin(); }
 
     template <typename FormatContext>
-    auto format(arancini::output::dynamic::arm64::cond_operand shift, FormatContext& ctx) const {
-        return fmt::format_to(ctx.out(), "{}", shift.condition());
+    auto format(arancini::output::dynamic::arm64::cond_operand cond, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", cond.condition());
     }
 };
 

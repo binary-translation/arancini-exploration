@@ -608,23 +608,20 @@ public:
         if (destination.size() != source.size())
             throw backend_exception("Cannot move type {} to {}", destination.type(), source.type());
 
-        if (is_bignum(destination.type())) {
-            throw backend_exception("Cannot move between bignums");
-        }
-
         if (destination.type().is_floating_point()) {
-            append(assembler::fmov(destination, source));
+            for (std::size_t i = 0; i < destination.size(); ++i) {
+                append(assembler::fmov(destination[i], source[i]));
+            }
+            return;
         }
 
-        append(assembler::mov(destination, source));
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            append(assembler::mov(destination[i], source[i]));
+        }
     }
 
     void move_to_variable(const variable &destination, const variable &source) {
-        if (destination.type().is_vector()) {
-            throw backend_exception("Cannot move between vectors");
-        }
-
-        if (source.type().is_vector()) {
+        if (destination.type().is_vector() || source.type().is_vector()) {
             throw backend_exception("Cannot move between vectors");
         }
 
@@ -643,11 +640,6 @@ public:
 
         // Check the actual size of the scalar
         std::size_t actual_size = std::min(get_min_bitsize(immediate), destination.type().width());
-
-        // TODO: why do we attempt to write too large immediates?
-        // if (actual_size > destination.type().width())
-        //     throw backend_exception("Truncating large immediate value {} by storing in type {}",
-        //                             imm, destination.type());
 
         // Can be moved in one go
         // TODO: implement optimization to support more immediates via shifts
@@ -768,34 +760,41 @@ public:
 
 
     void zero_extend(const scalar& destination, const scalar& source) {
-        if (source.type().element_width() <= 8) {
+        if (destination.type().width() == source.type().width()) {
+            move_to_variable(destination, source);
+            return;
+        }
+
+        // Sanity check
+        // TODO: more missing sanity checks
+        [[unlikely]]
+        if (destination.type().width() < source.type().width())
+            throw backend_exception("Cannot zero-extend {} to smaller size {}",
+                                    destination.type(), source.type());
+
+        std::size_t current_extension_bytes = 0;
+
+        insert_comment("zero-extend from {} to {}", source.type(), destination.type());
+        if (source.type().width() < 8) {
+            if (destination.type().width() >= 32) {
+                append(assembler::uxtb(destination[0], destination[0]).add_comment("sign-extend"));
+            } else {
+                backend_exception("Not implemented");
+            }
+        } else if (source.type().width() == 8) {
             append(assembler::uxtb(destination, source));
-            return;
-        }
-
-        if (source.type().element_width() <= 16) {
+        } else if (source.type().width() <= 16) {
             append(assembler::uxth(destination, source));
-            return;
-        }
-
-        if (source.type().element_width() <= 32) {
+        } else if (source.type().width() <= 32) {
             append(assembler::uxtw(destination, source));
-            return;
         }
 
-        if (source.type().element_width() <= 256) {
-            for (std::size_t i = 0; i < source.size(); ++i) {
-                move_to_variable(destination, source);
-            }
-
-            // Set upper registers to zero
-            if (destination.size() > 1) {
-                insert_comment("Set upper registers to zero");
-                for (std::size_t i = source.size(); i < destination.size(); ++i)
-                    move_to_variable(destination[i], 0);
-            }
+        current_extension_bytes += destination[0].type().width();
+        if (current_extension_bytes >= destination.type().width())
             return;
-        }
+
+        for (std::size_t i = 1; i < destination.size(); ++i)
+            move_to_variable(destination[i], 0);
     }
 
     void sign_extend(const scalar& destination, const scalar& source) {
@@ -806,6 +805,7 @@ public:
 
         // Sanity check
         // TODO: more missing sanity checks
+        [[unlikely]]
         if (destination.type().width() < source.type().width())
             throw backend_exception("Cannot sign-extend {} to smaller size {}",
                                     destination.type(), source.type());
@@ -896,6 +896,7 @@ public:
     }
 
     void convert(const scalar& destination, const scalar& source, ir::fp_convert_type trunc_type) {
+        throw backend_exception("Not implemented");
         constexpr auto uint_type = ir::value_type_class::unsigned_integer;
 
         // convert integer to float
@@ -993,6 +994,10 @@ public:
     }
 
     instruction& comparison(const scalar& lhs, const scalar& rhs) {
+        if (is_bignum(lhs.type()) || is_bignum(rhs.type()))
+            throw backend_exception("Cannot compare {} with {}",
+                                    lhs.type(), rhs.type());
+
         if (lhs.type().is_floating_point()) {
             return append(assembler::fcmp(lhs, rhs));
         }
@@ -1001,6 +1006,11 @@ public:
     }
 
     instruction& comparison(const scalar& lhs, const immediate_operand& rhs) {
+        [[unlikely]]
+        if (is_bignum(lhs.type()) || is_bignum(rhs.type()))
+            throw backend_exception("Cannot compare {} with immediate {}",
+                                    lhs.type(), rhs);
+
         [[unlikely]]
         if (lhs.type().is_floating_point())
             backend_exception("Cannot compare floating-point register with immediates");
