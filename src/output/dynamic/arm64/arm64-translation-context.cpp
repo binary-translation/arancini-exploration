@@ -63,6 +63,7 @@ void arm64_translation_context::end_instruction() {
         for (const auto* node : nodes_)
             materialise(node);
 
+        builder_.insert_comment("=====================================================");
         // builder_.allocate();
         // builder_.emit(writer());
         // builder_.clear();

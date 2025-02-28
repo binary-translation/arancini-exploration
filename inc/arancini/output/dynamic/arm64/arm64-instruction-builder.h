@@ -427,7 +427,7 @@ public:
         const auto& rhs_extended = vreg_alloc_.allocate_scalar(destination.type());
         sign_extend(lhs_extended, lhs);
         sign_extend(rhs_extended, rhs);
-        append(assembler::orr(destination, lhs, rhs));
+        append(assembler::orr(destination, lhs_extended, rhs_extended));
 
         if (destination.type().width() < 64)
             append(assembler::ands(register_operand(register_operand::wzr_sp),
@@ -459,33 +459,18 @@ public:
         logical_or(destination.as_scalar(), lhs.as_scalar(), rhs.as_scalar());
     }
 
-    void ands(const scalar &destination,
-              const scalar &lhs,
-              const scalar &rhs)
-    {
+    void ands(const scalar &destination, const scalar &lhs, const scalar &rhs) {
         [[unlikely]]
         if (is_bignum(destination.type()))
             throw backend_exception("Cannot perform ands {}, {}, {}",
                                     destination.type(), lhs.type(), rhs.type());
 
         for (std::size_t i = 0; i < destination.size(); ++i) {
-            switch (destination[0].type().element_width()) {
-            case 1:
-                sign_extend_to_byte(lhs);
-                sign_extend_to_byte(rhs);
-            case 8:
-            case 16:
-                extend_register(lhs, destination[0].type());
-                extend_register(rhs, destination[0].type());
-            case 32:
-                append(assembler::ands(destination, lhs, rhs));
-                break;
-            case 64:
-                append(assembler::ands(destination, lhs, rhs));
-                break;
-            default:
-                throw backend_exception("Unsupported ORR operation");
-            }
+            auto lhs_extended = vreg_alloc_.allocate_scalar(destination[i].type());
+            auto rhs_extended = vreg_alloc_.allocate_scalar(destination[i].type());
+            sign_extend(lhs_extended, lhs[i]);
+            sign_extend(rhs_extended, rhs[i]);
+            append(assembler::ands(destination[i], lhs_extended, rhs_extended));
         }
 
         set_zero_flag();
@@ -623,12 +608,12 @@ public:
         if (destination.size() != source.size())
             throw backend_exception("Cannot move type {} to {}", destination.type(), source.type());
 
-        if (destination.type().is_floating_point()) {
-            append(assembler::fmov(destination, source));
-        }
-
         if (is_bignum(destination.type())) {
             throw backend_exception("Cannot move between bignums");
+        }
+
+        if (destination.type().is_floating_point()) {
+            append(assembler::fmov(destination, source));
         }
 
         append(assembler::mov(destination, source));
@@ -717,6 +702,8 @@ public:
     }
 
     scalar cast(const scalar &src, ir::value_type type) {
+        throw backend_exception("Not working!");
+
         insert_comment("Internal cast from {} to {}", src.type(), type);
 
         if (src.type().type_class() == ir::value_type_class::floating_point &&
@@ -747,23 +734,9 @@ public:
         if (type.element_width() > 64)
             type = ir::value_type::u64();
 
-        auto dest = vreg_alloc_.allocate(type).as_scalar();
-        switch (src.type().element_width()) {
-        case 1:
-            sign_extend_to_byte(src, 1);
-        case 8:
-            append(assembler::sxtb(dest, src));
-            break;
-        case 16:
-            append(assembler::sxth(dest, src));
-            break;
-        case 32:
-            append(assembler::sxtw(dest, src));
-            break;
-        default:
-            return src;
-        }
-        return dest;
+        auto destination = vreg_alloc_.allocate(type).as_scalar();
+        sign_extend(destination, src);
+        return destination;
     }
 
     shift_operand extend_register(const register_operand& reg, arancini::ir::value_type type) {
@@ -825,18 +798,11 @@ public:
         }
     }
 
-    // TODO: this is wrong
-    // TODO: merge into wider sign_extend logic
-    void sign_extend_to_byte(const register_operand& reg, std::uint8_t from_idx = 1) {
-        // append(assembler::lsl(reg, reg, 8 - idx))
-        //       .add_comment("shift left LSB to set sign bit of byte");
-        // append(assembler::asr(reg, reg, 8 - idx))
-        //       .add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
-    }
-
     void sign_extend(const scalar& destination, const scalar& source) {
-        if (destination.type().width() == source.type().width())
+        if (destination.type().width() == source.type().width()) {
+            move_to_variable(destination, source);
             return;
+        }
 
         // Sanity check
         // TODO: more missing sanity checks
@@ -861,7 +827,7 @@ public:
             } else {
                 backend_exception("Not implemented");
             }
-        } else if (source.type().width() <= 8) {
+        } else if (source.type().width() == 8) {
             append(assembler::sxtb(destination, source));
         } else if (source.type().width() <= 16) {
             append(assembler::sxth(destination, source));
@@ -870,7 +836,6 @@ public:
         }
 
         current_extension_bytes += destination[0].type().width();
-
         if (current_extension_bytes >= destination.type().width())
             return;
 
@@ -886,6 +851,12 @@ public:
         // A simple mov is sufficient (eliminated anyway by the register
         // allocator)
         insert_comment("Bitcast from {} to {}", source.type(), destination.type());
+        // TODO: condition should be changed
+        if (destination.size() == 1 && source.size() == 1) {
+            move_to_variable(destination, source);
+            return;
+        }
+        throw backend_exception("Cannot handle bitcast");
 
         if (destination.type().is_vector() || source.type().is_vector()) {
             if (destination.type().element_width() > source.type().element_width()) {
@@ -906,7 +877,8 @@ public:
                 for (std::size_t i = 0; i < destination.size(); ++i) {
                     const auto& src_vreg = vreg_alloc_.allocate(destination[i].type());
                     move_to_variable(src_vreg.as_scalar(), source[src_idx]);
-                    append(assembler::lsl(src_vreg.as_scalar(), src_vreg.as_scalar(), src_pos % source.type().element_width()));
+                    append(assembler::lsl(src_vreg.as_scalar(), src_vreg.as_scalar(),
+                                          src_pos % source.type().element_width()));
                     move_to_variable(destination[i], src_vreg.as_scalar());
 
                     src_pos += source[i].type().width();
@@ -1246,10 +1218,6 @@ public:
         }
         logger.debug("Label {} already inserted\nCurrent labels:\n{}",
                      label, fmt::format("{}", fmt::join(labels_.begin(), labels_.end(), "\n")));
-    }
-
-    instruction& cfinv() {
-        return append(assembler::cfinv());
     }
 
     enum class atomic_types : std::uint8_t {
