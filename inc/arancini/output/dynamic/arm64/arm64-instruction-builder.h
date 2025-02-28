@@ -949,48 +949,36 @@ public:
         return append(assembler::b(target).as_branch());
     }
 
-    // TODO
     instruction& conditional_branch(const label_operand& target, const cond_operand& condition) {
-        label_refcount_[target.name()]++;
-        return append(assembler::b(target).as_branch());
+        if (condition.condition() == cond_operand::conditions::eq) {
+            label_refcount_[target.name()]++;
+            return append(assembler::beq(target).as_branch());
+        }
+
+        if (condition.condition() == cond_operand::conditions::ne) {
+            label_refcount_[target.name()]++;
+            return append(assembler::bne(target).as_branch());
+        }
+
+        throw backend_exception("Cannot branch on condition {}", condition);
     }
 
-    instruction& b(const label_operand &dest) {
-        label_refcount_[dest.name()]++;
-        return append(assembler::b(dest).as_branch());
-    }
+    instruction& zero_compare_and_branch(const register_operand& source,
+                                         const label_operand& target,
+                                         const cond_operand& condition)
+    {
+        if (condition.condition() == cond_operand::conditions::eq) {
+            label_refcount_[target.name()]++;
+            return append(assembler::cbz(source, target));
+        }
 
-    instruction& beq(const label_operand &dest) {
-        label_refcount_[dest.name()]++;
-        return append(assembler::beq(dest).as_branch()
-                      .implicitly_reads({register_operand(register_operand::nzcv)}));
-    }
+        if (condition.condition() == cond_operand::conditions::ne) {
+            label_refcount_[target.name()]++;
+            return append(assembler::cbnz(source, target));
+        }
 
-    instruction& bl(const label_operand &dest) {
-        label_refcount_[dest.name()]++;
-        return append(assembler::bl(dest));
-    }
-
-    instruction& bne(const label_operand &dest) {
-        label_refcount_[dest.name()]++;
-        return append(assembler::bne(dest));
-    }
-
-    // Check reg == 0 and jump if true
-    // Otherwise, continue to the next instruction
-    // Does not affect condition flags (can be used to compare-and-branch with 1 instruction)
-    instruction& cbz(const scalar &reg, const label_operand &label) {
-        label_refcount_[label.name()]++;
-        return append(assembler::cbz(reg, label));
-    }
-
-    // TODO: check if this allocated correctly
-    // Check reg == 0 and jump if false
-    // Otherwise, continue to the next instruction
-    // Does not affect condition flags (can be used to compare-and-branch with 1 instruction)
-    instruction& cbnz(const scalar &rt, const label_operand &dest) {
-        label_refcount_[dest.name()]++;
-        return append(assembler::cbnz(rt, dest));
+        throw backend_exception("Cannot zero-compare-and-branch on condition {}",
+                                condition);
     }
 
     instruction& comparison(const scalar& lhs, const scalar& rhs) {
@@ -1306,8 +1294,9 @@ public:
         body();
 
         atomic_store(status.as_scalar(), data, mem).add_comment("store if not failure");
-        cbz(status.as_scalar(), success_label).add_comment("== 0 represents success storing");
-        b(loop_label).add_comment("loop until failure or success");
+        zero_compare_and_branch(status.as_scalar(), success_label, cond_operand::eq())
+                                .add_comment("== 0 represents success storing");
+        branch(loop_label).add_comment("loop until failure or success");
         label(success_label);
         return;
     }

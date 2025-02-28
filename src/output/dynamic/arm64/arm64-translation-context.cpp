@@ -297,7 +297,7 @@ void arm64_translation_context::materialise_br(const br_node &n) {
     auto label_name = fmt::format("{}_{}", n.target()->name(), instr_cnt_);
     logger.debug("Generating branch to label {}\n", label_name);
     auto label = label_operand(label_name);
-    builder_.b(label);
+    builder_.branch(label);
 }
 
 void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
@@ -306,7 +306,7 @@ void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
     auto label_name = fmt::format("{}_{}", n.target()->name(), instr_cnt_);
     logger.debug("Generating conditional branch to label {}\n", label_name);
     auto label = label_operand(label_name);
-    builder_.cbnz(condition, label);
+    builder_.zero_compare_and_branch(condition.as_scalar(), label, cond_operand::ne());
 }
 
 void arm64_translation_context::materialise_constant(const constant_node &n) {
