@@ -563,6 +563,7 @@ public:
             throw backend_exception("Cannot complement {} to {}",
                                     destination.type(), source.type());
 
+        insert_comment("Computing complement of {} to {}", destination.type(), source.type());
         for (std::size_t i = 0; i < destination.size(); ++i) {
             append(assembler::mvn(destination, source));
         }
@@ -574,6 +575,7 @@ public:
             throw backend_exception("Cannot complement {} to {}",
                                     destination.type(), source.type());
 
+        insert_comment("Computing complement of {} to {}", destination.type(), source.type());
         if (destination.vector_backed() && source.vector_backed()) {
             append(assembler::mvn(destination, source));
             return;
@@ -596,9 +598,10 @@ public:
     void negate(const scalar &destination, const scalar &source) {
         [[unlikely]]
         if (destination.size() != source.size())
-            throw backend_exception("Cannot complement {} to {}",
+            throw backend_exception("Cannot negate {} to {}",
                                     destination.type(), source.type());
 
+        insert_comment("Computing negate of {} to {}", destination.type(), source.type());
         for (std::size_t i = 0; i < destination.size(); ++i) {
             append(assembler::neg(destination, source));
         }
@@ -607,9 +610,10 @@ public:
     void negate(const vector &destination, const vector &source) {
         [[unlikely]]
         if (destination.size() != source.size())
-            throw backend_exception("Cannot complement {} to {}",
+            throw backend_exception("Cannot negate {} to {}",
                                     destination.type(), source.type());
 
+        insert_comment("Computing negate of {} to {}", destination.type(), source.type());
         if (destination.vector_backed() && source.vector_backed()) {
             append(assembler::neg(destination, source));
         }
@@ -1265,6 +1269,16 @@ public:
 
     void bit_extract(const scalar& destination, const scalar& source,
                      std::size_t from, std::size_t length) {
+
+        [[unlikely]]
+        if (destination.type() != source.type())
+            throw backend_exception("Cannot extract bits from source {} incompatible with destination {}",
+                                    source.type(), destination.type());
+
+        if (is_bignum(destination.type())) {
+            throw backend_exception("Not implemented");
+        }
+
         [[likely]]
         if (destination.size() == 1) {
             // auto out = builder_.cast(insertion_bits, dest[0].type());
