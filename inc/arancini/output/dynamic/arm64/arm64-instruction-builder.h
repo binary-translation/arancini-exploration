@@ -1289,8 +1289,9 @@ public:
 		return;
     }
 
-    instruction& ret() {
-        return append(assembler::ret());
+    void ret(std::int64_t return_value) {
+        append(assembler::mov(dbt_retval_register_, return_value));
+        append(assembler::ret());
     }
 
     instruction& brk(const immediate_operand &imm) {
@@ -1797,6 +1798,14 @@ public:
         return instructions_.back();
     }
 
+    const register_operand& context_block() const {
+        return context_block_;
+    }
+
+    const register_operand& return_value() const {
+        return dbt_retval_register_;
+    }
+
     void clear() {
         instructions_.clear();
         vreg_alloc_.reset();
@@ -1810,6 +1819,9 @@ private:
     virtual_register_allocator vreg_alloc_;
     std::unordered_map<std::string, std::size_t> label_refcount_;
     std::unordered_set<std::string> labels_;
+
+    register_operand context_block_{register_operand::x29};
+    register_operand dbt_retval_register_{register_operand::x0};
 
     static flag_map_type flag_map_;
 

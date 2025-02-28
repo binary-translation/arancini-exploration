@@ -33,7 +33,7 @@ memory_operand arm64_translation_context::guest_memory(int regoff, memory_operan
         builder_.add(base, base, context_block_reg);
         return memory_operand(base.as_scalar(), 0, mode);
     } else {
-        return memory_operand(context_block_reg, regoff, mode);
+        return memory_operand(builder_.context_block(), regoff, mode);
     }
 }
 
@@ -83,12 +83,8 @@ void arm64_translation_context::end_block() {
     try {
         builder_.allocate();
 
-        // These instructions can be inserted after register allocation, since they do not depend on
-        // virtual registers and only def()
-        builder_.move_to_variable(dbt_retval_register, ret_);
-
         // Return value in x0 = 0;
-        builder_.ret();
+        builder_.ret(ret_);
 
         builder_.emit(writer());
 
