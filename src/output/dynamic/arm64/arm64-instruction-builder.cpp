@@ -99,7 +99,13 @@ void instruction_builder::emit(machine_code_writer &writer) {
         }
     }
 
-    auto instruction_stream = fmt::format("{}", fmt::join(instruction_begin(), instruction_end(), "\n"));
+    std::string instruction_stream;
+    instruction_stream.reserve(instructions_.size());
+    for (const auto& instruction : instructions_) {
+        if (instruction.is_dead()) continue;
+        if (instruction.opcode().find_first_of("//") == 0) continue;
+        fmt::format_to(std::back_inserter(instruction_stream), "{}\n", instruction);
+    }
 
     std::size_t size;
     std::uint8_t* encode;

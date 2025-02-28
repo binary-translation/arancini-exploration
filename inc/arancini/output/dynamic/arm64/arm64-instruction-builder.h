@@ -941,7 +941,7 @@ public:
     }
 
     void truncate(const variable& destination, const variable& source) {
-
+        throw backend_exception("Cannot handle bitcast");
     }
 
     instruction& branch(const label_operand& target) {
@@ -1008,32 +1008,73 @@ public:
     }
 
     void left_shift(const scalar& destination, const scalar& input, const scalar& amount) {
+        [[unlikely]]
+        if (is_bignum(destination.type())) {
+            throw backend_exception("Cannot perform logical left shift with big scalar {}",
+                                    destination.type());
+        }
+
         append(assembler::lsl(destination, input, amount));
     }
 
     void left_shift(const scalar& destination, const scalar& input, const immediate_operand& amount) {
-        append(assembler::lsl(destination, input, amount));
+        [[unlikely]]
+        if (is_bignum(destination.type())) {
+            throw backend_exception("Cannot perform logical left shift with big scalar {}",
+                                    destination.type());
+        }
+
+        auto element_size = destination.type().element_width() <= 32 ? 32 : 64;
+        std::size_t bitsize = element_size == 32 ? 5 : 6;
+        append(assembler::lsl(destination, input,
+                              move_immediate(amount.value(), ir::value_type::u(bitsize))));
     }
 
     void logical_right_shift(const scalar& destination, const scalar& input, const scalar& amount) {
-        append(assembler::lsr(destination, input, amount));
+        [[unlikely]]
+        if (is_bignum(destination.type())) {
+            throw backend_exception("Cannot perform logical right shift with big scalar {}",
+                                    destination.type());
+        }
 
-        // {
-        //     auto amount_imm = reinterpret_cast<const constant_node*>(n.amount().owner())->const_val_i();
-        //     if (amount_imm < 64) {
-        //         builder_.extr(dest_vreg[0], input[1], input[0], amount_imm);
-        //         builder_.lsr(dest_vreg[1], input[1], amount);
-        //     } else if (amount_imm == 64) {
-        //         builder_.mov(dest_vreg[0], input[1]);
-        //         builder_.mov(dest_vreg[1], 0);
-        //     } else {
-        //         throw backend_exception("Unsupported logical right-shift operation with amount {}", amount_imm);
-        //     }
-        // }
+        append(assembler::lsr(destination, input, amount));
+    }
+
+    void logical_right_shift(const scalar& destination, const scalar& input, const immediate_operand& amount) {
+        [[unlikely]]
+        if (is_bignum(destination.type())) {
+            throw backend_exception("Cannot perform logical right shift with big scalar {}",
+                                    destination.type());
+        }
+
+        auto element_size = destination.type().element_width() <= 32 ? 32 : 64;
+        std::size_t bitsize = element_size == 32 ? 5 : 6;
+        append(assembler::lsr(destination, input,
+                              move_immediate(amount.value(), ir::value_type::u(bitsize))));
     }
 
     void arithmetic_right_shift(const scalar& destination, const scalar& input, const scalar& amount) {
+        [[unlikely]]
+        if (is_bignum(destination.type())) {
+            throw backend_exception("Cannot perform arithmetic right shift with big scalar {}",
+                                    destination.type());
+        }
+
         append(assembler::asr(destination, input, amount));
+    }
+
+    void arithmetic_right_shift(const scalar& destination, const scalar& input, const immediate_operand& amount) {
+        [[unlikely]]
+        if (is_bignum(destination.type())) {
+            throw backend_exception("Cannot perform arithmetic right shift with big scalar {}",
+                                    destination.type());
+        }
+
+
+        auto element_size = destination.type().element_width() <= 32 ? 32 : 64;
+        std::size_t bitsize = element_size == 32 ? 5 : 6;
+        append(assembler::asr(destination, input,
+                              move_immediate(amount.value(), ir::value_type::u(bitsize))));
     }
 
     instruction& conditional_select(const scalar &destination,
