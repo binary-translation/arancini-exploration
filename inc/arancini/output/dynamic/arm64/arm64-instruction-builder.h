@@ -565,7 +565,8 @@ public:
 
         insert_comment("Computing complement of {} to {}", destination.type(), source.type());
         for (std::size_t i = 0; i < destination.size(); ++i) {
-            append(assembler::mvn(destination, source));
+            append(assembler::mvn(destination[i], source[i]));
+            bound_to_type(destination[i], destination[i].type());
         }
     }
 
@@ -583,6 +584,7 @@ public:
 
         for (std::size_t i = 0; i < destination.size(); ++i) {
             append(assembler::mvn(destination[i], source[i]));
+            bound_to_type(destination[i], destination[i].type());
         }
     }
 
@@ -1952,6 +1954,22 @@ private:
     [[nodiscard]]
     inline std::size_t get_min_bitsize(unsigned long long imm) {
         return value_types::base_type.element_width() - __builtin_clzll(imm|1);
+    }
+
+    void bound_to_type(const scalar& var, ir::value_type type) {
+        if (is_bignum(var.type()) || type.is_vector())
+            throw backend_exception("Cannot bound big scalar of type {} to type {}", var.type(), type);
+
+        auto mask_immediate = immediate_operand(1 << (var.type().width() - 1), ir::value_type::u(12));
+        auto mask = move_immediate(mask_immediate, var.type());
+        append(assembler::and_(var, var, mask));
+    }
+
+    void bound_to_type(const variable& var, ir::value_type type) {
+        if (var.type().is_vector())
+            throw backend_exception("Cannot bound to type vectors");
+
+        bound_to_type(var.as_scalar(), type);
     }
 };
 
