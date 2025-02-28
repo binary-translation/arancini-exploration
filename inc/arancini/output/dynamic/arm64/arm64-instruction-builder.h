@@ -1187,6 +1187,8 @@ public:
             append(assembler::bfi(destination, insert_bits, to, length));
             return;
         }
+
+        throw backend_exception("Not implemented");
     }
 
     void bit_insert(const variable& destination, const variable& source,
@@ -1208,6 +1210,7 @@ public:
             append(assembler::ubfx(destination, source, from, length));
             return;
         }
+        throw backend_exception("Not implemented");
     }
 
     void bit_extract(const variable& destination, const variable& source,
@@ -1224,6 +1227,7 @@ public:
                   const scalar& multiplicand,
                   const scalar& multiplier)
     {
+        throw backend_exception("Not implemented");
         [[unlikely]]
         if (!destination.size() || destination.size() > 2 ||
             destination[0].type().is_floating_point())
@@ -1311,6 +1315,7 @@ public:
                 const scalar& dividend,
                 const scalar& divider)
     {
+        throw backend_exception("Not implemented");
         if (destination.size() > 1)
             throw backend_exception("Division not supported for types larger than 128-bits");
 
@@ -1339,8 +1344,8 @@ public:
         append(assembler::ret());
     }
 
-    instruction& brk(const immediate_operand &imm) {
-        return append(assembler::brk(imm));
+    instruction& insert_breakpoint(const immediate_operand &index) {
+        return append(assembler::brk(index));
     }
 
     void label(const label_operand &label) {
@@ -1359,32 +1364,28 @@ public:
         release,
     };
 
-    instruction& atomic_load(const register_operand& dst, const memory_operand& mem,
+    instruction& atomic_load(const scalar& destination, const memory_operand& mem,
                              atomic_types type = atomic_types::exclusive) {
         if (type == atomic_types::exclusive) {
-            switch (dst.type().element_width()) {
-            case 8:
-                return append(assembler::ldxrb(dst, mem));
-            case 16:
-                return append(assembler::ldxrh(dst, mem));
-            case 32:
-            case 64:
-                return append(assembler::ldxr(dst, mem));
-            default:
-                throw backend_exception("Cannot load atomically type {}", dst.type());
+            if (destination.type().width() <= 8) {
+                return append(assembler::ldxrb(destination, mem));
+            } else if (destination.type().width() <= 16) {
+                return append(assembler::ldxrh(destination, mem));
             }
+
+            return append(assembler::ldxr(destination, mem));
         }
 
-        switch (dst.type().element_width()) {
+        switch (destination.type().element_width()) {
         case 8:
-            return append(assembler::ldaxrb(dst, mem));
+            return append(assembler::ldaxrb(destination, mem));
         case 16:
-            return append(assembler::ldaxrh(dst, mem));
+            return append(assembler::ldaxrh(destination, mem));
         case 32:
         case 64:
-            return append(assembler::ldaxr(dst, mem));
+            return append(assembler::ldaxr(destination, mem));
         default:
-            throw backend_exception("Cannot load atomically type {}", dst.type());
+            throw backend_exception("Cannot load atomically type {}", destination.type());
         }
     }
 

@@ -593,37 +593,141 @@ public:
         return instruction("cas", use(dst), use(src), use(mem_addr)).as_keep();
     }
 
-// ATOMICs
-    // LDXR{size} {Rt}, [Rn]
-#define LD_A_XR(name, size) \
-    [[nodiscard]] \
-    static instruction name##size(const register_operand &dst, const memory_operand &mem) { \
-        return instruction(#name#size, def(dst), use(mem)); \
+    [[nodiscard]]
+    static instruction ldxrb(const register_operand &destination, const memory_operand &mem) {
+        [[unlikely]]
+        if (!is_integer_scalar_of_width(destination.type(), 8))
+            throw backend_exception("Cannot load atomic byte with type {}", destination.type());
+        return instruction("ldxrb", def(destination), use(mem));
     }
 
-#define ST_A_XR(name, size) \
-    [[nodiscard]] \
-    static instruction name##size(const register_operand &status, const register_operand &rt, const memory_operand &mem) { \
-        return instruction(#name#size, def(status), use(rt), use(mem)).as_keep(); \
+    [[nodiscard]]
+    static instruction ldxrh(const register_operand &destination, const memory_operand &mem) {
+        [[unlikely]]
+        if (!is_integer_scalar_of_width(destination.type(), 16))
+            throw backend_exception("Cannot load atomic halfword with type {}", destination.type());
+        return instruction("ldxrh", def(destination), use(mem));
     }
 
-#define LD_A_XR_VARIANTS(name) \
-    LD_A_XR(name, b) \
-    LD_A_XR(name, h) \
-    LD_A_XR(name, w) \
-    LD_A_XR(name,)
+    [[nodiscard]]
+    static instruction ldxr(const register_operand &destination, const memory_operand &mem) {
+        [[unlikely]]
+        if (!is_integer_scalar_of_width(destination.type(), 32) &&
+            !is_integer_scalar_of_width(destination.type(), 64))
+        {
+            throw backend_exception("Cannot load atomic word/doubleword with type {}", destination.type());
+        }
 
-#define ST_A_XR_VARIANTS(name) \
-    ST_A_XR(name, b) \
-    ST_A_XR(name, h) \
-    ST_A_XR(name, w) \
-    ST_A_XR(name,)
+        return instruction("ldxr", def(destination), use(mem));
+    }
 
-    LD_A_XR_VARIANTS(ldxr);
-    LD_A_XR_VARIANTS(ldaxr);
+    [[nodiscard]]
+    static instruction ldaxrb(const register_operand &destination, const memory_operand &mem) {
+        [[unlikely]]
+        if (!is_integer_scalar_of_width(destination.type(), 8))
+            throw backend_exception("Cannot load atomic byte with type {}", destination.type());
+        return instruction("ldaxrb", def(destination), use(mem));
+    }
 
-    ST_A_XR_VARIANTS(stxr);
-    ST_A_XR_VARIANTS(stlxr);
+    [[nodiscard]]
+    static instruction ldaxrh(const register_operand &destination, const memory_operand &mem) {
+        [[unlikely]]
+        if (!is_integer_scalar_of_width(destination.type(), 16))
+            throw backend_exception("Cannot load atomic halfword with type {}", destination.type());
+        return instruction("ldaxrh", def(destination), use(mem));
+    }
+
+    [[nodiscard]]
+    static instruction ldaxr(const register_operand &destination, const memory_operand &mem) {
+        [[unlikely]]
+        if (!is_integer_scalar_of_width(destination.type(), 32) &&
+            !is_integer_scalar_of_width(destination.type(), 64))
+        {
+            throw backend_exception("Cannot load atomic word/doubleword with type {}", destination.type());
+        }
+
+        return instruction("ldaxr", def(destination), use(mem));
+    }
+
+    [[nodiscard]]
+    static instruction stxrb(const register_operand& status, const register_operand &source,
+                             const memory_operand &mem)
+    {
+        [[unlikely]]
+        if (!is_integer_scalar_of_width(source.type(), 8))
+            throw backend_exception("Cannot store atomic byte with source type {}", source.type());
+
+        [[unlikely]]
+        if (!is_integer_scalar_of_width(status.type(), 32))
+            throw backend_exception("Cannot store atomic byte with status type {}", source.type());
+
+        return instruction("stxrb", def(status), use(source), use(mem));
+    }
+
+    [[nodiscard]]
+    static instruction stxrh(const register_operand& status, const register_operand &source, const memory_operand &mem) {
+        [[unlikely]]
+        if (!is_integer_scalar_of_width(source.type(), 16))
+            throw backend_exception("Cannot store atomic halfword with type {}", source.type());
+
+        [[unlikely]]
+        if (!is_integer_scalar_of_width(status.type(), 32))
+            throw backend_exception("Cannot store atomic byte with status type {}", source.type());
+
+        return instruction("stxrh", def(status), use(source), use(mem));
+    }
+
+    [[nodiscard]]
+    static instruction stxr(const register_operand& status, const register_operand &source, const memory_operand &mem) {
+        [[unlikely]]
+        if (!is_integer_scalar_of_width(source.type(), 32) && !is_integer_scalar_of_width(source.type(), 64))
+            throw backend_exception("Cannot store atomic word/doubleword with type {}", source.type());
+
+        [[unlikely]]
+        if (!is_integer_scalar_of_width(status.type(), 32))
+            throw backend_exception("Cannot store atomic byte with status type {}", source.type());
+
+        return instruction("stxr", def(status), use(source), use(mem));
+    }
+
+    [[nodiscard]]
+    static instruction stlxrb(const register_operand& status, const register_operand &source, const memory_operand &mem) {
+        [[unlikely]]
+        if (!is_integer_scalar_of_width(source.type(), 8))
+            throw backend_exception("Cannot store atomic byte with type {}", source.type());
+
+        [[unlikely]]
+        if (!is_integer_scalar_of_width(status.type(), 32))
+            throw backend_exception("Cannot store atomic byte with status type {}", source.type());
+
+        return instruction("stlxrb", def(status), use(source), use(mem));
+    }
+
+    [[nodiscard]]
+    static instruction stlxrh(const register_operand& status, const register_operand &source, const memory_operand &mem) {
+        [[unlikely]]
+        if (!is_integer_scalar_of_width(source.type(), 16))
+            throw backend_exception("Cannot store atomic halfword with type {}", source.type());
+
+        [[unlikely]]
+        if (!is_integer_scalar_of_width(status.type(), 32))
+            throw backend_exception("Cannot store atomic byte with status type {}", source.type());
+
+        return instruction("stlxrh", def(status), use(source), use(mem));
+    }
+
+    [[nodiscard]]
+    static instruction stlxr(const register_operand& status, const register_operand &source, const memory_operand &mem) {
+        [[unlikely]]
+        if (!is_integer_scalar_of_width(source.type(), 32) && !is_integer_scalar_of_width(source.type(), 64))
+            throw backend_exception("Cannot store atomic word/doubleword with type {}", source.type());
+
+        [[unlikely]]
+        if (!is_integer_scalar_of_width(status.type(), 32))
+            throw backend_exception("Cannot store atomic byte with status type {}", source.type());
+
+        return instruction("stlxr", def(status), use(source), use(mem));
+    }
 
 #define AMO_SIZE_VARIANT(name, suffix_type, suffix_size) \
     [[nodiscard]] \
@@ -782,6 +886,13 @@ private:
     ks_engine* ks_;
 
     const bool supports_lse = false;
+
+    static bool is_integer_scalar_of_width(ir::value_type type, std::size_t width) {
+        return !type.is_vector() &&
+            (type.type_class() == ir::value_type_class::signed_integer ||
+             type.type_class() == ir::value_type_class::unsigned_integer) &&
+            type.width() == width;
+    }
 };
 
 } // namespace arancini::output::dynamic::arm64
