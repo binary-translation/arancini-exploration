@@ -217,18 +217,19 @@ public:
     // Otherwise, continue to the next instruction
     // Does not affect condition flags (can be used to compare-and-branch with 1 instruction)
     [[nodiscard]]
-    static instruction cbz(const register_operand &reg, const label_operand &label) {
-        // label_refcount_[label.name()]++;
-        return instruction("cbz", use(reg), use(label)).as_branch();
+    static instruction cbz(const register_operand &rt, const label_operand &label) {
+        if (!is_integer_scalar_of_width(rt.type(), 32) && !is_integer_scalar_of_width(rt.type(), 64))
+            throw backend_exception("Instruction cbnz required an integer 32-bit or 64-bit register");
+        return instruction("cbz", use(rt), use(label)).as_branch();
     }
 
-    // TODO: check if this allocated correctly
     // Check reg == 0 and jump if false
     // Otherwise, continue to the next instruction
     // Does not affect condition flags (can be used to compare-and-branch with 1 instruction)
     [[nodiscard]]
     static instruction cbnz(const register_operand &rt, const label_operand &dest) {
-        // label_refcount_[dest.name()]++;
+        if (!is_integer_scalar_of_width(rt.type(), 32) && !is_integer_scalar_of_width(rt.type(), 64))
+            throw backend_exception("Instruction cbnz required an integer 32-bit or 64-bit register");
         return instruction("cbnz", use(rt), use(dest)).as_branch();
     }
 
@@ -899,7 +900,7 @@ private:
         return !type.is_vector() &&
             (type.type_class() == ir::value_type_class::signed_integer ||
              type.type_class() == ir::value_type_class::unsigned_integer) &&
-            type.width() == width;
+            type.width() <= width;
     }
 };
 

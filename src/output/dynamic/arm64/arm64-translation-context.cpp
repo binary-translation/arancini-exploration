@@ -415,23 +415,14 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         sets_flags = false;
         break;
 	case binary_arith_op::cmpeq:
+        builder_.subs(destination, lhs, rhs);
+        builder_.complement(destination, destination);
+        break;
 	case binary_arith_op::cmpne:
+        builder_.subs(destination,lhs, rhs);
+        break;
 	case binary_arith_op::cmpgt:
-        // TODO: this looks wrong
-        // if (n.val().type().is_vector() || destination.size() > 1) {
-        //     throw backend_exception("Unsupported comparison between {} x {}",
-        //                             n.lhs().type(), n.rhs().type());
-        // }
-        //
-        // {
-        //     auto typed_rhs = builder_.cast(rhs[0], lhs[0].type());
-        //     builder_.comparison(lhs[0], typed_rhs)
-        //             .add_comment("compare LHS and RHS to generate condition for conditional set");
-        //     builder_.append(assembler::cset(destination[0], get_cset_type(n.op())))
-        //             .add_comment("set to 1 if condition is true (based flags from the previous compare)");
-        //     inverse_carry_flag_operation = true;
-        // }
-		break;
+        throw backend_exception("Not implemented");
 	case binary_arith_op::cmpoeq:
 	case binary_arith_op::cmpolt:
 	case binary_arith_op::cmpole:

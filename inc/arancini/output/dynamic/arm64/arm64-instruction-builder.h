@@ -401,6 +401,7 @@ public:
 
         for (std::size_t i = 0; i < destination.size(); ++i) {
             append(assembler::sub(destination[i], lhs[i], rhs[i]));
+            bound_to_type(destination[i], destination[i].type());
         }
     }
 
@@ -424,6 +425,7 @@ public:
         append(assembler::subs(destination[0], lhs[0], rhs[0]));
         for (std::size_t i = 1; i < destination.size(); ++i) {
             append(assembler::sbcs(destination[i], lhs[i], rhs[i]));
+            bound_to_type(destination[i], destination[i].type());
         }
     }
 
@@ -439,6 +441,7 @@ public:
                  register_operand(register_operand::wzr_sp),
                  register_operand(register_operand::wzr_sp)));
             append(assembler::sbcs(destination[i], lhs[i], rhs[i]));
+            bound_to_type(destination[i], destination[i].type());
         }
     }
 
@@ -1217,6 +1220,7 @@ public:
             // 3. Insert from big scalar to another big scalar (register to register)
             // 4. Insert from big scalar to another big scalar (register to location)
 
+            // TODO: need to handle cases like  bfi x0, w1, #0x0, #0x8
             auto to_idx = to / 64;
             auto end_idx = (to + length) / 64;
             if (to_idx != end_idx) {
