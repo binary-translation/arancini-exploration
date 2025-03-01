@@ -422,30 +422,29 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         builder_.subs(destination,lhs, rhs);
         break;
 	case binary_arith_op::cmpgt:
-        throw backend_exception("Not implemented");
+        builder_.subs(destination,lhs, rhs);
+        builder_.conditional_set(destination, get_cset_type(n.op()));
+        break;
 	case binary_arith_op::cmpoeq:
 	case binary_arith_op::cmpolt:
 	case binary_arith_op::cmpole:
 	case binary_arith_op::cmpo:
 	case binary_arith_op::cmpu:
         builder_.comparison(lhs, rhs);
-        // builder_.append(assembler::cset(destination[0], get_cset_type(n.op())))
-        //         .add_comment("set to 1 if condition is true (based flags from the previous compare)");
+        builder_.conditional_set(destination, get_cset_type(n.op()));
         break;
 	case binary_arith_op::cmpueq:
 	case binary_arith_op::cmpune:
 	case binary_arith_op::cmpult:
 	case binary_arith_op::cmpunlt:
 	case binary_arith_op::cmpunle:
-        // {
-        //     builder_.comparison(lhs, rhs);
-        //     const value& unordered = vreg_alloc_.allocate(value_type::u64());
-        //     builder_.append(assembler::cset(destination[0], get_cset_type(n.op())))
-        //             .add_comment("set to 1 if condition is true (based flags from the previous compare)");
-        //     builder_.append(assembler::cset(unordered, cond_operand::vs()))
-        //             .add_comment("set to 1 if condition is true (based flags from the previous compare)");
-        //     builder_.logical_or(destination[0], destination[0], unordered[0]);
-        // }
+        {
+            builder_.comparison(lhs, rhs);
+            const auto& unordered = vreg_alloc_.allocate(value_type::u64());
+            builder_.conditional_set(destination, get_cset_type(n.op()));
+            builder_.conditional_set(unordered, cond_operand::vs());
+            builder_.logical_or(destination, destination, unordered);
+        }
         break;
 	default:
 		throw backend_exception("Unsupported binary arithmetic operation with index {}",

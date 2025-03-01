@@ -818,7 +818,7 @@ public:
         [[unlikely]]
         if (destination.type().width() < source.type().width())
             throw backend_exception("Cannot zero-extend {} to smaller size {}",
-                                    destination.type(), source.type());
+                                    source.type(), destination.type());
 
         std::size_t current_extension_bytes = 0;
 
@@ -1145,7 +1145,9 @@ public:
                                     destination.type());
         }
 
-        append(assembler::lsr(destination, input, amount));
+        auto input_src = zero_extend(input, destination.type());
+        auto amount_src = zero_extend(amount, destination.type());
+        append(assembler::lsr(destination, input_src, amount_src));
     }
 
     void logical_right_shift(const scalar& destination, const scalar& input, const immediate_operand& amount) {
@@ -1168,7 +1170,9 @@ public:
                                     destination.type());
         }
 
-        append(assembler::asr(destination, input, amount));
+        auto input_src = zero_extend(input, destination.type());
+        auto amount_src = zero_extend(amount, destination.type());
+        append(assembler::asr(destination, input_src, amount_src));
     }
 
     void arithmetic_right_shift(const scalar& destination, const scalar& input, const immediate_operand& amount) {
@@ -1196,6 +1200,10 @@ public:
         for (std::size_t i = 0; i < destination.size(); ++i) {
             append(assembler::csel(destination[i], lhs[i], rhs[i], condition));
         }
+    }
+
+    void conditional_set(const scalar &destination, const cond_operand &condition) {
+        append(assembler::cset(destination[0], condition));
     }
 
     void bit_insert(const scalar& destination, const scalar& source,
@@ -1256,11 +1264,10 @@ public:
 
         [[likely]]
         if (destination.size() == 1) {
-            append(assembler::bfi(destination, insert_bits, to, length));
+            auto source = zero_extend(insert_bits, destination.type());
+            append(assembler::bfi(destination, source, to, length));
             return;
         }
-
-        throw backend_exception("Not implemented");
     }
 
     void bit_insert(const variable& destination, const variable& source,
@@ -1275,24 +1282,22 @@ public:
 
     void bit_extract(const scalar& destination, const scalar& source,
                      std::size_t from, std::size_t length) {
-
-        [[unlikely]]
-        if (destination.type() != source.type())
-            throw backend_exception("Cannot extract bits from source {} incompatible with destination {}",
-                                    source.type(), destination.type());
-
         if (is_bignum(destination.type())) {
             throw backend_exception("Not implemented");
         }
 
         [[likely]]
         if (destination.size() == 1) {
-            // auto out = builder_.cast(insertion_bits, dest[0].type());
-            move_to_variable(destination, source);
-            append(assembler::ubfx(destination, source, from, length));
+            if (destination.type().width() > source.type().width()) {
+                auto source_ext = zero_extend(source, destination.type());
+                append(assembler::ubfx(destination, source_ext, from, length));
+            } else {
+                auto dest_reg = destination[0];
+                dest_reg.cast(source.type());
+                append(assembler::ubfx(dest_reg, source, from, length));
+            }
             return;
         }
-        throw backend_exception("Not implemented");
     }
 
     void bit_extract(const variable& destination, const variable& source,
