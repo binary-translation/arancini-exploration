@@ -617,16 +617,20 @@ int execution_context::internal_call(void *cpu_state, int call) {
 			auto addr = (uint64_t)get_memory_ptr(x86_state->RDI);
 			auto timespec = x86_state->R10 ? (uint64_t)get_memory_ptr(x86_state->R10) : 0;
 			auto addr2 = (uint64_t)get_memory_ptr(x86_state->R8);
-			x86_state->RAX = native_syscall(__NR_futex, addr, x86_state->RSI, (uint64_t)x86_state->RDX, timespec, addr2, x86_state->R9);
+			x86_state->RAX = native_syscall(__NR_futex, addr, x86_state->RSI,
+                                            (uint64_t)x86_state->RDX, timespec, addr2,
+                                            x86_state->R9);
 			break;
         }
 		case 203: // sched_set_affinity
             util::global_logger.debug("System call: sched_set_affinity()\n");
-			x86_state->RAX = native_syscall(__NR_sched_setaffinity, x86_state->RDI, x86_state->RSI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RDX));
+			x86_state->RAX = native_syscall(__NR_sched_setaffinity, x86_state->RDI, x86_state->RSI,
+                                            (uintptr_t)get_memory_ptr((int64_t)x86_state->RDX));
 			break;
 		case 204: // sched_get_affinity
             util::global_logger.debug("System call: sched_get_affinity()\n");
-			x86_state->RAX = native_syscall(__NR_sched_getaffinity, x86_state->RDI, x86_state->RSI, (uintptr_t)get_memory_ptr((int64_t)x86_state->RDX));
+			x86_state->RAX = native_syscall(__NR_sched_getaffinity, x86_state->RDI, x86_state->RSI,
+                                            (uintptr_t)get_memory_ptr((int64_t)x86_state->RDX));
 			break;
 		case 218: // set_tid_address
         {
@@ -641,7 +645,8 @@ int execution_context::internal_call(void *cpu_state, int call) {
 		case 231:
             util::global_logger.debug("System call: exit()\n");
 
-            util::global_logger.info("Exiting from emulated process with exit code: {}\n", util::copy(x86_state->RDI));
+            util::global_logger.info("Exiting from emulated process with exit code: {}\n",
+                                      util::copy(x86_state->RDI));
 			exit(x86_state->RDI);
 			return 1;
 		case 228: // clock_gettime

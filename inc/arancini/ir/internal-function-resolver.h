@@ -1,7 +1,9 @@
 #pragma once
 
 #include <arancini/ir/node.h>
-#include <map>
+
+#include <string_view>
+#include <unordered_map>
 
 namespace arancini::ir {
 class internal_function_resolver {
@@ -21,9 +23,11 @@ public:
 	}
 
 protected:
-	virtual std::shared_ptr<internal_function> create(const std::string &name) const = 0;
+	virtual std::shared_ptr<internal_function> create(std::string_view name) const = 0;
 
 private:
-	std::map<std::string, std::shared_ptr<internal_function>> functions_;
+	std::unordered_map<std::string, std::shared_ptr<internal_function>> functions_;
 };
+
 } // namespace arancini::ir
+
