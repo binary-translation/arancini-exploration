@@ -821,20 +821,16 @@ public:
                                     source.type(), destination.type());
 
         std::size_t current_extension_bytes = 0;
-
         insert_comment("zero-extend from {} to {}", source.type(), destination.type());
         if (source.type().width() < 8) {
-            if (destination.type().width() >= 32) {
-                append(assembler::uxtb(destination[0], destination[0]).add_comment("sign-extend"));
-            } else {
-                backend_exception("Not implemented");
-            }
+            append(assembler::uxtb(destination[0], source[0]));
+            bound_to_type(destination[0], source.type());
         } else if (source.type().width() == 8) {
-            append(assembler::uxtb(destination, source));
+            append(assembler::uxtb(destination[0], source));
         } else if (source.type().width() <= 16) {
-            append(assembler::uxth(destination, source));
+            append(assembler::uxth(destination[0], source));
         } else if (source.type().width() <= 32) {
-            append(assembler::uxtw(destination, source));
+            append(assembler::uxtw(destination[0], source));
         }
 
         current_extension_bytes += destination[0].type().width();
@@ -871,22 +867,26 @@ public:
         // 2. If dest_scalar > 64-bit, determine sign
         // 3. Plaster sign all over the upper bits
         insert_comment("sign-extend from {} to {}", source.type(), destination.type());
-        if (source.type().width() < 8) {
-            if (destination.type().width() >= 32) {
+        if (source.type().width() == 1) {
+            if (destination.type().width() == 32) {
                 append(assembler::lsl(destination[0], source, 7))
                         .add_comment("shift left LSB to set sign bit of byte");
                 append(assembler::sxtb(destination[0], destination[0]).add_comment("sign-extend"));
                 append(assembler::asr(destination[0], destination[0], 7))
                       .add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
+            } else if (destination.type().width() > 32) {
+                backend_exception("Not implemented");
             } else {
                 backend_exception("Not implemented");
             }
         } else if (source.type().width() == 8) {
-            append(assembler::sxtb(destination, source));
+            append(assembler::sxtb(destination[0], source));
         } else if (source.type().width() <= 16) {
-            append(assembler::sxth(destination, source));
+            append(assembler::sxth(destination[0], source));
         } else if (source.type().width() <= 32) {
-            append(assembler::sxtw(destination, source));
+            append(assembler::sxtw(destination[0], source));
+        } else if (source.type().width() == 64) {
+            move_to_variable(destination[0], source);
         }
 
         current_extension_bytes += destination[0].type().width();
@@ -1000,8 +1000,31 @@ public:
         }
     }
 
-    void truncate(const variable& destination, const variable& source) {
-        throw backend_exception("Cannot handle truncation");
+    void truncate(const scalar& destination, const scalar& source) {
+        [[unlikely]]
+        if (destination.type().width() > source.type().width())
+            throw backend_exception("Cannot truncate from {} to larger type {}",
+                                    destination.type(), source.type());
+
+        [[unlikely]]
+        if (is_bignum(destination.type()))
+            throw backend_exception("Truncation not implemented for large scalar type {}",
+                                    destination.type());
+
+        auto src = source[0];
+        src.type() = ir::value_type(source.type().type_class(), 32);
+        move_to_variable(destination, src);
+
+        if (destination.type().width() == 1)
+            bound_to_type(destination, destination.type());
+
+        return;
+    }
+
+    scalar truncate(const scalar& source, ir::value_type type) {
+        auto destination = vreg_alloc_.allocate_scalar(type);
+        truncate(destination, source);
+        return destination;
     }
 
     instruction& branch(const label_operand& target) {
@@ -1310,91 +1333,71 @@ public:
         bit_extract(destination.as_scalar(), source.as_scalar(), from, length);
     }
 
-    void multiply(const scalar& destination,
-                  const scalar& multiplicand,
-                  const scalar& multiplier)
-    {
-        throw backend_exception("Not implemented");
+    void multiply(const scalar& destination, const scalar& multiplicand, const scalar& multiplier) {
         [[unlikely]]
-        if (!destination.size() || destination.size() > 2 ||
-            destination[0].type().is_floating_point())
-        {
-            throw backend_exception("Invalid multiplication");
-        }
+        if (destination.type().width() > 128)
+            throw backend_exception("Not implemented mul on larger than 128-bit");
 
-        // The input and the output have the same size:
-        // For 32-bit multiplication: 64-bit output and signed-extended 32-bit scalars to 64-bit inputs
-        // For 64-bit multiplication: 64-bit output and signed-extended 64-bit scalars to 128-bit inputs
-        // NOTE: this is very unfortunate
-        bool sets_flags = true;
-        if (destination.size() == 1) {
-            switch (destination[0].type().type_class()) {
+        if (destination.type().width() == 128) {
+            [[likely]]
+            // Get lower 64 bits
+            append(assembler::mul(destination[0], multiplicand[0], multiplier[0]));
+
+            // Get upper 64 bits
+            switch (destination[1].type().type_class()) {
             case ir::value_type_class::signed_integer:
-                {
-                    auto lhs = cast(multiplicand[0], ir::value_type(multiplicand[0].type().type_class(), 32, 1));
-                    auto rhs = cast(multiplier[0], ir::value_type(multiplier[0].type().type_class(), 32, 1));
-                    append(assembler::smull(destination, lhs, rhs));
-                }
+                append(assembler::smulh(destination[1], multiplicand[0], multiplier[0]));
                 break;
             case ir::value_type_class::unsigned_integer:
-                {
-                    auto lhs = cast(multiplicand[0], ir::value_type(multiplicand[0].type().type_class(), 32, 1));
-                    auto rhs = cast(multiplier[0], ir::value_type(multiplier[0].type().type_class(), 32, 1));
-                    append(assembler::umull(destination, lhs, rhs));
-                }
-                break;
-            case ir::value_type_class::floating_point:
-                // The same fmul is used in both 32-bit and 64-bit multiplication
-                // The actual operation depends on the type of its registers
-                {
-                    auto multiplicand_conv = cast(multiplicand, destination[0].type());
-                    auto multiplier_conv = cast(multiplier, destination[0].type());
-                    append(assembler::fmul(destination, multiplicand_conv, multiplier_conv));
-                    sets_flags = false;
-                }
+                append(assembler::umulh(destination[1], multiplicand[0], multiplier[0]));
                 break;
             default:
                 throw backend_exception("Encounted unknown type class {} for multiplication",
-                                        util::to_underlying(destination[0].type().type_class()));
+                                        util::to_underlying(destination[1].type().type_class()));
             }
+
             // TODO: need to compute CF and OF
             // CF and OF are set to 1 when multiplicand * multiplier > 64-bits
             // Otherwise they are set to 0
-            if (sets_flags) {
-                const auto& compare_regset = vreg_alloc_.allocate_scalar(destination[0].type());
-                move_to_variable(compare_regset, 0xFFFF0000);
-                comparison(compare_regset, destination);
-                set_carry_flag(cond_operand::ne());
-                set_overflow_flag(cond_operand::ne());
-                sets_flags = false;
-            }
+            append(assembler::cmp(destination[1], 0));
+            set_carry_flag(cond_operand::ne());
+            set_overflow_flag(cond_operand::ne());
+
             return;
         }
 
-        [[likely]]
-        // Get lower 64 bits
-        append(assembler::mul(destination[0], multiplicand[0], multiplier[0]));
-
-        // Get upper 64 bits
-        switch (destination[1].type().type_class()) {
+        // Compute lower bits
+        switch (destination.type().type_class()) {
         case ir::value_type_class::signed_integer:
-            append(assembler::smulh(destination[1], multiplicand[0], multiplier[0]));
+            append(assembler::smull(destination, multiplicand, multiplier));
             break;
         case ir::value_type_class::unsigned_integer:
-            append(assembler::umulh(destination[1], multiplicand[0], multiplier[0]));
+            append(assembler::umull(destination, multiplicand, multiplier));
+            break;
+        case ir::value_type_class::floating_point:
+            // The same fmul is used in both 32-bit and 64-bit multiplication
+            // The actual operation depends on the type of its registers
+            {
+                throw backend_exception("Not implemented");
+                // auto multiplicand_conv = cast(multiplicand, destination[0].type());
+                // auto multiplier_conv = cast(multiplier, destination[0].type());
+                // append(assembler::fmul(destination, multiplicand_conv, multiplier_conv));
+                // sets_flags = false;
+            }
             break;
         default:
             throw backend_exception("Encounted unknown type class {} for multiplication",
-                                    util::to_underlying(destination[1].type().type_class()));
+                                    util::to_underlying(destination[0].type().type_class()));
         }
 
         // TODO: need to compute CF and OF
         // CF and OF are set to 1 when multiplicand * multiplier > 64-bits
         // Otherwise they are set to 0
-        append(assembler::cmp(destination[1], 0));
+        const auto& compare_regset = vreg_alloc_.allocate_scalar(destination[0].type());
+        move_to_variable(compare_regset, 0xFFFF0000);
+        comparison(compare_regset, destination);
         set_carry_flag(cond_operand::ne());
         set_overflow_flag(cond_operand::ne());
-
         return;
     }
 

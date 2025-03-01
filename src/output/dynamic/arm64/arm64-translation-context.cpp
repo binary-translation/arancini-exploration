@@ -347,7 +347,7 @@ inline cond_operand get_cset_type(binary_arith_op op) {
 void arm64_translation_context::materialise_binary_arith(const binary_arith_node &n) {
     const auto &lhs = materialise_port(n.lhs());
     const auto &rhs = materialise_port(n.rhs());
-	auto &destination = vreg_alloc_.allocate(n.val());
+	const auto &destination = vreg_alloc_.allocate(n.val());
 
     // Sanity check
     // Binary operations are defined in the IR with same size inputs and output
@@ -379,7 +379,12 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         }
         break;
 	case binary_arith_op::mul:
-        builder_.multiply(destination, lhs, rhs);
+        {
+            auto type = ir::value_type(lhs.type().type_class(), lhs.type().width() / 2);
+            auto lhs_src = builder_.truncate(lhs, type);
+            auto rhs_src = builder_.truncate(rhs, type);
+            builder_.multiply(destination, lhs_src, rhs_src);
+        }
         sets_flags = false;
         break;
 	case binary_arith_op::div:
