@@ -668,8 +668,9 @@ void arm64_translation_context::materialise_vector_insert(const vector_insert_no
 
     builder_.insert_comment("Insert value of type {} into destination at index {}",
                             n.insert_value().type(), n.index());
-    builder_.bit_insert(destination, source, insertion_bits, n.index(),
-                        destination.type().width());
+
+    auto index = n.index() * destination.type().element_width();
+    builder_.bit_insert(destination, source, insertion_bits, index, insertion_bits.type().width());
 }
 
 void arm64_translation_context::materialise_vector_extract(const vector_extract_node &n) {

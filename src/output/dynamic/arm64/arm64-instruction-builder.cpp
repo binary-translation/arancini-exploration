@@ -34,6 +34,7 @@ inline std::size_t get_min_bitsize(unsigned long long imm) {
 }
 
 scalar virtual_register_allocator::allocate_scalar(ir::value_type type) {
+    [[unlikely]]
     if (type.is_vector()) {
         throw backend_exception("Cannot handle vectors");
     }
@@ -57,11 +58,20 @@ scalar virtual_register_allocator::allocate_scalar(ir::value_type type) {
 }
 
 vector virtual_register_allocator::allocate_vector(ir::value_type type) {
+    [[unlikely]]
     if (!type.is_vector()) {
         throw backend_exception("Cannot allocator scalar type {} as vector", type);
     }
 
-    throw backend_exception("Cannot allocate as vector yet");
+    // TODO: use real vectors
+    std::size_t element_count = type.nr_elements();
+    auto element_type = ir::value_type(type.type_class(), type.element_width(), 1);
+
+    std::vector<scalar> values;
+    for (std::size_t i = 0; i < element_count; ++i)
+        values.push_back(allocate_scalar(element_type))
+
+    return vector(values, type);
 }
 
 variable virtual_register_allocator::allocate(ir::value_type type) {

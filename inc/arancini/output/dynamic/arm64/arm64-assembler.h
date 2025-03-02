@@ -890,11 +890,18 @@ public:
             throw backend_exception("immediate {} cannot fit into {} (strict requirement)",
                                     imm, type);
     }
+
+    [[nodiscard]]
+    constexpr bool supports_lse() const { return supports_lse_; }
+
+    [[nodiscard]]
+    constexpr bool supports_sve() const { return supports_sve_; }
 private:
     ks_err status_;
     ks_engine* ks_;
 
-    const bool supports_lse = false;
+    constexpr static bool supports_lse_ = false;
+    constexpr static bool supports_sve_ = false;
 
     static bool is_integer_scalar_of_width(ir::value_type type, std::size_t width) {
         return !type.is_vector() &&

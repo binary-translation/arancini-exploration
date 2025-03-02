@@ -236,32 +236,64 @@ public:
     { }
 
     operator scalar_type&() {
-        return std::get<scalar_type>(value_);
+        if (std::holds_alternative<scalar_type>(value_))
+            return std::get<scalar_type>(value_);
+        throw backend_exception("Accessing vector type {} as scalar",
+                                std::get<vector_type>(value_).type());
     }
 
     operator const scalar_type&() const {
-        return std::get<scalar_type>(value_);
+        if (std::holds_alternative<scalar_type>(value_))
+            return std::get<scalar_type>(value_);
+        throw backend_exception("Accessing vector type {} as scalar",
+                                std::get<vector_type>(value_).type());
     }
 
     operator vector_type&() {
-        return std::get<vector_type>(value_);
+        if (std::holds_alternative<vector_type>(value_))
+            return std::get<vector_type>(value_);
+        throw backend_exception("Accessing scalar type {} as vector",
+                                std::get<scalar_type>(value_).type());
     }
 
     operator const vector_type&() const {
-        return std::get<vector_type>(value_);
+        if (std::holds_alternative<vector_type>(value_))
+            return std::get<vector_type>(value_);
+        throw backend_exception("Accessing scalar type {} as vector",
+                                std::get<scalar_type>(value_).type());
     }
 
     [[nodiscard]]
-    scalar_type& as_scalar() { return std::get<scalar_type>(value_); }
+    scalar_type& as_scalar() {
+        if (std::holds_alternative<scalar_type>(value_))
+            return std::get<scalar_type>(value_);
+        throw backend_exception("Accessing vector type {} as scalar",
+                                std::get<vector_type>(value_).type());
+    }
 
     [[nodiscard]]
-    const scalar_type& as_scalar() const { return std::get<scalar_type>(value_); }
+    const scalar_type& as_scalar() const {
+        if (std::holds_alternative<scalar_type>(value_))
+            return std::get<scalar_type>(value_);
+        throw backend_exception("Accessing vector type {} as scalar",
+                                std::get<vector_type>(value_).type());
+    }
 
     [[nodiscard]]
-    vector_type& as_vector() { return std::get<vector_type>(value_); }
+    vector_type& as_vector() {
+        if (std::holds_alternative<vector_type>(value_))
+            return std::get<vector_type>(value_);
+        throw backend_exception("Accessing scalar type {} as vector",
+                                std::get<scalar_type>(value_).type());
+    }
 
     [[nodiscard]]
-    const vector_type& as_vector() const { return std::get<vector_type>(value_); }
+    const vector_type& as_vector() const {
+        if (std::holds_alternative<vector_type>(value_))
+            return std::get<vector_type>(value_);
+        throw backend_exception("Accessing scalar type {} as vector",
+                                std::get<scalar_type>(value_).type());
+    }
 
     ir::value_type type() const {
         if (std::holds_alternative<scalar_type>(value_))
@@ -640,6 +672,10 @@ public:
         if (destination.size() != source.size())
             throw backend_exception("Cannot move type {} to {}", destination.type(), source.type());
 
+        [[unlikely]]
+        if (destination.type().element_width() != source.type().element_width())
+            throw backend_exception("Cannot move type {} to {}", destination.type(), source.type());
+
         if (destination.type().is_floating_point()) {
             for (std::size_t i = 0; i < destination.size(); ++i) {
                 append(assembler::fmov(destination[i], source[i]));
@@ -653,8 +689,20 @@ public:
     }
 
     void move_to_variable(const variable &destination, const variable &source) {
-        if (destination.type().is_vector() || source.type().is_vector()) {
-            throw backend_exception("Cannot move between vectors");
+        if (destination.type().is_vector()) {
+            if (!source.type().is_vector() || destination.type().element_width() != source.type().element_width())
+                throw backend_exception("Cannot move type {} to {}", destination.type(), source.type());
+
+            auto dest = destination.as_vector();
+            auto src = source.as_vector();
+            if (dest.vector_backed() || src.vector_backed())
+                throw backend_exception("Cannot move vector-backed type {} to {}",
+                        dest.type(), src.type());
+
+            for (std::size_t i = 0; i < dest.size(); ++i)
+                move_to_variable(dest[i], src[i]);
+
+            return;
         }
 
         move_to_variable(destination.as_scalar(), source.as_scalar());
@@ -911,48 +959,45 @@ public:
         // A simple mov is sufficient (eliminated anyway by the register
         // allocator)
         insert_comment("Bitcast from {} to {}", source.type(), destination.type());
-        // TODO: condition should be changed
-        if (destination.size() == 1 && source.size() == 1) {
-            move_to_variable(destination, source);
-            return;
-        }
-        throw backend_exception("Cannot handle bitcast");
-
-        if (destination.type().is_vector() || source.type().is_vector()) {
-            if (destination.type().element_width() > source.type().element_width()) {
-                // Destination consists of fewer elements but of larger widths
-                std::size_t dest_idx = 0;
-                std::size_t dest_pos = 0;
-                for (std::size_t i = 0; i < source.size(); ++i) {
-                    left_shift(source[i], source[i], dest_pos % destination.type().element_width());
-                    move_to_variable(destination[dest_idx], source);
-
-                    dest_pos += source[i].type().width();
-                    dest_idx = (dest_pos / destination[dest_idx].type().width());
-                }
-            } else if (destination.type().element_width() < source.type().element_width()) {
-                // Destination consists of more elements but of smaller widths
-                std::size_t src_idx = 0;
-                std::size_t src_pos = 0;
-                for (std::size_t i = 0; i < destination.size(); ++i) {
-                    const auto& src_vreg = vreg_alloc_.allocate(destination[i].type());
-                    move_to_variable(src_vreg.as_scalar(), source[src_idx]);
-                    append(assembler::lsl(src_vreg.as_scalar(), src_vreg.as_scalar(),
-                                          src_pos % source.type().element_width()));
-                    move_to_variable(destination[i], src_vreg.as_scalar());
-
-                    src_pos += source[i].type().width();
-                    src_idx = (src_pos / source[src_idx].type().width());
-                }
-            } else {
-                for (std::size_t i = 0; i < destination.size(); ++i)
-                    move_to_variable(destination[i], source[i]);
-            }
-
-            return;
-        }
-
         move_to_variable(destination, source);
+        return;
+    }
+
+    void bitcast(const variable& destination, const variable& source) {
+        if (!destination.type().is_vector() && !source.type().is_vector())
+            return bitcast(destination.as_scalar(), source.as_scalar());
+
+        if (destination.type().is_vector() && source.type().is_vector()) {
+            throw backend_exception("Cannot handle bitcast from vector {} to vector {}",
+                                    source.type(), destination.type());
+        }
+
+        if (destination.type().is_vector()) {
+            auto dest = destination.as_vector();
+            auto src = source.as_scalar();
+
+            [[unlikely]]
+            if (dest.vector_backed())
+                throw backend_exception("Cannot handle bitcast for vector-based vector {}",
+                                        dest.type());
+
+            for (std::size_t i = 0; i < dest.size(); ++i)
+                move_to_variable(dest[i], src[i]);
+
+            return;
+        }
+
+        // Source is vector
+        auto src = source.as_vector();
+        auto dest = destination.as_scalar();
+
+        [[unlikely]]
+        if (src.vector_backed())
+            throw backend_exception("Cannot handle bitcast for vector-based vector {}",
+                                    src.type());
+
+        for (std::size_t i = 0; i < dest.size(); ++i)
+            move_to_variable(dest[i], src[i]);
     }
 
     void convert(const scalar& destination, const scalar& source, ir::fp_convert_type trunc_type) {
@@ -1296,7 +1341,27 @@ public:
     void bit_insert(const variable& destination, const variable& source,
                     const variable& insert_bits, std::size_t to, std::size_t length) {
         if (destination.type().is_vector()) {
-            throw backend_exception("TODO");
+            [[unlikely]]
+            if (destination.type() != source.type())
+                throw backend_exception("Cannot insert from vector of type {} to vector of different type {}",
+                                        source.type(), destination.type());
+
+            if (insert_bits.type().is_vector())
+                throw backend_exception("cannot access insert bits of vector type {}", insert_bits.type());
+
+            if (insert_bits.type().element_type().width() < destination.type().element_type().width())
+                throw backend_exception("cannot access insert bits {} smaller than destination {}",
+                                        insert_bits.type(), destination.type());
+
+            move_to_variable(destination.as_vector(), source.as_vector());
+
+            auto start_vector_idx = to / destination.type().element_width();
+            auto end_vector_idx = to + length / destination.type().element_width();;
+            if (length > destination.type().element_width()) {
+                for (std::size_t i = 0; i < end_vector_idx; ++i)
+                    move_to_variable(destination.as_vector()[start_vector_idx+i], insert_bits.as_scalar()[i]);
+                return;
+            }
             return;
         }
 
@@ -1325,10 +1390,9 @@ public:
 
     void bit_extract(const variable& destination, const variable& source,
                      std::size_t from, std::size_t length) {
-        if (destination.type().is_vector()) {
-            throw backend_exception("TODO");
-            return;
-        }
+        if (destination.type().is_vector())
+            throw backend_exception("Cannot extract from {} to {}",
+                                    source.type(), destination.type());
 
         bit_extract(destination.as_scalar(), source.as_scalar(), from, length);
     }
@@ -1531,7 +1595,7 @@ public:
                     const memory_operand& mem, atomic_types type = atomic_types::exclusive)
     {
 
-        if constexpr (!supports_lse) {
+        if (!asm_.supports_lse()) {
             atomic_block(destination, mem, [this, &destination, &source]() {
                 adds(destination, source, destination);
             }, type);
@@ -1554,7 +1618,7 @@ public:
             }
         }
 
-        // TODO
+        throw backend_exception("Cannot generate non-exclusive atomic accesses");
     }
 
     void atomic_sub(const scalar &destination, const scalar &source,
@@ -1577,7 +1641,7 @@ public:
     void atomic_clr(const scalar &destination, const scalar &source,
                     const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
-        if constexpr (!supports_lse) {
+        if (!asm_.supports_lse()) {
             atomic_block(destination, mem, [this, &destination, &source]() {
                 const scalar& negated = vreg_alloc_.allocate_scalar(source.type());
                 complement(negated, source);
@@ -1602,7 +1666,7 @@ public:
             }
         }
 
-        // TODO
+        throw backend_exception("Cannot generate non-exclusive atomic accesses");
     }
 
     void atomic_and(const scalar &destination, const scalar &source,
@@ -1616,7 +1680,7 @@ public:
     void atomic_eor(const scalar &destination, const scalar &source,
                     const scalar &mem, atomic_types type = atomic_types::exclusive)
     {
-        if constexpr (!supports_lse) {
+        if (!asm_.supports_lse()) {
             atomic_block(destination, mem, [this, &destination, &source]() {
                 exclusive_or(destination, destination, source);
             }, type);
@@ -1638,13 +1702,13 @@ public:
             }
         }
 
-        // TODO
+        throw backend_exception("Cannot generate non-exclusive atomic accesses");
     }
 
     void atomic_or(const scalar &destination, const scalar &source,
                     const scalar &mem, atomic_types type = atomic_types::exclusive)
     {
-        if constexpr (!supports_lse) {
+        if (!asm_.supports_lse()) {
             atomic_block(destination, mem, [this, &destination, &source]() {
                 logical_or(destination, destination, source);
             }, type);
@@ -1666,13 +1730,13 @@ public:
             }
         }
 
-        // TODO
+        throw backend_exception("Cannot generate non-exclusive atomic accesses");
     }
 
     void atomic_smax(const scalar &destination, const scalar &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
-        if constexpr (!supports_lse) {
+        if (!asm_.supports_lse()) {
             throw backend_exception("smax not implemented");
         }
         if (type == atomic_types::exclusive) {
@@ -1692,13 +1756,13 @@ public:
             }
         }
 
-        // TODO
+        throw backend_exception("Cannot generate non-exclusive atomic accesses");
     }
 
     void atomic_smin(const scalar &rm, const scalar &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
-        if constexpr (!supports_lse) {
+        if (!asm_.supports_lse()) {
             throw backend_exception("smin not implemented");
         }
         if (type == atomic_types::exclusive) {
@@ -1718,13 +1782,13 @@ public:
             }
         }
 
-        // TODO
+        throw backend_exception("Cannot generate non-exclusive atomic accesses");
     }
 
     void atomic_umax(const scalar &rm, const scalar &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
-        if constexpr (!supports_lse) {
+        if (!asm_.supports_lse()) {
             throw backend_exception("umax not implemented");
         }
 
@@ -1745,14 +1809,14 @@ public:
             }
         }
 
-        // TODO
+        throw backend_exception("Cannot generate non-exclusive atomic accesses");
     }
 
 
     void atomic_umin(const scalar &rm, const scalar &source,
                             const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
-        if constexpr (!supports_lse) {
+        if (!asm_.supports_lse()) {
             throw backend_exception("umin not implemented");
         }
         if (type == atomic_types::exclusive) {
@@ -1772,13 +1836,13 @@ public:
             }
         }
 
-        // TODO
+        throw backend_exception("Cannot generate non-exclusive atomic accesses");
     }
 
     void atomic_swap(const scalar &destination, const scalar &source,
                      const memory_operand &mem, atomic_types type = atomic_types::exclusive)
     {
-        if constexpr (!supports_lse) {
+        if (!asm_.supports_lse()) {
             atomic_block(destination, mem, [this, &destination, &source]() {
                 const auto& old = vreg_alloc_.allocate_scalar(destination.type());
                 append(assembler::mov(old, destination));
@@ -1804,14 +1868,14 @@ public:
             }
         }
 
-        // TODO
+        throw backend_exception("Cannot generate non-exclusive atomic accesses");
     }
 
     void atomic_cmpxchg(const scalar& current, const scalar &acc,
                         const scalar &src, const memory_operand &mem,
                         atomic_types type = atomic_types::exclusive)
     {
-        if constexpr (!supports_lse) {
+        if (!asm_.supports_lse()) {
             atomic_block(current, mem, [this, &current, &acc]() {
                 comparison(current, acc);
                 append(assembler::csel(acc, current, acc, cond_operand::ne()))
@@ -1826,7 +1890,7 @@ public:
         append(assembler::cmp(acc, 0));
         append(assembler::mov(current, acc));
 
-        // TODO
+        throw backend_exception("Cannot generate non-exclusive atomic accesses");
     }
 
     [[nodiscard]]
@@ -1950,7 +2014,6 @@ public:
     }
 private:
     assembler asm_;
-    constexpr static bool supports_lse = false;
 	std::vector<instruction> instructions_;
     virtual_register_allocator vreg_alloc_;
     std::unordered_map<std::string, std::size_t> label_refcount_;
