@@ -80,6 +80,121 @@ variable virtual_register_allocator::allocate(ir::value_type type) {
     return allocate_scalar(type);
 }
 
+void instruction_builder::multiply(const scalar& destination, 
+                                   const scalar& multiplicand,
+                                   const scalar& multiplier) 
+{
+    [[unlikely]]
+    if (destination.type().width() > 128)
+        throw backend_exception("Not implemented mul on type {} larger than 128-bit",
+                                destination.type());
+
+    if (destination.type().width() == 128) {
+        [[likely]]
+        // Get lower 64 bits
+        append(assembler::mul(destination[0], multiplicand[0], multiplier[0]));
+
+        // Get upper 64 bits
+        switch (destination[1].type().type_class()) {
+        case ir::value_type_class::signed_integer:
+            append(assembler::smulh(destination[1], multiplicand[0], multiplier[0]));
+            break;
+        case ir::value_type_class::unsigned_integer:
+            append(assembler::umulh(destination[1], multiplicand[0], multiplier[0]));
+            break;
+        default:
+            throw backend_exception("Encounted unknown type class {} for multiplication",
+                                    util::to_underlying(destination[1].type().type_class()));
+        }
+
+        // TODO: need to compute CF and OF
+        // CF and OF are set to 1 when multiplicand * multiplier > 64-bits
+        // Otherwise they are set to 0
+        append(assembler::cmp(destination[1], 0));
+        set_carry_flag(cond_operand::ne());
+        set_overflow_flag(cond_operand::ne());
+
+        return;
+    }
+
+    // Compute lower bits
+    switch (destination.type().type_class()) {
+    case ir::value_type_class::signed_integer:
+        append(assembler::smull(destination, multiplicand, multiplier));
+        break;
+    case ir::value_type_class::unsigned_integer:
+        append(assembler::umull(destination, multiplicand, multiplier));
+        break;
+    case ir::value_type_class::floating_point:
+        // The same fmul is used in both 32-bit and 64-bit multiplication
+        // The actual operation depends on the type of its registers
+        {
+            throw backend_exception("Not implemented floating-point multiplication {} = {}x{}",
+                                    destination.type(), multiplicand.type(), multiplier.type());
+            // auto multiplicand_conv = cast(multiplicand, destination[0].type());
+            // auto multiplier_conv = cast(multiplier, destination[0].type());
+            // append(assembler::fmul(destination, multiplicand_conv, multiplier_conv));
+            // sets_flags = false;
+        }
+        break;
+    default:
+        throw backend_exception("Encounted unknown type class {} for multiplication",
+                                util::to_underlying(destination[0].type().type_class()));
+    }
+
+    // TODO: need to compute CF and OF
+    // CF and OF are set to 1 when multiplicand * multiplier > 64-bits
+    // Otherwise they are set to 0
+    const auto& compare_regset = vreg_alloc_.allocate_scalar(destination[0].type());
+    move_to_variable(compare_regset, 0xFFFF0000);
+    comparison(compare_regset, destination);
+    set_carry_flag(cond_operand::ne());
+    set_overflow_flag(cond_operand::ne());
+    return;
+}
+
+void instruction_builder::divide(const scalar& destination,
+                                 const scalar& dividend,
+                                 const scalar& divider) 
+{
+    [[unlikely]]
+    if (dividend.type() != divider.type() || destination.type() != dividend.type())
+        throw backend_exception("Not implemented division with different divided {} and divider {} to {}",
+                                dividend.type(), divider.type(), destination.type());
+
+    [[unlikely]]
+    if (destination.type().width() > 128)
+        throw backend_exception("Not implemented division on type {} larger than 128-bit",
+                                destination.type());
+
+    [[unlikely]]
+    if (destination.type().type_class() == ir::value_type_class::floating_point)
+        throw backend_exception("Not implemented division on floating-point types",
+                                destination.type());
+
+    if (is_bignum(destination.type()))
+        throw backend_exception("Not implemented division to big scalar type {}",
+                                destination.type());
+
+    // The input and the output have the same size:
+    // For 64-bit division: 64-bit input dividend/divisor and 64-bit output but 32-bit division
+    // For 128-bit multiplication: 128-bit input dividend/divisor and 128-bit output but 64-bit division
+    // NOTE: this is very unfortunate
+    // NOTE: we'll need to handle separetely floats
+    switch (destination.type().type_class()) {
+    case ir::value_type_class::signed_integer:
+        append(assembler::sdiv(destination, dividend, divider));
+        break;
+    case ir::value_type_class::unsigned_integer:
+        append(assembler::udiv(destination, dividend, divider));
+        break;
+    default:
+        throw backend_exception("Encounted unknown type class {} for division",
+                                util::to_underlying(destination.type().type_class()));
+    }
+
+    return;
+}
 
 instruction& instruction_builder::atomic_load(const scalar& destination, const memory_operand& mem,
                                               atomic_types type) 
