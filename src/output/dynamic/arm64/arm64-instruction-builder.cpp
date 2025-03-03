@@ -69,9 +69,9 @@ vector virtual_register_allocator::allocate_vector(ir::value_type type) {
 
     std::vector<scalar> values;
     for (std::size_t i = 0; i < element_count; ++i)
-        values.push_back(allocate_scalar(element_type))
+        values.push_back(allocate_scalar(element_type));
 
-    return vector(values, type);
+    return vector(values.begin(), values.end(), type);
 }
 
 variable virtual_register_allocator::allocate(ir::value_type type) {
@@ -267,7 +267,20 @@ struct register_hash final {
 
 struct register_equal final {
     bool operator()(const register_operand& r1, const register_operand& r2) const {
-        return r1.index() == r2.index() && r1.type().type_class() == r2.type().type_class();
+        return r1.index() == r2.index() && equal_type_class(r1, r2);
+    }
+private:
+    static bool equal_type_class(const register_operand& r1, const register_operand& r2) {
+        switch (r1.type().type_class()) {
+        case arancini::ir::value_type_class::signed_integer:
+        case arancini::ir::value_type_class::unsigned_integer:
+            return r2.type().type_class() == arancini::ir::value_type_class::signed_integer ||
+                   r2.type().type_class() == arancini::ir::value_type_class::unsigned_integer;
+        case arancini::ir::value_type_class::floating_point:
+            return r2.type().type_class() == arancini::ir::value_type_class::floating_point;
+        case arancini::ir::value_type_class::none:
+            return r2.type().type_class() == arancini::ir::value_type_class::none;
+        }
     }
 };
 

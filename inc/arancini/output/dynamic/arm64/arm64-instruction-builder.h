@@ -69,7 +69,7 @@ public:
     }
 
     [[nodiscard]]
-    ir::value_type type() const { return type_; }
+    const ir::value_type& type() const { return type_; }
 
     [[nodiscard]]
     register_operand& operator[](std::size_t i) { return regset_[i]; }
@@ -91,8 +91,15 @@ public:
 
     [[nodiscard]]
     std::size_t size() const { return regset_.size(); }
-    // TODO: make sure this is always possible
-    // void cast(ir::value_type type) { type_ = type; }
+
+    void cast(ir::value_type type) {
+        if (regset_.size() == 1) {
+            type_ = type;
+            regset_[0].cast(type_);
+            return;
+        }
+        throw backend_exception("Attempting to cast large scalar");
+    }
 private:
     register_sequence regset_;
     ir::value_type type_;
@@ -116,86 +123,128 @@ private:
     }
 };
 
+using scalar_sequence = std::vector<scalar>;
+
 class vector final {
 public:
     vector() = default;
 
     vector(const register_operand& reg):
-        regset_({reg}),
+        backing_vector_(reg),
         type_(reg.type())
     {
         [[unlikely]]
         if (!type_.is_vector())
-            throw backend_exception("cannot construct vector from non-vector");
+            throw backend_exception("cannot construct vector from non-vector type {}", type_);
     }
 
-    vector(const register_sequence& regs, ir::value_type type):
-        regset_(regs),
+    vector(std::initializer_list<scalar> scalars, ir::value_type type):
+        vector(scalars.begin(), scalars.end(), type)
+    { }
+
+    template <typename It>
+    vector(It start, It end, ir::value_type type):
         type_(type)
     {
         [[unlikely]]
         if (!type_.is_vector())
-            throw backend_exception("cannot construct vector from non-vector");
-    }
+            throw backend_exception("cannot construct vector from non-vector type {}", type_);
 
-    vector(const variable& var);
+        if (std::distance(start, end) == 1) {
+            *this = vector(*start);
+            return;
+        }
+
+        backing_vector_ = scalar_sequence(start, end);
+        for (const auto& scalar : as_simulated_vector()) {
+            [[unlikely]]
+            if (scalar.type() != type_.element_type())
+                throw backend_exception("cannot construct vector of type {} from elements of type {}",
+                                        type_, scalar.type());
+        }
+    }
 
     [[nodiscard]]
     operator const register_operand&() const {
-        [[unlikely]]
-        if (regset_.size() > 1)
-            throw backend_exception("Cannot convert value of type {} to register",
-                                    type_);
-        return regset_[0];
+        return as_backing_vector();
     }
 
     [[nodiscard]]
     operator register_operand&() {
+        return as_backing_vector();
+    }
+
+    [[nodiscard]]
+    operator scalar_sequence&() {
+        return as_simulated_vector();
+    }
+
+    [[nodiscard]]
+    operator const scalar_sequence&() const {
+        return as_simulated_vector();
+    }
+
+    [[nodiscard]]
+    bool vector_backed() const {
+        return std::holds_alternative<register_operand>(backing_vector_);
+    }
+
+    [[nodiscard]]
+    register_operand& as_backing_vector() {
         [[unlikely]]
-        if (regset_.size() > 1)
-            throw backend_exception("Cannot convert value of type {} to register",
-                                    type_);
-        return regset_[0];
+        if (!vector_backed())
+            throw backend_exception("Attempting to access simulated vector as vector-backed vector");
+
+        return std::get<register_operand>(backing_vector_);
     }
 
     [[nodiscard]]
-    operator register_sequence&() {
-        return regset_;
+    const register_operand& as_backing_vector() const {
+        [[unlikely]]
+        if (!vector_backed())
+            throw backend_exception("Attempting to access simulated vector as vector-backed vector");
+
+        return std::get<register_operand>(backing_vector_);
     }
 
     [[nodiscard]]
-    operator const register_sequence&() const {
-        return regset_;
+    scalar_sequence& as_simulated_vector() {
+        [[unlikely]]
+        if (vector_backed())
+            throw backend_exception("Attempting to access vector-backed vector as simulated vector");
+
+        return std::get<scalar_sequence>(backing_vector_);
     }
 
     [[nodiscard]]
-    bool vector_backed() const { return regset_.size() == 1; }
+    const scalar_sequence& as_simulated_vector() const {
+        [[unlikely]]
+        if (vector_backed())
+            throw backend_exception("Attempting to access vector-backed vector as simulated vector");
+
+        return std::get<scalar_sequence>(backing_vector_);
+    }
+
+    [[nodiscard]]
+    scalar& operator[](std::size_t i) {
+        return as_simulated_vector()[i];
+    }
+
+    [[nodiscard]]
+    const scalar& operator[](std::size_t i) const {
+        return as_simulated_vector()[i];
+    }
+
+    [[nodiscard]]
+    std::size_t size() const {
+        if (vector_backed()) return 1;
+        return as_simulated_vector().size();
+    }
 
     [[nodiscard]]
     ir::value_type type() const { return type_; }
-
-    [[nodiscard]]
-    register_operand& operator[](std::size_t i) { return regset_[i]; }
-
-    [[nodiscard]]
-    const register_operand& operator[](std::size_t i) const { return regset_[i]; }
-
-    [[nodiscard]]
-    register_operand& front() { return regset_[0]; }
-
-    [[nodiscard]]
-    const register_operand& front() const { return regset_[0]; }
-
-    [[nodiscard]]
-    register_operand& back() { return regset_[regset_.size()]; }
-
-    [[nodiscard]]
-    const register_operand& back() const { return regset_[regset_.size()]; }
-
-    [[nodiscard]]
-    std::size_t size() const { return regset_.size(); }
 private:
-    register_sequence regset_;
+    std::variant<std::vector<scalar>, register_operand> backing_vector_;
     ir::value_type type_;
 
     static void check_type(const register_sequence& regseq, ir::value_type type) {
@@ -375,26 +424,39 @@ public:
     }
 
     void store(const variable& source, const memory_operand& address) {
-        if (source.type().is_vector())
-            throw backend_exception("Cannot handle vector stores");
+        if (source.type().is_vector()) {
+            auto src = source.as_vector();
+
+            [[unlikely]]
+            if (src.vector_backed())
+                throw backend_exception("Cannot handle vector stores for type {}", source.type());
+
+            auto simulated = src.as_simulated_vector();
+            for (std::size_t i = 0; i < simulated.size(); ++i) {
+                auto addr = memory_operand(address.base_register(),
+                                           i * (simulated[i].type().width() / 64));
+                store(simulated[i], addr);
+            }
+
+            return;
+        }
 
         store(source.as_scalar(), address);
     }
 
-
-    void add(const vector& destination, const vector& lhs, const vector& rhs) {
-        if (destination.vector_backed() && lhs.vector_backed() && rhs.vector_backed()) {
-            append(assembler::add(destination[0], lhs[0], rhs[0]));
-        } else {
-            for (std::size_t i = 0; i < destination.size(); ++i) {
-                append(assembler::add(destination[i], lhs[i], rhs[i]));
-            }
-        }
-    }
-
 	void add(const variable &destination, const variable &lhs, const variable &rhs) {
         if (destination.type().is_vector()) {
-            add(destination.as_vector(), lhs.as_vector(), rhs.as_vector());
+            const auto& dest = destination.as_vector();
+            const auto& lhs_vec = lhs.as_vector();
+            const auto& rhs_vec = rhs.as_vector();
+            if (dest.vector_backed() && lhs_vec.vector_backed() && rhs_vec.vector_backed()) {
+                append(assembler::add(dest, lhs_vec, rhs_vec));
+            } else {
+                for (std::size_t i = 0; i < dest.size(); ++i) {
+                    append(assembler::add(dest[i], lhs_vec[i], rhs_vec[i]));
+                }
+            }
+
             return;
         }
 
@@ -433,7 +495,6 @@ public:
 
         for (std::size_t i = 0; i < destination.size(); ++i) {
             append(assembler::sub(destination[i], lhs[i], rhs[i]));
-            bound_to_type(destination[i], destination[i].type());
         }
     }
 
@@ -457,7 +518,6 @@ public:
         append(assembler::subs(destination[0], lhs[0], rhs[0]));
         for (std::size_t i = 1; i < destination.size(); ++i) {
             append(assembler::sbcs(destination[i], lhs[i], rhs[i]));
-            bound_to_type(destination[i], destination[i].type());
         }
     }
 
@@ -473,7 +533,6 @@ public:
                  register_operand(register_operand::wzr_sp),
                  register_operand(register_operand::wzr_sp)));
             append(assembler::sbcs(destination[i], lhs[i], rhs[i]));
-            bound_to_type(destination[i], destination[i].type());
         }
     }
 
@@ -488,6 +547,7 @@ public:
         auto lhs_extended = sign_extend(lhs, destination.type());
         auto rhs_extended = sign_extend(rhs, destination.type());
         append(assembler::orr(destination, lhs_extended, rhs_extended));
+        bound_to_type(destination, destination.type());
 
         if (destination.type().width() < 64)
             append(assembler::ands(register_operand(register_operand::wzr_sp),
@@ -526,9 +586,10 @@ public:
                                     destination.type(), lhs.type(), rhs.type());
 
         for (std::size_t i = 0; i < destination.size(); ++i) {
-        auto lhs_extended = sign_extend(lhs[i], destination.type());
-        auto rhs_extended = sign_extend(rhs[i], destination.type());
+            auto lhs_extended = sign_extend(lhs[i], destination.type());
+            auto rhs_extended = sign_extend(rhs[i], destination.type());
             append(assembler::ands(destination[i], lhs_extended, rhs_extended));
+            bound_to_type(destination, destination.type());
         }
 
         set_zero_flag();
@@ -861,6 +922,10 @@ public:
             return;
         }
 
+        [[unlikely]]
+        if (is_bignum(source.type()))
+            throw backend_exception("Not implemented zero-extend for type {}", source.type());
+
         // Sanity check
         // TODO: more missing sanity checks
         [[unlikely]]
@@ -879,6 +944,8 @@ public:
             append(assembler::uxth(destination[0], source));
         } else if (source.type().width() <= 32) {
             append(assembler::uxtw(destination[0], source));
+        } else {
+            move_to_variable(destination[0], source[0]);
         }
 
         current_extension_bytes += destination[0].type().width();
@@ -967,10 +1034,14 @@ public:
         if (!destination.type().is_vector() && !source.type().is_vector())
             return bitcast(destination.as_scalar(), source.as_scalar());
 
-        if (destination.type().is_vector() && source.type().is_vector()) {
+        [[unlikely]]
+        if (destination.type().is_vector() && source.type().is_vector())
             throw backend_exception("Cannot handle bitcast from vector {} to vector {}",
                                     source.type(), destination.type());
-        }
+
+        if (destination.type().width() != source.type().width())
+            throw backend_exception("Cannot bitcast from type {} to type with different width {}",
+                                    source.type(), destination.type());
 
         if (destination.type().is_vector()) {
             auto dest = destination.as_vector();
@@ -981,10 +1052,56 @@ public:
                 throw backend_exception("Cannot handle bitcast for vector-based vector {}",
                                         dest.type());
 
-            for (std::size_t i = 0; i < dest.size(); ++i)
-                move_to_variable(dest[i], src[i]);
+            if (dest.type().element_width() == src.type().element_width()) {
+                for (std::size_t i = 0; i < dest.size(); ++i)
+                    move_to_variable(dest[i], src[i]);
+                return;
+            }
+
+            // TODO: check
+            // [[unlikely]]
+            // if (dest.type().element_width() % src.type().element_width())
+            //     throw backend_exception("Cannot move incompatible type {} to {}",
+            //                             src.type(), dest.type());
+
+            if (src.type().element_width() <= dest.type().element_width()) {
+                for (std::size_t i = 0; i < dest.size(); ++i) {
+                    for (std::size_t j = 0; j < dest[i].size(); ++j)
+                        move_to_variable(dest[i][j], src[i+j]);
+                }
+            } else {
+                bit_insert(dest, dest, src, 0, src.type().width());
+            }
 
             return;
+        }
+
+        if (source.type().is_vector()) {
+            auto dest = destination.as_scalar();
+            auto src = source.as_vector();
+
+            [[unlikely]]
+            if (src.vector_backed())
+                throw backend_exception("Cannot handle bitcast from vector-based vector {}",
+                                        src.type());
+
+            if (src.type().element_width() <= dest.type().element_width()) {
+                std::size_t insert_per_elem = dest[0].type().width() / src[0].type().width();
+                std::size_t inserted_count = 0;
+                for (std::size_t i = 0; i < dest.size(); ++i) {
+                    auto insert_idx = i + inserted_count;
+                    bit_insert(dest[i], dest[i], src[insert_idx],
+                               inserted_count * src[insert_idx].type().width(),
+                               src[insert_idx].type().width());
+
+                    if (++inserted_count == insert_per_elem)
+                        inserted_count = 0;
+                }
+
+                return;
+            }
+
+            throw backend_exception("Not implemented");
         }
 
         // Source is vector
@@ -1056,13 +1173,8 @@ public:
             throw backend_exception("Truncation not implemented for large scalar type {}",
                                     destination.type());
 
-        auto src = source[0];
-        src.type() = ir::value_type(source.type().type_class(), 32);
-        move_to_variable(destination, src);
-
-        if (destination.type().width() == 1)
-            bound_to_type(destination, destination.type());
-
+        insert_comment("Truncate from {} to {}", source.type(), destination.type());
+        bit_extract(destination, source, 0, destination.type().width());
         return;
     }
 
@@ -1138,7 +1250,12 @@ public:
     void left_shift(const scalar& destination, const scalar& input, const scalar& amount) {
         [[unlikely]]
         if (destination.type() != input.type())
-            throw backend_exception("Cannot left-shift between different types");
+            throw backend_exception("Cannot left-shift different types {} to {}",
+                                    destination.type(), input.type());
+
+        [[unlikely]]
+        if (is_bignum(amount.type()))
+            throw backend_exception("Cannot left-shift with big scalar amount {}", amount.type());
 
         [[unlikely]]
         if (is_bignum(destination.type())) {
@@ -1149,6 +1266,13 @@ public:
             // 2. Input is also big scalar
             throw backend_exception("Cannot perform logical left shift with big scalar {}",
                                     destination.type());
+        }
+
+        if (destination.type().width() > amount.type().width()) {
+            auto amount_var = amount;
+            amount_var[0].cast(destination.type());
+            append(assembler::lsl(destination, input, amount_var));
+            return;
         }
 
         append(assembler::lsl(destination, input, amount));
@@ -1356,12 +1480,37 @@ public:
             move_to_variable(destination.as_vector(), source.as_vector());
 
             auto start_vector_idx = to / destination.type().element_width();
-            auto end_vector_idx = to + length / destination.type().element_width();;
-            if (length > destination.type().element_width()) {
-                for (std::size_t i = 0; i < end_vector_idx; ++i)
-                    move_to_variable(destination.as_vector()[start_vector_idx+i], insert_bits.as_scalar()[i]);
+            auto end_vector_idx = to + length / destination.type().element_width();
+
+            auto dest = destination.as_vector();
+            auto insert = insert_bits.as_scalar();
+            if (is_bignum(dest.type().element_type())) {
+                for (std::size_t i = 0; i < end_vector_idx; ++i) {
+                    std::size_t reg_count = dest[start_vector_idx+i].size();
+                    for (std::size_t j = 0; j < reg_count; ++j) {
+                        move_to_variable(dest[start_vector_idx+i][j], insert[i+j]);
+                    }
+                }
                 return;
             }
+
+            if (dest.type().element_width() < insert[0].type().width()) {
+                std::size_t insert_per_elem = insert[0].type().width() / dest[0].type().width();
+                std::size_t insert_count = 0;
+                for (std::size_t i = 0; i < end_vector_idx; ++i) {
+                    std::size_t dest_idx = start_vector_idx+i;
+                    std::size_t insert_idx = (i - insert_count) / insert_per_elem;
+                    bit_extract(dest[dest_idx], insert[insert_idx],
+                                insert_count * dest[dest_idx].type().width(),
+                                dest[dest_idx].type().width());
+                    if (++insert_count == insert_per_elem)
+                        insert_count = 0;
+                }
+                return;
+            }
+
+            for (std::size_t i = 0; i < end_vector_idx; ++i)
+                move_to_variable(dest[start_vector_idx+i], insert[i]);
             return;
         }
 
@@ -1370,21 +1519,37 @@ public:
 
     void bit_extract(const scalar& destination, const scalar& source,
                      std::size_t from, std::size_t length) {
-        if (is_bignum(destination.type())) {
-            throw backend_exception("Not implemented");
-        }
+        [[unlikely]]
+        if (is_bignum(destination.type()))
+            throw backend_exception("Bit extract for big scalar type {} not implemented",
+                                    destination.type());
 
-        [[likely]]
-        if (destination.size() == 1) {
-            if (destination.type().width() > source.type().width()) {
-                auto source_ext = zero_extend(source, destination.type());
-                append(assembler::ubfx(destination, source_ext, from, length));
-            } else {
+        if (destination.type().width() > source.type().width()) {
+            auto source_ext = zero_extend(source, destination.type());
+            append(assembler::ubfx(destination, source_ext, from, length));
+        } else {
+            if (is_bignum(source.type())) {
                 auto dest_reg = destination[0];
-                dest_reg.cast(source.type());
-                append(assembler::ubfx(dest_reg, source, from, length));
+
+                auto src_idx = from / source[0].type().width();
+                dest_reg.cast(source[src_idx].type());
+                append(assembler::ubfx(dest_reg, source[src_idx], from % source[0].type().width(), length));
+                return;
             }
-            return;
+
+            if (destination.type().width() < source.type().width()) {
+                // auto dest = vreg_alloc_.allocate_scalar(source.type());
+                // move_to_variable(dest, 0);
+                // append(assembler::ubfx(dest, source, from, length));
+                // dest.type() = destination.type();
+                // move_to_variable(destination, dest);
+                auto dest = destination;
+                dest.cast(source.type());
+                append(assembler::ubfx(dest, source, from, length));
+                return;
+            }
+
+            append(assembler::ubfx(destination, source, from, length));
         }
     }
 
@@ -1400,7 +1565,8 @@ public:
     void multiply(const scalar& destination, const scalar& multiplicand, const scalar& multiplier) {
         [[unlikely]]
         if (destination.type().width() > 128)
-            throw backend_exception("Not implemented mul on larger than 128-bit");
+            throw backend_exception("Not implemented mul on type {} larger than 128-bit",
+                                    destination.type());
 
         if (destination.type().width() == 128) {
             [[likely]]
@@ -1442,7 +1608,8 @@ public:
             // The same fmul is used in both 32-bit and 64-bit multiplication
             // The actual operation depends on the type of its registers
             {
-                throw backend_exception("Not implemented");
+                throw backend_exception("Not implemented floating-point multiplication {} = {}x{}",
+                                        destination.type(), multiplicand.type(), multiplier.type());
                 // auto multiplicand_conv = cast(multiplicand, destination[0].type());
                 // auto multiplier_conv = cast(multiplier, destination[0].type());
                 // append(assembler::fmul(destination, multiplicand_conv, multiplier_conv));
@@ -1465,20 +1632,32 @@ public:
         return;
     }
 
-    void divide(const scalar& destination,
-                const scalar& dividend,
-                const scalar& divider)
-    {
-        throw backend_exception("Not implemented");
-        if (destination.size() > 1)
-            throw backend_exception("Division not supported for types larger than 128-bits");
+    void divide(const scalar& destination, const scalar& dividend, const scalar& divider) {
+        [[unlikely]]
+        if (dividend.type() != divider.type() || destination.type() != dividend.type())
+            throw backend_exception("Not implemented division with different divided {} and divider {} to {}",
+                                    dividend.type(), divider.type(), destination.type());
+
+        [[unlikely]]
+        if (destination.type().width() > 128)
+            throw backend_exception("Not implemented division on type {} larger than 128-bit",
+                                    destination.type());
+
+        [[unlikely]]
+        if (destination.type().type_class() == ir::value_type_class::floating_point)
+            throw backend_exception("Not implemented division on floating-point types",
+                                    destination.type());
+
+        if (is_bignum(destination.type()))
+            throw backend_exception("Not implemented division to big scalar type {}",
+                                    destination.type());
 
         // The input and the output have the same size:
         // For 64-bit division: 64-bit input dividend/divisor and 64-bit output but 32-bit division
         // For 128-bit multiplication: 128-bit input dividend/divisor and 128-bit output but 64-bit division
         // NOTE: this is very unfortunate
         // NOTE: we'll need to handle separetely floats
-        switch (destination[0].type().type_class()) {
+        switch (destination.type().type_class()) {
         case ir::value_type_class::signed_integer:
             append(assembler::sdiv(destination, dividend, divider));
             break;
@@ -1487,7 +1666,7 @@ public:
             break;
         default:
             throw backend_exception("Encounted unknown type class {} for division",
-                                    util::to_underlying(destination[0].type().type_class()));
+                                    util::to_underlying(destination.type().type_class()));
         }
 
 		return;

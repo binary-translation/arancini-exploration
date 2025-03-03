@@ -895,7 +895,7 @@ public:
     constexpr bool supports_lse() const { return supports_lse_; }
 
     [[nodiscard]]
-    constexpr bool supports_sve() const { return supports_sve_; }
+    bool supports_sve() const { return supports_sve_; }
 private:
     ks_err status_;
     ks_engine* ks_;

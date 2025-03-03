@@ -17,20 +17,13 @@
 using namespace arancini::output::dynamic::arm64;
 using namespace arancini::ir;
 
-// TODO: move to common
-register_operand context_block_reg(register_operand::x29);
-register_operand dbt_retval_register(register_operand::x0);
-
-// TODO: handle as part of capabilities code
-static constexpr bool supports_lse = false;
-
 using arancini::input::x86::reg_offsets;
 
 memory_operand arm64_translation_context::guest_memory(int regoff, memory_operand::address_mode mode) {
     if (regoff > 255 || regoff < -256) {
         const auto& base = vreg_alloc_.allocate(value_types::addr_type);
         builder_.move_to_variable(base, regoff);
-        builder_.add(base, base, context_block_reg);
+        builder_.add(base, base, scalar(builder_.context_block()));
         return memory_operand(base.as_scalar(), 0, mode);
     } else {
         return memory_operand(builder_.context_block(), regoff, mode);
@@ -83,7 +76,6 @@ void arm64_translation_context::end_block() {
     try {
         builder_.allocate();
 
-        // Return value in x0 = 0;
         builder_.ret(ret_);
 
         builder_.emit(writer());
@@ -388,7 +380,14 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         sets_flags = false;
         break;
 	case binary_arith_op::div:
-        builder_.divide(destination, lhs, rhs);
+        {
+            auto type = ir::value_type(lhs.type().type_class(), lhs.type().width() / 2);
+            auto lhs_src = builder_.truncate(lhs, type);
+            auto rhs_src = builder_.truncate(rhs, type);
+            destination.type() = ir::value_type(destination.type().type_class(),
+                                                destination.type().element_width() / 2);
+            builder_.divide(destination, lhs, rhs);
+        }
         sets_flags = false;
 		break;
 	case binary_arith_op::mod:
@@ -399,10 +398,13 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         // lhs % rhs = lhs - (rhs * floor(lhs/rhs))
         {
             builder_.insert_comment("Implementing modulo via division and multiplication");
-            auto temp1 = vreg_alloc_.allocate(n.val().type());
-            auto temp2 = vreg_alloc_.allocate(n.val().type());
-            builder_.divide(temp1, lhs, rhs);
-            builder_.multiply(temp2, rhs, temp1);
+            auto type = ir::value_type(lhs.type().type_class(), lhs.type().width() / 2);
+            auto lhs_src = builder_.truncate(lhs, type);
+            auto rhs_src = builder_.truncate(rhs, type);
+            auto temp1 = vreg_alloc_.allocate(type);
+            auto temp2 = vreg_alloc_.allocate(destination.type());
+            builder_.divide(temp1, lhs_src, rhs_src);
+            builder_.multiply(temp2, rhs_src, temp1);
             builder_.subs(destination, lhs, temp2);
             sets_flags = false;
         }
