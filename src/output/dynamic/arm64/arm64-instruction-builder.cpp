@@ -80,6 +80,384 @@ variable virtual_register_allocator::allocate(ir::value_type type) {
     return allocate_scalar(type);
 }
 
+
+instruction& instruction_builder::atomic_load(const scalar& destination, const memory_operand& mem,
+                                              atomic_types type) 
+{
+    if (type == atomic_types::exclusive) {
+        if (destination.type().width() <= 8) {
+            return append(assembler::ldxrb(destination, mem));
+        } else if (destination.type().width() <= 16) {
+            return append(assembler::ldxrh(destination, mem));
+        }
+
+        return append(assembler::ldxr(destination, mem));
+    }
+
+    switch (destination.type().element_width()) {
+    case 8:
+        return append(assembler::ldaxrb(destination, mem));
+    case 16:
+        return append(assembler::ldaxrh(destination, mem));
+    case 32:
+    case 64:
+        return append(assembler::ldaxr(destination, mem));
+    default:
+        throw backend_exception("Cannot load atomically type {}", destination.type());
+    }
+}
+
+instruction& instruction_builder::atomic_store(const register_operand& status, const register_operand& rt,
+                                               const memory_operand& mem, atomic_types type) 
+{
+    if (type == atomic_types::exclusive) {
+        switch (status.type().element_width()) {
+        case 8:
+            return append(assembler::stxrb(status, rt, mem));
+        case 16:
+            return append(assembler::stxrh(status, rt, mem));
+        case 32:
+        case 64:
+            return append(assembler::stxr(status, rt, mem));
+        default:
+            throw backend_exception("Cannot store atomically type {}", status.type());
+        }
+    }
+
+    switch (status.type().element_width()) {
+    case 8:
+        return append(assembler::stlxrb(status, rt, mem));
+    case 16:
+        return append(assembler::stlxrh(status, rt, mem));
+    case 32:
+    case 64:
+        return append(assembler::stlxr(status, rt, mem));
+    default:
+        throw backend_exception("Cannot store atomically type {}", status.type());
+    }
+}
+
+void instruction_builder::atomic_block(const register_operand &data, const memory_operand &mem,
+                                       std::function<void()> body, atomic_types type)
+{
+    const auto& status = vreg_alloc_.allocate(ir::value_type::u32());
+    auto loop_label = fmt::format("loop_{}", instructions_.size());
+    auto success_label = fmt::format("success_{}", instructions_.size());
+    label(loop_label);
+    atomic_load(data, mem);
+
+    body();
+
+    atomic_store(status.as_scalar(), data, mem).add_comment("store if not failure");
+    zero_compare_and_branch(status.as_scalar(), success_label, cond_operand::eq())
+                            .add_comment("== 0 represents success storing");
+    branch(loop_label).add_comment("loop until failure or success");
+    label(success_label);
+    return;
+}
+
+void instruction_builder::atomic_add(const scalar& destination, const scalar& source,
+                const memory_operand& mem, atomic_types type)
+{
+
+    if (!asm_.supports_lse()) {
+        atomic_block(destination, mem, [this, &destination, &source]() {
+            adds(destination, source, destination);
+        }, type);
+    }
+
+    if (type == atomic_types::exclusive) {
+        switch (destination.type().element_width()) {
+        case 8:
+            append(assembler::ldaddb(destination, source, mem).as_keep());
+            return;
+        case 16:
+            append(assembler::ldaddh(destination, source, mem).as_keep());
+            return;
+        case 32:
+        case 64:
+            append(assembler::ldadd(destination, source, mem).as_keep());
+            return;
+        default:
+            throw backend_exception("Cannot atomically add type {}", source.type());
+        }
+    }
+
+    throw backend_exception("Cannot generate non-exclusive atomic accesses");
+}
+
+void instruction_builder::atomic_sub(const scalar &destination, const scalar &source,
+                const memory_operand &mem, atomic_types type)
+{
+    const auto& negated = vreg_alloc_.allocate(source.type());
+    negate(negated.as_scalar(), source);
+    atomic_add(destination, negated.as_scalar(), mem, type);
+}
+
+void instruction_builder::atomic_xadd(const scalar &destination, const scalar &source,
+                 const memory_operand &mem, atomic_types type)
+{
+    const scalar &old = vreg_alloc_.allocate_scalar(destination.type());
+    append(assembler::mov(old, destination));
+    atomic_add(destination, source, mem, type);
+    append(assembler::mov(source, old));
+}
+
+void instruction_builder::atomic_clr(const scalar &destination, const scalar &source,
+                const memory_operand &mem, atomic_types type)
+{
+    if (!asm_.supports_lse()) {
+        atomic_block(destination, mem, [this, &destination, &source]() {
+            const scalar& negated = vreg_alloc_.allocate_scalar(source.type());
+            complement(negated, source);
+            ands(destination, destination, negated);
+        }, type);
+    }
+
+    if (type == atomic_types::exclusive) {
+        switch (destination.type().element_width()) {
+        case 8:
+            append(assembler::ldclrb(destination, source, mem).as_keep());
+            return;
+        case 16:
+            append(assembler::ldclrh(destination, source, mem).as_keep());
+            return;
+        case 32:
+        case 64:
+            append(assembler::ldclr(destination, source, mem).as_keep());
+            return;
+        default:
+            throw backend_exception("Cannot atomically clear type {}", source.type());
+        }
+    }
+
+    throw backend_exception("Cannot generate non-exclusive atomic accesses");
+}
+
+void instruction_builder::atomic_and(const scalar &destination, const scalar &source,
+                const memory_operand &mem, atomic_types type)
+{
+    const auto& complemented = vreg_alloc_.allocate_scalar(source.type());
+    complement(complemented, source);
+    atomic_clr(destination, complemented, mem, type);
+}
+
+void instruction_builder::atomic_eor(const scalar &destination, const scalar &source,
+                const scalar &mem, atomic_types type)
+{
+    if (!asm_.supports_lse()) {
+        atomic_block(destination, mem, [this, &destination, &source]() {
+            exclusive_or(destination, destination, source);
+        }, type);
+    }
+    if (type == atomic_types::exclusive) {
+        switch (destination.type().element_width()) {
+        case 8:
+            append(assembler::ldeorb(destination, source, mem).as_keep());
+            return;
+        case 16:
+            append(assembler::ldeorh(destination, source, mem).as_keep());
+            return;
+        case 32:
+        case 64:
+            append(assembler::ldeor(destination, source, mem).as_keep());
+            return;
+        default:
+            throw backend_exception("Cannot atomically clear type {}", source.type());
+        }
+    }
+
+    throw backend_exception("Cannot generate non-exclusive atomic accesses");
+}
+
+void instruction_builder::atomic_or(const scalar &destination, const scalar &source,
+                const scalar &mem, atomic_types type)
+{
+    if (!asm_.supports_lse()) {
+        atomic_block(destination, mem, [this, &destination, &source]() {
+            logical_or(destination, destination, source);
+        }, type);
+    }
+    if (type == atomic_types::exclusive) {
+        switch (destination.type().element_width()) {
+        case 8:
+            append(assembler::ldsetb(destination, source, mem));
+            return;
+        case 16:
+            append(assembler::ldseth(destination, source, mem));
+            return;
+        case 32:
+        case 64:
+            append(assembler::ldset(destination, source, mem));
+            return;
+        default:
+            throw backend_exception("Cannot atomically clear type {}", destination.type());
+        }
+    }
+
+    throw backend_exception("Cannot generate non-exclusive atomic accesses");
+}
+
+void instruction_builder::atomic_smax(const scalar &destination, const scalar &source,
+                 const memory_operand &mem, atomic_types type)
+{
+    if (!asm_.supports_lse()) {
+        throw backend_exception("smax not implemented");
+    }
+    if (type == atomic_types::exclusive) {
+        switch (destination.type().element_width()) {
+        case 8:
+            append(assembler::ldsmaxb(destination, source, mem).as_keep());
+            return;
+        case 16:
+            append(assembler::ldsmaxh(destination, source, mem).as_keep());
+            return;
+        case 32:
+        case 64:
+            append(assembler::ldsmax(destination, source, mem).as_keep());
+            return;
+        default:
+            throw backend_exception("Cannot atomically clear type {}", source.type());
+        }
+    }
+
+    throw backend_exception("Cannot generate non-exclusive atomic accesses");
+}
+
+void instruction_builder::atomic_smin(const scalar &rm, const scalar &source,
+                 const memory_operand &mem, atomic_types type)
+{
+    if (!asm_.supports_lse()) {
+        throw backend_exception("smin not implemented");
+    }
+    if (type == atomic_types::exclusive) {
+        switch (rm.type().element_width()) {
+        case 8:
+            append(assembler::ldsminb(rm, source, mem).as_keep());
+            return;
+        case 16:
+            append(assembler::ldsminh(rm, source, mem).as_keep());
+            return;
+        case 32:
+        case 64:
+            append(assembler::ldsmin(rm, source, mem).as_keep());
+            return;
+        default:
+            throw backend_exception("Cannot atomically clear type {}", source.type());
+        }
+    }
+
+    throw backend_exception("Cannot generate non-exclusive atomic accesses");
+}
+
+void instruction_builder::atomic_umax(const scalar &rm, const scalar &source,
+                 const memory_operand &mem, atomic_types type)
+{
+    if (!asm_.supports_lse()) {
+        throw backend_exception("umax not implemented");
+    }
+
+    if (type == atomic_types::exclusive) {
+        switch (rm.type().element_width()) {
+        case 8:
+            append(assembler::ldumaxb(rm, source, mem).as_keep());
+            return;
+        case 16:
+            append(assembler::ldumaxh(rm, source, mem).as_keep());
+            return;
+        case 32:
+        case 64:
+            append(assembler::ldumax(rm, source, mem).as_keep());
+            return;
+        default:
+            throw backend_exception("Cannot atomically clear type {}", source.type());
+        }
+    }
+
+    throw backend_exception("Cannot generate non-exclusive atomic accesses");
+}
+
+
+void instruction_builder::atomic_umin(const scalar &rm, const scalar &source,
+                        const memory_operand &mem, atomic_types type)
+{
+    if (!asm_.supports_lse()) {
+        throw backend_exception("umin not implemented");
+    }
+    if (type == atomic_types::exclusive) {
+        switch (rm.type().element_width()) {
+        case 8:
+            append(assembler::lduminb(rm, source, mem).as_keep());
+            return;
+        case 16:
+            append(assembler::lduminh(rm, source, mem).as_keep());
+            return;
+        case 32:
+        case 64:
+            append(assembler::ldumin(rm, source, mem).as_keep());
+            return;
+        default:
+            throw backend_exception("Cannot atomically clear type {}", source.type());
+        }
+    }
+
+    throw backend_exception("Cannot generate non-exclusive atomic accesses");
+}
+
+void instruction_builder::atomic_swap(const scalar &destination, const scalar &source,
+                 const memory_operand &mem, atomic_types type)
+{
+    if (!asm_.supports_lse()) {
+        atomic_block(destination, mem, [this, &destination, &source]() {
+            const auto& old = vreg_alloc_.allocate_scalar(destination.type());
+            append(assembler::mov(old, destination));
+            append(assembler::mov(destination, source));
+            append(assembler::mov(source, old));
+        }, type);
+    }
+
+    if (type == atomic_types::exclusive) {
+        switch (destination.type().element_width()) {
+        case 8:
+            append(assembler::swpb(destination, source, mem).as_keep());
+            return;
+        case 16:
+            append(assembler::swph(destination, source, mem).as_keep());
+            return;
+        case 32:
+        case 64:
+            append(assembler::swp(destination, source, mem).as_keep());
+            return;
+        default:
+            throw backend_exception("Cannot atomically clear type {}", source.type());
+        }
+    }
+
+    throw backend_exception("Cannot generate non-exclusive atomic accesses");
+}
+
+void instruction_builder::atomic_cmpxchg(const scalar& current, const scalar &acc,
+                    const scalar &src, const memory_operand &mem,
+                    atomic_types type)
+{
+    if (!asm_.supports_lse()) {
+        atomic_block(current, mem, [this, &current, &acc]() {
+            comparison(current, acc);
+            append(assembler::csel(acc, current, acc, cond_operand::ne()))
+                  .add_comment("conditionally move current memory scalar into accumulator");
+        }, type);
+        return;
+    }
+
+    insert_comment("Atomic CMPXCHG using CAS (enabled on systems with LSE support");
+    append(assembler::cas(acc, src, mem))
+           .add_comment("write source to memory if source == accumulator, accumulator = source");
+    append(assembler::cmp(acc, 0));
+    append(assembler::mov(current, acc));
+
+    throw backend_exception("Cannot generate non-exclusive atomic accesses");
+}
+
 void instruction_builder::spill() {
 }
 
