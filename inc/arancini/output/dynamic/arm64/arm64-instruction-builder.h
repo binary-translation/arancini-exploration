@@ -1247,139 +1247,17 @@ public:
         return append(assembler::cmp(lhs, rhs_value));
     }
 
-    void left_shift(const scalar& destination, const scalar& input, const scalar& amount) {
-        [[unlikely]]
-        if (destination.type() != input.type())
-            throw backend_exception("Cannot left-shift different types {} to {}",
-                                    destination.type(), input.type());
+    void left_shift(const scalar& destination, const scalar& input, const scalar& amount);
 
-        [[unlikely]]
-        if (is_bignum(amount.type()))
-            throw backend_exception("Cannot left-shift with big scalar amount {}", amount.type());
+    void left_shift(const scalar& destination, const scalar& input, const immediate_operand& shift_amount);
 
-        [[unlikely]]
-        if (is_bignum(destination.type())) {
+    void logical_right_shift(const scalar& destination, const scalar& input, const scalar& amount);
 
+    void logical_right_shift(const scalar& destination, const scalar& input, const immediate_operand& amount);
 
-            // Need to handle two cases:
-            // 1. Input is GPR/FPR
-            // 2. Input is also big scalar
-            throw backend_exception("Cannot perform logical left shift with big scalar {}",
-                                    destination.type());
-        }
+    void arithmetic_right_shift(const scalar& destination, const scalar& input, const scalar& amount);
 
-        if (destination.type().width() > amount.type().width()) {
-            auto amount_var = amount;
-            amount_var[0].cast(destination.type());
-            append(assembler::lsl(destination, input, amount_var));
-            return;
-        }
-
-        append(assembler::lsl(destination, input, amount));
-    }
-
-    void left_shift(const scalar& destination, const scalar& input, const immediate_operand& shift_amount) {
-        [[unlikely]]
-        if (destination.type() != input.type())
-            throw backend_exception("Cannot left-shift between different types");
-
-        immediate_operand amount = shift_amount;
-        std::size_t first_non_zero = 0;
-        if (is_bignum(destination.type())) {
-            // Multiple of 64
-            move_to_variable(destination, 0);
-
-            if ((amount.value() % 64) == 0 || amount.value() > 64) {
-                auto multiple = amount.value() / 64;
-                for (std::size_t i = multiple; i < destination.size(); ++i)
-                    move_to_variable(destination[i], input[i - multiple]);
-
-                if ((amount.value() % 64) == 0) return;
-
-                amount = amount.value() - (multiple * 64);
-                first_non_zero = multiple;
-                // NOTE: now we know that we have a shift amount < 64
-            }
-
-            auto temporary = vreg_alloc_.allocate_scalar(input.type());
-            if (amount.value() < 64) {
-                std::size_t extract_start = 64 - amount.value();
-
-                auto element_size = destination.type().element_width() <= 32 ? 32 : 64;
-                auto bitsize = element_size == 32 ? 5 : 6;
-                auto amount_var = move_immediate(amount.value(), ir::value_type::u(bitsize));
-
-                for (std::size_t i = first_non_zero; i < destination.size() - 1; ++i) {
-                    bit_extract(temporary[i], input[i], extract_start, amount.value());
-                }
-
-                for (std::size_t i = first_non_zero; i < destination.size(); ++i) {
-                    append(assembler::lsl(destination[i], input[i], amount_var));
-                }
-
-                for (std::size_t i = first_non_zero; i < destination.size() - 1; ++i) {
-                    bit_insert(destination[i], destination[i], temporary[i+1], 0, amount.value());
-                }
-                return;
-            }
-        }
-
-        auto element_size = destination.type().element_width() <= 32 ? 32 : 64;
-        std::size_t bitsize = element_size == 32 ? 5 : 6;
-        append(assembler::lsl(destination, input,
-                              move_immediate(amount.value(), ir::value_type::u(bitsize))));
-    }
-
-    void logical_right_shift(const scalar& destination, const scalar& input, const scalar& amount) {
-        [[unlikely]]
-        if (is_bignum(destination.type())) {
-            throw backend_exception("Cannot perform logical right shift with big scalar {}",
-                                    destination.type());
-        }
-
-        auto input_src = zero_extend(input, destination.type());
-        auto amount_src = zero_extend(amount, destination.type());
-        append(assembler::lsr(destination, input_src, amount_src));
-    }
-
-    void logical_right_shift(const scalar& destination, const scalar& input, const immediate_operand& amount) {
-        [[unlikely]]
-        if (is_bignum(destination.type())) {
-            throw backend_exception("Cannot perform logical right shift with big scalar {}",
-                                    destination.type());
-        }
-
-        auto element_size = destination.type().element_width() <= 32 ? 32 : 64;
-        std::size_t bitsize = element_size == 32 ? 5 : 6;
-        append(assembler::lsr(destination, input,
-                              move_immediate(amount.value(), ir::value_type::u(bitsize))));
-    }
-
-    void arithmetic_right_shift(const scalar& destination, const scalar& input, const scalar& amount) {
-        [[unlikely]]
-        if (is_bignum(destination.type())) {
-            throw backend_exception("Cannot perform arithmetic right shift with big scalar {}",
-                                    destination.type());
-        }
-
-        auto input_src = zero_extend(input, destination.type());
-        auto amount_src = zero_extend(amount, destination.type());
-        append(assembler::asr(destination, input_src, amount_src));
-    }
-
-    void arithmetic_right_shift(const scalar& destination, const scalar& input, const immediate_operand& amount) {
-        [[unlikely]]
-        if (is_bignum(destination.type())) {
-            throw backend_exception("Cannot perform arithmetic right shift with big scalar {}",
-                                    destination.type());
-        }
-
-
-        auto element_size = destination.type().element_width() <= 32 ? 32 : 64;
-        std::size_t bitsize = element_size == 32 ? 5 : 6;
-        append(assembler::asr(destination, input,
-                              move_immediate(amount.value(), ir::value_type::u(bitsize))));
-    }
+    void arithmetic_right_shift(const scalar& destination, const scalar& input, const immediate_operand& amount);
 
     void conditional_select(const scalar &destination, const scalar &lhs,
                             const scalar &rhs, const cond_operand &condition)
