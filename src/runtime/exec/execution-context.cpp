@@ -451,7 +451,7 @@ int execution_context::internal_call(void *cpu_state, int call) {
 			auto set = (uintptr_t)get_memory_ptr(x86_state->RSI);
 			auto oldset = x86_state->RDX ? (uintptr_t)get_memory_ptr(x86_state->RDX) : 0;
 
-			x86_state->RAX = native_syscall(__NR_rt_sigprocmask, x86_state->RDI, set, oldset, x86_state->R10);
+            native_syscall(__NR_rt_sigprocmask, x86_state->RDI, set, oldset, x86_state->R10);
 			break;
         }
 		case 16: // ioctl

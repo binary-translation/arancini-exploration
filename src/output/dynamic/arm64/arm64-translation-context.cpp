@@ -70,6 +70,13 @@ register_operand arm64_translation_context::cast(const register_operand &src, va
 
         if (type.element_width() == 64 && src.type().element_width() == 64)
             return src;
+        
+        if (type.element_width() == 64 && src.type().element_width() == 128) {
+            auto dest = vreg_alloc_.allocate(src.type());
+            builder_.fmov(dest, src);
+            dest[0].cast(type);
+            return dest;
+        }
 
         throw backend_exception("Cannot internally cast from {} to {}", src.type(), type);
     }
@@ -348,7 +355,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
             const auto &source = flag_map.at(static_cast<reg_offsets>(n.regoff()));
             builder_.strb(source, guest_memory(n.regoff()))
                          .add_comment(fmt::format("write flag: {}", n.regname()));
-        } else {
+        } else if (src.size()) {
             src[0].cast(n.value().type());
             builder_.strb(src[0], guest_memory(n.regoff()))
                          .add_comment(fmt::format("write flag: {}", n.regname()));
@@ -732,6 +739,9 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             case ir::value_type_class::unsigned_integer:
                 builder_.udiv(dest_regset[0], lhs_regset[0], rhs_regset[0]);
                 break;
+            case ir::value_type_class::floating_point:
+                builder_.fdiv(dest_regset[0], lhs_regset[0], rhs_regset[0]);
+                break;
             default:
                 throw backend_exception("Encounted unknown type class {} for division",
                                         util::to_underlying(n.val().type().type_class()));
@@ -795,6 +805,11 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 
             // Scalar subtraction (including > 64-bits)
             auto shift_op = extend_register(builder_, lhs_regset[0], op_type);
+            if (dest_regset[0].type().is_floating_point()) {
+                dest_regset[0].cast(ir::value_type::f128());
+                lhs_regset[0].cast(ir::value_type::f128());
+                rhs_regset[0].cast(ir::value_type::f128());
+            }
             builder_.subs(dest_regset[0], lhs_regset[0], rhs_regset[0], shift_op);
 
             // Subtraction for > 64-bits
@@ -1699,6 +1714,7 @@ void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
     amount = cast(amount, n.val().type());
 
     const auto& dest_vreg = vreg_alloc_.allocate(n.val());
+    logger.debug("Handling bit-shift from {} by {} to {}\n", n.input().type(), n.amount().type(), n.val().type());
 
     switch (n.op()) {
     case shift_op::lsl:

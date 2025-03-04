@@ -543,6 +543,12 @@ public:
         return append(instruction("fmul", def(dest), use(src1), use(src2)));
     }
 
+    instruction& fdiv(const register_operand &dest,
+                      const register_operand &src1,
+                      const register_operand &src2) {
+        return append(instruction("fdiv", def(dest), use(src1), use(src2)));
+    }
+
     instruction& fmov(const register_operand &dest,
                       const register_operand &src) {
         if (src.type().type_class() != ir::value_type_class::floating_point &&
