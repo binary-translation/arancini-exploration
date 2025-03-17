@@ -297,27 +297,9 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
         throw backend_exception("Cannot load registers of type {}", type);
 
     auto comment = fmt::format("read register: {}", n.regname());
-    auto &dest_vregs = vreg_alloc_.allocate(n.val());
-    for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
-        auto width = dest_vregs[i].type().element_width();
-        auto addr = guest_memory(n.regoff() + i * (width / 8));
-        switch (width) {
-            case 1:
-            case 8:
-                builder_.append(arm64_assembler::ldrb(dest_vregs[i], addr)).add_comment(comment);
-                break;
-            case 16:
-                builder_.append(arm64_assembler::ldrh(dest_vregs[i], addr)).add_comment(comment);
-                break;
-            case 32:
-            case 64:
-                builder_.append(arm64_assembler::ldr(dest_vregs[i], addr)).add_comment(comment);
-                break;
-            default:
-                throw backend_exception("cannot load individual register values (type: {}) larger than 64-bits",
-                                        type);
-        }
-    }
+    auto& dest_vregs = vreg_alloc_.allocate(n.val());
+    auto address = guest_memory(n.regoff());
+    builder_.load(dest_vregs, address);
 }
 
 inline bool is_flag_setter(node_kinds node_kind) {
@@ -359,29 +341,8 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     //
     // There should be clear type promotion and type coercion.
     auto comment = fmt::format("write register: {}", n.regname());
-    for (std::size_t i = 0; i < src.size(); ++i) {
-        // if (src[i].type().width() > n.value().type().width() && n.value().type().width() <= value_types::base_type.element_width())
-        //     src[i] = cast(src[i], n.value().type());
-
-        std::size_t width = src[i].type().width();
-        auto addr = guest_memory(n.regoff() + i * (width / 8));
-        switch (width) {
-            case 1:
-            case 8:
-                builder_.append(arm64_assembler::strb(src[i], addr)).add_comment(comment);
-                break;
-            case 16:
-                builder_.append(arm64_assembler::strh(src[i], addr)).add_comment(comment);
-                break;
-            case 32:
-            case 64:
-                builder_.append(arm64_assembler::str(src[i], addr)).add_comment(comment);
-                break;
-            default:
-                // This is by definition; registers >= 64-bits are always vector registers
-                throw backend_exception("Cannot write individual register values larger than 64-bits");
-        }
-    }
+    auto address = guest_memory(n.regoff());
+    builder_.store(src, address);
 }
 
 void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
@@ -393,30 +354,8 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
         throw backend_exception("Cannot load vectors from memory with type {}", type);
 
     const auto &dest = vreg_alloc_.allocate(n.val());
-    const register_operand &addr_vreg = materialise_port(n.address());
-
-    for (std::size_t i = 0; i < dest.size(); ++i) {
-        std::size_t width = dest[i].type().element_width();
-
-        memory_operand mem_op(addr_vreg, i * (width / 8));
-        switch (width) {
-            case 1:
-            case 8:
-                builder_.append(arm64_assembler::ldrb(dest[i], mem_op)).add_comment("read memory");
-                break;
-            case 16:
-                builder_.append(arm64_assembler::ldrh(dest[i], mem_op)).add_comment("read memory");
-                break;
-            case 32:
-            case 64:
-                builder_.append(arm64_assembler::ldr(dest[i], mem_op)).add_comment("read memory");
-                break;
-            default:
-                // This is by definition; registers >= 64-bits are always vector registers
-                throw backend_exception("Cannot load individual memory values of type {}",
-                                         dest[i].type());
-        }
-    }
+    const register_operand &address = materialise_port(n.address());
+    builder_.load(dest, address);
 }
 
 void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
@@ -431,27 +370,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
     const auto &src = materialise_port(n.value());
 
     const auto &address = materialise_port(n.address());
-    for (std::size_t i = 0; i < src.size(); ++i) {
-        std::size_t width = src[i].type().element_width();
-
-        memory_operand mem_op(address, i * (width / 8));
-        switch (width) {
-            case 1:
-            case 8:
-                builder_.append(arm64_assembler::strb(src[i], mem_op)).add_comment("write memory");
-                break;
-            case 16:
-                builder_.append(arm64_assembler::strh(src[i], mem_op)).add_comment("write memory");
-                break;
-            case 32:
-            case 64:
-                builder_.append(arm64_assembler::str(src[i], mem_op)).add_comment("write memory");
-                break;
-            default:
-                // This is by definition; registers >= 64-bits are always vector registers
-                throw backend_exception("cannot write individual memory values of type", src[i].type());
-        }
-    }
+    builder_.store(src, address);
 }
 
 void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
