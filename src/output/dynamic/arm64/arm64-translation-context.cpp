@@ -89,21 +89,7 @@ register_operand arm64_translation_context::cast(const register_operand &src, va
         type = value_type::u64();
 
     auto dest = vreg_alloc_.allocate(type);
-    switch (src.type().element_width()) {
-    case 1:
-        fill_byte_with_bit(builder_, src);
-    case 8:
-        builder_.sxtb(dest, src);
-        break;
-    case 16:
-        builder_.sxth(dest, src);
-        break;
-    case 32:
-        builder_.sxtw(dest, src);
-        break;
-    default:
-        return src;
-    }
+    builder_.sign_extend(dest, src);
     return dest;
 }
 
@@ -1281,19 +1267,9 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         }
 		break;
 	case cast_op::zx:
-        // Sanity check
-        [[unlikely]]
-        if (n.val().type().element_width() <= n.source_value().type().element_width())
-            throw backend_exception("Cannot zero-extend {} to smaller size {}",
-                                    n.val().type(), n.source_value().type());
-
         builder_.insert_comment("zero-extend from {} to {}", n.source_value().type(), n.val().type());
         builder_.zero_extend(dest_vreg, src_vreg);
-
-        if (n.source_value().type().width() > 64) {
-            throw backend_exception("Cannot zero-extend from {} to {}", n.source_value().type(), n.val().type());
-        } 
-        break;
+        return;
     case cast_op::trunc:
         [[unlikely]]
         if (dest_vreg.type().element_width() > src_vreg.type().element_width())

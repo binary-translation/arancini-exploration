@@ -620,30 +620,6 @@ public:
         return append(instruction("cfinv"));
     }
 
-    instruction& sxtb(const register_operand &dst, const register_operand &src) {
-        return append(arm64_assembler::sxtb(dst, src));
-    }
-
-    instruction& sxth(const register_operand &dst, const register_operand &src) {
-        return append(arm64_assembler::sxth(dst, src));
-    }
-
-    instruction& sxtw(const register_operand &dst, const register_operand &src) {
-        return append(arm64_assembler::sxtw(dst, src));
-    }
-
-    instruction& uxtb(const register_operand &dst, const register_operand &src) {
-        return append(arm64_assembler::uxtb(dst, src));
-    }
-
-    instruction& uxth(const register_operand &dst, const register_operand &src) {
-        return append(arm64_assembler::uxth(dst, src));
-    }
-
-    instruction& uxtw(const register_operand &dst, const register_operand &src) {
-        return append(arm64_assembler::uxtw(dst, src));
-    }
-
     void zero_extend(const register_operand& out, const register_operand& source) {
         if (out.type().width() == source.type().width()) {
             append(arm64_assembler::mov(out, source));
@@ -658,10 +634,7 @@ public:
                                     source.type(), out.type());
     
         insert_comment("zero-extend from {} to {}", source.type(), out.type());
-        if (source.type().width() < 8) {
-            append(arm64_assembler::uxtb(out, source));
-            bound_to_type(out, source.type());
-        } else if (source.type().width() == 8) {
+        if (source.type().width() <= 8) {
             append(arm64_assembler::uxtb(out, source));
         } else if (source.type().width() <= 16) {
             append(arm64_assembler::uxth(out, source));
