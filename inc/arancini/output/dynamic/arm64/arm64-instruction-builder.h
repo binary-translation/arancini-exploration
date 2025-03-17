@@ -310,6 +310,38 @@ public:
         return append(arm64_assembler::mov(dst, policy(src)));
     }
 
+    void load(const register_sequence& out, const memory_operand& address) {
+        for (std::size_t i = 0; i < out.size(); ++i) {
+            if (out[i].type().element_width() <= 8) {
+                memory_operand memory(address.base_register(), address.offset().value() + i);
+                append(arm64_assembler::ldrb(out[i], memory));
+            } else if (out[i].type().element_width() <= 16) {
+                memory_operand memory(address.base_register(), address.offset().value() + i * 2);
+                append(arm64_assembler::ldrh(out[i], memory));
+            } else {
+                auto offset = i * (out[i].type().element_width() < 64 ? 4 : 8);
+                memory_operand memory(address.base_register(), address.offset().value() + offset);
+                append(arm64_assembler::ldr(out[i], memory));
+            }
+        }
+    }
+
+    void store(const register_sequence& source, const memory_operand& address) {
+        for (std::size_t i = 0; i < source.size(); ++i) {
+            if (source[i].type().element_width() <= 8) {
+                memory_operand memory(address.base_register(), address.offset().value() + i);
+                append(arm64_assembler::strb(source[i], memory));
+            } else if (source[i].type().element_width() <= 16) {
+                memory_operand memory(address.base_register(), address.offset().value() + i * 2);
+                append(arm64_assembler::strh(source[i], memory));
+            } else {
+                auto offset = i * (source[i].type().element_width() < 64 ? 4 : 8);
+                memory_operand memory(address.base_register(), address.offset().value() + offset);
+                append(arm64_assembler::str(source[i], memory));
+            }
+        }
+    }
+
     instruction& branch(label_operand &dest) {
         label_refcount_[dest.name()]++;
 		return append(arm64_assembler::b(dest));
