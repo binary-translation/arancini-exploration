@@ -11,23 +11,6 @@
 using namespace arancini::output::dynamic::arm64;
 using value_type = arancini::ir::value_type;
 
-std::size_t assembler::assemble(const char *code, unsigned char **out) {
-    std::size_t size = 0;
-    std::size_t count = 0;
-    int status = ks_asm(ks_, code, 0, out, &size, &count);
-
-    [[unlikely]]
-    if (status == -1)
-        throw backend_exception("Keystone assembler encountered invalid instruction error");
-
-    [[unlikely]]
-    if (status != 0)
-        throw backend_exception("Keystone assembler encountered error after {} instructions: {}",
-                                count, ks_strerror(ks_errno(ks_)));
-
-    return size;
-}
-
 [[nodiscard]]
 inline std::size_t get_min_bitsize(unsigned long long imm) {
     return value_types::base_type.element_width() - __builtin_clzll(imm|1);
