@@ -301,41 +301,44 @@ public:
         return append(arm64_assembler::mov(dst, policy(src)));
     }
 
-    instruction& b(label_operand &dest) {
+    instruction& branch(label_operand &dest) {
         label_refcount_[dest.name()]++;
 		return append(arm64_assembler::b(dest));
     }
 
-    instruction& beq(label_operand &dest) {
+    instruction& branch(label_operand &dest, const cond_operand& cond) {
         label_refcount_[dest.name()]++;
-		return append(arm64_assembler::beq(dest));
-    }
 
-    instruction& bl(label_operand &dest) {
-        label_refcount_[dest.name()]++;
-		return append(arm64_assembler::bl(dest));
-    }
+        if (cond.condition() == "eq")
+            return append(arm64_assembler::beq(dest));
 
-    instruction& bne(label_operand &dest) {
-        label_refcount_[dest.name()]++;
-		return append(arm64_assembler::bne(dest));
+        if (cond.condition() == "ne")
+            return append(arm64_assembler::bne(dest));
+        
+        [[likely]]
+        if (cond.condition() == "lt")
+            return append(arm64_assembler::bl(dest));
+
+        throw backend_exception("Cannot branch with condition {}", cond);
     }
 
     // Check reg == 0 and jump if true
     // Otherwise, continue to the next instruction
     // Does not affect condition flags (can be used to compare-and-branch with 1 instruction)
-    instruction& cbz(const register_operand &reg, const label_operand &label) {
+    instruction& zero_compare_and_branch(const register_operand &reg, 
+                                         const label_operand &label,
+                                         const cond_operand& cond) 
+    {
         label_refcount_[label.name()]++;
-		return append(arm64_assembler::cbz(reg, label));
-    }
 
-    // TODO: check if this allocated correctly
-    // Check reg == 0 and jump if false
-    // Otherwise, continue to the next instruction
-    // Does not affect condition flags (can be used to compare-and-branch with 1 instruction)
-    instruction& cbnz(const register_operand &rt, const label_operand &dest) {
-        label_refcount_[dest.name()]++;
-		return append(arm64_assembler::cbnz(rt, dest));
+        if (cond.condition() == "eq")
+            return append(arm64_assembler::cbz(reg, label));
+
+        [[likely]]
+        if (cond.condition() == "ne")
+            return append(arm64_assembler::cbnz(reg, label));
+
+        throw backend_exception("Cannot zero-compare-and-branch on condition {}", cond);
     }
 
     // TODO: handle register_set
@@ -798,8 +801,9 @@ struct atomic_block {
                                     src_reg.type());
         }
         // Compare and also set flags for later
-        builder_->cbz(status_reg, success_label_).add_comment("== 0 represents success storing");
-        builder_->b(loop_label_).add_comment("loop until failure or success");
+        builder_->zero_compare_and_branch(status_reg, success_label_, cond_operand::eq())
+                .add_comment("== 0 represents success storing");
+        builder_->branch(loop_label_).add_comment("loop until failure or success");
         builder_->label(success_label_);
     }
 
