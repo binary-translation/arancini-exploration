@@ -4,6 +4,7 @@
 
 #include <arancini/ir/port.h>
 #include <arancini/output/dynamic/machine-code-writer.h>
+#include <arancini/output/dynamic/arm64/arm64-assembler.h>
 #include <arancini/output/dynamic/arm64/arm64-instruction.h>
 
 #include <vector>
@@ -158,88 +159,71 @@ public:
 	instruction& add(const register_operand &dst,
                       const register_operand &src1,
                       const reg_or_imm &src2) {
-        return append(instruction("add", def(dst), use(src1), use(src2)));
+		return append(arm64_assembler::add(dst, src1, src2));
     }
 
     instruction& add(const register_operand &dst,
                       const register_operand &src1,
                       const reg_or_imm &src2,
                       const shift_operand &shift) {
-        return append(instruction("add", def(dst), use(src1), use(src2), use(shift)));
+        return append(arm64_assembler::add(dst, src1, src2, shift));
     }
 
 	instruction& adds(const register_operand &dst,
                       const register_operand &src1,
                       const reg_or_imm &src2) {
-        return append(instruction("adds", def(dst), use(src1), use(src2))
-                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+        return append(arm64_assembler::adds(dst, src1, src2));
     }
 
     instruction& adds(const register_operand &dst,
                       const register_operand &src1,
                       const reg_or_imm &src2,
                       const shift_operand &shift) {
-        return append(instruction("adds", def(dst), use(src1), use(src2), use(shift))
-                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+        return append(arm64_assembler::adds(dst, src1, src2, shift));
     }
 
 	instruction& adcs(const register_operand &dst,
                       const register_operand &src1,
                       const reg_or_imm &src2) {
-        return append(instruction("adcs", def(dst), use(src1), use(src2))
-                      .implicitly_reads({register_operand(register_operand::nzcv)})
-                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+        return append(arm64_assembler::adcs(dst, src1, src2));
     }
 
 	instruction& sub(const register_operand &dst,
                       const register_operand &src1,
                       const reg_or_imm &src2) {
-        return append(instruction("sub", def(dst), use(src1), use(src2)));
+        return append(arm64_assembler::sub(dst, src1, src2));
     }
 
     instruction& sub(const register_operand &dst,
                       const register_operand &src1,
                       const reg_or_imm &src2,
                       const shift_operand &shift) {
-        return append(instruction("sub", def(dst), use(src1), use(src2), use(shift)));
+        return append(arm64_assembler::sub(dst, src1, src2, shift));
     }
 
 	instruction& subs(const register_operand &dst,
                       const register_operand &src1,
                       const reg_or_imm &src2) {
-        return append(instruction("subs", def(dst), use(src1), use(src2))
-                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+        return append(arm64_assembler::subs(dst, src1, src2));
     }
 
     instruction& subs(const register_operand &dst,
                       const register_operand &src1,
                       const reg_or_imm &src2,
                       const shift_operand &shift) {
-        return append(instruction("subs", def(dst), use(src1), use(src2), use(shift))
-                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+        return append(arm64_assembler::subs(dst, src1, src2, shift));
     }
 
 	instruction& sbc(const register_operand &dst,
                       const register_operand &src1,
                       const reg_or_imm &src2) {
-        return append(instruction("sbc", def(dst), use(src1), use(src2))
-                      .implicitly_reads({register_operand(register_operand::nzcv)}));
-    }
-
-    instruction& sbc(const register_operand &dst,
-                      const register_operand &src1,
-                      const reg_or_imm &src2,
-                      const shift_operand &shift) {
-        return append(instruction("sbc", def(dst), use(src1), use(src2), use(shift))
-                      .implicitly_reads({register_operand(register_operand::nzcv)}));
+        return append(arm64_assembler::sbc(dst, src1, src2));
     }
 
 	instruction& sbcs(const register_operand &dst,
                       const register_operand &src1,
                       const reg_or_imm &src2) {
-        return append(instruction("sbcs", def(dst), use(src1), use(src2))
-                      .implicitly_reads({register_operand(register_operand::nzcv)})
-                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+        return append(arm64_assembler::sbcs(dst, src1, src2));
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
@@ -249,7 +233,7 @@ public:
         // TODO: this checks that the immediate is between immr:imms (bits [21:10])
         // However, for 64-bit orr, we have N:immr:imms, which gives us bits [22:10])
         ImmediatesPolicy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
-        return append(instruction("orr", def(dst), use(src1), use(policy(src2))));
+        return append(arm64_assembler::orr(dst, src1, policy(src2)));
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
@@ -259,7 +243,7 @@ public:
         // TODO: this checks that the immediate is between immr:imms (bits [21:10])
         // However, for 64-bit and, we have N:immr:imms, which gives us bits [22:10])
         ImmediatesPolicy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
-        return append(instruction("and", def(dst), use(src1), use(policy(src2))));
+        return append(arm64_assembler::and_(dst, src1, policy(src2)));
     }
 
     // TODO: refactor this; there should be only a single version and the comment should be removed
@@ -269,78 +253,72 @@ public:
                       const reg_or_imm &src2) {
         // TODO: this checks that the immediate is between immr:imms (bits [21:10])
         // However, for 64-bit ands, we have N:immr:imms, which gives us bits [22:10])
-        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
-        return append(instruction("ands", def(dst), use(src1), use(immediates_policy(src2)))
-                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+        ImmediatesPolicy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
+        return append(arm64_assembler::ands(dst, src1, policy(src2)));
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& eor_(const register_operand &dst, const register_operand &src1, const reg_or_imm &src2) {
         // TODO: this checks that the immediate is between immr:imms (bits [21:10])
         // However, for 64-bit eor, we have N:immr:imms, which gives us bits [22:10])
-        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
-        return append(instruction("eor", def(dst), use(src1), use(immediates_policy(src2))));
+        ImmediatesPolicy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
+        return append(arm64_assembler::eor(dst, src1, policy(src2)));
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& not_(const register_operand &dst, const reg_or_imm &src) {
-        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 6), dst.type());
-        return append(instruction("mvn", def(dst), use(immediates_policy(src))));
+        ImmediatesPolicy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 6), dst.type());
+        return append(arm64_assembler::mvn(dst, policy(src)));
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& neg(const register_operand &dst, const register_operand &src) {
-        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 6), dst.type());
-        return append(instruction("neg", def(dst), use(immediates_policy(src))));
+        ImmediatesPolicy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 6), dst.type());
+        return append(arm64_assembler::neg(dst, policy(src)));
     }
 
     instruction& movn(const register_operand &dst,
               const immediate_operand &src,
               const shift_operand &shift) {
-        return append(instruction("movn", def(dst), use(src), use(shift)));
+        return append(arm64_assembler::movn(dst, src, shift));
     }
 
     instruction& movz(const register_operand &dst,
               const immediate_operand &src,
               const shift_operand &shift) {
-        immediates_strict_policy immediates_policy(ir::value_type(ir::value_type_class::unsigned_integer, 16));
-        return append(instruction("movz", def(dst), use(immediates_policy(src)), use(shift)));
+        return append(arm64_assembler::movz(dst, src, shift));
     }
 
     instruction& movk(const register_operand &dst,
               const immediate_operand &src,
               const shift_operand &shift) {
-        immediates_strict_policy immediates_policy(ir::value_type(ir::value_type_class::unsigned_integer, 16));
-        return append(instruction("movk", use(def(dst)), use(immediates_policy(src)), use(shift)));
+        return append(arm64_assembler::movk(dst, src, shift));
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& mov(const register_operand &dst, const reg_or_imm &src) {
-        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
-        return append(instruction("mov", def(dst), use(immediates_policy(src))));
+        ImmediatesPolicy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
+        return append(arm64_assembler::mov(dst, policy(src)));
     }
 
     instruction& b(label_operand &dest) {
         label_refcount_[dest.name()]++;
-        return append(instruction("b", use(dest)).as_branch());
+		return append(arm64_assembler::b(dest));
     }
 
     instruction& beq(label_operand &dest) {
         label_refcount_[dest.name()]++;
-        return append(instruction("beq", use(dest)).as_branch()
-                      .implicitly_reads({register_operand(register_operand::nzcv)}));
+		return append(arm64_assembler::beq(dest));
     }
 
     instruction& bl(label_operand &dest) {
         label_refcount_[dest.name()]++;
-        return append(instruction("bl", use(dest)).as_branch()
-                      .implicitly_reads({register_operand(register_operand::nzcv)}));
+		return append(arm64_assembler::bl(dest));
     }
 
     instruction& bne(label_operand &dest) {
         label_refcount_[dest.name()]++;
-        return append(instruction("bne", use(dest)).as_branch()
-                      .implicitly_reads({register_operand(register_operand::nzcv)}));
+		return append(arm64_assembler::bne(dest));
     }
 
     // Check reg == 0 and jump if true
@@ -348,7 +326,7 @@ public:
     // Does not affect condition flags (can be used to compare-and-branch with 1 instruction)
     instruction& cbz(const register_operand &reg, const label_operand &label) {
         label_refcount_[label.name()]++;
-        return append(instruction("cbz", use(reg), use(label)).as_branch());
+		return append(arm64_assembler::cbz(reg, label));
     }
 
     // TODO: check if this allocated correctly
@@ -357,33 +335,30 @@ public:
     // Does not affect condition flags (can be used to compare-and-branch with 1 instruction)
     instruction& cbnz(const register_operand &rt, const label_operand &dest) {
         label_refcount_[dest.name()]++;
-        return append(instruction("cbnz", use(rt), use(dest)).as_branch());
+		return append(arm64_assembler::cbnz(rt, dest));
     }
 
     // TODO: handle register_set
     instruction& cmn(const register_operand &dst,
                      const reg_or_imm &src) {
-        return append(instruction("cmn", use(dst), use(src))
-                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+        return append(arm64_assembler::cmn(dst, src));
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& cmp(const register_operand &dst, const reg_or_imm &src) {
-        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
-        return append(instruction("cmp", use(dst), use(immediates_policy(src)))
-                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+        ImmediatesPolicy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
+        return append(arm64_assembler::cmp(dst, policy(src)));
     }
 
     instruction& tst(const register_operand &dst, const reg_or_imm &src) {
-        return append(instruction("tst", use(dst), use(src))
-                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+        return append(arm64_assembler::tst(dst, src));
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& lsl(const register_operand &dst, const register_operand &src1, const reg_or_imm &src2) {
         std::size_t size = dst.type().element_width() <= 32 ? 4 : 6;
-        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
-        return append(instruction("lsl", def(dst), use(src1), use(immediates_policy(src2))));
+        immediates_upgrade_policy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
+        return append(arm64_assembler::lsl(dst, src1, policy(src2)));
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
@@ -391,40 +366,35 @@ public:
                      const register_operand &src1,
                      const reg_or_imm &src2) {
         std::size_t size = dst.type().element_width() <= 32 ? 5 : 6;
-        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
-        return append(instruction("lsr", def(dst), use(src1), use(immediates_policy(src2))));
+        immediates_upgrade_policy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
+        return append(arm64_assembler::lsr(dst, src1, policy(src2)));
     }
 
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
     instruction& asr(const register_operand &dst,
                      const register_operand &src1,
                      const reg_or_imm &src2) {
         std::size_t size = dst.type().element_width() <= 32 ? 5 : 6;
-        ImmediatesPolicy immediates_policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
-        return append(instruction("asr", def(dst), use(src1), use(immediates_policy(src2))));
+        immediates_upgrade_policy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
+        return append(arm64_assembler::asr(dst, src1, policy(src2)));
     }
 
     instruction& extr(const register_operand &dst,
                       const register_operand &src1,
                       const register_operand &src2,
-                      const immediate_operand &shift) {
-        std::size_t size = dst.type().element_width() <= 32 ? 5 : 6;
-        immediates_strict_policy policy(ir::value_type(ir::value_type_class::unsigned_integer, size));
-        return append(instruction("extr", def(dst), use(src1), use(src2), use(policy(shift))));
+                      const immediate_operand &shift) 
+    {
+        return append(arm64_assembler::extr(dst, src1, src2, shift));
     }
 
     instruction& csel(const register_operand &dst,
                       const register_operand &src1,
                       const register_operand &src2,
                       const cond_operand &cond) {
-        return append(instruction("csel", def(dst), use(src1), use(src2), use(cond))
-                      .implicitly_reads({register_operand(register_operand::x0)}));
+        return append(arm64_assembler::csel(dst, src1, src2, cond));
     }
 
-    instruction& cset(const register_operand &dst,
-                      const cond_operand &cond) {
-        return append(instruction("cset", def(dst), use(cond))
-                      .implicitly_reads({register_operand(register_operand::x0)}));
+    instruction& cset(const register_operand &dst, const cond_operand &cond) {
+        return append(arm64_assembler::cset(dst, cond));
     }
 
     instruction& bfxil(const register_operand &dst,
@@ -432,13 +402,7 @@ public:
                        const immediate_operand &lsb,
                        const immediate_operand &width)
     {
-        auto element_size = dst.type().element_width() <= 32 ? 32 : 64;
-        std::size_t bitsize = element_size == 32 ? 5 : 6;
-        immediates_strict_policy policy(ir::value_type(ir::value_type_class::unsigned_integer, bitsize));
-        if (width.value() > element_size - lsb.value())
-            throw backend_exception("Invalid width immediate {} for BFXIL instruction must fit into [1,{}] for lsb",
-                                    width, element_size - lsb.value(), lsb);
-        return append(instruction("bfxil", use(def(dst)), use(src1), use(policy(lsb)), use(width)));
+        return append(arm64_assembler::bfxil(dst, src1, lsb, width));
     }
 
     instruction& ubfx(const register_operand &dst,
@@ -446,13 +410,7 @@ public:
                       const immediate_operand &lsb,
                       const immediate_operand &width)
     {
-        auto element_size = dst.type().element_width() <= 32 ? 32 : 64;
-        std::size_t bitsize = element_size == 32 ? 5 : 6;
-        immediates_strict_policy policy(ir::value_type(ir::value_type_class::unsigned_integer, bitsize));
-        if (width.value() > element_size - lsb.value())
-            throw backend_exception("Invalid width immediate {} for UBFX instruction must fit into [1,{}] for lsb",
-                                    width, element_size - lsb.value(), lsb);
-        return append(instruction("ubfx", def(dst), use(src1), use(policy(lsb)), use(width)));
+        return append(arm64_assembler::ubfx(dst, src1, lsb, width));
     }
 
     instruction& bfi(const register_operand &dst,
@@ -460,205 +418,124 @@ public:
                      const immediate_operand &lsb,
                      const immediate_operand &width)
     {
-        auto element_size = dst.type().element_width() <= 32 ? 32 : 64;
-        std::size_t bitsize = element_size == 32 ? 5 : 6;
-        immediates_strict_policy policy(ir::value_type(ir::value_type_class::unsigned_integer, bitsize));
-        if (width.value() > element_size - lsb.value())
-            throw backend_exception("Invalid width immediate {} for BFI instruction must fit into [1,{}] for lsb {}",
-                                    width, element_size - lsb.value(), lsb);
-        return append(instruction("bfi", use(def(dst)), use(src1), use(lsb), use(width)));
+        return append(arm64_assembler::bfi(dst, src1, lsb, width));
     }
-
-#define LDR_VARIANTS(name) \
-    instruction& name(const register_operand &dest, \
-             const memory_operand &base) { \
-        return append(instruction(#name, def(dest), use(base))); \
-    } \
-
-#define STR_VARIANTS(name) \
-    instruction& name(const register_operand &src, \
-              const memory_operand &base) { \
-        return append(instruction(#name, use(src), use(base)).as_keep()); \
-    } \
-
-    LDR_VARIANTS(ldr);
-    LDR_VARIANTS(ldrh);
-    LDR_VARIANTS(ldrb);
-
-    STR_VARIANTS(str);
-    STR_VARIANTS(strh);
-    STR_VARIANTS(strb);
 
     instruction& mul(const register_operand &dest,
              const register_operand &src1,
              const register_operand &src2) {
-        return append(instruction("mul", def(dest), use(src1), use(src2)));
+        return append(arm64_assembler::mul(dest, src1, src2));
     }
 
     instruction& smulh(const register_operand &dest,
                const register_operand &src1,
                const register_operand &src2) {
-        return append(instruction("smulh", def(dest), use(src1), use(src2)));
+        return append(arm64_assembler::smulh(dest, src1, src2));
     }
 
     instruction& smull(const register_operand &dest,
                const register_operand &src1,
                const register_operand &src2) {
-        return append(instruction("smull", def(dest), use(src1), use(src2)));
+        return append(arm64_assembler::smull(dest, src1, src2));
     }
 
     instruction& umulh(const register_operand &dest,
                const register_operand &src1,
                const register_operand &src2) {
-        return append(instruction("umulh", def(dest), use(src1), use(src2)));
+        return append(arm64_assembler::umulh(dest, src1, src2));
     }
 
     instruction& umull(const register_operand &dest,
                const register_operand &src1,
                const register_operand &src2) {
-        return append(instruction("umull", def(dest), use(src1), use(src2)));
+        return append(arm64_assembler::umull(dest, src1, src2));
     }
 
     instruction& sdiv(const register_operand &dest,
               const register_operand &src1,
               const register_operand &src2) {
-        return append(instruction("sdiv", def(dest), use(src1), use(src2)));
+        return append(arm64_assembler::sdiv(dest, src1, src2));
     }
 
     instruction& udiv(const register_operand &dest,
               const register_operand &src1,
               const register_operand &src2) {
-        return append(instruction("udiv", def(dest), use(src1), use(src2)));
+        return append(arm64_assembler::udiv(dest, src1, src2));
     }
 
     instruction& fmul(const register_operand &dest,
                       const register_operand &src1,
                       const register_operand &src2) {
-        if (src1.type().type_class() != ir::value_type_class::floating_point)
-            throw backend_exception("Second operand of fmul must be floating-point instead of {}",
-                                    src1.type());
-        if (src2.type().type_class() != ir::value_type_class::floating_point)
-            throw backend_exception("Third operand of fmul must be floating-point instead of {}",
-                                    src1.type());
-        return append(instruction("fmul", def(dest), use(src1), use(src2)));
+        return append(arm64_assembler::fmul(dest, src1, src2));
     }
 
     instruction& fdiv(const register_operand &dest,
                       const register_operand &src1,
                       const register_operand &src2) {
-        return append(instruction("fdiv", def(dest), use(src1), use(src2)));
+        return append(arm64_assembler::fdiv(dest, src1, src2));
     }
 
     instruction& fmov(const register_operand &dest,
                       const register_operand &src) {
-        if (src.type().type_class() != ir::value_type_class::floating_point &&
-            dest.type().type_class() != ir::value_type_class::floating_point)
-        {
-            throw backend_exception("Either the first or the second operand of fmov {}, {} must be a floating point register",
-                                    dest.type(), src.type());
-        }
-        return append(instruction("fmov", def(dest), use(src)));
+        return append(arm64_assembler::fmov(dest, src));
     }
 
     instruction& fmov(const register_operand &dest,
                       const immediate_operand &src) {
-        if (dest.type().type_class() != ir::value_type_class::floating_point) {
-            throw backend_exception("The first operand of fmov {}, {} must be a floating point register",
-                                    dest.type(), src.type());
-        }
-        return append(instruction("fmov", def(dest), use(src)));
+        return append(arm64_assembler::fmov(dest, src));
     }
 
     instruction& fcvt(const register_operand &dest,
-                      const register_operand &src) {
-        if (src.type().type_class() != ir::value_type_class::floating_point &&
-            dest.type().type_class() != ir::value_type_class::floating_point)
-        {
-            throw backend_exception("Either the first or the second operand of fcvt {}, {} must be a floating point register",
-                                    dest.type(), src.type());
-        }
-        return append(instruction("fcvt", def(dest), use(src)));
+                      const register_operand &src) 
+    {
+        return append(arm64_assembler::fcvt(dest, src));
     }
 
     instruction& fcvtzs(const register_operand &dest, const register_operand &src) {
-        if (src.type().type_class() != ir::value_type_class::floating_point)
-            throw backend_exception("The second operand of fcvtsz {}, {} must be a floating point register",
-                                    dest.type(), src.type());
-        if (dest.type().type_class() == ir::value_type_class::floating_point)
-            throw backend_exception("The first operand of fcvtsz {}, {} must be a GPR",
-                                    dest.type(), src.type());
-        return append(instruction("fcvtzs", def(dest), use(src)));
+        return append(arm64_assembler::fcvtzs(dest, src));
     }
 
     instruction& fcvtzu(const register_operand &dest, const register_operand &src) {
-        if (src.type().type_class() != ir::value_type_class::floating_point)
-            throw backend_exception("The second operand of fcvtzu {}, {} must be a floating point register",
-                                    dest.type(), src.type());
-        if (dest.type().type_class() == ir::value_type_class::floating_point)
-            throw backend_exception("The first operand of fcvtzu {}, {} must be a GPR",
-                                    dest.type(), src.type());
-        return append(instruction("fcvtzu", def(dest), use(src)));
+        return append(arm64_assembler::fcvtzu(dest, src));
     }
 
     instruction& fcvtas(const register_operand &dest, const register_operand &src) {
-        if (src.type().type_class() != ir::value_type_class::floating_point)
-            throw backend_exception("The second operand of fcvtas {}, {} must be a floating point register",
-                                    dest.type(), src.type());
-        if (dest.type().type_class() == ir::value_type_class::floating_point)
-            throw backend_exception("The first operand of fcvtas {}, {} must be a GPR",
-                                    dest.type(), src.type());
-        return append(instruction("fcvtas", def(dest), use(src)));
+        return append(arm64_assembler::fcvtas(dest, src));
     }
 
     instruction& fcvtau(const register_operand &dest, const register_operand &src) {
-        if (src.type().type_class() != ir::value_type_class::floating_point)
-            throw backend_exception("The second operand of fcvtau {}, {} must be a floating point register",
-                                    dest.type(), src.type());
-        if (dest.type().type_class() == ir::value_type_class::floating_point)
-            throw backend_exception("The first operand of fcvtau {}, {} must be a GPR",
-                                    dest.type(), src.type());
-        return append(instruction("fcvtau", def(dest), use(src)));
+        return append(arm64_assembler::fcvtau(dest, src));
     }
 
     // TODO: this also has an immediate variant
     instruction& fcmp(const register_operand &dest, const register_operand &src) {
-        if (src.type().type_class() != ir::value_type_class::floating_point ||
-            src.type().type_class() != ir::value_type_class::floating_point)
-        {
-            throw backend_exception("The first and second operand of fcmp {}, {} must be a floating point register",
-                                    dest.type(), src.type());
-        }
-
-        return append(instruction("fcmp", def(dest), use(src))
-                      .implicitly_writes({register_operand(register_operand::nzcv)}));
+        return append(arm64_assembler::fcmp(dest, src));
     }
 
-    instruction& scvtf(const register_operand &dest,
-               const register_operand &src) {
-        return append(instruction("scvtf", def(dest), use(src)));
+    instruction& scvtf(const register_operand &dest, const register_operand &src) {
+        return append(arm64_assembler::scvtf(dest, src));
     }
 
-    instruction& ucvtf(const register_operand &dest,
-               const register_operand &src) {
-        return append(instruction("ucvtf", def(dest), use(src)));
+    instruction& ucvtf(const register_operand &dest, const register_operand &src) {
+        return append(arm64_assembler::ucvtf(dest, src));
     }
 
     instruction& mrs(const register_operand &dest,
              const register_operand &src) {
-        return append(instruction("mrs", def(dest), use(src)));
+        return append(arm64_assembler::mrs(dest, src));
     }
 
     instruction& msr(const register_operand &dest,
                      const register_operand &src) {
-        return append(instruction("msr", def(dest), use(src)));
+        return append(arm64_assembler::msr(dest, src));
     }
 
     instruction& ret() {
-        return append(instruction("ret").as_keep().implicitly_reads({register_operand(register_operand::x0)}));
+        return append(arm64_assembler::ret());
     }
 
     instruction& brk(const immediate_operand &imm) {
-        return append(instruction("brk", use(imm)));
+        return append(arm64_assembler::brk(imm));
     }
 
     void label(const label_operand &label) {
@@ -672,26 +549,26 @@ public:
     }
 
 	instruction& setz(const register_operand &dst) {
-        return append(instruction("cset", def(dst), cond_operand::eq())
+        return append(arm64_assembler::cset(dst, cond_operand::eq())
                       .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 
 	instruction& sets(const register_operand &dst) {
-        return append(instruction("cset", def(dst), cond_operand::lt())
+        return append(arm64_assembler::cset(dst, cond_operand::lt())
                       .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 
 	instruction& setc(const register_operand &dst) {
-        return append(instruction("cset", def(dst), cond_operand::cs())
+        return append(arm64_assembler::cset(dst, cond_operand::cs())
                       .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 
 	instruction& setcc(const register_operand &dst) {
-        return append(instruction("cset", def(dst), cond_operand::cc())
+        return append(arm64_assembler::cset(dst, cond_operand::cc())
                       .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 	instruction& seto(const register_operand &dst) {
-        return append(instruction("cset", def(dst), cond_operand::vs())
+        return append(arm64_assembler::cset(dst, cond_operand::vs())
                       .implicitly_reads({register_operand(register_operand::nzcv)}));
     }
 
@@ -700,198 +577,32 @@ public:
     }
 
     instruction& sxtb(const register_operand &dst, const register_operand &src) {
-        return append(instruction("sxtb", def(dst), use(src)));
+        return append(arm64_assembler::sxtb(dst, src));
     }
 
     instruction& sxth(const register_operand &dst, const register_operand &src) {
-        return append(instruction("sxth", def(dst), use(src)));
+        return append(arm64_assembler::sxth(dst, src));
     }
 
     instruction& sxtw(const register_operand &dst, const register_operand &src) {
-        return append(instruction("sxtw", def(dst), use(src)));
+        return append(arm64_assembler::sxtw(dst, src));
     }
 
     instruction& uxtb(const register_operand &dst, const register_operand &src) {
-        return append(instruction("uxtb", def(dst), use(src)));
+        return append(arm64_assembler::uxtb(dst, src));
     }
 
     instruction& uxth(const register_operand &dst, const register_operand &src) {
-        return append(instruction("uxth", def(dst), use(src)));
+        return append(arm64_assembler::uxth(dst, src));
     }
 
     instruction& uxtw(const register_operand &dst, const register_operand &src) {
-        return append(instruction("uxtw", def(dst), use(src)));
+        return append(arm64_assembler::uxtw(dst, src));
     }
 
     instruction& cas(const register_operand &dst, const register_operand &src,
                      const memory_operand &mem_addr) {
         return append(instruction("cas", use(dst), use(src), use(mem_addr)).as_keep());
-    }
-
-// ATOMICs
-    // LDXR{size} {Rt}, [Rn]
-#define LD_A_XR(name, size) \
-    instruction& name##size(const register_operand &dst, const memory_operand &mem) { \
-        return append(instruction(#name#size, def(dst), use(mem))); \
-    }
-
-#define ST_A_XR(name, size) \
-    instruction& name##size(const register_operand &status, const register_operand &rt, const memory_operand &mem) { \
-        return append(instruction(#name#size, def(status), use(rt), use(mem)).as_keep()); \
-    }
-
-#define LD_A_XR_VARIANTS(name) \
-    LD_A_XR(name, b) \
-    LD_A_XR(name, h) \
-    LD_A_XR(name, w) \
-    LD_A_XR(name,)
-
-#define ST_A_XR_VARIANTS(name) \
-    ST_A_XR(name, b) \
-    ST_A_XR(name, h) \
-    ST_A_XR(name, w) \
-    ST_A_XR(name,)
-
-    LD_A_XR_VARIANTS(ldxr);
-    LD_A_XR_VARIANTS(ldaxr);
-
-    ST_A_XR_VARIANTS(stxr);
-    ST_A_XR_VARIANTS(stlxr);
-
-#define AMO_SIZE_VARIANT(name, suffix_type, suffix_size) \
-    instruction& name##suffix_type##suffix_size(const register_operand &rm, const register_operand &rt, const memory_operand &mem) { \
-        return append(instruction(#name#suffix_type#suffix_size, use(rm), def(rt), use(mem)).as_keep()); \
-    }
-
-#define AMO_SIZE_VARIANTS(name, size) \
-    AMO_SIZE_VARIANT(name, , size) \
-    AMO_SIZE_VARIANT(name, a, size) \
-    AMO_SIZE_VARIANT(name, al, size) \
-    AMO_SIZE_VARIANT(name, l, size)
-
-#define AMO_SIZE_VARIANT_HW(name) \
-    AMO_SIZE_VARIANTS(name, ) \
-    AMO_SIZE_VARIANTS(name, h) \
-    AMO_SIZE_VARIANTS(name, w)
-
-#define AMO_SIZE_VARIANT_BHW(name) \
-        AMO_SIZE_VARIANT_HW(name) \
-        AMO_SIZE_VARIANTS(name, b) \
-
-    AMO_SIZE_VARIANT_BHW(swp);
-
-    AMO_SIZE_VARIANT_BHW(ldadd);
-
-    AMO_SIZE_VARIANT_BHW(ldclr);
-
-    AMO_SIZE_VARIANT_BHW(ldeor);
-
-    AMO_SIZE_VARIANT_BHW(ldset);
-
-    AMO_SIZE_VARIANT_HW(ldsmax);
-
-    AMO_SIZE_VARIANT_HW(ldsmin);
-
-    AMO_SIZE_VARIANT_HW(ldumax);
-
-    AMO_SIZE_VARIANT_HW(ldumin);
-
-// NEON Vectors
-// NOTE: these should be built only if there is no support for SVE/SVE2
-//
-// Otherwise, we should just use SVE2 operations directly
-#define VOP_ARITH(name) \
-    instruction& name(const std::string &size, const register_operand &dest, const register_operand &src1, const register_operand &src2) { \
-        return append(instruction(#name "." + size, def(dest), use(src1), use(src2))); \
-    }
-
-    // vector additions
-    VOP_ARITH(vadd);
-    VOP_ARITH(vqadd);
-    VOP_ARITH(vhadd);
-    VOP_ARITH(vrhadd);
-
-    // vector subtractions
-    VOP_ARITH(vsub);
-    VOP_ARITH(vqsub);
-    VOP_ARITH(vhsub);
-
-    // vector multiplication
-    // TODO: some not included
-    VOP_ARITH(vmul);
-    VOP_ARITH(vmla);
-    VOP_ARITH(vmls);
-
-    // vector absolute value
-    VOP_ARITH(vabs);
-    VOP_ARITH(vqabs);
-
-    // vector negation
-    VOP_ARITH(vneg);
-    VOP_ARITH(vqneg);
-
-    // vector round float
-    VOP_ARITH(vrnd);
-    VOP_ARITH(vrndi);
-    VOP_ARITH(vrnda);
-
-    // pairwise addition
-    VOP_ARITH(vpadd);
-    VOP_ARITH(vpaddl);
-
-    // vector shifts
-    // shift left, shift right, shift left long.
-    VOP_ARITH(vshl);
-    VOP_ARITH(vshr);
-    VOP_ARITH(vshll);
-
-    // vector comparisons
-    // VCMP, VCEQ, VCGE, VCGT: compare, compare equal, compare greater than or equal, compare greater than.
-    VOP_ARITH(vcmp);
-    VOP_ARITH(vceq);
-    VOP_ARITH(vcge);
-    VOP_ARITH(vcgt);
-
-    // min-max
-    VOP_ARITH(vmin);
-    VOP_ARITH(vmax);
-
-    // reciprocal-sqrt
-    VOP_ARITH(vrecpe);
-    VOP_ARITH(vrsqrte);
-
-// SVE2
-    // SVE2 version
-    instruction& add(const register_operand &dst,
-             const register_operand &pred,
-             const register_operand &src1,
-             const register_operand &src2) {
-        return append(instruction("add", def(dst), use(pred), use(src1), use(src2)));
-    }
-
-    // SVE2
-    instruction& sub(const register_operand &dst,
-             const register_operand &pred,
-             const register_operand &src1,
-             const register_operand &src2) {
-        return append(instruction("sub", def(dst), use(pred), use(src1), use(src2)));
-    }
-
-    // SVE2
-    instruction& ld1(const register_operand &src,
-             const register_operand &pred,
-             const memory_operand &addr) {
-        return append(instruction("ld1", use(src), use(pred), use(addr)));
-    }
-
-    instruction& st1(const register_operand &dest,
-             const register_operand &pred,
-             const memory_operand &addr) {
-        return append(instruction("st1", def(dest), use(pred), use(addr)));
-    }
-
-    instruction& ptrue(const register_operand &dest) {
-        return append(instruction("ptrue", def(dest)));
     }
 
     template <typename... Args>
@@ -1025,17 +736,17 @@ public:
         label_refcount_.clear();
         labels_.clear();
     }
+
+	instruction& append(const instruction &i) {
+        instructions_.push_back(i);
+        return instructions_.back();
+    }
 private:
     assembler asm_;
 	std::vector<instruction> instructions_;
     virtual_register_allocator vreg_alloc_;
     std::unordered_map<std::string, std::size_t> label_refcount_;
     std::unordered_set<std::string> labels_;
-
-	instruction& append(const instruction &i) {
-        instructions_.push_back(i);
-        return instructions_.back();
-    }
 
     void spill();
 };
@@ -1054,14 +765,14 @@ struct atomic_block {
         switch (data_reg.type().element_width()) {
         case 1:
         case 8:
-            builder_->ldxrb(data_reg, mem_addr_).add_comment("load atomically");
+            builder_->append(arm64_assembler::ldxrb(data_reg, mem_addr_)).add_comment("load atomically");
             break;
         case 16:
-            builder_->ldxrh(data_reg, mem_addr_).add_comment("load atomically");
+            builder_->append(arm64_assembler::ldxrh(data_reg, mem_addr_)).add_comment("load atomically");
             break;
         case 32:
         case 64:
-            builder_->ldxr(data_reg, mem_addr_).add_comment("load atomically");
+            builder_->append(arm64_assembler::ldxr(data_reg, mem_addr_)).add_comment("load atomically");
             break;
         default:
             throw backend_exception("Cannot load atomically values of type {}",
@@ -1073,14 +784,14 @@ struct atomic_block {
         switch (src_reg.type().element_width()) {
         case 1:
         case 8:
-            builder_->stxrb(status_reg, src_reg, mem_addr_).add_comment("store if not failure");
+            builder_->append(arm64_assembler::stxrb(status_reg, src_reg, mem_addr_)).add_comment("store if not failure");
             break;
         case 16:
-            builder_->stxrh(status_reg, src_reg, mem_addr_).add_comment("store if not failure");
+            builder_->append(arm64_assembler::stxrh(status_reg, src_reg, mem_addr_)).add_comment("store if not failure");
             break;
         case 32:
         case 64:
-            builder_->stxr(status_reg, src_reg, mem_addr_).add_comment("store if not failure");
+            builder_->append(arm64_assembler::stxr(status_reg, src_reg, mem_addr_)).add_comment("store if not failure");
             break;
         default:
             throw backend_exception("Cannot store atomically values of type {}",

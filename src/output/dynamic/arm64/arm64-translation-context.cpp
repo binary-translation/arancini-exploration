@@ -318,14 +318,14 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
         switch (width) {
             case 1:
             case 8:
-                builder_.ldrb(dest_vregs[i], addr).add_comment(comment);
+                builder_.append(arm64_assembler::ldrb(dest_vregs[i], addr)).add_comment(comment);
                 break;
             case 16:
-                builder_.ldrh(dest_vregs[i], addr).add_comment(comment);
+                builder_.append(arm64_assembler::ldrh(dest_vregs[i], addr)).add_comment(comment);
                 break;
             case 32:
             case 64:
-                builder_.ldr(dest_vregs[i], addr).add_comment(comment);
+                builder_.append(arm64_assembler::ldr(dest_vregs[i], addr)).add_comment(comment);
                 break;
             default:
                 throw backend_exception("cannot load individual register values (type: {}) larger than 64-bits",
@@ -353,11 +353,11 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     if (is_flag_port(n.value())) {
         if (is_flag_setter(n.value().owner()->kind())) {
             const auto &source = flag_map.at(static_cast<reg_offsets>(n.regoff()));
-            builder_.strb(source, guest_memory(n.regoff()))
+            builder_.append(arm64_assembler::strb(source, guest_memory(n.regoff())))
                          .add_comment(fmt::format("write flag: {}", n.regname()));
         } else if (src.size()) {
             src[0].cast(n.value().type());
-            builder_.strb(src[0], guest_memory(n.regoff()))
+            builder_.append(arm64_assembler::strb(src[0], guest_memory(n.regoff())))
                          .add_comment(fmt::format("write flag: {}", n.regname()));
         }
         return;
@@ -382,14 +382,14 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
         switch (width) {
             case 1:
             case 8:
-                builder_.strb(src[i], addr).add_comment(comment);
+                builder_.append(arm64_assembler::strb(src[i], addr)).add_comment(comment);
                 break;
             case 16:
-                builder_.strh(src[i], addr).add_comment(comment);
+                builder_.append(arm64_assembler::strh(src[i], addr)).add_comment(comment);
                 break;
             case 32:
             case 64:
-                builder_.str(src[i], addr).add_comment(comment);
+                builder_.append(arm64_assembler::str(src[i], addr)).add_comment(comment);
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
@@ -416,14 +416,14 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
         switch (width) {
             case 1:
             case 8:
-                builder_.ldrb(dest[i], mem_op).add_comment("read memory");
+                builder_.append(arm64_assembler::ldrb(dest[i], mem_op)).add_comment("read memory");
                 break;
             case 16:
-                builder_.ldrh(dest[i], mem_op).add_comment("read memory");
+                builder_.append(arm64_assembler::ldrh(dest[i], mem_op)).add_comment("read memory");
                 break;
             case 32:
             case 64:
-                builder_.ldr(dest[i], mem_op).add_comment("read memory");
+                builder_.append(arm64_assembler::ldr(dest[i], mem_op)).add_comment("read memory");
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
@@ -452,14 +452,14 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
         switch (width) {
             case 1:
             case 8:
-                builder_.strb(src[i], mem_op).add_comment("write memory");
+                builder_.append(arm64_assembler::strb(src[i], mem_op)).add_comment("write memory");
                 break;
             case 16:
-                builder_.strh(src[i], mem_op).add_comment("write memory");
+                builder_.append(arm64_assembler::strh(src[i], mem_op)).add_comment("write memory");
                 break;
             case 32:
             case 64:
-                builder_.str(src[i], mem_op).add_comment("write memory");
+                builder_.append(arm64_assembler::str(src[i], mem_op)).add_comment("write memory");
                 break;
             default:
                 // This is by definition; registers >= 64-bits are always vector registers
@@ -484,7 +484,7 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
 		ret_ = 4;
 	}
 
-    builder_.str(new_pc_vreg, guest_memory(reg_offsets::PC))
+    builder_.append(arm64_assembler::str(new_pc_vreg, guest_memory(reg_offsets::PC)))
             .add_comment("write program counter");
 }
 
@@ -1130,53 +1130,10 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
 
 	switch (n.op()) {
 	case binary_atomic_op::add:
-        if constexpr (supports_lse) {
-            switch (n.val().type().element_width()) {
-            case 1:
-            case 8:
-                builder_.ldaddb(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 16:
-                builder_.ldaddh(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 32:
-                builder_.ldaddw(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 64:
-                builder_.ldadd(src_vreg, dest_vreg, mem_addr);
-                break;
-            default:
-                throw backend_exception("Atomic LDADD cannot handle sizes > 64-bit");
-            }
-        } else {
-            builder_.adds(dest_vreg, dest_vreg, src_vreg);
-        }
+        builder_.adds(dest_vreg, dest_vreg, src_vreg);
         break;
 	case binary_atomic_op::sub:
-        if constexpr (supports_lse) {
-            const auto& negated = vreg_alloc_.allocate(n.rhs().type());
-            builder_.neg(negated, src_vreg);
-            switch (n.val().type().element_width()) {
-            case 1:
-            case 8:
-                builder_.ldaddb(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 16:
-                builder_.ldaddh(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 32:
-                builder_.ldaddw(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 64:
-                builder_.ldadd(src_vreg, dest_vreg, mem_addr);
-                break;
-            default:
-                throw backend_exception("Atomic LDADD cannot handle sizes > 64-bit");
-            }
-            builder_.cmp(dest_vreg, 0);
-        } else {
-            builder_.subs(dest_vreg, dest_vreg, src_vreg);
-        }
+        builder_.subs(dest_vreg, dest_vreg, src_vreg);
         inverse_carry_flag_operation = true;
         break;
     case binary_atomic_op::xadd:
@@ -1188,150 +1145,30 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
         }
         break;
 	case binary_atomic_op::bor:
-        if constexpr (supports_lse) {
-            switch (n.val().type().element_width()) {
-            case 1:
-            case 8:
-                builder_.ldsetb(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 16:
-                builder_.ldseth(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 32:
-            case 64:
-                builder_.ldset(src_vreg, dest_vreg, mem_addr);
-                break;
-            default:
-                throw backend_exception("Atomic LDSET cannot handle types {} and {}",
-                                        n.val().type(), n.rhs().type());
-            }
-        } else {
-            builder_.orr_(dest_vreg, dest_vreg, src_vreg);
-        }
+        builder_.orr_(dest_vreg, dest_vreg, src_vreg);
         builder_.cmp(dest_vreg, 0);
         inverse_carry_flag_operation = true;
 		break;
 	case binary_atomic_op::band:
         // TODO: Not sure if this is correct
-        if constexpr (supports_lse) {
-            builder_.not_(src_vreg, src_vreg);
-            switch (n.val().type().element_width()) {
-            case 1:
-            case 8:
-                builder_.ldclrb(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 16:
-                builder_.ldclrh(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 32:
-                builder_.ldclrw(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 64:
-                builder_.ldclr(src_vreg, dest_vreg, mem_addr);
-                break;
-            default:
-                throw backend_exception("Atomic LDCLR cannot handle sizes > 64-bit");
-            }
-        } else {
-            builder_.ands(dest_vreg, dest_vreg, src_vreg);
-        }
+        builder_.ands(dest_vreg, dest_vreg, src_vreg);
 		break;
 	case binary_atomic_op::bxor:
-        if constexpr (supports_lse) {
-            switch (n.val().type().element_width()) {
-            case 1:
-            case 8:
-                builder_.ldeorb(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 16:
-                builder_.ldeorh(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 32:
-                builder_.ldeorw(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 64:
-                builder_.ldeor(src_vreg, dest_vreg, mem_addr);
-                break;
-            default:
-                throw backend_exception("Atomic LDEOR cannot handle sizes > 64-bit");
-            }
-        } else {
-            builder_.eor_(dest_vreg, dest_vreg, src_vreg);
-        }
+        builder_.eor_(dest_vreg, dest_vreg, src_vreg);
         builder_.cmp(dest_vreg, 0);
         inverse_carry_flag_operation = true;
 		break;
     case binary_atomic_op::btc:
-        if constexpr (supports_lse) {
-            switch (n.val().type().element_width()) {
-            case 1:
-            case 8:
-                builder_.ldclrb(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 16:
-                builder_.ldclrh(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 32:
-                builder_.ldclrw(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 64:
-                builder_.ldclr(src_vreg, dest_vreg, mem_addr);
-                break;
-            default:
-                throw backend_exception("Atomic LDCLR cannot handle sizes > 64-bit");
-            }
-        } else {
-            builder_.mov(dest_vreg, 0);
-        }
+        builder_.mov(dest_vreg, 0);
         sets_flags = false;
 		break;
     case binary_atomic_op::bts:
-        if constexpr (supports_lse) {
-            switch (n.val().type().element_width()) {
-            case 1:
-            case 8:
-                builder_.ldsetb(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 16:
-                builder_.ldseth(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 32:
-                builder_.ldsetw(src_vreg, dest_vreg, mem_addr);
-                break;
-            case 64:
-                builder_.ldset(src_vreg, dest_vreg, mem_addr);
-                break;
-            default:
-                throw backend_exception("Atomic LDSET cannot handle sizes > 64-bit");
-            }
-        } else {
-            builder_.mov(dest_vreg, 0);
-        }
+        builder_.mov(dest_vreg, 0);
         sets_flags = false;
 		break;
     case binary_atomic_op::xchg:
         // TODO: check if this works
-        if constexpr (supports_lse) {
-            switch(n.val().type().element_width()) {
-            case 1:
-            case 8:
-                builder_.swpb(dest_vreg, src_vreg, mem_addr);
-                break;
-            case 16:
-                builder_.swph(dest_vreg, src_vreg, mem_addr);
-                break;
-            case 32:
-                builder_.swpw(dest_vreg, src_vreg, mem_addr);
-                break;
-            case 64:
-                builder_.swp(dest_vreg, src_vreg, mem_addr);
-                break;
-            default:
-                throw backend_exception("Atomic XCHG not supported for sizes > 64-bit");
-            }
-        } else {
-            builder_.mov(dest_vreg, src_vreg);
-        }
+        builder_.mov(dest_vreg, src_vreg);
         sets_flags = false;
         break;
 	default:

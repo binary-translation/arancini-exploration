@@ -359,7 +359,7 @@ operand use(const T& o) {
     return operand{o}.as_use();
 }
 
-class instruction final {
+class instruction {
 public:
     typedef std::array<operand, 5> operand_array;
 

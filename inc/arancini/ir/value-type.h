@@ -11,6 +11,7 @@ enum class value_type_class : std::uint8_t { none, signed_integer, unsigned_inte
 class value_type {
 public:
 	static value_type v() { return value_type(value_type_class::none, 0); }
+	static value_type u(std::size_t size) { return value_type(value_type_class::unsigned_integer, size, 1); }
 	static value_type u1() { return value_type(value_type_class::unsigned_integer, 1, 1); }
 	static value_type u8() { return value_type(value_type_class::unsigned_integer, 8, 1); }
 	static value_type u16() { return value_type(value_type_class::unsigned_integer, 16, 1); }
