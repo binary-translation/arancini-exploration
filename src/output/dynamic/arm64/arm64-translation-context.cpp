@@ -89,21 +89,7 @@ register_operand arm64_translation_context::cast(const register_operand &src, va
         type = value_type::u64();
 
     auto dest = vreg_alloc_.allocate(type);
-    switch (src.type().element_width()) {
-    case 1:
-        fill_byte_with_bit(builder_, src);
-    case 8:
-        builder_.sxtb(dest, src);
-        break;
-    case 16:
-        builder_.sxth(dest, src);
-        break;
-    case 32:
-        builder_.sxtw(dest, src);
-        break;
-    default:
-        return src;
-    }
+    builder_.sign_extend(dest, src);
     return dest;
 }
 
@@ -528,22 +514,19 @@ inline shift_operand extend_register(instruction_builder& builder, const registe
     case 8:
         if (type.type_class() == value_type_class::signed_integer) {
             mod = shift_operand::shift_type::sxtb;
-            builder.sxtb(reg, reg);
         } else {
             mod = shift_operand::shift_type::uxtb;
-            builder.uxtb(reg, reg);
         }
         break;
     case 16:
         if (type.type_class() == value_type_class::signed_integer) {
             mod = shift_operand::shift_type::sxth;
-            builder.sxth(reg, reg);
         } else {
             mod = shift_operand::shift_type::uxth;
-            builder.uxth(reg, reg);
         }
         break;
     }
+    builder.extend(reg, reg);
 
     return shift_operand(mod, 0);
 }
@@ -1299,43 +1282,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         // 2. If dest_value > 64-bit, determine sign
         // 3. Plaster sign all over the upper bits
         builder_.insert_comment("sign-extend from {} to {}", n.source_value().type(), n.val().type());
-        switch (n.source_value().type().element_width()) {
-        case 1:
-            // 1 -> N
-            // sign-extend to 1 byte
-            // sign-extend the rest
-            // TODO: this is likely wrong
-            builder_.lsl(dest_vreg, src_vreg, 7)
-                    .add_comment("shift left LSB to set sign bit of byte");
-            builder_.sxtb(dest_vreg, dest_vreg).add_comment("sign-extend");
-            builder_.asr(dest_vreg, dest_vreg, 7)
-                    .add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
-            break;
-        case 8:
-            builder_.sxtb(dest_vreg, src_vreg);
-            break;
-        case 16:
-            builder_.sxth(dest_vreg, src_vreg);
-            break;
-        case 32:
-            builder_.sxtw(dest_vreg, src_vreg);
-            break;
-        case 64:
-            builder_.mov(dest_vreg, src_vreg);
-            break;
-        case 128:
-        case 256:
-            // Move existing values into destination register
-            // Sign extension for remaining registers handled outside of the
-            // switch
-            for (std::size_t i = 0; i < src_vregs.size(); ++i)
-                builder_.mov(dest_vregs[i], src_vregs[i]);
-            break;
-        default:
-            throw backend_exception("Cannot sign-extend from size {} to size {}",
-                                    src_vreg.type().width(),
-                                    dest_vreg.type().width());
-        }
+        builder_.sign_extend(dest_vreg, src_vreg);
 
         // Determine sign and write to upper registers
         // This really only happens when dest_reg_count > src_reg_count > 1
@@ -1401,43 +1348,9 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         }
 		break;
 	case cast_op::zx:
-        // Sanity check
-        [[unlikely]]
-        if (n.val().type().element_width() <= n.source_value().type().element_width())
-            throw backend_exception("Cannot zero-extend {} to smaller size {}",
-                                    n.val().type(), n.source_value().type());
-
         builder_.insert_comment("zero-extend from {} to {}", n.source_value().type(), n.val().type());
-        if (n.source_value().type().element_width() <= 8) {
-            builder_.uxtb(dest_vreg, src_vreg);
-            return;
-        }
-
-        if (n.source_value().type().element_width() <= 16) {
-            builder_.uxth(dest_vreg, src_vreg);
-            return;
-        }
-
-        if (n.source_value().type().element_width() <= 32) {
-            builder_.uxtw(dest_vreg, src_vreg);
-            return;
-        }
-
-        if (n.source_value().type().element_width() <= 256) {
-            for (std::size_t i = 0; i < src_vregs.size(); ++i) {
-                builder_.mov(dest_vregs[i], src_vregs[i]);
-            }
-
-            // Set upper registers to zero
-            if (dest_vregs.size() > 1) {
-                builder_.insert_comment("Set upper registers to zero");
-                for (std::size_t i = src_vregs.size(); i < dest_vregs.size(); ++i)
-                    builder_.mov(dest_vregs[i], 0);
-            }
-            return;
-        }
-
-        throw backend_exception("Cannot zero-extend from {} to {}", n.source_value().type(), n.val().type());
+        builder_.zero_extend(dest_vreg, src_vreg);
+        return;
     case cast_op::trunc:
         [[unlikely]]
         if (dest_vreg.type().element_width() > src_vreg.type().element_width())

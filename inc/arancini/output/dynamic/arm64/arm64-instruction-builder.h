@@ -156,6 +156,15 @@ public:
         ir::value_type imm_type_;
     };
 
+    void bound_to_type(const register_operand& var, ir::value_type type) {
+        // if (is_bignum(var.type()) || type.is_vector())
+        //     throw backend_exception("Cannot bound big scalar of type {} to type {}", var.type(), type);
+
+        auto mask_immediate = 1 << (var.type().width() - 1);
+        auto mask = move_immediate(mask_immediate, var.type());
+        append(arm64_assembler::and_(var, var, mask));
+    }
+
 	instruction& add(const register_operand &dst,
                       const register_operand &src1,
                       const reg_or_imm &src2) {
@@ -579,28 +588,63 @@ public:
         return append(instruction("cfinv"));
     }
 
-    instruction& sxtb(const register_operand &dst, const register_operand &src) {
-        return append(arm64_assembler::sxtb(dst, src));
+    void zero_extend(const register_operand& out, const register_operand& source) {
+        if (out.type().width() == source.type().width()) {
+            append(arm64_assembler::mov(out, source));
+            return;
+        }
+    
+        // Sanity check
+        // TODO: more missing sanity checks
+        [[unlikely]]
+        if (out.type().width() < source.type().width())
+            throw backend_exception("Cannot zero-extend {} to smaller size {}",
+                                    source.type(), out.type());
+    
+        insert_comment("zero-extend from {} to {}", source.type(), out.type());
+        if (source.type().width() <= 8) {
+            append(arm64_assembler::uxtb(out, source));
+        } else if (source.type().width() <= 16) {
+            append(arm64_assembler::uxth(out, source));
+        } else if (source.type().width() <= 32) {
+            append(arm64_assembler::uxtw(out, source));
+        } else {
+            append(arm64_assembler::mov(out, source));
+        }
     }
 
-    instruction& sxth(const register_operand &dst, const register_operand &src) {
-        return append(arm64_assembler::sxth(dst, src));
+    void sign_extend(const register_operand& out, const register_operand& source) {
+        if (out.type().width() == source.type().width()) {
+            append(arm64_assembler::mov(out, source));
+            return;
+        }
+    
+        // Sanity check
+        // TODO: more missing sanity checks
+        [[unlikely]]
+        if (out.type().width() < source.type().width())
+            throw backend_exception("Cannot sign-extend {} to smaller size {}",
+                                    source.type(), out.type());
+    
+        insert_comment("sign-extend from {} to {}", source.type(), out.type());
+        if (source.type().width() < 8) {
+            append(arm64_assembler::sxtb(out, source));
+            bound_to_type(out, source.type());
+        } else if (source.type().width() == 8) {
+            append(arm64_assembler::sxtb(out, source));
+        } else if (source.type().width() <= 16) {
+            append(arm64_assembler::sxth(out, source));
+        } else if (source.type().width() <= 32) {
+            append(arm64_assembler::sxtw(out, source));
+        } else {
+            append(arm64_assembler::mov(out, source));
+        }
     }
 
-    instruction& sxtw(const register_operand &dst, const register_operand &src) {
-        return append(arm64_assembler::sxtw(dst, src));
-    }
-
-    instruction& uxtb(const register_operand &dst, const register_operand &src) {
-        return append(arm64_assembler::uxtb(dst, src));
-    }
-
-    instruction& uxth(const register_operand &dst, const register_operand &src) {
-        return append(arm64_assembler::uxth(dst, src));
-    }
-
-    instruction& uxtw(const register_operand &dst, const register_operand &src) {
-        return append(arm64_assembler::uxtw(dst, src));
+    void extend(const register_operand& out, const register_operand& source) {
+        if (source.type().is_signed())
+            return sign_extend(out, source);
+        return zero_extend(out, source);
     }
 
     instruction& cas(const register_operand &dst, const register_operand &src,

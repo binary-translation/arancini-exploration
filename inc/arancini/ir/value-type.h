@@ -79,6 +79,9 @@ public:
 	bool is_integer() const { return tc_ == value_type_class::signed_integer || tc_ == value_type_class::unsigned_integer; }
 
     [[nodiscard]]
+	bool is_signed() const { return tc_ == value_type_class::signed_integer || tc_ == value_type_class::floating_point; }
+
+    [[nodiscard]]
 	value_type element_type() const { return value_type(tc_, element_width_, 1); }
 
     [[nodiscard]]
