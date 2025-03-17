@@ -2,10 +2,19 @@
 
 #include <arancini/output/dynamic/arm64/arm64-instruction.h>
 
+#include <keystone/keystone.h>
+
 namespace arancini::output::dynamic::arm64 {
 
 class arm64_assembler {
 public:
+    arm64_assembler() {
+        status_ = ks_open(KS_ARCH_ARM64, KS_MODE_LITTLE_ENDIAN, &ks_);
+
+        if (status_ != KS_ERR_OK)
+            throw backend_exception("failed to initialise keystone assembler: {}", ks_strerror(status_));
+    }
+
 	struct add : instruction {
 		add(const register_operand &dst, const register_operand &src1, const reg_or_imm &src2): 
 			instruction("add", def(dst), use(src1), use(src2))
@@ -737,7 +746,19 @@ public:
 			as_keep();
 		}
 	};
+
+
+    std::size_t assemble(const char *code, unsigned char **out);
+
+    void free(unsigned char* ptr) const { ks_free(ptr); }
+
+    ~arm64_assembler() {
+        ks_close(ks_);
+    }
 private:
+    ks_err status_;
+    ks_engine* ks_;
+
 	static reg_or_imm check_immediate(const reg_or_imm& imm, ir::value_type type) { 
 		return imm;
 	}

@@ -19,10 +19,11 @@ set(INCLUDE_PATH ../../../inc)
 function(generate_arm64_lib target type)
     add_library(${target}
                 ${type}
-                arm64-dynamic-output-engine.cpp
+                arm64-assembler.cpp
                 arm64-instruction.cpp
                 arm64-instruction-builder.cpp
-                arm64-translation-context.cpp)
+                arm64-translation-context.cpp
+                arm64-dynamic-output-engine.cpp)
 
     target_include_directories(${target}
                                PUBLIC
