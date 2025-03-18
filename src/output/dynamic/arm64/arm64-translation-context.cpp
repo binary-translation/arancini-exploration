@@ -95,7 +95,7 @@ register_operand arm64_translation_context::cast(const register_operand &src, va
 
 memory_operand arm64_translation_context::guest_memory(int regoff, memory_operand::address_mode mode) {
     if (regoff > 255 || regoff < -256) {
-        const register_operand& base_vreg = vreg_alloc_.allocate(value_types::addr_type);
+        register_operand base_vreg = vreg_alloc_.allocate(value_types::addr_type);
         builder_.mov(base_vreg, regoff);
         builder_.add(base_vreg, context_block_reg, base_vreg);
         return memory_operand(base_vreg, 0, mode);
@@ -299,7 +299,7 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
     auto comment = fmt::format("read register: {}", n.regname());
     auto& dest_vregs = vreg_alloc_.allocate(n.val());
     auto address = guest_memory(n.regoff());
-    builder_.load(dest_vregs, address);
+    builder_.load(variable(dest_vregs), address);
 }
 
 inline bool is_flag_setter(node_kinds node_kind) {
@@ -342,7 +342,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     // There should be clear type promotion and type coercion.
     auto comment = fmt::format("write register: {}", n.regname());
     auto address = guest_memory(n.regoff());
-    builder_.store(src, address);
+    builder_.store(variable(src), address);
 }
 
 void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
@@ -355,7 +355,7 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
 
     const auto &dest = vreg_alloc_.allocate(n.val());
     const register_operand &address = materialise_port(n.address());
-    builder_.load(dest, address);
+    builder_.load(variable(dest), address);
 }
 
 void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
@@ -370,7 +370,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
     const auto &src = materialise_port(n.value());
 
     const auto &address = materialise_port(n.address());
-    builder_.store(src, address);
+    builder_.store(variable(src), address);
 }
 
 void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
@@ -1097,7 +1097,7 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
     // Destination register only used for storing return code of STXR (a 32-bit value)
     // Since STXR expects a 32-bit register; we directly allocate a 32-bit one
     // NOTE: we're only going to use it afterwards for a comparison and an increment
-    const register_operand &status_reg = vreg_alloc_.allocate(n.val(), value_type::u32());
+    register_operand status_reg = vreg_alloc_.allocate(value_type::u32());
     const register_operand &current_data_reg = vreg_alloc_.allocate(n.val(), n.rhs().type());
 
     const register_operand &acc_reg = materialise_port(n.rhs());
@@ -1189,29 +1189,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
     logger.debug("Materializing cast operation: {}\n", n.op());
 	switch (n.op()) {
 	case cast_op::sx:
-        // Sanity check
-        if (n.val().type().element_width() <= n.source_value().type().element_width())
-            throw backend_exception("cannot sign-extend {} to smaller size {}",
-                                    n.val().type().element_width(),
-                                    n.source_value().type().element_width());
-
-
-        // IDEA:
-        // 1. Sign-extend reasonably
-        // 2. If dest_value > 64-bit, determine sign
-        // 3. Plaster sign all over the upper bits
-        builder_.insert_comment("sign-extend from {} to {}", n.source_value().type(), n.val().type());
-        builder_.sign_extend(dest_vreg, src_vreg);
-
-        // Determine sign and write to upper registers
-        // This really only happens when dest_reg_count > src_reg_count > 1
-        if (dest_vregs.size() > 1) {
-            builder_.insert_comment("Determine sign and write to upper registers");
-            for (std::size_t i = src_vregs.size(); i < dest_vregs.size(); ++i) {
-                builder_.mov(dest_vregs[i], src_vregs[src_vregs.size()-1]);
-                builder_.asr(dest_vregs[i], dest_vregs[i], 64);
-            }
-        }
+        builder_.sign_extend(variable(dest_vregs), variable(src_vregs));
         break;
 	case cast_op::bitcast:
         // Simply change the meaning of the bit pattern
@@ -1267,8 +1245,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
         }
 		break;
 	case cast_op::zx:
-        builder_.insert_comment("zero-extend from {} to {}", n.source_value().type(), n.val().type());
-        builder_.zero_extend(dest_vreg, src_vreg);
+        builder_.zero_extend(variable(dest_vregs), variable(src_vregs));
         return;
     case cast_op::trunc:
         [[unlikely]]

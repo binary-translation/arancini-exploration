@@ -18,62 +18,193 @@ public:
     register_sequence() = default;
 
     register_sequence(const register_operand& reg):
-        regs_{reg}
+        values_{reg}
     { }
 
     register_sequence(std::initializer_list<register_operand> regs):
-        regs_(regs)
+        values_(regs)
     { }
 
     template <typename It>
     register_sequence(It begin, It end):
-        regs_(begin, end)
+        values_(begin, end)
     { }
 
-    operator register_operand() const {
+    operator const register_operand&() const {
         [[unlikely]]
-        if (regs_.size() > 1)
+        if (values_.size() > 1)
             throw backend_exception("Accessing register set of {} registers as single register",
-                                    regs_.size());
-        return regs_[0];
+                                    values_.size());
+        return values_[0];
     }
 
-    operator std::vector<register_operand>() const {
-        return regs_;
+    operator const std::vector<register_operand>&() const {
+        return values_;
     }
 
     [[nodiscard]]
-    register_operand& operator[](std::size_t i) { return regs_[i]; }
+    register_operand& operator[](std::size_t i) { return values_[i]; }
 
     [[nodiscard]]
-    const register_operand& operator[](std::size_t i) const { return regs_[i]; }
+    const register_operand& operator[](std::size_t i) const { return values_[i]; }
 
     [[nodiscard]]
-    register_operand& front() { return regs_[0]; }
+    register_operand& front() { return values_[0]; }
 
     [[nodiscard]]
-    const register_operand& front() const { return regs_[0]; }
+    const register_operand& front() const { return values_[0]; }
 
     [[nodiscard]]
-    register_operand& back() { return regs_[regs_.size()]; }
+    register_operand& back() { return values_[values_.size()]; }
 
     [[nodiscard]]
-    const register_operand& back() const { return regs_[regs_.size()]; }
+    const register_operand& back() const { return values_[values_.size()]; }
 
     [[nodiscard]]
-    std::size_t size() const { return regs_.size(); }
+    std::size_t size() const { return values_.size(); }
 
-    void push_back(const register_operand& reg) { regs_.push_back(reg); }
+    void push_back(const register_operand& reg) { values_.push_back(reg); }
 
-    void push_back(register_operand&& reg) { regs_.push_back(std::move(reg)); }
+    void push_back(register_operand&& reg) { values_.push_back(std::move(reg)); }
+
+    ir::value_type type() const {
+        if (values_.size() == 1)
+            return values_[0].type();
+            
+        // Big scalars
+        return ir::value_type(values_[0].type().type_class(),
+                              values_[0].type().width() * values_.size());
+    }
+
+    using iterator = std::vector<register_operand>::iterator;
+    using const_iterator = std::vector<register_operand>::const_iterator;
+
+    [[nodiscard]]
+    iterator begin() { return values_.begin(); }
+
+    [[nodiscard]]
+    const_iterator begin() const { return values_.begin(); }
+
+    [[nodiscard]]
+    const_iterator cbegin() const { return values_.cbegin(); }
+
+    [[nodiscard]]
+    iterator end() { return values_.end(); }
+
+    [[nodiscard]]
+    const_iterator end() const { return values_.end(); }
+
+    [[nodiscard]]
+    const_iterator cend() const { return values_.cend(); }
 private:
-    std::vector<register_operand> regs_;
+    std::vector<register_operand> values_;
+};
+
+class variable {
+    std::vector<register_sequence> values_;
+public:
+    variable(const register_operand& reg):
+        values_({{reg}})
+    { } 
+
+    variable(const register_sequence& regseq):
+        values_({regseq})
+    {
+        [[unlikely]]
+        if (regseq.type().is_vector())
+            throw backend_exception("Attempting to create variable from vector register sequence");
+
+        // TODO: may prefer to relax this constraint
+        [[unlikely]]
+        if (!regseq.size())
+            throw backend_exception("Attempting to create variable from empty register sequence");
+    } 
+
+    variable(const std::vector<register_sequence>& emulated_vector):
+        values_(emulated_vector)
+    { 
+        [[unlikely]]
+        if (emulated_vector.size() && emulated_vector[0].type().is_vector())
+            throw backend_exception("Attempting to create variable from vector register sequence");
+    } 
+
+    operator const register_operand&() const {
+        return values_[0];
+    }
+
+    operator const register_sequence&() const {
+        return values_[0];
+    }
+
+    register_sequence& operator[](std::size_t idx) {
+        return values_[idx];
+    }
+
+    const register_sequence& operator[](std::size_t idx) const {
+        return values_[idx];
+    }
+
+    register_sequence& scalar() {
+        if (values_.size() != 1)
+            throw backend_exception("Cannot treat vector type {} as scalar", type());
+        return values_[0];
+    }
+
+    const register_sequence& scalar() const {
+        if (values_.size() != 1)
+            throw backend_exception("Cannot treat vector type {} as scalar", type());
+        return values_[0];
+    }
+
+    bool is_native_vector() const {
+        return type().is_vector() && values_.size() == 1;
+    }
+
+    std::size_t size() const { 
+        if (values_.size() == 1)
+            return values_[0].size();
+        return values_.size();
+    }
+
+    ir::value_type type() const {
+        if (values_.size() == 1) {
+            // For normal scalars, real vectors and big scalars
+            return values_[0].type();
+        }
+        
+        // For emulated vectors
+        return ir::value_type::vector(values_[0].type(), values_.size());
+    }
+
+    using iterator = std::vector<register_sequence>::iterator;
+    using const_iterator = std::vector<register_sequence>::const_iterator;
+
+    [[nodiscard]]
+    iterator begin() { return values_.begin(); }
+
+    [[nodiscard]]
+    const_iterator begin() const { return values_.begin(); }
+
+    [[nodiscard]]
+    const_iterator cbegin() const { return values_.cbegin(); }
+
+    [[nodiscard]]
+    iterator end() { return values_.end(); }
+
+    [[nodiscard]]
+    const_iterator end() const { return values_.end(); }
+
+    [[nodiscard]]
+    const_iterator cend() const { return values_.cend(); }
 };
 
 class virtual_register_allocator final {
 public:
     [[nodiscard]]
     register_sequence allocate([[maybe_unused]] ir::value_type type);
+
+    [[nodiscard]]
+    variable allocate_variable(ir::value_type type);
 
     void reset() { next_vreg_ = 33; }
 private:
@@ -83,6 +214,10 @@ private:
         return type.width() <= 64; // TODO: formalize this
     }
 };
+
+static inline bool is_big_scalar(ir::value_type type) {
+    return !type.is_vector() && type.width() > 64;
+}
 
 class instruction_builder final {
 public:
@@ -287,36 +422,28 @@ public:
         return append(arm64_assembler::mov(dst, policy(src)));
     }
 
-    void load(const register_sequence& out, const memory_operand& address) {
-        for (std::size_t i = 0; i < out.size(); ++i) {
-            if (out[i].type().element_width() <= 8) {
-                memory_operand memory(address.base_register(), address.offset().value() + i);
-                append(arm64_assembler::ldrb(out[i], memory));
-            } else if (out[i].type().element_width() <= 16) {
-                memory_operand memory(address.base_register(), address.offset().value() + i * 2);
-                append(arm64_assembler::ldrh(out[i], memory));
-            } else {
-                auto offset = i * (out[i].type().element_width() < 64 ? 4 : 8);
-                memory_operand memory(address.base_register(), address.offset().value() + offset);
-                append(arm64_assembler::ldr(out[i], memory));
-            }
+    void load(const variable& out, const memory_operand& address) {
+        if (out.type().is_vector()) {
+            if (out.is_native_vector())
+                throw backend_exception("Cannot load native vectors");
+
+            for (const auto& vec_elem : out)
+                return load(vec_elem, address);
         }
+
+        return load(out.scalar(), address);
     }
 
-    void store(const register_sequence& source, const memory_operand& address) {
-        for (std::size_t i = 0; i < source.size(); ++i) {
-            if (source[i].type().element_width() <= 8) {
-                memory_operand memory(address.base_register(), address.offset().value() + i);
-                append(arm64_assembler::strb(source[i], memory));
-            } else if (source[i].type().element_width() <= 16) {
-                memory_operand memory(address.base_register(), address.offset().value() + i * 2);
-                append(arm64_assembler::strh(source[i], memory));
-            } else {
-                auto offset = i * (source[i].type().element_width() < 64 ? 4 : 8);
-                memory_operand memory(address.base_register(), address.offset().value() + offset);
-                append(arm64_assembler::str(source[i], memory));
-            }
+    void store(const variable& source, const memory_operand& address) {
+        if (source.type().is_vector()) {
+            if (source.is_native_vector())
+                throw backend_exception("Cannot store native vectors");
+
+            for (const auto& vec_elem : source)
+                return store(vec_elem, address);
         }
+
+        return store(source.scalar(), address);
     }
 
     instruction& branch(label_operand &dest) {
@@ -597,7 +724,7 @@ public:
         return append(instruction("cfinv"));
     }
 
-    void zero_extend(const register_operand& out, const register_operand& source) {
+    void zero_extend(const register_sequence& out, const register_sequence& source) {
         if (out.type().width() == source.type().width()) {
             append(arm64_assembler::mov(out, source));
             return;
@@ -610,47 +737,74 @@ public:
             throw backend_exception("Cannot zero-extend {} to smaller size {}",
                                     source.type(), out.type());
     
-        insert_comment("zero-extend from {} to {}", source.type(), out.type());
-        if (source.type().width() <= 8) {
-            append(arm64_assembler::uxtb(out, source));
-        } else if (source.type().width() <= 16) {
-            append(arm64_assembler::uxth(out, source));
-        } else if (source.type().width() <= 32) {
-            append(arm64_assembler::uxtw(out, source));
+        insert_comment("zero-extend from {} to {}", source[0].type(), out.type());
+        if (source[0].type().width() <= 8) {
+            append(arm64_assembler::uxtb(out[0], source[0]));
+            return;
+        } else if (source[0].type().width() <= 16) {
+            append(arm64_assembler::uxth(out[0], source[0]));
+            return;
+        } else if (source[0].type().width() <= 32) {
+            append(arm64_assembler::uxtw(out[0], source[0]));
+            return;
         } else {
-            append(arm64_assembler::mov(out, source));
+            append(arm64_assembler::mov(out[0], source[0]));
+            return;
+        }
+
+        for (std::size_t i = 1; i < std::min(out.size(), source.size()); ++i) {
+            append(arm64_assembler::mov(out[i], source[i]));
+        }
+
+        for (std::size_t i = source.size(); i < out.size(); ++i) {
+            append(arm64_assembler::mov(out[i], 0));
         }
     }
 
-    void sign_extend(const register_operand& out, const register_operand& source) {
-        if (out.type().width() == source.type().width()) {
-            append(arm64_assembler::mov(out, source));
-            return;
-        }
-    
+    void sign_extend(const register_sequence& out, const register_sequence& source) {
         // Sanity check
         // TODO: more missing sanity checks
         [[unlikely]]
         if (out.type().width() < source.type().width())
             throw backend_exception("Cannot sign-extend {} to smaller size {}",
                                     source.type(), out.type());
-    
-        insert_comment("sign-extend from {} to {}", source.type(), out.type());
-        if (source.type().width() < 8) {
-            append(arm64_assembler::sxtb(out, source));
-            bound_to_type(out, source.type());
-        } else if (source.type().width() == 8) {
-            append(arm64_assembler::sxtb(out, source));
-        } else if (source.type().width() <= 16) {
-            append(arm64_assembler::sxth(out, source));
-        } else if (source.type().width() <= 32) {
-            append(arm64_assembler::sxtw(out, source));
-        } else {
+        if (source.size() == 0)
+            throw backend_exception("Cannot sign-extend source of type {}", source.type());
+
+        if (out.type().width() == source.type().width()) {
             append(arm64_assembler::mov(out, source));
+            return;
+        }
+
+        insert_comment("sign-extend from {} to {}", source.type(), out.type());
+
+        auto extension_start_idx = source.size();
+        for (std::size_t i = 0; i < extension_start_idx; ++i) {
+            append(arm64_assembler::mov(out[i], source[i]));
+        }
+
+        const auto& last_source_value = source[extension_start_idx-1];
+        if (last_source_value.type().width() <= 64) {
+            if (last_source_value.type().width() < 8) {
+                append(arm64_assembler::sxtb(out[0], last_source_value));
+                bound_to_type(out[0], last_source_value.type());
+            } else if (last_source_value.type().width() == 8) {
+                append(arm64_assembler::sxtb(out[0], last_source_value));
+            } else if (last_source_value.type().width() <= 16) {
+                append(arm64_assembler::sxth(out[0], last_source_value));
+            } else if (last_source_value.type().width() <= 32) {
+                append(arm64_assembler::sxtw(out[0], last_source_value));
+            } else {
+                append(arm64_assembler::mov(out[0], last_source_value));
+            }
+        }
+
+        for (std::size_t i = extension_start_idx; i < out.size(); ++i) {
+            append(arm64_assembler::asr(out[i], out[i], 63));
         }
     }
 
-    void extend(const register_operand& out, const register_operand& source) {
+    void extend(const register_sequence& out, const register_sequence& source) {
         if (source.type().is_signed())
             return sign_extend(out, source);
         return zero_extend(out, source);
@@ -805,6 +959,38 @@ private:
     std::unordered_set<std::string> labels_;
 
     void spill();
+
+    void load(const register_sequence& out, const memory_operand& address) {
+        for (std::size_t i = 0; i < out.size(); ++i) {
+            if (out[i].type().element_width() <= 8) {
+                memory_operand memory(address.base_register(), address.offset().value() + i);
+                append(arm64_assembler::ldrb(out[i], memory));
+            } else if (out[i].type().element_width() <= 16) {
+                memory_operand memory(address.base_register(), address.offset().value() + i * 2);
+                append(arm64_assembler::ldrh(out[i], memory));
+            } else {
+                auto offset = i * (out[i].type().element_width() < 64 ? 4 : 8);
+                memory_operand memory(address.base_register(), address.offset().value() + offset);
+                append(arm64_assembler::ldr(out[i], memory));
+            }
+        }
+    }
+
+    void store(const register_sequence& source, const memory_operand& address) {
+        for (std::size_t i = 0; i < source.size(); ++i) {
+            if (source[i].type().element_width() <= 8) {
+                memory_operand memory(address.base_register(), address.offset().value() + i);
+                append(arm64_assembler::strb(source[i], memory));
+            } else if (source[i].type().element_width() <= 16) {
+                memory_operand memory(address.base_register(), address.offset().value() + i * 2);
+                append(arm64_assembler::strh(source[i], memory));
+            } else {
+                auto offset = i * (source[i].type().element_width() < 64 ? 4 : 8);
+                memory_operand memory(address.base_register(), address.offset().value() + offset);
+                append(arm64_assembler::str(source[i], memory));
+            }
+        }
+    }
 };
 
 struct atomic_block {
