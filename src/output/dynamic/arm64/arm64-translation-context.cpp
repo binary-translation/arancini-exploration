@@ -95,7 +95,7 @@ register_operand arm64_translation_context::cast(const register_operand &src, va
 
 memory_operand arm64_translation_context::guest_memory(int regoff, memory_operand::address_mode mode) {
     if (regoff > 255 || regoff < -256) {
-        const register_operand& base_vreg = vreg_alloc_.allocate(value_types::addr_type);
+        register_operand base_vreg = vreg_alloc_.allocate(value_types::addr_type);
         builder_.mov(base_vreg, regoff);
         builder_.add(base_vreg, context_block_reg, base_vreg);
         return memory_operand(base_vreg, 0, mode);
@@ -299,7 +299,7 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
     auto comment = fmt::format("read register: {}", n.regname());
     auto& dest_vregs = vreg_alloc_.allocate(n.val());
     auto address = guest_memory(n.regoff());
-    builder_.load(dest_vregs, address);
+    builder_.load(variable(dest_vregs), address);
 }
 
 inline bool is_flag_setter(node_kinds node_kind) {
@@ -342,7 +342,7 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
     // There should be clear type promotion and type coercion.
     auto comment = fmt::format("write register: {}", n.regname());
     auto address = guest_memory(n.regoff());
-    builder_.store(src, address);
+    builder_.store(variable(src), address);
 }
 
 void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
@@ -355,7 +355,7 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
 
     const auto &dest = vreg_alloc_.allocate(n.val());
     const register_operand &address = materialise_port(n.address());
-    builder_.load(dest, address);
+    builder_.load(variable(dest), address);
 }
 
 void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
@@ -370,7 +370,7 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
     const auto &src = materialise_port(n.value());
 
     const auto &address = materialise_port(n.address());
-    builder_.store(src, address);
+    builder_.store(variable(src), address);
 }
 
 void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
@@ -1097,7 +1097,7 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
     // Destination register only used for storing return code of STXR (a 32-bit value)
     // Since STXR expects a 32-bit register; we directly allocate a 32-bit one
     // NOTE: we're only going to use it afterwards for a comparison and an increment
-    const register_operand &status_reg = vreg_alloc_.allocate(n.val(), value_type::u32());
+    register_operand status_reg = vreg_alloc_.allocate(value_type::u32());
     const register_operand &current_data_reg = vreg_alloc_.allocate(n.val(), n.rhs().type());
 
     const register_operand &acc_reg = materialise_port(n.rhs());

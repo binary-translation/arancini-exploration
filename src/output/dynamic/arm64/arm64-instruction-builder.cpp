@@ -35,6 +35,19 @@ register_sequence virtual_register_allocator::allocate(ir::value_type type) {
     return regset;
 }
 
+variable virtual_register_allocator::allocate_variable(ir::value_type type) {
+    // Currently, always allocate vectors as emulated vectors
+    if (type.is_vector()) {
+        std::vector<register_sequence> emulated_vec;
+        for (std::size_t i = 0; i < type.nr_elements(); ++i) {
+            emulated_vec.push_back(allocate(type.element_type()));
+        }
+        return variable(emulated_vec);
+    } 
+
+    return allocate(type);
+}
+
 void instruction_builder::spill() {
 }
 
