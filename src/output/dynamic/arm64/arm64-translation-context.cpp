@@ -994,26 +994,12 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
 }
 
 void arm64_translation_context::materialise_binary_atomic(const binary_atomic_node &n) {
-	const auto &dest_vregs = vreg_alloc_.allocate(n.val());
-    const auto &src_vregs = materialise_port(n.rhs());
-    const auto &addr_regs = materialise_port(n.address());
-
-    [[unlikely]]
-    if (addr_regs.size() != 1)
-        throw backend_exception("Binary atomic operation address type not supported {}", n.address().type());
-
-    [[unlikely]]
-    if (dest_vregs.size() != 1 || src_vregs.size() != 1)
-        throw backend_exception("Binary atomic operations not supported for vector types (src: {} or dest: {})",
-                                n.rhs().type(), n.val().type());
-
-    const auto &src_vreg = src_vregs[0];
-    const auto &dest_vreg = dest_vregs[0];
+	const auto &out = vreg_alloc_.allocate(n.val());
+    const auto &source = materialise_port(n.rhs());
+    const auto &address = materialise_port(n.address());
 
     // No need to handle flags: they are not visible to other PEs
     allocate_flags(vreg_alloc_, flag_map, n);
-
-    memory_operand mem_addr(addr_regs[0]);
 
     bool sets_flags = true;
     bool inverse_carry_flag_operation = false;
@@ -1022,62 +1008,46 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
     // NOTE: not sure if the proper alternative was used (should a/al/l or
     // nothing be used?)
 
-    atomic_block atomic(builder_, instr_cnt_, mem_addr);
-    const register_operand& status = vreg_alloc_.allocate(value_type::u32());
-    if constexpr (!supports_lse) {
-        atomic.start_atomic_block(dest_vreg);
-    }
-
 	switch (n.op()) {
 	case binary_atomic_op::add:
-        builder_.adds(dest_vreg, dest_vreg, src_vreg);
+        builder_.atomic_add(out, source, address);
         break;
 	case binary_atomic_op::sub:
-        builder_.subs(dest_vreg, dest_vreg, src_vreg);
+        builder_.atomic_sub(out, source, address);
         inverse_carry_flag_operation = true;
         break;
-    case binary_atomic_op::xadd:
-        {
-            // TODO: must find a way to make this unique
-            const register_operand &old_dest = vreg_alloc_.allocate(n.rhs().type());
-            builder_.adds(dest_vreg, dest_vreg, src_vreg);
-            builder_.mov(src_vreg, old_dest);
-        }
-        break;
-	case binary_atomic_op::bor:
-        builder_.orr_(dest_vreg, dest_vreg, src_vreg);
-        builder_.compare(variable(dest_vreg), 0);
-        inverse_carry_flag_operation = true;
-		break;
 	case binary_atomic_op::band:
-        // TODO: Not sure if this is correct
-        builder_.ands(dest_vreg, dest_vreg, src_vreg);
+        builder_.atomic_and(out, source, address);
 		break;
+	case binary_atomic_op::bor:
+        builder_.atomic_or(out, source, address);
+        builder_.compare(variable(out), 0);
+        inverse_carry_flag_operation = true;
+		break;
+    case binary_atomic_op::xadd:
+        builder_.atomic_xadd(out, source, address);
+        break;
 	case binary_atomic_op::bxor:
-        builder_.eor_(dest_vreg, dest_vreg, src_vreg);
-        builder_.compare(variable(dest_vreg), 0);
+        builder_.atomic_xor(out, source, address);
+        builder_.compare(variable(out), 0);
         inverse_carry_flag_operation = true;
 		break;
     case binary_atomic_op::btc:
-        builder_.mov(dest_vreg, 0);
+        builder_.atomic_clr(out, source, address);
         sets_flags = false;
 		break;
     case binary_atomic_op::bts:
-        builder_.mov(dest_vreg, 0);
+        builder_.atomic_or(out, source, address);
         sets_flags = false;
 		break;
     case binary_atomic_op::xchg:
         // TODO: check if this works
-        builder_.mov(dest_vreg, src_vreg);
+        builder_.atomic_swap(out, source, address);
         sets_flags = false;
         break;
 	default:
 		throw backend_exception("unsupported binary atomic operation {}", util::to_underlying(n.op()));
 	}
-
-    if constexpr (!supports_lse) {
-        atomic.end_atomic_block(status, dest_vreg);
-    }
 
     if (sets_flags) {
         builder_.setz(flag_map[reg_offsets::ZF]).add_comment("write flag: ZF");
@@ -1092,45 +1062,19 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
 }
 
 void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_node &n) {
-    // Destination register only used for storing return code of STXR (a 32-bit value)
-    // Since STXR expects a 32-bit register; we directly allocate a 32-bit one
-    // NOTE: we're only going to use it afterwards for a comparison and an increment
-    register_operand status_reg = vreg_alloc_.allocate(value_type::u32());
-    const register_operand &current_data_reg = vreg_alloc_.allocate(n.val(), n.rhs().type());
-
-    const register_operand &acc_reg = materialise_port(n.rhs());
-    const register_operand &src_reg = materialise_port(n.top());
-    const register_operand &addr_reg = materialise_port(n.address());
+    const register_operand &out = vreg_alloc_.allocate(n.val(), n.rhs().type());
+    const register_operand &accumulator = materialise_port(n.rhs());
+    const register_operand &source = materialise_port(n.top());
+    const register_operand &address = materialise_port(n.address());
 
     allocate_flags(vreg_alloc_, flag_map, n);
 
-    // CMPXCHG:
-    // dest_reg = mem[addr];
-    // if (dest_reg != acc_reg) acc_reg = dest_reg;
-    // else try mem[addr] = src_reg;
-    //      if (failed) goto beginning
-    // end
-    auto mem_addr = memory_operand(addr_reg);
     switch (n.op()) {
     case ternary_atomic_op::cmpxchg:
-        if constexpr (supports_lse) {
-            builder_.insert_comment("Atomic CMPXCHG using CAS (enabled on systems with LSE support");
-            builder_.cas(acc_reg, src_reg, memory_operand(mem_addr))
-                    .add_comment("write source (2nd reg) to memory if source == accumulator (1st reg), accumulator = source");
-            builder_.compare(variable(acc_reg), 0);
-        } else {
-            builder_.insert_comment("Atomic CMPXCHG without CAS");
-            atomic_block atomic{builder_, instr_cnt_, mem_addr};
-            atomic.start_atomic_block(current_data_reg);
-            builder_.insert_comment("Compare with accumulator");
-            builder_.compare(variable(current_data_reg), variable(acc_reg));
-            builder_.csel(acc_reg, current_data_reg, acc_reg, cond_operand::ne())
-                     .add_comment("conditionally move current memory value into accumulator");
-            atomic.end_atomic_block(status_reg, src_reg);
-        }
+        builder_.atomic_cmpxchg(out, accumulator, source, address);
         break;
     default:
-		throw backend_exception("unsupported binary atomic operation {}", util::to_underlying(n.op()));
+		throw backend_exception("unsupported ternary atomic operation {}", util::to_underlying(n.op()));
     }
 
     builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");

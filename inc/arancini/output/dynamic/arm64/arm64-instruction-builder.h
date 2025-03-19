@@ -6,6 +6,7 @@
 #include <arancini/output/dynamic/arm64/arm64-instruction.h>
 
 #include <vector>
+#include <atomic>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
@@ -809,9 +810,528 @@ public:
         return zero_extend(out, source);
     }
 
-    instruction& cas(const register_operand &dst, const register_operand &src,
-                     const memory_operand &mem_addr) {
-        return append(instruction("cas", use(dst), use(src), use(mem_addr)).as_keep());
+    void atomic_load(const register_operand& out, const memory_operand& address, 
+                     std::memory_order mem_order = std::memory_order_acquire) {
+        if (mem_order != std::memory_order_acquire && mem_order != std::memory_order_relaxed)
+            throw backend_exception("Memory order {} not supported for atomic load (only acquire and relaxed supported)",
+                                    util::to_underlying(mem_order));
+
+        [[unlikely]]
+        if (mem_order == std::memory_order_relaxed) {
+            if (out.type().width() <= 8) {
+                append(arm64_assembler::ldxrb(out, address));
+                return;
+            } else if (out.type().width() <= 16) {
+                append(arm64_assembler::ldxrh(out, address));
+                return;
+            }
+    
+            append(arm64_assembler::ldxr(out, address));
+            return;
+        }
+    
+        // Acquire
+        switch (out.type().element_width()) {
+        case 8:
+            append(arm64_assembler::ldaxrb(out, address));
+            return;
+        case 16:
+            append(arm64_assembler::ldaxrh(out, address));
+            return;
+        case 32:
+        case 64:
+            append(arm64_assembler::ldaxr(out, address));
+            return;
+        default:
+            throw backend_exception("Cannot load atomically type {}", out.type());
+        }
+    }
+
+    void atomic_store(const register_operand& status, const register_operand& source,
+                      const memory_operand& address, 
+                      std::memory_order mem_order = std::memory_order_release) {
+
+        if (mem_order != std::memory_order_release && mem_order != std::memory_order_relaxed)
+            throw backend_exception("Memory order {} not supported for atomic store (only release and relaxed supported)",
+                                    util::to_underlying(mem_order));
+
+        [[unlikely]]
+        if (mem_order == std::memory_order_relaxed) {
+            if (source.type().width() <= 8) {
+                append(arm64_assembler::stxrb(status, source, address));
+                return;
+            } else if (source.type().width() <= 16) {
+                append(arm64_assembler::stxrh(status, source, address));
+                return;
+            }
+    
+            append(arm64_assembler::stxr(status, source, address));
+            return;
+        }
+    
+        // Release
+        switch (source.type().element_width()) {
+        case 8:
+            append(arm64_assembler::stlxrb(status, source, address));
+            return;
+        case 16:
+            append(arm64_assembler::stlxrh(status, source, address));
+            return;
+        case 32:
+        case 64:
+            append(arm64_assembler::stlxr(status, source, address));
+            return;
+        default:
+            throw backend_exception("Cannot store atomically type {}", source.type());
+        }
+    }
+
+    void atomic_block(const register_operand &data, const memory_operand &mem,
+                      std::function<void()> atomic_logic, 
+                      std::memory_order load_mem_order = std::memory_order_acquire,
+                      std::memory_order store_mem_order = std::memory_order_release) {
+        auto status = vreg_alloc_.allocate(ir::value_type::u32());
+        auto loop_label = label_operand(fmt::format("loop_{}", instructions_.size()));
+        auto success_label = label_operand(fmt::format("success_{}", instructions_.size()));
+        label(loop_label);
+        atomic_load(data, mem, load_mem_order);
+
+        atomic_logic();
+
+        atomic_store(status, data, mem, store_mem_order);
+        zero_compare_and_branch(status, success_label, cond_operand::eq());
+        branch(loop_label);
+        label(success_label);
+        return;
+    }
+
+    static constexpr auto default_memory_order = std::memory_order_acq_rel;
+    void atomic_add(const register_operand& out, const register_operand& source,
+                    const memory_operand& address,
+                    std::memory_order mem_order = default_memory_order)
+    {
+        if (!asm_.supports_lse()) {
+            auto [load_mem_order, store_mem_order] = determine_memory_order(mem_order);
+            atomic_block(out, source, [this, &out, &source]() {
+                adds(out, source, out);
+            }, load_mem_order, store_mem_order);
+            return;
+        }
+
+        switch (out.type().element_width()) {
+        case 8:
+            switch (mem_order) {
+            case std::memory_order_relaxed:
+                append(arm64_assembler::ldaddb(out, source, address));
+                break;
+            case std::memory_order_acquire:
+                append(arm64_assembler::ldaddab(out, source, address));
+                break;
+            case std::memory_order_acq_rel:
+                append(arm64_assembler::ldaddalb(out, source, address));
+                break;
+            default:
+                throw backend_exception("Cannot atomically add byte for memory order {}", util::to_underlying(mem_order));
+            }
+            return;
+        case 16:
+            switch (mem_order) {
+            case std::memory_order_relaxed:
+                append(arm64_assembler::ldaddh(out, source, address));
+                break;
+            case std::memory_order_acquire:
+                append(arm64_assembler::ldaddah(out, source, address));
+                break;
+            case std::memory_order_acq_rel:
+                append(arm64_assembler::ldaddalh(out, source, address));
+                break;
+            default:
+                throw backend_exception("Cannot atomically add halfword for memory order {}", util::to_underlying(mem_order));
+            }
+            return;
+        case 32:
+        case 64:
+            switch (mem_order) {
+            case std::memory_order_relaxed:
+                append(arm64_assembler::ldadd(out, source, address));
+                break;
+            case std::memory_order_acquire:
+                append(arm64_assembler::ldadda(out, source, address));
+                break;
+            case std::memory_order_acq_rel:
+                append(arm64_assembler::ldaddal(out, source, address));
+                break;
+            default:
+                throw backend_exception("Cannot atomically add for memory order {}", util::to_underlying(mem_order));
+            }
+            return;
+        default:
+            throw backend_exception("Cannot atomically add type {}", source.type());
+        }
+    }
+
+    void atomic_sub(const register_operand& out, const register_operand& source,
+                    const memory_operand &address, 
+                    std::memory_order mem_order = default_memory_order)
+    {
+        auto negated = vreg_alloc_.allocate(source.type());
+        negate(negated, source);
+        atomic_add(out, negated, address, mem_order);
+    }
+
+    void atomic_xadd(const register_operand& out, const register_operand& source,
+                     const memory_operand& address,
+                     std::memory_order mem_order = default_memory_order)
+    {
+        register_operand old = vreg_alloc_.allocate(out.type());
+        append(arm64_assembler::mov(old, out));
+        atomic_add(out, source, address, mem_order);
+        append(arm64_assembler::mov(source, old));
+    }
+
+    void atomic_clr(const register_operand& out, const register_operand& source,
+        const memory_operand &mem, std::memory_order mem_order = default_memory_order)
+    {
+        if (!asm_.supports_lse()) {
+            auto [load_mem_order, store_mem_order] = determine_memory_order(mem_order);
+
+            atomic_block(out, mem, [this, &out, &source]() {
+                auto negated = vreg_alloc_.allocate(source.type());
+                inverse(negated, source);
+                ands(out, out, negated);
+            }, load_mem_order, store_mem_order);
+            return;
+        }
+
+        switch (out.type().element_width()) {
+        case 8:
+            switch (mem_order) {
+            case std::memory_order_relaxed:
+                append(arm64_assembler::ldclrb(out, source, mem));
+                break;
+            case std::memory_order_acquire:
+                append(arm64_assembler::ldclrab(out, source, mem));
+                break;
+            case std::memory_order_release:
+                append(arm64_assembler::ldclrlb(out, source, mem));
+                break;
+            case std::memory_order_acq_rel:
+                append(arm64_assembler::ldclralb(out, source, mem));
+                break;
+            default:
+                throw backend_exception("Cannot atomically clear byte for memory order {}", util::to_underlying(mem_order));
+            }
+            return;
+        case 16:
+            switch (mem_order) {
+            case std::memory_order_relaxed:
+                append(arm64_assembler::ldclrh(out, source, mem));
+                break;
+            case std::memory_order_acquire:
+                append(arm64_assembler::ldclrah(out, source, mem));
+                break;
+            case std::memory_order_release:
+                append(arm64_assembler::ldclrlh(out, source, mem));
+                break;
+            case std::memory_order_acq_rel:
+                append(arm64_assembler::ldclralh(out, source, mem));
+                break;
+            default:
+                throw backend_exception("Cannot atomically clear byte for memory order {}", util::to_underlying(mem_order));
+            }
+            return;
+        case 32:
+        case 64:
+            switch (mem_order) {
+            case std::memory_order_relaxed:
+                append(arm64_assembler::ldclr(out, source, mem));
+                break;
+            case std::memory_order_acquire:
+                append(arm64_assembler::ldclra(out, source, mem));
+                break;
+            case std::memory_order_release:
+                append(arm64_assembler::ldclrl(out, source, mem));
+                break;
+            case std::memory_order_acq_rel:
+                append(arm64_assembler::ldclral(out, source, mem));
+                break;
+            default:
+                throw backend_exception("Cannot atomically clear byte for memory order {}", util::to_underlying(mem_order));
+            }
+            return;
+        default:
+            throw backend_exception("Cannot atomically clear type {}", source.type());
+        }
+    }
+
+    void atomic_and(const register_operand& out, const register_operand& source,
+            const memory_operand &mem, std::memory_order mem_order = default_memory_order)
+    {
+        auto complemented = vreg_alloc_.allocate(source.type());
+        inverse(complemented, source);
+        atomic_clr(out, complemented, mem, mem_order);
+    }
+
+    void atomic_xor(const register_operand& out, const register_operand& source,
+            const register_operand& mem, std::memory_order mem_order = default_memory_order)
+    {
+        if (!asm_.supports_lse()) {
+            auto [load_mem_order, store_mem_order] = determine_memory_order(mem_order);
+
+            atomic_block(out, mem, [this, &out, &source]() {
+                append(arm64_assembler::eor(out, out, source));
+            }, load_mem_order, store_mem_order);
+            return;
+        }
+
+        switch (out.type().element_width()) {
+        case 8:
+            switch (mem_order) {
+            case std::memory_order_relaxed:
+                append(arm64_assembler::ldeorb(out, source, mem));
+                break;
+            case std::memory_order_acquire:
+                append(arm64_assembler::ldeorab(out, source, mem));
+                break;
+            case std::memory_order_release:
+                append(arm64_assembler::ldeorlb(out, source, mem));
+                break;
+            case std::memory_order_acq_rel:
+                append(arm64_assembler::ldeoralb(out, source, mem));
+                break;
+            default:
+                throw backend_exception("Cannot atomically XOR byte for memory order {}", util::to_underlying(mem_order));
+            }
+            return;
+        case 16:
+            switch (mem_order) {
+            case std::memory_order_relaxed:
+                append(arm64_assembler::ldeorh(out, source, mem));
+                break;
+            case std::memory_order_acquire:
+                append(arm64_assembler::ldeorah(out, source, mem));
+                break;
+            case std::memory_order_release:
+                append(arm64_assembler::ldeorlh(out, source, mem));
+                break;
+            case std::memory_order_acq_rel:
+                append(arm64_assembler::ldeoralh(out, source, mem));
+                break;
+            default:
+                throw backend_exception("Cannot atomically XOR byte for memory order {}", util::to_underlying(mem_order));
+            }
+            return;
+        case 32:
+        case 64:
+            switch (mem_order) {
+            case std::memory_order_relaxed:
+                append(arm64_assembler::ldeor(out, source, mem));
+                break;
+            case std::memory_order_acquire:
+                append(arm64_assembler::ldeora(out, source, mem));
+                break;
+            case std::memory_order_release:
+                append(arm64_assembler::ldeorl(out, source, mem));
+                break;
+            case std::memory_order_acq_rel:
+                append(arm64_assembler::ldeoral(out, source, mem));
+                break;
+            default:
+                throw backend_exception("Cannot atomically XOR byte for memory order {}", util::to_underlying(mem_order));
+            }
+            return;
+        default:
+            throw backend_exception("Cannot atomically XOR type {}", source.type());
+        }
+    }
+
+    void atomic_or(const register_operand& out, const register_operand& source,
+            const register_operand& mem, std::memory_order mem_order = default_memory_order)
+    {
+        if (!asm_.supports_lse()) {
+            auto [load_mem_order, store_mem_order] = determine_memory_order(mem_order);
+
+            atomic_block(out, mem, [this, &out, &source]() {
+                append(arm64_assembler::orr(out, out, source));
+            }, load_mem_order, store_mem_order);
+            return;
+        }
+
+        switch (out.type().element_width()) {
+        case 8:
+            switch (mem_order) {
+            case std::memory_order_relaxed:
+                append(arm64_assembler::ldsetb(out, source, mem));
+                break;
+            case std::memory_order_acquire:
+                append(arm64_assembler::ldsetab(out, source, mem));
+                break;
+            case std::memory_order_release:
+                append(arm64_assembler::ldsetlb(out, source, mem));
+                break;
+            case std::memory_order_acq_rel:
+                append(arm64_assembler::ldsetalb(out, source, mem));
+                break;
+            default:
+                throw backend_exception("Cannot atomically OR byte for memory order {}", util::to_underlying(mem_order));
+            }
+            return;
+        case 16:
+            switch (mem_order) {
+            case std::memory_order_relaxed:
+                append(arm64_assembler::ldseth(out, source, mem));
+                break;
+            case std::memory_order_acquire:
+                append(arm64_assembler::ldsetah(out, source, mem));
+                break;
+            case std::memory_order_release:
+                append(arm64_assembler::ldsetlh(out, source, mem));
+                break;
+            case std::memory_order_acq_rel:
+                append(arm64_assembler::ldsetalh(out, source, mem));
+                break;
+            default:
+                throw backend_exception("Cannot atomically OR halfword for memory order {}", util::to_underlying(mem_order));
+            }
+            return;
+        case 32:
+        case 64:
+            switch (mem_order) {
+            case std::memory_order_relaxed:
+                append(arm64_assembler::ldset(out, source, mem));
+                break;
+            case std::memory_order_acquire:
+                append(arm64_assembler::ldseta(out, source, mem));
+                break;
+            case std::memory_order_release:
+                append(arm64_assembler::ldsetl(out, source, mem));
+                break;
+            case std::memory_order_acq_rel:
+                append(arm64_assembler::ldsetal(out, source, mem));
+                break;
+            default:
+                throw backend_exception("Cannot atomically OR for memory order {}", util::to_underlying(mem_order));
+            }
+            return;
+        default:
+            throw backend_exception("Cannot atomically clear type {}", out.type());
+        }
+    }
+
+    void atomic_swap(const register_operand& out, const register_operand& source,
+                     const memory_operand &mem, 
+                     std::memory_order mem_order = std::memory_order_acq_rel)
+    {
+        if (!asm_.supports_lse()) {
+            auto [load_mem_order, store_mem_order] = determine_memory_order(mem_order);
+
+            atomic_block(out, mem, [this, &out, &source]() {
+                auto old = vreg_alloc_.allocate(out.type());
+                append(arm64_assembler::mov(old, out));
+                append(arm64_assembler::mov(out, source));
+                append(arm64_assembler::mov(source, old));
+            }, load_mem_order, store_mem_order);
+            return;
+        }
+
+        switch (out.type().element_width()) {
+        case 8:
+            switch (mem_order) {
+            case std::memory_order_relaxed:
+                append(arm64_assembler::swpb(out, source, mem));
+                break;
+            case std::memory_order_acquire:
+                append(arm64_assembler::swpab(out, source, mem));
+                break;
+            case std::memory_order_release:
+                append(arm64_assembler::swplb(out, source, mem));
+                break;
+            case std::memory_order_acq_rel:
+                append(arm64_assembler::swpalb(out, source, mem));
+                break;
+            default:
+                throw backend_exception("Cannot atomically swap byte for memory order {}", util::to_underlying(mem_order));
+            }
+            return;
+        case 16:
+            switch (mem_order) {
+            case std::memory_order_relaxed:
+                append(arm64_assembler::swph(out, source, mem));
+                break;
+            case std::memory_order_acquire:
+                append(arm64_assembler::swpah(out, source, mem));
+                break;
+            case std::memory_order_release:
+                append(arm64_assembler::swplh(out, source, mem));
+                break;
+            case std::memory_order_acq_rel:
+                append(arm64_assembler::swpalh(out, source, mem));
+                break;
+            default:
+                throw backend_exception("Cannot atomically swap halfword for memory order {}", util::to_underlying(mem_order));
+            }
+            return;
+        case 32:
+        case 64:
+            switch (mem_order) {
+            case std::memory_order_relaxed:
+                append(arm64_assembler::swp(out, source, mem));
+                break;
+            case std::memory_order_acquire:
+                append(arm64_assembler::swpa(out, source, mem));
+                break;
+            case std::memory_order_release:
+                append(arm64_assembler::swpl(out, source, mem));
+                break;
+            case std::memory_order_acq_rel:
+                append(arm64_assembler::swpal(out, source, mem));
+                break;
+            default:
+                throw backend_exception("Cannot atomically swap for memory order {}", util::to_underlying(mem_order));
+            }
+            return;
+        default:
+            throw backend_exception("Cannot atomically swap type {}", source.type());
+        }
+    }
+
+    void atomic_cmpxchg(const register_operand& current, const register_operand& acc,
+                const register_operand& src, const memory_operand &mem,
+                std::memory_order mem_order = default_memory_order)
+    {
+        if (!asm_.supports_lse()) {
+            auto [load_mem_order, store_mem_order] = determine_memory_order(mem_order);
+            
+            atomic_block(current, mem, [this, &current, &acc]() {
+                compare(current, acc);
+                append(arm64_assembler::csel(acc, current, acc, cond_operand::ne()))
+                    .add_comment("conditionally move current memory scalar into accumulator");
+            }, load_mem_order, store_mem_order);
+            return;
+        }
+
+        insert_comment("Atomic CMPXCHG using CAS (enabled on systems with LSE support");
+        switch (mem_order) {
+        case std::memory_order_relaxed:
+            append(arm64_assembler::cas(acc, src, mem));
+            break;
+        case std::memory_order_acquire:
+            append(arm64_assembler::casa(acc, src, mem));
+            break;
+        case std::memory_order_release:
+            append(arm64_assembler::casl(acc, src, mem));
+            break;
+        case std::memory_order_acq_rel:
+            append(arm64_assembler::casal(acc, src, mem));
+            break;
+        default:
+            throw backend_exception("Cannot perform CAS for memory order of type {}", util::to_underlying(mem_order));
+        }
+
+        append(arm64_assembler::cmp(acc, 0));
+        append(arm64_assembler::mov(current, acc));
+
+        throw backend_exception("Cannot generate non-exclusive atomic accesses");
     }
 
     template <typename... Args>
@@ -1009,66 +1529,35 @@ private:
 
         append(arm64_assembler::neg(out, source));
     }
-};
 
-struct atomic_block {
-    atomic_block(instruction_builder& builder, std::size_t block_id, const memory_operand& mem_addr):
-        mem_addr_(mem_addr),
-        loop_label_(fmt::format("loop_{}", block_id)),
-        success_label_(fmt::format("success_{}", block_id)),
-        builder_(&builder)
-    {
-    }
-
-    void start_atomic_block(const register_operand& data_reg) {
-        builder_->label(loop_label_);
-        switch (data_reg.type().element_width()) {
-        case 1:
-        case 8:
-            builder_->append(arm64_assembler::ldxrb(data_reg, mem_addr_)).add_comment("load atomically");
+    static std::pair<std::memory_order, std::memory_order> 
+    determine_memory_order(const std::memory_order& mem_order) {
+        std::memory_order load_mem_order;
+        std::memory_order store_mem_order;
+        switch (mem_order) {
+        case std::memory_order_relaxed:
+            load_mem_order = std::memory_order_relaxed;
+            store_mem_order = std::memory_order_relaxed;
             break;
-        case 16:
-            builder_->append(arm64_assembler::ldxrh(data_reg, mem_addr_)).add_comment("load atomically");
+        case std::memory_order_acquire:
+            load_mem_order = std::memory_order_acquire;
+            store_mem_order = std::memory_order_relaxed;
             break;
-        case 32:
-        case 64:
-            builder_->append(arm64_assembler::ldxr(data_reg, mem_addr_)).add_comment("load atomically");
+        case std::memory_order_release:
+            load_mem_order = std::memory_order_relaxed;
+            store_mem_order = std::memory_order_release;
+            break;
+        case std::memory_order_acq_rel:
+            load_mem_order = std::memory_order_acquire;
+            store_mem_order = std::memory_order_release;
             break;
         default:
-            throw backend_exception("Cannot load atomically values of type {}",
-                                    data_reg.type());
+            throw backend_exception("Cannot support memory order {} for atomic operation",
+                                    util::to_underlying(mem_order));
         }
-    }
 
-    void end_atomic_block(const register_operand& status_reg, const register_operand& src_reg) {
-        switch (src_reg.type().element_width()) {
-        case 1:
-        case 8:
-            builder_->append(arm64_assembler::stxrb(status_reg, src_reg, mem_addr_)).add_comment("store if not failure");
-            break;
-        case 16:
-            builder_->append(arm64_assembler::stxrh(status_reg, src_reg, mem_addr_)).add_comment("store if not failure");
-            break;
-        case 32:
-        case 64:
-            builder_->append(arm64_assembler::stxr(status_reg, src_reg, mem_addr_)).add_comment("store if not failure");
-            break;
-        default:
-            throw backend_exception("Cannot store atomically values of type {}",
-                                    src_reg.type());
-        }
-        // Compare and also set flags for later
-        builder_->zero_compare_and_branch(status_reg, success_label_, cond_operand::eq())
-                .add_comment("== 0 represents success storing");
-        builder_->branch(loop_label_).add_comment("loop until failure or success");
-        builder_->label(success_label_);
+        return {load_mem_order, store_mem_order};
     }
-
-    memory_operand mem_addr_;
-    label_operand loop_label_;
-    label_operand success_label_;
-    instruction_builder* builder_;
 };
 
 } // namespace arancini::output::dynamic::arm64
-
