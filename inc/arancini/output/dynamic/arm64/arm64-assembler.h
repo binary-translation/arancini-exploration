@@ -632,14 +632,6 @@ public:
 		}
 	};
 
-	struct cas : instruction {
-		cas(const register_operand& dst, const register_operand& src, const memory_operand& mem_addr):
-			instruction("cas", use(dst), use(src), use(mem_addr))
-		{
-			as_keep();
-		}
-	};
-
 	// ATOMICs
     // LDXR{size} {Rt}, [Rn]*/
 #define LD_A_XR(name, size) \
@@ -710,13 +702,15 @@ public:
 
     AMO_SIZE_VARIANT_BHW(ldset);
 
-    AMO_SIZE_VARIANT_HW(ldsmax);
+    AMO_SIZE_VARIANT_BHW(ldsmax);
 
-    AMO_SIZE_VARIANT_HW(ldsmin);
+    AMO_SIZE_VARIANT_BHW(ldsmin);
 
-    AMO_SIZE_VARIANT_HW(ldumax);
+    AMO_SIZE_VARIANT_BHW(ldumax);
 
-    AMO_SIZE_VARIANT_HW(ldumin);
+    AMO_SIZE_VARIANT_BHW(ldumin);
+
+	AMO_SIZE_VARIANT_BHW(cas);
 
 	struct msr : instruction {
 		msr(const register_operand& sysreg, const register_operand& src):
@@ -747,6 +741,7 @@ public:
 		}
 	};
 
+	bool supports_lse() const { return false; }
 
     std::size_t assemble(const char *code, unsigned char **out);
 
