@@ -1144,24 +1144,17 @@ void arm64_translation_context::materialise_unary_arith(const unary_arith_node &
     const auto &dest_vregs = vreg_alloc_.allocate(n.val());
     const auto &lhs_vregs = materialise_port(n.lhs());
 
-    if (dest_vregs.size() != 1 || lhs_vregs.size() != 1)
-        throw backend_exception("Unary arithmetic node does not support operations > 64-bit");
-
-    const auto &dest_vreg = dest_vregs[0];
-    const auto &lhs_vreg = lhs_vregs[0];
-
     switch (n.op()) {
     case unary_arith_op::bnot:
-        /* builder_.brk(immediate_operand(100, 64)); */
+        // TODO: replace this with just inverse when we start directly allocating variables
         if (is_flag_port(n.val()))
-            builder_.eor_(dest_vreg, lhs_vreg, 1);
+            builder_.append(arm64_assembler::eor(dest_vregs[0], lhs_vregs[0], 1));
         else
-            builder_.not_(dest_vreg, lhs_vreg);
+            builder_.inverse(variable(dest_vregs), variable(lhs_vregs));
         break;
     case unary_arith_op::neg:
         // neg: ~reg + 1 for complement-of-2
-        builder_.not_(dest_vreg, lhs_vreg);
-        builder_.add(dest_vreg, dest_vreg, 1);
+        builder_.negate(variable(dest_vregs), variable(lhs_vregs));
         break;
     default:
         throw backend_exception("Unknown unary operation");
