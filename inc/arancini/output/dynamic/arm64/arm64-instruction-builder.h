@@ -472,12 +472,6 @@ public:
         throw backend_exception("Cannot zero-compare-and-branch on condition {}", cond);
     }
 
-    // TODO: handle register_set
-    instruction& cmn(const register_operand &dst,
-                     const reg_or_imm &src) {
-        return append(arm64_assembler::cmn(dst, src));
-    }
-
     void compare(const variable& source1, const variable& source2) {
         // TODO: check types
         if (source1.type().is_vector())
@@ -493,10 +487,6 @@ public:
 
         immediates_upgrade_policy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), source1.type());
         append(arm64_assembler::cmp(source1, policy(source2)));
-    }
-
-    instruction& tst(const register_operand &dst, const reg_or_imm &src) {
-        return append(arm64_assembler::tst(dst, src));
     }
 
     template <typename ImmediatesPolicy = immediates_upgrade_policy>
