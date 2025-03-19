@@ -557,7 +557,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             if (sets_flags) {
                 auto compare_regset = vreg_alloc_.allocate(dest_regset[0].type());
                 builder_.mov(compare_regset, 0xFFFF0000);
-                builder_.cmp(compare_regset, dest_regset);
+                builder_.compare(variable(compare_regset), variable(dest_regset));
                 builder_.cset(flag_map[reg_offsets::CF], cond_operand::ne()).add_comment("compute flag: CF");
                 builder_.cset(flag_map[reg_offsets::OF], cond_operand::ne()).add_comment("compute flag: OF");
                 sets_flags = false;
@@ -585,7 +585,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 // TODO: need to compute CF and OF
                 // CF and OF are set to 1 when lhs * rhs > 64-bits
                 // Otherwise they are set to 0
-                builder_.cmp(dest_regset[1], 0);
+                builder_.compare(variable(dest_regset[1]), 0);
                 builder_.cset(flag_map[reg_offsets::CF], cond_operand::ne()).add_comment("compute flag: CF");
                 builder_.cset(flag_map[reg_offsets::OF], cond_operand::ne()).add_comment("compute flag: OF");
                 sets_flags = false;
@@ -877,8 +877,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                                     n.lhs().type(), n.rhs().type());
 
         rhs_regset[0] = cast(rhs_regset[0], lhs_regset[0].type());
-        builder_.cmp(lhs_regset[0], rhs_regset[0])
-                .add_comment("compare LHS and RHS to generate condition for conditional set");
+        builder_.insert_comment("Compare LHS and RHS to generate condition for conditional set");
+        builder_.compare(variable(lhs_regset), variable(rhs_regset));
         builder_.cset(dest_regset[0], get_cset_type(n.op()))
                 .add_comment("set to 1 if condition is true (based flags from the previous compare)");
         inverse_carry_flag_operation = true;
@@ -969,7 +969,7 @@ void arm64_translation_context::materialise_ternary_arith(const ternary_arith_no
         // builder_.orr_(pstate, pstate, top_regs[i]);
         // builder_.msr(register_operand(register_operand::nzcv), pstate);
 
-        builder_.cmp(top_regs[i], 0);
+        builder_.compare(variable(top_regs[i]), 0);
         builder_.sbcs(register_operand(register_operand::wzr_sp),
                       register_operand(register_operand::wzr_sp),
                       register_operand(register_operand::wzr_sp));
@@ -1048,7 +1048,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
         break;
 	case binary_atomic_op::bor:
         builder_.orr_(dest_vreg, dest_vreg, src_vreg);
-        builder_.cmp(dest_vreg, 0);
+        builder_.compare(variable(dest_vreg), 0);
         inverse_carry_flag_operation = true;
 		break;
 	case binary_atomic_op::band:
@@ -1057,7 +1057,7 @@ void arm64_translation_context::materialise_binary_atomic(const binary_atomic_no
 		break;
 	case binary_atomic_op::bxor:
         builder_.eor_(dest_vreg, dest_vreg, src_vreg);
-        builder_.cmp(dest_vreg, 0);
+        builder_.compare(variable(dest_vreg), 0);
         inverse_carry_flag_operation = true;
 		break;
     case binary_atomic_op::btc:
@@ -1119,12 +1119,13 @@ void arm64_translation_context::materialise_ternary_atomic(const ternary_atomic_
             builder_.insert_comment("Atomic CMPXCHG using CAS (enabled on systems with LSE support");
             builder_.cas(acc_reg, src_reg, memory_operand(mem_addr))
                     .add_comment("write source (2nd reg) to memory if source == accumulator (1st reg), accumulator = source");
-            builder_.cmp(acc_reg, 0);
+            builder_.compare(variable(acc_reg), 0);
         } else {
             builder_.insert_comment("Atomic CMPXCHG without CAS");
             atomic_block atomic{builder_, instr_cnt_, mem_addr};
             atomic.start_atomic_block(current_data_reg);
-            builder_.cmp(current_data_reg, acc_reg).add_comment("compare with accumulator");
+            builder_.insert_comment("Compare with accumulator");
+            builder_.compare(variable(current_data_reg), variable(acc_reg));
             builder_.csel(acc_reg, current_data_reg, acc_reg, cond_operand::ne())
                      .add_comment("conditionally move current memory value into accumulator");
             atomic.end_atomic_block(status_reg, src_reg);
@@ -1331,8 +1332,8 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
     const auto &true_var = materialise_port(n.trueval());
     const auto &false_var = materialise_port(n.falseval());
 
-    builder_.cmp(condition, 0)
-            .add_comment("compare condition for conditional select");
+    builder_.insert_comment("compare condition for conditional select");
+    builder_.compare(variable(condition), 0);
     builder_.csel(dest, true_var, false_var, cond_operand::ne());
 }
 
