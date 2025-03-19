@@ -478,10 +478,21 @@ public:
         return append(arm64_assembler::cmn(dst, src));
     }
 
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& cmp(const register_operand &dst, const reg_or_imm &src) {
-        ImmediatesPolicy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
-        return append(arm64_assembler::cmp(dst, policy(src)));
+    void compare(const variable& source1, const variable& source2) {
+        // TODO: check types
+        if (source1.type().is_vector())
+            throw backend_exception("Cannot compare vectors");
+
+        append(arm64_assembler::cmp(source1, source2));
+    }
+
+    void compare(const variable& source1, const immediate_operand& source2) {
+        // TODO: check types
+        if (source1.type().is_vector())
+            throw backend_exception("Cannot compare vectors");
+
+        immediates_upgrade_policy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), source1.type());
+        append(arm64_assembler::cmp(source1, policy(source2)));
     }
 
     instruction& tst(const register_operand &dst, const reg_or_imm &src) {
