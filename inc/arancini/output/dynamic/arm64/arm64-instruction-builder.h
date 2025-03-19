@@ -75,6 +75,17 @@ public:
         return ir::value_type(regs_[0].type().type_class(),
                               regs_[0].type().width() * regs_.size());
     }
+
+    using iterator = std::vector<register_operand>::iterator;
+    using const_iterator = std::vector<register_operand>::const_iterator;
+
+    iterator begin() { return regs_.begin(); }
+    const_iterator begin() const { return regs_.begin(); }
+    const_iterator cbegin() const { return regs_.cbegin(); }
+
+    iterator end() { return regs_.end(); }
+    const_iterator end() const { return regs_.end(); }
+    const_iterator cend() const { return regs_.cend(); }
 private:
     std::vector<register_operand> regs_;
 };
@@ -347,16 +358,30 @@ public:
         return append(arm64_assembler::eor(dst, src1, policy(src2)));
     }
 
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& not_(const register_operand &dst, const reg_or_imm &src) {
-        ImmediatesPolicy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 6), dst.type());
-        return append(arm64_assembler::mvn(dst, policy(src)));
+    void inverse(const variable& out, const variable& source) {
+        // TODO: compare types without signs
+        if (out.type().is_vector()) {
+            if (out.is_native_vector())
+                throw backend_exception("Cannot inverse native vectors");
+
+            for (auto out_it = out.begin(), src_it = source.begin(); out_it != out.end(); ++out_it, ++src_it)
+                inverse(*out_it, *src_it);
+        }
+
+        return inverse(out.scalar(), source.scalar());
     }
 
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& neg(const register_operand &dst, const register_operand &src) {
-        ImmediatesPolicy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 6), dst.type());
-        return append(arm64_assembler::neg(dst, policy(src)));
+    void negate(const variable& out, const variable& source) {
+        // TODO: compare types without signs
+        if (out.type().is_vector()) {
+            if (out.is_native_vector())
+                throw backend_exception("Cannot negate native vectors");
+
+            for (auto out_it = out.begin(), src_it = source.begin(); out_it != out.end(); ++out_it, ++src_it)
+                negate(*out_it, *src_it);
+        }
+
+        return negate(out.scalar(), source.scalar());
     }
 
     instruction& movn(const register_operand &dst,
@@ -924,6 +949,25 @@ private:
                 append(arm64_assembler::str(source[i], memory));
             }
         }
+    }
+
+    void inverse(const register_sequence &out, const register_sequence &source) {
+        if (out.type().width() == 1) {
+            append(arm64_assembler::eor(out, source, source));
+            return;
+        }
+
+        for (auto out_it = out.begin(), src_it = source.begin(); out_it != out.end(); ++out_it, ++src_it)
+            append(arm64_assembler::mvn(*out_it, *src_it));
+    }
+
+    void negate(const register_sequence &out, const register_sequence &source) {
+        if (out.type().width() == 1) {
+            append(arm64_assembler::eor(out, source, source));
+            return;
+        }
+
+        append(arm64_assembler::neg(out, source));
     }
 };
 
