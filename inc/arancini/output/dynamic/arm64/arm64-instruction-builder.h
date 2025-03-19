@@ -517,28 +517,67 @@ public:
         append(arm64_assembler::cmp(source1, policy(source2)));
     }
 
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& lsl(const register_operand &dst, const register_operand &src1, const reg_or_imm &src2) {
-        std::size_t size = dst.type().element_width() <= 32 ? 4 : 6;
-        immediates_upgrade_policy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
-        return append(arm64_assembler::lsl(dst, src1, policy(src2)));
+    void shift_left(const variable& out, const variable& input, const variable& amount) {
+        if (out.type().is_vector())
+            throw backend_exception("Cannot shift left vector of type {}", out.type());
+
+        append(arm64_assembler::lsl(out, input, amount));
     }
 
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& lsr(const register_operand &dst,
-                     const register_operand &src1,
-                     const reg_or_imm &src2) {
-        std::size_t size = dst.type().element_width() <= 32 ? 5 : 6;
-        immediates_upgrade_policy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
-        return append(arm64_assembler::lsr(dst, src1, policy(src2)));
+    void shift_left(const variable& out, const variable& input, immediate_operand amount) {
+        if (out.type().is_vector())
+            throw backend_exception("Cannot shift left vector of type {}", out.type());
+
+        std::size_t size = out.type().element_width() <= 32 ? 5 : 6;
+        immediates_upgrade_policy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), out.type());
+        append(arm64_assembler::lsl(out, input, policy(amount)));
     }
 
-    instruction& asr(const register_operand &dst,
-                     const register_operand &src1,
-                     const reg_or_imm &src2) {
-        std::size_t size = dst.type().element_width() <= 32 ? 5 : 6;
-        immediates_upgrade_policy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), dst.type());
-        return append(arm64_assembler::asr(dst, src1, policy(src2)));
+    void logical_shift_right(const variable& out, const variable& input, const variable& amount) {
+        if (out.type().is_vector())
+            throw backend_exception("Cannot logically shift right vector of type {}", out.type());
+
+        append(arm64_assembler::lsr(out, input, amount));
+    }
+
+    void logical_shift_right(const variable& out, const variable& input, immediate_operand amount) {
+        if (out.type().is_vector())
+            throw backend_exception("Cannot logically shift right vector of type {}", out.type());
+
+
+        if (out.type().width() == 128) {
+            if (amount.value() < 64) {
+                append(arm64_assembler::extr(out.scalar()[0], input.scalar()[1], input.scalar()[0], amount));
+                append(arm64_assembler::lsr(out.scalar()[1], input.scalar()[1], amount));
+                return;
+            } else if (amount.value() == 64) {
+                append(arm64_assembler::mov(out.scalar()[0], input.scalar()[1]));
+                append(arm64_assembler::mov(out.scalar()[1], 0));
+                return;
+            }
+
+            throw backend_exception("Unsupported logical right-shift operation with amount {}", amount);
+        } 
+
+        std::size_t size = out.type().element_width() <= 32 ? 5 : 6;
+        immediates_upgrade_policy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), out.type());
+        append(arm64_assembler::lsr(out, input, policy(amount)));
+    }
+
+    void arithmetic_shift_right(const variable& out, const variable& input, const variable& amount) {
+        if (out.type().is_vector())
+            throw backend_exception("Cannot arithmetically shift right vector of type {}", out.type());
+
+        append(arm64_assembler::asr(out, input, amount));
+    }
+
+    void arithmetic_shift_right(const variable& out, const variable& input, immediate_operand amount) {
+        if (out.type().is_vector())
+            throw backend_exception("Cannot arithmetically shift right vector of type {}", out.type());
+
+        std::size_t size = out.type().element_width() <= 32 ? 5 : 6;
+        immediates_upgrade_policy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, size), out.type());
+        append(arm64_assembler::asr(out, input, policy(amount)));
     }
 
     instruction& extr(const register_operand &dst,

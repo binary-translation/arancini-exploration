@@ -44,10 +44,8 @@ void allocate_flags(port_register_allocator& allocator, flag_map_type& flag_map,
 }
 
 void fill_byte_with_bit(instruction_builder& builder, const register_operand& reg) {
-    builder.lsl(reg, reg, 7)
-                .add_comment("shift left LSB to set sign bit of byte");
-    builder.asr(reg, reg, 7)
-                .add_comment("shift right to fill LSB with sign bit (except for least-significant bit)");
+    builder.shift_left(variable(reg), variable(reg), 7);
+    builder.arithmetic_shift_right(variable(reg), variable(reg), 7);
 }
 
 register_operand arm64_translation_context::cast(const register_operand &src, value_type type) {
@@ -1214,7 +1212,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             std::size_t dest_idx = 0;
             std::size_t dest_pos = 0;
             for (std::size_t i = 0; i < src_vregs.size(); ++i) {
-                builder_.lsl(src_vregs[i], src_vregs[i], dest_pos % n.val().type().element_width());
+                builder_.shift_left(variable(src_vregs[i]), variable(src_vregs[i]), dest_pos % n.val().type().element_width());
                 builder_.mov(dest_vregs[dest_idx], src_vreg);
 
                 dest_pos += src_vregs[i].type().width();
@@ -1227,7 +1225,7 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
                 const register_operand& src_vreg = vreg_alloc_.allocate(dest_vreg.type());
                 builder_.mov(src_vreg, src_vregs[src_idx]);
-                builder_.lsl(src_vreg, src_vreg, src_pos % n.source_value().type().element_width());
+                builder_.shift_left(variable(src_vreg), variable(src_vreg), src_pos % n.source_value().type().element_width());
                 builder_.mov(dest_vregs[i], src_vreg);
 
                 src_pos += src_vregs[i].type().width();
@@ -1266,8 +1264,8 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
             immediate_operand immediate = 64 - dest_vreg.type().element_width();
             if (src_vreg.type().element_width() > dest_vreg.type().element_width())
                 src_vreg.cast(dest_vreg.type());
-            builder_.lsl(dest_vreg, src_vreg, immediate);
-            builder_.asr(dest_vreg, dest_vreg, immediate);
+            builder_.shift_left(variable(dest_vreg), variable(src_vreg), immediate);
+            builder_.arithmetic_shift_right(variable(dest_vreg), variable(dest_vreg), immediate);
         }
         break;
     case cast_op::convert:
@@ -1358,60 +1356,17 @@ void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
 
     switch (n.op()) {
     case shift_op::lsl:
-        switch (n.val().type().element_width()) {
-        case 1:
-        case 8:
-        case 16:
-        case 32:
-        case 64:
-            builder_.lsl(dest_vreg, input, amount);
-            break;
-        default:
-            throw backend_exception("Unsupported logical left-shift operation");
-        }
+        builder_.shift_left(variable(dest_vreg), variable(input), variable(amount));
         break;
     case shift_op::lsr:
-        switch (n.val().type().element_width()) {
-        case 1:
-        case 8:
-        case 16:
-        case 32:
-        case 64:
-            builder_.lsr(dest_vreg, input, amount);
-            break;
-        case 128:
-            {
-                [[unlikely]]
-                if (n.amount().owner()->kind() != node_kinds::constant)
-                    throw backend_exception("Cannot generate logical right-shift for 128-bit with non-constant shift amount");
-                auto amount_imm = reinterpret_cast<const constant_node*>(n.amount().owner())->const_val_i();
-                if (amount_imm < 64) {
-                    builder_.extr(dest_vreg[0], input[1], input[0], amount_imm);
-                    builder_.lsr(dest_vreg[1], input[1], amount);
-                } else if (amount_imm == 64) {
-                    builder_.mov(dest_vreg[0], input[1]);
-                    builder_.mov(dest_vreg[1], 0);
-                } else {
-                    throw backend_exception("Unsupported logical right-shift operation with amount {}", amount_imm);
-                }
-            }
-            break;
-        default:
-            throw backend_exception("Unsupported logical right-shift operation");
-        }
+        if (n.amount().owner()->kind() == node_kinds::constant)
+            builder_.logical_shift_right(variable(dest_vreg), variable(input), 
+                                         reinterpret_cast<const constant_node*>(n.amount().owner())->const_val_i());
+        else
+            builder_.logical_shift_right(variable(dest_vreg), variable(input), variable(amount));
         break;
     case shift_op::asr:
-        switch (n.val().type().element_width()) {
-        case 1:
-        case 8:
-        case 16:
-        case 32:
-        case 64:
-            builder_.asr(dest_vreg, input, amount);
-            break;
-        default:
-            throw backend_exception("Unsupported arithmetic right-shift operation");
-        }
+        builder_.arithmetic_shift_right(variable(dest_vreg), variable(input), variable(amount));
         break;
     default:
         throw backend_exception("Unsupported shift operation: {}", n.op());
