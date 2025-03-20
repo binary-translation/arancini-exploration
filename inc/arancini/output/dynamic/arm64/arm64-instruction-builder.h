@@ -596,8 +596,26 @@ public:
         return append(arm64_assembler::csel(dst, src1, src2, cond));
     }
 
-    instruction& cset(const register_operand &dst, const cond_operand &cond) {
-        return append(arm64_assembler::cset(dst, cond));
+    void conditional_select(const variable& out, const variable& true_val, 
+                            const variable& false_val, const cond_operand& cond) {
+        if (out.type().is_vector()) 
+            throw backend_exception("Cannot conditionally select between vectors");
+
+        for (auto out_it = out.scalar().begin(), true_it = true_val.scalar().begin(), false_it = false_val.scalar().begin();
+             out_it != out.scalar().end(); ++out_it, ++true_it, ++false_it) 
+        {
+            append(arm64_assembler::csel(*out_it, *true_it, *false_it, cond));
+        }
+    }
+
+    void conditional_set(const variable &out, const cond_operand &cond) {
+        if (out.type().is_vector()) 
+            throw backend_exception("Cannot conditionally set vector");
+
+        append(arm64_assembler::cset(*out.scalar().begin(), cond));
+        for (auto out_it = std::next(out.scalar().begin()); out_it != out.scalar().end(); ++out_it) {
+            append(arm64_assembler::mov(*out_it, 0));
+        }
     }
 
     instruction& bfxil(const register_operand &dst,
