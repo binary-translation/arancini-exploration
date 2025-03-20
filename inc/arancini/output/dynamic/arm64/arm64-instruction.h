@@ -115,33 +115,39 @@ inline bool operator!=(const register_operand& r1, const register_operand& r2) {
     return !(r1 == r2);
 }
 
-// TODO: ARM uses logical immediates that make determining their encoding completely different than
-// what fits() does
-// TODO: virtual destructor
 class immediate_operand final {
 public:
-    immediate_operand() = default;
-
     using value_type = arancini::ir::value_type;
 
+    immediate_operand() = default;
+
+    // TODO: should bitcast instead
     template <typename T, typename std::enable_if<std::is_arithmetic_v<T>, int>::type = 0>
 	immediate_operand(T v, ir::value_type type):
         value_(v),
         type_(type)
-	{ }
+	{
+        auto min_type = value_type::from_value(v);
+        if (type.width() > min_type.width())
+            type_ = ir::value_type(type_.type_class(), min_type.width(), 1); 
+
+        check_scalar();
+    }
 
     template <typename T, typename std::enable_if<std::is_arithmetic_v<T>, int>::type = 0>
 	immediate_operand(T v):
         immediate_operand(v, value_type::from_value(v))
-	{ }
-
-    [[nodiscard]]
-    static bool fits(std::uintmax_t v, value_type type) {
-        return type.element_width() == 64 || (v & ((1llu << type.element_width()) - 1)) == v;
+	{ 
+        check_scalar();
     }
 
     [[nodiscard]]
-    std::uintmax_t value() const { return value_; }
+    static bool fits(std::uintmax_t v, value_type type) {
+        return type.element_width() == 64 || (v & mask(type)) == v;
+    }
+
+    [[nodiscard]]
+    std::uintmax_t value() const { return value_ & mask(); }
 
     [[nodiscard]]
     ir::value_type& type() { return type_; }
@@ -151,6 +157,23 @@ public:
 private:
     std::uintmax_t value_;
     ir::value_type type_;
+
+    [[nodiscard]]
+    static std::uintmax_t mask(ir::value_type type) { 
+        if (type.width() == 64) 
+            return ~(0llu);
+
+        return ((1llu << type.element_width()) - 1); 
+    }
+
+    [[nodiscard]]
+    std::uintmax_t mask() const { return mask(type_); }
+
+    void check_scalar() const { 
+        [[unlikely]]
+        if (!type_.width() || type_.width() > 64 || type_.is_vector())
+            throw backend_exception("Cannot create immediate of type {}", type_);
+    }
 };
 
 class shift_operand final {
@@ -169,6 +192,33 @@ public:
     };
 
     shift_operand() = default;
+
+    [[nodiscard]]
+    static shift_operand lsl(immediate_operand amount) { return shift_operand(shift_type::lsl, amount); }
+
+    [[nodiscard]]
+    static shift_operand lsr(immediate_operand amount) { return shift_operand(shift_type::lsr, amount); }
+
+    [[nodiscard]]
+    static shift_operand asr(immediate_operand amount) { return shift_operand(shift_type::asr, amount); }
+
+    [[nodiscard]]
+    static shift_operand ror(immediate_operand amount) { return shift_operand(shift_type::ror, amount); }
+
+    [[nodiscard]]
+    static shift_operand rrx(immediate_operand amount) { return shift_operand(shift_type::rrx, amount); }
+    
+    [[nodiscard]]
+    static shift_operand uxtb(immediate_operand amount) { return shift_operand(shift_type::uxtb, amount); }
+
+    [[nodiscard]]
+    static shift_operand uxth(immediate_operand amount) { return shift_operand(shift_type::uxth, amount); }
+
+    [[nodiscard]]
+    static shift_operand sxtb(immediate_operand amount) { return shift_operand(shift_type::sxtb, amount); }
+
+    [[nodiscard]]
+    static shift_operand sxth(immediate_operand amount) { return shift_operand(shift_type::sxth, amount); }
 
     shift_operand(shift_type modifier, immediate_operand imm):
         modifier_(modifier),

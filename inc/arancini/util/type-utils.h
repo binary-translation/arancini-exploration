@@ -66,8 +66,9 @@ overloaded(Ts...) -> overloaded<Ts...>;
 
 // Based on: https://github.com/jfbastien/bit_cast
 template<typename To, typename From>
+[[nodiscard]]
 inline constexpr To bit_cast_zeros(const From& from) noexcept {
-    To to;
+    To to = 0;
 
     if constexpr (endian::native == endian::little) {
         std::memcpy(&to, &from, sizeof(From));
@@ -79,5 +80,11 @@ inline constexpr To bit_cast_zeros(const From& from) noexcept {
     }
 }
 
-} // namespace util
+template <typename T>
+[[nodiscard]]
+inline std::size_t minimum_bit_size(T value) {
+    auto casted = util::bit_cast_zeros<unsigned long long>(value);
+    return sizeof(unsigned long long) * 8 - __builtin_clzll(casted|1);
+}
 
+} // namespace util

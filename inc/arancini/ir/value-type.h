@@ -1,5 +1,7 @@
 #pragma once
 
+#include <arancini/util/type-utils.h>
+
 #include <fmt/core.h>
 
 #include <vector>
@@ -32,14 +34,15 @@ public:
 
     template <typename T, typename std::enable_if<std::is_arithmetic_v<T>, int>::type = 0>
     static value_type from_value(T val) {
+		auto value_bit_size = util::minimum_bit_size(val);
         if constexpr (std::is_integral_v<T>) {
             if constexpr (std::is_signed_v<T>)
-                return value_type(value_type_class::signed_integer, sizeof(T), 1);
+                return value_type(value_type_class::signed_integer, value_bit_size, 1);
 
-            return value_type(value_type_class::unsigned_integer, sizeof(T), 1);
+            return value_type(value_type_class::unsigned_integer, value_bit_size, 1);
         }
 
-        return value_type(value_type_class::floating_point, sizeof(T), 1);
+        return value_type(value_type_class::floating_point, value_bit_size, 1);
     }
 
     using size_type = std::size_t;
