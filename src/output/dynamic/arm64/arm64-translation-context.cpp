@@ -1475,37 +1475,21 @@ void arm64_translation_context::materialise_read_local(const read_local_node &n)
         throw backend_exception("Attempting to read local@{} of type {} that does not exist",
                                 fmt::ptr(n.local()), n.local()->type());
 
-    const auto &dest_vregs = vreg_alloc_.allocate(n.val());
     const auto &locals = locals_[n.local()];
-
-    [[unlikely]]
-    if (locals.size() != dest_vregs.size())
-        throw backend_exception("Read local received mismatched types for locals {}" \
-                                "(register count {}) and destination {} (register count {})",
-                                 n.local()->type(), locals.size(), n.val().type(), dest_vregs.size());
+    const auto &out = vreg_alloc_.allocate(n.val());
 
     builder_.insert_comment("Read local variable @{}", fmt::ptr(n.local()));
-    for (std::size_t i = 0; i < dest_vregs.size(); ++i)
-        builder_.mov(dest_vregs[i], locals[i]);
+    builder_.move(variable(out), variable(locals));
 }
 
 void arm64_translation_context::materialise_write_local(const write_local_node &n) {
-    const auto &write_regs = materialise_port(n.write_value());
+    const auto &write_value = materialise_port(n.write_value());
     if (locals_.count(n.local()) == 0) {
         const auto& dest_vregs = vreg_alloc_.allocate(n.write_value().type());
         locals_.emplace(n.local(), dest_vregs);
     }
 
-    builder_.insert_comment("Write local variable @{} with register {}", fmt::ptr(n.local()), write_regs[0]);
-    const auto &dest_vregs = locals_[n.local()];
-
-    [[unlikely]]
-    if (write_regs.size() != dest_vregs.size())
-        throw backend_exception("Write local received mismatched types: {} (register count {}) and {} (register count {})",
-                                 n.write_value().type(), write_regs.size(), n.val().type(), dest_vregs.size());
-
-
-    for (std::size_t i = 0; i < dest_vregs.size(); ++i)
-        builder_.mov(dest_vregs[i], write_regs[i]);
+    builder_.insert_comment("Write local variable @{} with register {}", fmt::ptr(n.local()), write_value[0]);
+    builder_.move(variable(locals_[n.local()]), variable(write_value));
 }
 

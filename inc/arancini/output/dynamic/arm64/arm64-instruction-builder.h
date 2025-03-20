@@ -385,6 +385,35 @@ public:
         return negate(out.scalar(), source.scalar());
     }
 
+    void move(const variable& out, const variable& source) {
+        // TODO: checks
+        if (out.type().is_vector() || source.type().is_vector())
+            throw backend_exception("Cannot move from {} to {} (vectors not supported)", 
+                                    out.type(), source.type());
+        
+        if (out.size() != source.size())
+            throw backend_exception("Cannot move from {} to {} (different sizes not supported)", 
+                                    out.type(), source.type());
+        
+        for (auto out_it = out.begin(), src_it = source.begin();
+             out_it != out.end(); ++out_it, ++src_it)
+        {
+            append(arm64_assembler::mov(*out_it, *src_it));
+        }
+    }
+
+    void move(const variable& out, const immediate_operand& imm) {
+        auto reg_or_imm = move_immediate(imm.value(), ir::value_type::u(12));
+        if (std::holds_alternative<immediate_operand>(reg_or_imm.get())) {
+            append(arm64_assembler::mov(out.scalar()[0], std::get<immediate_operand>(reg_or_imm.get())));
+            for (auto out_it = std::next(out.scalar().begin()); out_it != out.scalar().end(); ++out_it)
+                append(arm64_assembler::mov(*out_it, 0));
+            return;
+        }
+
+        move(out, variable(std::get<register_operand>(reg_or_imm.get())));
+    }
+
     instruction& movn(const register_operand &dst,
               const immediate_operand &src,
               const shift_operand &shift) {
