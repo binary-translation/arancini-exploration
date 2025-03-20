@@ -118,7 +118,7 @@ void arm64_translation_context::begin_instruction(off_t address, const std::stri
     instr_cnt_++;
 
     // TODO: these comments should be inserted only in debug builds
-    builder_.insert_comment("instruction_{}: {}", instr_cnt_, disasm);
+    builder_.begin_instruction_block(fmt::format("instruction_{}: {}", instr_cnt_, disasm));
 
     nodes_.clear();
 }
@@ -392,26 +392,16 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
 }
 
 void arm64_translation_context::materialise_label(const label_node &n) {
-    auto label_name = fmt::format("{}_{}", n.name(), instr_cnt_);
-    logger.debug("Inserting label {}\n", label_name);
-    auto label = label_operand(label_name);
-    builder_.label(label);
+    builder_.label(n.name());
 }
 
 void arm64_translation_context::materialise_br(const br_node &n) {
-    auto label_name = fmt::format("{}_{}", n.target()->name(), instr_cnt_);
-    logger.debug("Generating branch to label {}\n", label_name);
-    auto label = label_operand(label_name);
-    builder_.branch(label);
+    builder_.branch(n.target()->name());
 }
 
 void arm64_translation_context::materialise_cond_br(const cond_br_node &n) {
     const auto &cond_vregs = materialise_port(n.cond());
-
-    auto label_name = fmt::format("{}_{}", n.target()->name(), instr_cnt_);
-    logger.debug("Generating conditional branch to label {}\n", label_name);
-    auto label = label_operand(label_name);
-    builder_.zero_compare_and_branch(cond_vregs, label, cond_operand::ne());
+    builder_.zero_compare_and_branch(cond_vregs, n.target()->name(), cond_operand::ne());
 }
 
 void arm64_translation_context::materialise_constant(const constant_node &n) {
