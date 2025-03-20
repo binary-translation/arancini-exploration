@@ -556,8 +556,12 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 auto compare_regset = vreg_alloc_.allocate(dest_regset[0].type());
                 builder_.mov(compare_regset, 0xFFFF0000);
                 builder_.compare(variable(compare_regset), variable(dest_regset));
-                builder_.cset(flag_map[reg_offsets::CF], cond_operand::ne()).add_comment("compute flag: CF");
-                builder_.cset(flag_map[reg_offsets::OF], cond_operand::ne()).add_comment("compute flag: OF");
+
+                builder_.insert_comment("compute flag: CF");
+                builder_.conditional_set(variable(flag_map[reg_offsets::CF]), cond_operand::ne());
+
+                builder_.insert_comment("compute flag: OF");
+                builder_.conditional_set(variable(flag_map[reg_offsets::OF]), cond_operand::ne());
                 sets_flags = false;
             }
             break;
@@ -584,8 +588,11 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                 // CF and OF are set to 1 when lhs * rhs > 64-bits
                 // Otherwise they are set to 0
                 builder_.compare(variable(dest_regset[1]), 0);
-                builder_.cset(flag_map[reg_offsets::CF], cond_operand::ne()).add_comment("compute flag: CF");
-                builder_.cset(flag_map[reg_offsets::OF], cond_operand::ne()).add_comment("compute flag: OF");
+                builder_.insert_comment("compute flag: CF");
+                builder_.conditional_set(variable(flag_map[reg_offsets::CF]), cond_operand::ne());
+
+                builder_.insert_comment("compute flag: OF");
+                builder_.conditional_set(variable(flag_map[reg_offsets::OF]), cond_operand::ne());
                 sets_flags = false;
                 break;
             } else {
@@ -781,7 +788,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                                     n.lhs().type(), n.rhs().type());
         }
         builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");
-        builder_.cset(flag_map[reg_offsets::SF], cond_operand::mi()).add_comment("compute flag: SF");
+        builder_.insert_comment("compute flag: SF");
+        builder_.conditional_set(variable(flag_map[reg_offsets::SF]), cond_operand::mi());
         sets_flags = false;
         if (lhs_regset[0].type().element_width() < 64) {
             unsigned long long mask = ~(~0llu << lhs_regset[0].type().element_width());
@@ -814,7 +822,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
                                     n.lhs().type(), n.rhs().type());
         }
         builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");
-        builder_.cset(flag_map[reg_offsets::SF], cond_operand::mi()).add_comment("compute flag: SF");
+        builder_.insert_comment("compute flag: SF");
+        builder_.conditional_set(variable(flag_map[reg_offsets::SF]), cond_operand::mi());
         sets_flags = false;
         if (lhs_regset[0].type().element_width() < 64) {
             unsigned long long mask = ~(~0llu << lhs_regset[0].type().element_width());
@@ -859,7 +868,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             }
         }
         builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");
-        builder_.cset(flag_map[reg_offsets::SF], cond_operand::mi()).add_comment("compute flag: SF");
+        builder_.insert_comment("compute flag: SF");
+        builder_.conditional_set(variable(flag_map[reg_offsets::SF]), cond_operand::mi());
         sets_flags = false;
         if (lhs_regset[0].type().element_width() < 64) {
             unsigned long long mask = ~(~0llu << lhs_regset[0].type().element_width());
@@ -877,8 +887,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         rhs_regset[0] = cast(rhs_regset[0], lhs_regset[0].type());
         builder_.insert_comment("Compare LHS and RHS to generate condition for conditional set");
         builder_.compare(variable(lhs_regset), variable(rhs_regset));
-        builder_.cset(dest_regset[0], get_cset_type(n.op()))
-                .add_comment("set to 1 if condition is true (based flags from the previous compare)");
+        builder_.conditional_set(variable(dest_regset), get_cset_type(n.op()));
         inverse_carry_flag_operation = true;
 		break;
 	case binary_arith_op::cmpoeq:
@@ -888,8 +897,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 	case binary_arith_op::cmpu:
         builder_.fcmp(lhs_regset, rhs_regset);
         dest_regset[0].cast(value_type::u64());
-        builder_.cset(dest_regset[0], get_cset_type(n.op()))
-                .add_comment("set to 1 if condition is true (based flags from the previous compare)");
+        builder_.conditional_set(variable(dest_regset), get_cset_type(n.op()));
         break;
 	case binary_arith_op::cmpueq:
 	case binary_arith_op::cmpune:
@@ -900,10 +908,8 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
             builder_.fcmp(lhs_regset, rhs_regset);
             const auto& unordered = vreg_alloc_.allocate(value_type::u64());
             dest_regset[0].cast(value_type::u64());
-            builder_.cset(dest_regset[0], get_cset_type(n.op()))
-                    .add_comment("set to 1 if condition is true (based flags from the previous compare)");
-            builder_.cset(unordered, cond_operand::vs())
-                    .add_comment("set to 1 if condition is true (based flags from the previous compare)");
+            builder_.conditional_set(variable(dest_regset), get_cset_type(n.op()));
+            builder_.conditional_set(variable(unordered), cond_operand::vs());
             builder_.orr_(dest_regset[0], dest_regset[0], unordered);
         }
         break;
@@ -1288,10 +1294,6 @@ void arm64_translation_context::materialise_cast(const cast_node &n) {
 }
 
 void arm64_translation_context::materialise_csel(const csel_node &n) {
-    [[unlikely]]
-    if (n.val().type().is_vector() || n.val().type().element_width() > value_types::base_type.element_width())
-        throw backend_exception("Cannot implement conditional selection for type {}", n.val().type());
-
     const auto &dest = vreg_alloc_.allocate(n.val());
     const auto &condition = materialise_port(n.condition());
     const auto &true_var = materialise_port(n.trueval());
@@ -1299,7 +1301,7 @@ void arm64_translation_context::materialise_csel(const csel_node &n) {
 
     builder_.insert_comment("compare condition for conditional select");
     builder_.compare(variable(condition), 0);
-    builder_.csel(dest, true_var, false_var, cond_operand::ne());
+    builder_.conditional_select(variable(dest), variable(true_var), variable(false_var), cond_operand::ne());
 }
 
 void arm64_translation_context::materialise_bit_shift(const bit_shift_node &n) {
