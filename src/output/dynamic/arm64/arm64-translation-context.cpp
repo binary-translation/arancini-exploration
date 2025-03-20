@@ -287,17 +287,11 @@ static inline bool is_flag_port(const port &value) {
 }
 
 void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
-    // Sanity check
-    auto type = n.val().type();
+    builder_.insert_comment("read register: {}", n.regname());
 
-    [[unlikely]]
-    if (type.is_vector() && type.element_width() > value_types::base_type.element_width())
-        throw backend_exception("Cannot load registers of type {}", type);
-
-    auto comment = fmt::format("read register: {}", n.regname());
-    auto& dest_vregs = vreg_alloc_.allocate(n.val());
     auto address = guest_memory(n.regoff());
-    builder_.load(variable(dest_vregs), address);
+    const auto& destination = vreg_alloc_.allocate(n.val());
+    builder_.load(variable(destination), address);
 }
 
 inline bool is_flag_setter(node_kinds node_kind) {
@@ -306,69 +300,37 @@ inline bool is_flag_setter(node_kinds node_kind) {
 }
 
 void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
-    // Sanity check
-    auto type = n.val().type();
-    auto &src = materialise_port(n.value());
-
-    [[unlikely]]
-    if (type.is_vector() && type.element_width() > value_types::base_type.element_width())
-        throw backend_exception("Cannot store registers of type {}", type);
+    auto &source = materialise_port(n.value());
+    auto address = guest_memory(n.regoff());
 
     // Flags may be set either based on some preceding operation or with a constant
     // Handle the case when they are generated based on a previous operation here
     if (is_flag_port(n.value())) {
+        builder_.insert_comment("write flag: {}", n.regname());
         if (is_flag_setter(n.value().owner()->kind())) {
-            const auto &source = flag_map.at(static_cast<reg_offsets>(n.regoff()));
-            builder_.append(arm64_assembler::strb(source, guest_memory(n.regoff())))
-                         .add_comment(fmt::format("write flag: {}", n.regname()));
-        } else if (src.size()) {
-            src[0].cast(n.value().type());
-            builder_.append(arm64_assembler::strb(src[0], guest_memory(n.regoff())))
-                         .add_comment(fmt::format("write flag: {}", n.regname()));
+            const auto &flag = flag_map.at(static_cast<reg_offsets>(n.regoff()));
+            builder_.store(variable(flag), address);
+        } else if (source.size()) {
+            source[0].cast(n.value().type());
+            builder_.store(variable(source), address);
         }
         return;
     }
 
-    // FIXME: horrible hack needed here
-    //
-    // If we have a bit-extract before, we might have casted to a 64-bit type
-    // We then attempt to write a single byte, but that won't work because strb()
-    // requires a 32-bit register.
-    //
-    // We now down-cast it.
-    //
-    // There should be clear type promotion and type coercion.
-    auto comment = fmt::format("write register: {}", n.regname());
-    auto address = guest_memory(n.regoff());
-    builder_.store(variable(src), address);
+    builder_.insert_comment("write register: {}", n.regname());
+    builder_.store(variable(source), address);
 }
 
 void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
-    // Sanity checks
-    auto type = n.val().type();
-
-    [[unlikely]]
-    if (type.is_vector() && type.element_width() > value_types::base_type.element_width())
-        throw backend_exception("Cannot load vectors from memory with type {}", type);
-
-    const auto &dest = vreg_alloc_.allocate(n.val());
-    const register_operand &address = materialise_port(n.address());
-    builder_.load(variable(dest), address);
+    const auto &destination = vreg_alloc_.allocate(n.val());
+    const auto &address = materialise_port(n.address());
+    builder_.load(variable(destination), memory_operand(address));
 }
 
 void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
-    auto type = n.val().type();
-
-    // Sanity check; cannot by definition load a register larger than 64-bit
-    // without it being a vector
-    [[unlikely]]
-    if (type.is_vector() && type.element_width() > value_types::base_type.element_width())
-        throw backend_exception("Unable to write vectors of type {}", type);
-
-    const auto &src = materialise_port(n.value());
-
+    const auto &source = materialise_port(n.value());
     const auto &address = materialise_port(n.address());
-    builder_.store(variable(src), address);
+    builder_.store(variable(source), memory_operand(address));
 }
 
 void arm64_translation_context::materialise_read_pc(const read_pc_node &n) {
@@ -387,8 +349,10 @@ void arm64_translation_context::materialise_write_pc(const write_pc_node &n) {
 		ret_ = 4;
 	}
 
-    builder_.append(arm64_assembler::str(new_pc_vreg, guest_memory(reg_offsets::PC)))
-            .add_comment("write program counter");
+    builder_.insert_comment("update program counter");
+
+    auto address = guest_memory(reg_offsets::PC);
+    builder_.store(variable(new_pc_vreg), address);
 }
 
 void arm64_translation_context::materialise_label(const label_node &n) {
