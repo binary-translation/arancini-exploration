@@ -433,23 +433,25 @@ public:
         return store(source.scalar(), address);
     }
 
-    instruction& branch(label_operand &dest) {
-        label_refcount_[dest.name()]++;
-		return append(arm64_assembler::b(dest));
+    instruction& branch(const label_operand &label) {
+        auto destination = format_label(label.name());
+        label_refcount_[destination.name()]++;
+		return append(arm64_assembler::b(destination));
     }
 
-    instruction& branch(label_operand &dest, const cond_operand& cond) {
-        label_refcount_[dest.name()]++;
+    instruction& branch(label_operand &label, const cond_operand& cond) {
+        auto destination = format_label(label.name());
+        label_refcount_[destination.name()]++;
 
         if (cond.condition() == "eq")
-            return append(arm64_assembler::beq(dest));
+            return append(arm64_assembler::beq(destination));
 
         if (cond.condition() == "ne")
-            return append(arm64_assembler::bne(dest));
+            return append(arm64_assembler::bne(destination));
         
         [[likely]]
         if (cond.condition() == "lt")
-            return append(arm64_assembler::bl(dest));
+            return append(arm64_assembler::bl(destination));
 
         throw backend_exception("Cannot branch with condition {}", cond);
     }
@@ -461,14 +463,15 @@ public:
                                          const label_operand &label,
                                          const cond_operand& cond) 
     {
-        label_refcount_[label.name()]++;
+        auto destination = format_label(label.name());
+        label_refcount_[destination.name()]++;
 
         if (cond.condition() == "eq")
-            return append(arm64_assembler::cbz(reg, label));
+            return append(arm64_assembler::cbz(reg, destination));
 
         [[likely]]
         if (cond.condition() == "ne")
-            return append(arm64_assembler::cbnz(reg, label));
+            return append(arm64_assembler::cbnz(reg, destination));
 
         throw backend_exception("Cannot zero-compare-and-branch on condition {}", cond);
     }
@@ -732,13 +735,14 @@ public:
     }
 
     void label(const label_operand &label) {
-        if (!labels_.count(label.name())) {
-            labels_.insert(label.name());
-            append(instruction(label));
+        auto unique_label = format_label(label.name());
+        if (!labels_.count(unique_label.name())) {
+            labels_.insert(unique_label.name());
+            append(instruction(unique_label));
             return;
         }
         logger.debug("Label {} already inserted\nCurrent labels:\n{}",
-                     label, fmt::format("{}", fmt::join(labels_.begin(), labels_.end(), "\n")));
+                     unique_label, fmt::format("{}", fmt::join(labels_.begin(), labels_.end(), "\n")));
     }
 
 	instruction& setz(const register_operand &dst) {
@@ -909,8 +913,8 @@ public:
                       std::memory_order load_mem_order = std::memory_order_acquire,
                       std::memory_order store_mem_order = std::memory_order_release) {
         auto status = vreg_alloc_.allocate(ir::value_type::u32());
-        auto loop_label = label_operand(fmt::format("loop_{}", instructions_.size()));
-        auto success_label = label_operand(fmt::format("success_{}", instructions_.size()));
+        auto loop_label = format_label("loop");
+        auto success_label = format_label("success");
         label(loop_label);
         atomic_load(data, mem, load_mem_order);
 
@@ -1477,6 +1481,14 @@ public:
         return reg;
     }
 
+    static label_operand format_label(const std::string& label, std::size_t uuid) {
+        return fmt::format("{}_{}", label, uuid);
+    }
+
+    label_operand format_label(const std::string& label) {
+        return format_label(label, instruction_block_);
+    }
+
     void clear() {
         instructions_.clear();
         vreg_alloc_.reset();
@@ -1484,12 +1496,21 @@ public:
         labels_.clear();
     }
 
+    void begin_instruction_block(std::string_view comment = "") {
+        instruction_block_++;
+        if (!comment.empty())
+            insert_comment(comment);
+    }
+
+    void end_instruction_block() { }
+
 	instruction& append(const instruction &i) {
         instructions_.push_back(i);
         return instructions_.back();
     }
 private:
     arm64_assembler asm_;
+    std::size_t instruction_block_ = 0;
 	std::vector<instruction> instructions_;
     virtual_register_allocator vreg_alloc_;
     std::unordered_map<std::string, std::size_t> label_refcount_;
