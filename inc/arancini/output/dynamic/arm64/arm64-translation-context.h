@@ -64,7 +64,7 @@ private:
     std::vector<ir::node *> nodes_;
 	std::unordered_set<const ir::node *> materialised_nodes_;
 	std::unordered_map<unsigned long, off_t> instruction_index_to_guest_;
-    std::unordered_map<const ir::local_var *, std::vector<register_operand>> locals_;
+    std::unordered_map<const ir::local_var *, register_sequence> locals_;
 
     port_register_allocator vreg_alloc_{&builder_.register_allocator()};
 
