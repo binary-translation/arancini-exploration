@@ -545,6 +545,11 @@ public:
         if (source1.type().is_vector())
             throw backend_exception("Cannot compare vectors");
 
+        if (source1.type().is_floating_point()) {
+            append(arm64_assembler::fcmp(source1, source2));
+            return;
+        }
+
         append(arm64_assembler::cmp(source1, source2));
     }
 
@@ -552,6 +557,11 @@ public:
         // TODO: check types
         if (source1.type().is_vector())
             throw backend_exception("Cannot compare vectors");
+
+        if (source1.type().is_floating_point()) {
+            append(arm64_assembler::fcmp(source1, source2));
+            return;
+        }
 
         auto immediate = move_immediate(source2, ir::value_type::u(12), source1.type());
         append(arm64_assembler::cmp(source1, immediate));

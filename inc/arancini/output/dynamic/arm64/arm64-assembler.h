@@ -491,6 +491,17 @@ public:
 
 			implicitly_writes({register_operand(register_operand::nzcv)});
 		}
+
+		fcmp(const register_operand& dest, const immediate_operand& imm):
+			instruction("fcmp", use(dest), use(imm))
+		{
+			[[unlikely]]
+			if (imm.value() != 0)
+				throw backend_exception("Instruction fcmp {}, {} can only take #0.0 as an immediate",
+										dest.type(), imm);
+
+			implicitly_writes({register_operand(register_operand::nzcv)});
+		}
 	};
 
 	struct fmul : instruction {
