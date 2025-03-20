@@ -201,8 +201,7 @@ public:
             if (std::holds_alternative<register_operand>(op.get()))
                 return op;
 
-            const immediate_operand& imm = op;
-            return builder_->move_immediate(imm.value(), imm_type_, reg_type_);
+            return builder_->move_immediate(op, reg_type_);
         }
     protected:
         immediates_upgrade_policy(instruction_builder* builder, ir::value_type imm_type, ir::value_type reg_type):
@@ -394,6 +393,11 @@ public:
         if (out.size() != source.size())
             throw backend_exception("Cannot move from {} to {} (different sizes not supported)", 
                                     out.type(), source.type());
+
+        if (out.type().is_floating_point()) {
+            append(arm64_assembler::fmov(out, source));
+            return;
+        }
         
         for (auto out_it = out.begin(), src_it = source.begin();
              out_it != out.end(); ++out_it, ++src_it)
@@ -403,15 +407,20 @@ public:
     }
 
     void move(const variable& out, const immediate_operand& imm) {
-        auto reg_or_imm = move_immediate(imm.value(), ir::value_type::u(12));
-        if (std::holds_alternative<immediate_operand>(reg_or_imm.get())) {
-            append(arm64_assembler::mov(out.scalar()[0], std::get<immediate_operand>(reg_or_imm.get())));
-            for (auto out_it = std::next(out.scalar().begin()); out_it != out.scalar().end(); ++out_it)
-                append(arm64_assembler::mov(*out_it, 0));
+        if (imm.type().is_floating_point()) {
+            append(arm64_assembler::fmov(out, imm));
             return;
         }
 
-        move(out, variable(std::get<register_operand>(reg_or_imm.get())));
+        auto reg_or_imm = move_immediate(imm, ir::value_type::u(12));
+        if (std::holds_alternative<immediate_operand>(reg_or_imm.get())) {
+            append(arm64_assembler::mov(out.scalar()[0], std::get<immediate_operand>(reg_or_imm.get())));
+        } else {
+            move(out.scalar()[0], variable(std::get<register_operand>(reg_or_imm.get())));
+        }
+
+        for (auto out_it = std::next(out.scalar().begin()); out_it != out.scalar().end(); ++out_it)
+            append(arm64_assembler::mov(*out_it, 0));
     }
 
     instruction& movn(const register_operand &dst,
@@ -430,12 +439,6 @@ public:
               const immediate_operand &src,
               const shift_operand &shift) {
         return append(arm64_assembler::movk(dst, src, shift));
-    }
-
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& mov(const register_operand &dst, const reg_or_imm &src) {
-        ImmediatesPolicy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
-        return append(arm64_assembler::mov(dst, policy(src)));
     }
 
     void load(const variable& out, const memory_operand& address) {
@@ -698,16 +701,6 @@ public:
                       const register_operand &src1,
                       const register_operand &src2) {
         return append(arm64_assembler::fdiv(dest, src1, src2));
-    }
-
-    instruction& fmov(const register_operand &dest,
-                      const register_operand &src) {
-        return append(arm64_assembler::fmov(dest, src));
-    }
-
-    instruction& fmov(const register_operand &dest,
-                      const immediate_operand &src) {
-        return append(arm64_assembler::fmov(dest, src));
     }
 
     instruction& fcvt(const register_operand &dest,
@@ -1430,81 +1423,50 @@ public:
         return value_types::base_type.element_width() - __builtin_clzll(imm|1);
     }
 
-    template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
-    reg_or_imm move_immediate(T imm, ir::value_type imm_type, ir::value_type reg_type) {
-        [[unlikely]]
-        if (imm_type.is_vector() || imm_type.element_width() > value_types::base_type.element_width())
-            throw backend_exception("Attempting to move immediate {:#x} into unsupported immediate type {}",
-                                     imm, imm_type);
-
-        auto immediate = util::bit_cast_zeros<unsigned long long>(imm);
-        std::size_t actual_size = get_min_bitsize(immediate);
-
-        if (actual_size < imm_type.element_width()) {
-            logger.debug("Immediate {:#x} fits within {} (actual size = {})\n",
-                          imm, imm_type, actual_size);
-            return immediate_operand(imm, imm_type);
+    reg_or_imm move_immediate(immediate_operand imm, ir::value_type max_imm_type) {
+        if (imm.type().width() < max_imm_type.width()) {
+            logger.debug("Immediate {} fits within {}\n", imm, max_imm_type);
+            return imm;
         }
 
-        return move_to_register(imm, reg_type);
+        return move_to_register(imm);
      }
 
-    template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
-    reg_or_imm move_immediate(T imm, ir::value_type imm_type) {
-        ir::value_type reg_type;
-        if (imm_type.element_width() < 32)
-            reg_type = ir::value_type(imm_type.type_class(), 32);
-        else if (imm_type.element_width() > 32)
-            reg_type = ir::value_type(imm_type.type_class(), 64);
-
-        return move_immediate(imm, imm_type, reg_type);
+    register_operand move_to_register(immediate_operand immediate) {
+        auto reg_type = register_type_for_immediate(immediate);
+        return move_to_register(immediate, reg_type);
     }
 
-    template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
-    register_operand move_to_register(T imm, ir::value_type type) {
+    register_operand move_to_register(immediate_operand imm, ir::value_type out_type) {
         // Sanity checks
-        static_assert (sizeof(T) <= sizeof(std::uint64_t),
-                       "Attempting to move immediate requiring more than 64-bits into register");
         static_assert (sizeof(std::uint64_t) <= sizeof(unsigned long long),
-                       "ARM DBT expects unsigned long long to be at least as large as 64-bits");
+                       "Arm DBT expects unsigned long long to be at least as large as 64-bits");
 
         [[unlikely]]
-        if (type.is_vector())
-            throw backend_exception("Cannot move immediate {} into vector type {}", imm, type);
-
-        // Convert to unsigned long long so that clzll can be used
-        // 1s in sizeof(unsinged long long) - sizeof(imm) upper bits
-        auto immediate = util::bit_cast_zeros<unsigned long long>(imm);
-
-        // Check the actual size of the value
-        std::size_t actual_size = get_min_bitsize(immediate);
-        if (actual_size > type.width()) {
-            logger.warn("Converting value of size {} to size {} by truncation\n",
-                        actual_size, type.element_width());
-            actual_size = type.element_width();
-        }
+        if (out_type.is_vector())
+            throw backend_exception("Cannot move immediate {} into vector type {}", imm, out_type);
 
         // Can be moved in one go
         // TODO: implement optimization to support more immediates via shifts
-        if (actual_size < 12) {
-            insert_comment("Move immediate {:#x} directly as < 12-bits", immediate);
-            auto reg = vreg_alloc_.allocate(type);
-            std::uint64_t mask = (1ULL << actual_size) - 1;
-            mov<immediates_strict_policy>(reg, immediate & mask);
+        if (imm.type().width() < 12) {
+            insert_comment("Move immediate {} directly as < 12-bits", imm);
+            auto reg = vreg_alloc_.allocate(out_type);
+            append(arm64_assembler::mov(reg, imm));
             return reg;
         }
 
         // Determine how many 16-bit chunks we need to move
-        std::size_t move_count = actual_size / 16 + (actual_size % 16 != 0);
-        logger.debug("Moving value {:#x} requires {} 16-bit moves\n", immediate, move_count);
+        std::size_t move_count = imm.type().width() / 16 + (imm.type().width() % 16 != 0);
+        logger.debug("Moving value {} requires {} 16-bit moves\n", imm, move_count);
 
         // Can be moved in multiple operations
         // NOTE: this assumes that we're only working with 64-bit registers or smaller
-        auto reg = vreg_alloc_.allocate(type);
-        insert_comment("Move immediate {:#x} > 12-bits with sequence of movz/movk operations", immediate);
-        movz(reg, immediate & 0xFFFF, shift_operand(shift_operand::shift_type::lsl, 0));
+        auto reg = vreg_alloc_.allocate(out_type);
+        insert_comment("Move immediate {} > 12-bits with sequence of movz/movk operations", imm);
+        movz(reg, imm.value() & 0xFFFF, shift_operand::lsl(0));
         for (std::size_t i = 1; i < move_count; ++i) {
-            movk(reg, immediate >> (i * 16) & 0xFFFF, shift_operand(shift_operand::shift_type::lsl, i * 16));
+            auto offset = i * 16;
+            movk(reg, imm.value() >> (offset & 0xFFFF), shift_operand::lsl(offset));
         }
 
         return reg;
@@ -1596,6 +1558,15 @@ private:
         }
 
         append(arm64_assembler::neg(out, source));
+    }
+
+    ir::value_type register_type_for_immediate(immediate_operand immediate) {
+        if (immediate.type().element_width() <= 32)
+            return ir::value_type(immediate.type().type_class(), 32);
+        else if (immediate.type().element_width() <= 64)
+            return ir::value_type(immediate.type().type_class(), 64);
+        throw backend_exception("Cannot move immediate of type {} to variable", 
+                                immediate.type());
     }
 
     static std::pair<std::memory_order, std::memory_order> 
