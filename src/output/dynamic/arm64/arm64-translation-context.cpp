@@ -791,39 +791,18 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
 		break;
 	case binary_arith_op::bxor:
         {
-            if (n.val().type().is_floating_point()) {
-                lhs_regset[0].cast(value_type::vector(value_type::f64(), 2));
-                rhs_regset[0].cast(value_type::vector(value_type::f64(), 2));
-                auto type = dest_regset[0].type();
-                dest_regset[0].cast(value_type::vector(value_type::f64(), 2));
-                builder_.eor_(dest_regset[0], lhs_regset[0], rhs_regset[0]);
-                dest_regset[0].cast(type);
-                std::size_t i = 1;
-                for (; i < dest_regset.size(); ++i) {
-                    lhs_regset[i].cast(value_type::vector(value_type::f64(), 2));
-                    rhs_regset[i].cast(value_type::vector(value_type::f64(), 2));
-                    dest_regset[i].cast(value_type::vector(value_type::f64(), 2));
-                    builder_.eor_(dest_regset[i], lhs_regset[i], rhs_regset[i]);
-                    dest_regset[i].cast(type);
-                }
-                sets_flags = false;
-                break;
-            }
-
-            builder_.eor_(dest_regset[0], lhs_regset[0], rhs_regset[0]);
-            std::size_t i = 1;
-            for (; i < dest_regset.size(); ++i) {
-                builder_.eor_(dest_regset[i], lhs_regset[i], rhs_regset[i]);
-            }
+            builder_.exclusive_or(dest_regset, lhs_regset, rhs_regset);
 
             // EOR does not set flags
             // TODO
-            if (is_vector_op) sets_flags = false;
-            else {
-                if (dest_regset[i-1].type().element_width() > 32)
-                    builder_.ands(register_operand(register_operand::xzr_sp), dest_regset[i-1], dest_regset[i-1]);
+            if (is_vector_op || dest_regset.type().type_class() == ir::value_type_class::floating_point) {
+                sets_flags = false;
+            } else {
+                auto last = dest_regset.size() - 1;
+                if (dest_regset[last].type().element_width() > 32)
+                    builder_.ands(register_operand(register_operand::xzr_sp), dest_regset[last], dest_regset[last]);
                 else
-                    builder_.ands(register_operand(register_operand::wzr_sp), dest_regset[i-1], dest_regset[i-1]);
+                    builder_.ands(register_operand(register_operand::wzr_sp), dest_regset[last], dest_regset[last]);
             }
         }
         builder_.setz(flag_map[reg_offsets::ZF]).add_comment("compute flag: ZF");

@@ -379,12 +379,40 @@ public:
         return append(arm64_assembler::ands(dst, src1, policy(src2)));
     }
 
-    template <typename ImmediatesPolicy = immediates_upgrade_policy>
-    instruction& eor_(const register_operand &dst, const register_operand &src1, const reg_or_imm &src2) {
-        // TODO: this checks that the immediate is between immr:imms (bits [21:10])
-        // However, for 64-bit eor, we have N:immr:imms, which gives us bits [22:10])
-        ImmediatesPolicy policy(this, ir::value_type(ir::value_type_class::unsigned_integer, 12), dst.type());
-        return append(arm64_assembler::eor(dst, src1, policy(src2)));
+    void exclusive_or(const variable& out, const variable& lhs, const variable& rhs) {
+        // TODO: compare all 3 types
+        if (out.type().is_vector()) {
+            if (out.is_native_vector()) {
+                throw backend_exception("Cannot XOR native vectors of type {} = {} xor {}",
+                                        out.type(), lhs.type(), rhs.type());
+            }
+
+            for (auto out_it = out.values_begin(), lhs_it = lhs.values_begin(), rhs_it = rhs.values_begin(); 
+                 out_it != out.values_end(); ++out_it, ++lhs_it, ++rhs_it) 
+            {
+                exclusive_or(*out_it, *lhs_it, *rhs_it);
+            }
+        }
+
+        if (out.type().type_class() == ir::value_type_class::floating_point) {
+            auto lhs_casted = lhs;
+            auto rhs_casted = rhs;
+            auto out_casted = out;
+            auto type = out[0].type();
+
+            for (std::size_t i = 0; i < out.size(); ++i) {
+                // TODO: move these to zero-extend logic
+                lhs_casted[i].cast(ir::value_type::vector(ir::value_type::f64(), 2));
+                rhs_casted[i].cast(ir::value_type::vector(ir::value_type::f64(), 2));
+                out_casted[i].cast(ir::value_type::vector(ir::value_type::f64(), 2));
+                append(arm64_assembler::eor(out_casted[i], lhs_casted[i], rhs_casted[i]));
+            }
+
+            return;
+        }
+
+        for (std::size_t i = 0; i < out.size(); ++i)
+            append(arm64_assembler::eor(out[i], lhs[i], rhs[i]));
     }
 
     void inverse(const variable& out, const variable& source) {
