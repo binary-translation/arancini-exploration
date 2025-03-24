@@ -752,7 +752,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         sets_flags = false;
         if (lhs_regset[0].type().element_width() < 64) {
             unsigned long long mask = ~(~0llu << lhs_regset[0].type().element_width());
-            builder_.and_(dest_regset, dest_regset, builder_.move_to_register(mask, dest_regset[0].type()));
+            builder_.and_(dest_regset, dest_regset, mask);
         }
 		break;
 	case binary_arith_op::band:
@@ -786,7 +786,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         sets_flags = false;
         if (lhs_regset[0].type().element_width() < 64) {
             unsigned long long mask = ~(~0llu << lhs_regset[0].type().element_width());
-            builder_.and_(dest_regset, dest_regset, builder_.move_to_register(mask, dest_regset[0].type()));
+            builder_.and_(dest_regset, dest_regset, mask);
         }
 		break;
 	case binary_arith_op::bxor:
@@ -832,7 +832,7 @@ void arm64_translation_context::materialise_binary_arith(const binary_arith_node
         sets_flags = false;
         if (lhs_regset[0].type().element_width() < 64) {
             unsigned long long mask = ~(~0llu << lhs_regset[0].type().element_width());
-            builder_.and_(dest_regset, dest_regset, builder_.move_to_register(mask, dest_regset[0].type()));
+            builder_.and_(dest_regset, dest_regset, mask);
         }
         break;
 	case binary_arith_op::cmpeq:

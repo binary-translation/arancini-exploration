@@ -1467,19 +1467,6 @@ public:
 
     const virtual_register_allocator& register_allocator() const { return vreg_alloc_; }
 
-    reg_or_imm move_immediate(immediate_operand imm, ir::value_type max_imm_type, ir::value_type reg_type) {
-        if (imm.type().width() < max_imm_type.width()) {
-            logger.debug("Immediate {} fits within {}\n", imm, max_imm_type);
-            return imm;
-        }
-
-        return move_to_register(imm);
-    }
-
-    reg_or_imm move_immediate(immediate_operand imm, ir::value_type max_imm_type) {
-        return move_immediate(imm, max_imm_type, register_type_for_immediate(imm));
-    }
-
     register_operand move_to_register(immediate_operand immediate) {
         auto reg_type = register_type_for_immediate(immediate);
         return move_to_register(immediate, reg_type);
@@ -1557,6 +1544,19 @@ private:
     std::unordered_set<std::string> labels_;
 
     void spill();
+
+    reg_or_imm move_immediate(immediate_operand imm, ir::value_type max_imm_type, ir::value_type reg_type) {
+        if (imm.type().width() < max_imm_type.width()) {
+            logger.debug("Immediate {} fits within {}\n", imm, max_imm_type);
+            return imm;
+        }
+
+        return move_to_register(imm);
+    }
+
+    reg_or_imm move_immediate(immediate_operand imm, ir::value_type max_imm_type) {
+        return move_immediate(imm, max_imm_type, register_type_for_immediate(imm));
+    }
 
     void load_scalar(const value& out, const memory_operand& address) {
         for (std::size_t i = 0; i < out.size(); ++i) {
