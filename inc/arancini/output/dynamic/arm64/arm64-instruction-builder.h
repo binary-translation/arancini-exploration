@@ -13,24 +13,25 @@
 
 namespace arancini::output::dynamic::arm64 {
 
-class register_sequence final {
+class value final {
 public:
     // TODO: do we need this?
-    register_sequence() = default;
+    value() = default;
 
-    register_sequence(const register_operand& reg):
+    value(const register_operand& reg):
         values_{reg}
     { }
 
-    register_sequence(std::initializer_list<register_operand> regs):
+    value(std::initializer_list<register_operand> regs):
         values_(regs)
     { }
 
     template <typename It>
-    register_sequence(It begin, It end):
+    value(It begin, It end):
         values_(begin, end)
     { }
 
+    [[nodiscard]]
     operator const register_operand&() const {
         [[unlikely]]
         if (values_.size() > 1)
@@ -39,6 +40,7 @@ public:
         return values_[0];
     }
 
+    [[nodiscard]]
     operator const std::vector<register_operand>&() const {
         return values_;
     }
@@ -68,6 +70,7 @@ public:
 
     void push_back(register_operand&& reg) { values_.push_back(std::move(reg)); }
 
+    [[nodiscard]]
     ir::value_type type() const {
         if (values_.size() == 1)
             return values_[0].type();
@@ -80,93 +83,85 @@ public:
     using iterator = std::vector<register_operand>::iterator;
     using const_iterator = std::vector<register_operand>::const_iterator;
 
-    [[nodiscard]]
-    iterator begin() { return values_.begin(); }
+    [[nodiscard]] iterator begin() { return values_.begin(); }
+    [[nodiscard]] const_iterator begin() const { return values_.begin(); }
+    [[nodiscard]] const_iterator cbegin() const { return values_.cbegin(); }
 
-    [[nodiscard]]
-    const_iterator begin() const { return values_.begin(); }
-
-    [[nodiscard]]
-    const_iterator cbegin() const { return values_.cbegin(); }
-
-    [[nodiscard]]
-    iterator end() { return values_.end(); }
-
-    [[nodiscard]]
-    const_iterator end() const { return values_.end(); }
-
-    [[nodiscard]]
-    const_iterator cend() const { return values_.cend(); }
+    [[nodiscard]] iterator end() { return values_.end(); }
+    [[nodiscard]] const_iterator end() const { return values_.end(); }
+    [[nodiscard]] const_iterator cend() const { return values_.cend(); }
 private:
     std::vector<register_operand> values_;
 };
 
 class variable {
-    std::vector<register_sequence> values_;
+    std::vector<value> values_;
 public:
     variable(const register_operand& reg):
         values_({{reg}})
     { } 
 
-    variable(const register_sequence& regseq):
+    variable(const value& regseq):
         values_({regseq})
     {
         [[unlikely]]
         if (regseq.type().is_vector())
-            throw backend_exception("Attempting to create variable from vector register sequence");
+            throw backend_exception("Attempting to create variable from vector value");
 
         // TODO: may prefer to relax this constraint
         [[unlikely]]
         if (!regseq.size())
-            throw backend_exception("Attempting to create variable from empty register sequence");
+            throw backend_exception("Attempting to create variable from empty value");
     } 
 
-    variable(const std::vector<register_sequence>& emulated_vector):
+    variable(const std::vector<value>& emulated_vector):
         values_(emulated_vector)
     { 
         [[unlikely]]
         if (emulated_vector.size() && emulated_vector[0].type().is_vector())
-            throw backend_exception("Attempting to create variable from vector register sequence");
+            throw backend_exception("Attempting to create variable from vector value");
     } 
 
+    [[nodiscard]]
     operator const register_operand&() const {
         return values_[0];
     }
 
-    operator const register_sequence&() const {
-        return values_[0];
-    }
-
-    register_sequence& operator[](std::size_t idx) {
-        return values_[idx];
-    }
-
-    const register_sequence& operator[](std::size_t idx) const {
-        return values_[idx];
-    }
-
-    register_sequence& scalar() {
+    [[nodiscard]]
+    operator const value&() const {
         if (values_.size() != 1)
             throw backend_exception("Cannot treat vector type {} as scalar", type());
         return values_[0];
     }
 
-    const register_sequence& scalar() const {
-        if (values_.size() != 1)
-            throw backend_exception("Cannot treat vector type {} as scalar", type());
-        return values_[0];
+    [[nodiscard]]
+    register_operand& operator[](std::size_t idx) {
+        auto value_idx = idx / values_[0].size();
+        auto reg_idx = idx % (value_idx * values_[0].size());
+
+        return values_[value_idx][reg_idx];
     }
 
+    [[nodiscard]]
+    const register_operand& operator[](std::size_t idx) const {
+        auto value_idx = idx / values_[0].size();
+        auto reg_idx = idx % (value_idx * values_[0].size());
+
+        return values_[value_idx][reg_idx];
+    }
+
+    [[nodiscard]]
     bool is_native_vector() const {
         return type().is_vector() && values_.size() == 1;
     }
 
+    // Returns count of backing register operands
+    [[nodiscard]]
     std::size_t size() const { 
-        if (values_.size() == 1)
-            return values_[0].size();
-        return values_.size();
+        return values_.size() ? values_.size() * values_[0].size() : 0;
     }
 
+    [[nodiscard]]
     ir::value_type type() const {
         if (values_.size() == 1) {
             // For normal scalars, real vectors and big scalars
@@ -177,32 +172,31 @@ public:
         return ir::value_type::vector(values_[0].type(), values_.size());
     }
 
-    using iterator = std::vector<register_sequence>::iterator;
-    using const_iterator = std::vector<register_sequence>::const_iterator;
+    using register_iterator = value::iterator;
+    using const_register_iterator = value::const_iterator;
 
-    [[nodiscard]]
-    iterator begin() { return values_.begin(); }
+    [[nodiscard]] register_iterator begin() { return values_begin()->begin(); }
+    [[nodiscard]] const_register_iterator begin() const { return values_begin()->begin(); }
+    [[nodiscard]] const_register_iterator cbegin() const { return values_cbegin()->begin(); }
+    [[nodiscard]] register_iterator end() { return std::prev(values_end())->end(); }
+    [[nodiscard]] const_register_iterator end() const { return std::prev(values_end())->end(); }
+    [[nodiscard]] const_register_iterator cend() const { return std::prev(values_cend())->end(); }
 
-    [[nodiscard]]
-    const_iterator begin() const { return values_.begin(); }
+    using value_iterator = std::vector<value>::iterator;
+    using const_value_iterator = std::vector<value>::const_iterator;
 
-    [[nodiscard]]
-    const_iterator cbegin() const { return values_.cbegin(); }
-
-    [[nodiscard]]
-    iterator end() { return values_.end(); }
-
-    [[nodiscard]]
-    const_iterator end() const { return values_.end(); }
-
-    [[nodiscard]]
-    const_iterator cend() const { return values_.cend(); }
+    [[nodiscard]] value_iterator values_begin() { return values_.begin(); }
+    [[nodiscard]] const_value_iterator values_begin() const { return values_.begin(); }
+    [[nodiscard]] const_value_iterator values_cbegin() const { return values_.cbegin(); }
+    [[nodiscard]] value_iterator values_end() { return values_.end(); }
+    [[nodiscard]] const_value_iterator values_end() const { return values_.end(); }
+    [[nodiscard]] const_value_iterator values_cend() const { return values_.cend(); }
 };
 
 class virtual_register_allocator final {
 public:
     [[nodiscard]]
-    register_sequence allocate([[maybe_unused]] ir::value_type type);
+    value allocate([[maybe_unused]] ir::value_type type);
 
     [[nodiscard]]
     variable allocate_variable(ir::value_type type);
@@ -211,6 +205,7 @@ public:
 private:
     std::size_t next_vreg_ = 33; // TODO: formalize this
 
+    [[nodiscard]]
     bool base_representable(const ir::value_type& type) {
         return type.width() <= 64; // TODO: formalize this
     }
@@ -246,6 +241,7 @@ public:
     struct immediates_strict_policy final {
         friend instruction_builder;
 
+        [[nodiscard]]
         reg_or_imm operator()(const reg_or_imm& op) {
             if (std::holds_alternative<register_operand>(op.get()))
                 return op;
@@ -397,11 +393,14 @@ public:
             if (out.is_native_vector())
                 throw backend_exception("Cannot inverse native vectors");
 
-            for (auto out_it = out.begin(), src_it = source.begin(); out_it != out.end(); ++out_it, ++src_it)
-                inverse(*out_it, *src_it);
+            for (auto out_it = out.values_begin(), src_it = source.values_begin(); 
+                 out_it != out.values_end(); ++out_it, ++src_it) 
+            {
+                inverse_scalar(*out_it, *src_it);
+            }
         }
 
-        return inverse(out.scalar(), source.scalar());
+        return inverse_scalar(out, source);
     }
 
     void negate(const variable& out, const variable& source) {
@@ -411,10 +410,10 @@ public:
                 throw backend_exception("Cannot negate native vectors");
 
             for (auto out_it = out.begin(), src_it = source.begin(); out_it != out.end(); ++out_it, ++src_it)
-                negate(*out_it, *src_it);
+                negate_scalar(*out_it, *src_it);
         }
 
-        return negate(out.scalar(), source.scalar());
+        return negate_scalar(out, source);
     }
 
     void move(const variable& out, const variable& source) {
@@ -430,8 +429,10 @@ public:
                                         out.type(), source.type());
             }
 
-            for (std::size_t i = 0; i < out.size(); ++i) {
-                move(out[i], source[i]);
+            for (auto out_it = out.values_begin(), src_it = source.values_begin(); 
+                 out_it != out.values_end(); ++out_it, ++src_it) 
+            {
+                move(*out_it, *src_it);
             }
 
             return;
@@ -447,10 +448,8 @@ public:
             return;
         }
         
-        const auto& out_scalar = out.scalar();
-        const auto& source_scalar = source.scalar();
-        for (std::size_t i = 0; i < out_scalar.size(); ++i) {
-            append(arm64_assembler::mov(out_scalar[i], source_scalar[i]));
+        for (std::size_t i = 0; i < out.size(); ++i) {
+            append(arm64_assembler::mov(out[i], source[i]));
         }
     }
 
@@ -462,14 +461,13 @@ public:
 
         auto reg_or_imm = move_immediate(imm, ir::value_type::u(12));
         if (auto* imm = std::get_if<immediate_operand>(&reg_or_imm.get()); imm) {
-            append(arm64_assembler::mov(out.scalar()[0], *imm));
+            append(arm64_assembler::mov(out[0], *imm));
         } else {
-            move(out.scalar()[0], variable(std::get<register_operand>(reg_or_imm.get())));
+            move(out[0], variable(std::get<register_operand>(reg_or_imm.get())));
         }
 
-        const auto& out_scalar = out.scalar();
-        for (std::size_t i = 1; i < out_scalar.size(); ++i) {
-            append(arm64_assembler::mov(out_scalar[i], 0));
+        for (std::size_t i = 1; i < out.size(); ++i) {
+            append(arm64_assembler::mov(out[i], 0));
         }
     }
 
@@ -478,11 +476,11 @@ public:
             if (out.is_native_vector())
                 throw backend_exception("Cannot load native vectors");
 
-            for (const auto& vec_elem : out)
-                return load(vec_elem, address);
+            for (auto vec_elem_it = out.values_begin(); vec_elem_it != out.values_end(); ++vec_elem_it)
+                return load_scalar(*vec_elem_it, address);
         }
 
-        return load(out.scalar(), address);
+        return load_scalar(out, address);
     }
 
     void store(const variable& source, const memory_operand& address) {
@@ -490,11 +488,11 @@ public:
             if (source.is_native_vector())
                 throw backend_exception("Cannot store native vectors");
 
-            for (const auto& vec_elem : source)
-                return store(vec_elem, address);
+            for (auto vec_elem_it = source.values_begin(); vec_elem_it != source.values_end(); ++vec_elem_it)
+                return store_scalar(*vec_elem_it, address);
         }
 
-        return store(source.scalar(), address);
+        return store_scalar(source, address);
     }
 
     instruction& branch(const label_operand &label) {
@@ -597,12 +595,12 @@ public:
 
         if (out.type().width() == 128) {
             if (amount.value() < 64) {
-                append(arm64_assembler::extr(out.scalar()[0], input.scalar()[1], input.scalar()[0], amount));
-                append(arm64_assembler::lsr(out.scalar()[1], input.scalar()[1], amount));
+                append(arm64_assembler::extr(out[0], input[1], input[0], amount));
+                append(arm64_assembler::lsr(out[1], input[1], amount));
                 return;
             } else if (amount.value() == 64) {
-                append(arm64_assembler::mov(out.scalar()[0], input.scalar()[1]));
-                append(arm64_assembler::mov(out.scalar()[1], 0));
+                append(arm64_assembler::mov(out[0], input[1]));
+                append(arm64_assembler::mov(out[1], 0));
                 return;
             }
 
@@ -635,20 +633,17 @@ public:
         if (out.type().is_vector()) 
             throw backend_exception("Cannot conditionally select between vectors");
 
-        for (auto out_it = out.scalar().begin(), true_it = true_val.scalar().begin(), false_it = false_val.scalar().begin();
-             out_it != out.scalar().end(); ++out_it, ++true_it, ++false_it) 
-        {
-            append(arm64_assembler::csel(*out_it, *true_it, *false_it, cond));
-        }
+        for (std::size_t i = 0; i < out.size(); ++i) 
+            append(arm64_assembler::csel(out[i], true_val[i], false_val[i], cond));
     }
 
     void conditional_set(const variable &out, const cond_operand &cond) {
         if (out.type().is_vector()) 
             throw backend_exception("Cannot conditionally set vector");
 
-        append(arm64_assembler::cset(*out.scalar().begin(), cond));
-        for (auto out_it = std::next(out.scalar().begin()); out_it != out.scalar().end(); ++out_it) {
-            append(arm64_assembler::mov(*out_it, 0));
+        append(arm64_assembler::cset(out[0], cond));
+        for (std::size_t i = 1; i < out.size(); ++i) {
+            append(arm64_assembler::mov(out[i], 0));
         }
     }
 
@@ -822,7 +817,7 @@ public:
         return append(instruction("cfinv"));
     }
 
-    void zero_extend(const register_sequence& out, const register_sequence& source) {
+    void zero_extend(const value& out, const value& source) {
         if (out.type().width() == source.type().width()) {
             append(arm64_assembler::mov(out, source));
             return;
@@ -859,7 +854,7 @@ public:
         }
     }
 
-    void sign_extend(const register_sequence& out, const register_sequence& source) {
+    void sign_extend(const value& out, const value& source) {
         // Sanity check
         // TODO: more missing sanity checks
         [[unlikely]]
@@ -902,7 +897,7 @@ public:
         }
     }
 
-    void extend(const register_sequence& out, const register_sequence& source) {
+    void extend(const value& out, const value& source) {
         if (source.type().is_signed())
             return sign_extend(out, source);
         return zero_extend(out, source);
@@ -1563,7 +1558,7 @@ private:
 
     void spill();
 
-    void load(const register_sequence& out, const memory_operand& address) {
+    void load_scalar(const value& out, const memory_operand& address) {
         for (std::size_t i = 0; i < out.size(); ++i) {
             if (out[i].type().element_width() <= 8) {
                 memory_operand memory(address.base_register(), address.offset().value() + i);
@@ -1579,7 +1574,7 @@ private:
         }
     }
 
-    void store(const register_sequence& source, const memory_operand& address) {
+    void store_scalar(const value& source, const memory_operand& address) {
         for (std::size_t i = 0; i < source.size(); ++i) {
             if (source[i].type().element_width() <= 8) {
                 memory_operand memory(address.base_register(), address.offset().value() + i);
@@ -1595,7 +1590,7 @@ private:
         }
     }
 
-    void inverse(const register_sequence &out, const register_sequence &source) {
+    void inverse_scalar(const value &out, const value &source) {
         if (out.type().width() == 1) {
             append(arm64_assembler::eor(out, source, source));
             return;
@@ -1605,7 +1600,7 @@ private:
             append(arm64_assembler::mvn(*out_it, *src_it));
     }
 
-    void negate(const register_sequence &out, const register_sequence &source) {
+    void negate_scalar(const value &out, const value &source) {
         if (out.type().width() == 1) {
             append(arm64_assembler::eor(out, source, source));
             return;

@@ -16,7 +16,7 @@ inline std::size_t get_min_bitsize(unsigned long long imm) {
     return value_types::base_type.element_width() - __builtin_clzll(imm|1);
 }
 
-register_sequence virtual_register_allocator::allocate(ir::value_type type) {
+value virtual_register_allocator::allocate(ir::value_type type) {
     std::size_t reg_count = type.nr_elements();
     auto element_width = type.width();
     if (element_width > value_types::base_type.width()) {
@@ -26,19 +26,18 @@ register_sequence virtual_register_allocator::allocate(ir::value_type type) {
 
     auto reg_type = ir::value_type(type.type_class(), element_width, 1);
 
-    register_sequence regset;
+    value value;
     for (std::size_t i = 0; i < reg_count; ++i) {
-        auto reg = register_sequence{register_operand(next_vreg_++, reg_type)};
-        regset.push_back(reg);
+        value.push_back(register_operand(next_vreg_++, reg_type));
     }
 
-    return regset;
+    return value;
 }
 
 variable virtual_register_allocator::allocate_variable(ir::value_type type) {
     // Currently, always allocate vectors as emulated vectors
     if (type.is_vector()) {
-        std::vector<register_sequence> emulated_vec;
+        std::vector<value> emulated_vec;
         for (std::size_t i = 0; i < type.nr_elements(); ++i) {
             emulated_vec.push_back(allocate(type.element_type()));
         }
@@ -162,8 +161,8 @@ struct fmt::formatter<register_set<N>> {
     constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
 
     template <typename FormatContext>
-    auto format(const register_set<N>& regset, FormatContext& ctx) const {
-        return fmt::format_to(ctx.out(), "{}", regset.registers());
+    auto format(const register_set<N>& value, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", value.registers());
     }
 };
 
@@ -208,8 +207,8 @@ struct fmt::formatter<system_register_set> {
     constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
 
     template <typename FormatContext>
-    auto format(const system_register_set& regset, FormatContext& ctx) const {
-        return fmt::format_to(ctx.out(), "GPR: {}, FPR: {}", regset.gpr_state(), regset.fpr_state());
+    auto format(const system_register_set& value, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "GPR: {}, FPR: {}", value.gpr_state(), value.fpr_state());
     }
 };
 
@@ -237,14 +236,14 @@ class physical_register_allocator final {
 public:
     using register_map = std::unordered_map<register_operand, register_operand, register_hash, register_equal>;
 
-    physical_register_allocator(system_register_set regset):
-        regset_(regset)
+    physical_register_allocator(system_register_set value):
+        value_(value)
     { }
 
     // Modifiers
     [[nodiscard]]
     register_operand allocate(const register_operand &vreg) {
-        auto allocation = register_operand{regset_.allocate(vreg.type()), vreg.type()};
+        auto allocation = register_operand{value_.allocate(vreg.type()), vreg.type()};
 
         current_allocations_.emplace(vreg, allocation);
         current_allocations_.emplace(allocation, vreg);
@@ -260,7 +259,7 @@ public:
         current_allocations_.erase(vreg);
         current_allocations_.erase(preg);
 
-        regset_.deallocate(preg);
+        value_.deallocate(preg);
     }
 
     // Lookup
@@ -275,7 +274,7 @@ public:
     }
 
     [[nodiscard]]
-    system_register_set state() const noexcept { return regset_; }
+    system_register_set state() const noexcept { return value_; }
 
     using iterator = register_map::iterator;
     using const_iterator = register_map::const_iterator;
@@ -288,7 +287,7 @@ public:
     const_iterator end() const { return current_allocations_.end(); }
     const_iterator cend() const { return current_allocations_.cend(); }
 private:
-    system_register_set regset_;
+    system_register_set value_;
     register_map current_allocations_;
 };
 
@@ -394,8 +393,8 @@ void instruction_builder::allocate() {
     // SP/zero - ARM64 limitation (x31),
     // Return to trampoline (x30)
     // Frame Pointer - points to guest registers (x29)
-    system_register_set regset{register_set<32>{0x11FFFFFFF}, register_set<32>{0xFFFFFFFFF}};
-    physical_register_allocator reg_alloc{regset};
+    system_register_set value{register_set<32>{0x11FFFFFFF}, register_set<32>{0xFFFFFFFFF}};
+    physical_register_allocator reg_alloc{value};
 
     branch_liveness_tracker branch_tracker;
     implicit_dependency_handler implicit_dependencies;
@@ -598,9 +597,9 @@ void instruction_builder::allocate() {
 
     // Check that no dangling allocations remained
     // [[unlikely]]
-    // if (reg_alloc.state() != regset)
+    // if (reg_alloc.state() != value)
     //     throw backend_exception("Dangling allocations after register allocation:\n{} != {} (ref != actual)",
-    //                             reg_alloc.state(), regset);
+    //                             reg_alloc.state(), value);
 
     [[unlikely]]
     if (branch_tracker.in_branch_block())

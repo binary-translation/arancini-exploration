@@ -21,27 +21,27 @@ public:
     { }
 
     [[nodiscard]]
-    register_sequence allocate(ir::value_type type) {
+    value allocate(ir::value_type type) {
         return regalloc_->allocate(type);
     }
 
-    register_sequence& allocate(const ir::port& p) {
-        port_to_vreg_[&p] = regalloc_->allocate(p.type());
-        return port_to_vreg_[&p];
+    value& allocate(const ir::port& p) {
+        port_to_var_[&p] = regalloc_->allocate(p.type());
+        return port_to_var_[&p];
     }
 
-	register_sequence &allocate(const ir::port &p, ir::value_type type) {
-        port_to_vreg_[&p] = regalloc_->allocate(type);
-		return port_to_vreg_[&p];
+	value &allocate(const ir::port &p, ir::value_type type) {
+        port_to_var_[&p] = regalloc_->allocate(type);
+		return port_to_var_[&p];
 	}
 
     [[nodiscard]]
-    register_sequence& get(const ir::port& p) { return port_to_vreg_[&p]; }
+    value& get(const ir::port& p) { return port_to_var_[&p]; }
 
-    void reset() { regalloc_->reset(); port_to_vreg_.clear(); }
+    void reset() { regalloc_->reset(); port_to_var_.clear(); }
 private:
     virtual_register_allocator* regalloc_;
-	std::unordered_map<const ir::port *, register_sequence> port_to_vreg_;
+	std::unordered_map<const ir::port *, value> port_to_var_;
 };
 
 class arm64_translation_context final : public translation_context {
@@ -64,9 +64,9 @@ private:
     std::vector<ir::node *> nodes_;
 	std::unordered_set<const ir::node *> materialised_nodes_;
 	std::unordered_map<unsigned long, off_t> instruction_index_to_guest_;
-    std::unordered_map<const ir::local_var *, register_sequence> locals_;
+    std::unordered_map<const ir::local_var *, value> locals_;
 
-    port_register_allocator vreg_alloc_{&builder_.register_allocator()};
+    port_register_allocator var_alloc_{&builder_.register_allocator()};
 
     int ret_;
 	off_t this_pc_;
@@ -76,9 +76,9 @@ private:
     std::string current_instruction_disasm_;
 
     [[nodiscard]]
-    register_sequence& materialise_port(const ir::port &p) {
+    value& materialise_port(const ir::port &p) {
         materialise(p.owner());
-        return vreg_alloc_.get(p);
+        return var_alloc_.get(p);
     }
 
     using address_mode = memory_operand::address_mode;
