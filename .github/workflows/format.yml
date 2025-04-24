@@ -1,0 +1,20 @@
+name: Format
+
+on:
+    push:
+    pull_request:
+
+jobs:
+    check_format:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Install clang-format
+              uses: aminya/setup-cpp@v1
+              with:
+                  clang-format: true
+
+            - name: Check clang-formatting
+              run: find . -name '*.c' -o -name '*.cpp' -o -name '*.h' | xargs clang-format --dry-run --Werror --fail-on-incomplete-format
