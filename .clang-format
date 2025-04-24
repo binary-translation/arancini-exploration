@@ -1,7 +1,14 @@
-BasedOnStyle: WebKit
+BasedOnStyle: LLVM
+
 IndentWidth: 4
-TabWidth: 4
-UseTab: Always
-ColumnLimit: 160
+UseTab: Never
+
 PointerAlignment: Right
+
 FixNamespaceComments: true
+
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 2
+
+AllowShortBlocksOnASingleLine: Empty
