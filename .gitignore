@@ -1,3 +1,7 @@
+# CMake
+!CMakeLists.txt
+
+# Other
 **/*.o
 **/*.so
 **/*.a
