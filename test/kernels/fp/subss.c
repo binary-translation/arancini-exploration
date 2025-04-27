@@ -1,4 +1,2 @@
 
-float test(float a, float b) {
-  return a-b;
-}
+float test(float a, float b) { return a - b; }

@@ -34,10 +34,10 @@ std::ostream &operator<<(std::ostream &os, const x86_cpu_state &s) {
     return os;
 }
 
-std::ostream &print_stack(std::ostream &os,
-                          const uint64_t *rsp,
+std::ostream &print_stack(std::ostream &os, const uint64_t *rsp,
                           size_t byte_count) {
-    if (byte_count == 0) return os;
+    if (byte_count == 0)
+        return os;
 
     os << std::hex;
     os << "0x" << *rsp << "\t <- rsp\n";
@@ -49,4 +49,3 @@ std::ostream &print_stack(std::ostream &os,
 }
 
 } // namespace arancini::runtime::exec::x86
-

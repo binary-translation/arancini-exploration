@@ -1,4 +1,2 @@
 #include <emmintrin.h>
-__m128 test(__m128 a, __m128 b) {
-  return _mm_div_ss(a,b);
-}
+__m128 test(__m128 a, __m128 b) { return _mm_div_ss(a, b); }

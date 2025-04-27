@@ -1,35 +1,34 @@
 #pragma once
 
-#include <cstdlib>
 #include <cstdint>
+#include <cstdlib>
 
 namespace arancini::runtime::dbt {
 
 struct native_call_result {
-	int exit_code;
-	uint64_t chain_address;
+    int exit_code;
+    uint64_t chain_address;
 };
 
 extern "C" native_call_result call_native(void *, void *);
 
 class translation {
 
-public:
-	translation(void *code_ptr, size_t code_size)
-		: code_ptr_(code_ptr)
-		, code_size_(code_size)
-	{
-	}
+  public:
+    translation(void *code_ptr, size_t code_size)
+        : code_ptr_(code_ptr), code_size_(code_size) {}
 
-	~translation() { std::free(code_ptr_); }
+    ~translation() { std::free(code_ptr_); }
 
-	native_call_result invoke(void *cpu_state) { return call_native(code_ptr_, cpu_state); }
+    native_call_result invoke(void *cpu_state) {
+        return call_native(code_ptr_, cpu_state);
+    }
 
-	[[nodiscard]] void *get_code_ptr() const { return code_ptr_; }
-	[[nodiscard]] size_t get_code_size() const { return code_size_; }
+    [[nodiscard]] void *get_code_ptr() const { return code_ptr_; }
+    [[nodiscard]] size_t get_code_size() const { return code_size_; }
 
-private:
-	void *code_ptr_;
-	[[maybe_unused]] size_t code_size_;
+  private:
+    void *code_ptr_;
+    [[maybe_unused]] size_t code_size_;
 };
 } // namespace arancini::runtime::dbt

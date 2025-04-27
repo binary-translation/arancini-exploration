@@ -5,14 +5,13 @@
 namespace arancini::output::dynamic::arm64 {
 
 class backend_exception : public std::runtime_error {
-public:
+  public:
     template <typename... Args>
-    backend_exception(std::string_view format, Args&&... args):
-        std::runtime_error(fmt::format(format, std::forward<Args>(args)...))
-    { }
+    backend_exception(std::string_view format, Args &&...args)
+        : std::runtime_error(fmt::format(format, std::forward<Args>(args)...)) {
+    }
 };
 
-inline auto& logger = util::global_logger;
+inline auto &logger = util::global_logger;
 
-} // arancini::output::dynamic::arm64
-
+} // namespace arancini::output::dynamic::arm64

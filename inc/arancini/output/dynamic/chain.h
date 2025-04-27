@@ -9,37 +9,34 @@ namespace arancini::output::dynamic {
  * Only performs size checking.
  */
 class chain_machine_code_allocator : public machine_code_allocator {
-public:
-	explicit chain_machine_code_allocator(size_t size)
-		: size_ { size }
-	{
-	}
-	void *allocate(void *original, size_t size) override
-	{
-		if (size <= size_) {
-			return original;
-		}
-		return nullptr;
-	}
+  public:
+    explicit chain_machine_code_allocator(size_t size) : size_{size} {}
+    void *allocate(void *original, size_t size) override {
+        if (size <= size_) {
+            return original;
+        }
+        return nullptr;
+    }
 
-private:
-	size_t size_;
+  private:
+    size_t size_;
 };
 
 /**
- * Writes code to a given address to allow overwriting code at that address in chaining.
+ * Writes code to a given address to allow overwriting code at that address in
+ * chaining.
  */
 class chain_machine_code_writer : public machine_code_writer {
-public:
-	chain_machine_code_writer(void *target, size_t sizeE)
-		: machine_code_writer(alloc_, (void *)((uintptr_t)target & ~0xfull), ((uintptr_t)target & 0xfull), sizeE + ((uintptr_t)target & 0xfull))
-		, alloc_(sizeE + ((uintptr_t)target & 0xfull))
-	{
-	}
+  public:
+    chain_machine_code_writer(void *target, size_t sizeE)
+        : machine_code_writer(alloc_, (void *)((uintptr_t)target & ~0xfull),
+                              ((uintptr_t)target & 0xfull),
+                              sizeE + ((uintptr_t)target & 0xfull)),
+          alloc_(sizeE + ((uintptr_t)target & 0xfull)) {}
 
-	~chain_machine_code_writer() { finalise(); }
+    ~chain_machine_code_writer() { finalise(); }
 
-private:
-	chain_machine_code_allocator alloc_;
+  private:
+    chain_machine_code_allocator alloc_;
 };
 } // namespace arancini::output::dynamic
