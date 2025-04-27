@@ -8,5 +8,3 @@ set(TOOLCHAIN_PREFIX aarch64-linux-gnu)
 
 # Set DBT architecture
 set(DBT_ARCH AARCH64)
-
-
