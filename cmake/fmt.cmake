@@ -7,7 +7,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # We want to use the same fmt version as NixOS (as of 2024-04-29)
 FetchContent_Declare(
-    fmt
+  fmt
   GIT_REPOSITORY https://github.com/fmtlib/fmt.git
   GIT_TAG 10.2.1)
 
