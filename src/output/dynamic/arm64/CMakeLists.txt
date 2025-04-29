@@ -3,13 +3,6 @@ project(arancini-output-arm64)
 
 if(NOT DEFINED ENV{FLAKE_BUILD})
   include("./cmake/getKeystone.cmake")
-  # find_package(Keystone)
-  # if(NOT Keystone_FOUND)
-  #   message("Keystone not found")
-
-  #   # Fetch and build Keystone
-  #   include("./cmake/getKeystone.cmake")
-  # endif()
 endif() # NIX
 
 # Compile with -fPIC

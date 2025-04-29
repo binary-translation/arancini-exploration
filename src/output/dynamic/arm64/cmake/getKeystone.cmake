@@ -21,13 +21,11 @@ message("keystone_SOURCE_DIR = ${keystone_SOURCE_DIR}")
 
 # Apply patch
 execute_process(
-  COMMAND patch -p1 --force -i ${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/keystone.patch
+  COMMAND patch -p1 --force -i ${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/keystone.patch || true
   WORKING_DIRECTORY ${keystone_SOURCE_DIR}
 )
-
-
 
 set(BUILD_LIBS_ONLY
     ON
     CACHE BOOL "Disable test build" FORCE)
-include_directories(${keystone_SOURCE_DIR}/include/keystone)
+include_directories(${keystone_SOURCE_DIR}/include)

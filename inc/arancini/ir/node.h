@@ -10,6 +10,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include <cstdint>
+
 namespace arancini::ir {
 
 enum class node_kinds {

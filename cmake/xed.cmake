@@ -71,7 +71,7 @@ ExternalProject_Add(mbuild
         xed-prefix
     PATCH_COMMAND
         patch -p1 --force -i
-            ${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mbuild-riscv.patch
+            ${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mbuild-riscv.patch || true
 )
 
 # Download and patch mbuild We want to use the same keystone version as NixOS
