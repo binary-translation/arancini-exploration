@@ -10,6 +10,8 @@ endif()
 
 message("Acquiring fadec")
 
+include(FetchContent)
+
 # We want to use the same fmt version as NixOS (as of 2024-04-29)
 FetchContent_Declare(
   fadec

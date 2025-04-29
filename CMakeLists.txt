@@ -71,7 +71,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY
 
 # Nix takes care of fetching the dependencies
 if(NOT DEFINED ENV{FLAKE_BUILD})
-  # Get dpendencies
+  # Get dependencies
   include(cmake/xed.cmake)
   include(cmake/fadec.cmake)
   include(cmake/fmt.cmake)

@@ -21,13 +21,10 @@ message("keystone_SOURCE_DIR = ${keystone_SOURCE_DIR}")
 
 # Apply patch
 execute_process(
-  COMMAND patch -p1 -i ${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/keystone.patch
+  COMMAND patch -p1 --force -i ${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/keystone.patch
   WORKING_DIRECTORY ${keystone_SOURCE_DIR}
-  RESULT_VARIABLE patch_result
 )
-if(NOT patch_result EQUAL 0)
-    message(FATAL_ERROR "Patching Keystone failed with error code: ${patch_result}")
-endif()
+
 
 
 set(BUILD_LIBS_ONLY
