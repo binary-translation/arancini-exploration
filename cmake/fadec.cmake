@@ -8,7 +8,7 @@ if(NOT Python3_FOUND)
   message(FATAL_ERROR "Python3 is required for building fadec")
 endif()
 
-message("Installing fadec")
+message("Acquiring fadec")
 
 # We want to use the same fmt version as NixOS (as of 2024-04-29)
 FetchContent_Declare(
