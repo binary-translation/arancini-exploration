@@ -36,3 +36,9 @@ target_link_libraries(
           arancini-logger)
 
 install(TARGETS arancini-runtime LIBRARY)
+
+# We need to wait for XED to be build first In nix this is already ensured
+if(NOT DEFINED ENV{FLAKE_BUILD})
+  add_dependencies(arancini-runtime external-xed)
+  add_dependencies(arancini-runtime-static external-xed)
+endif() # NIX

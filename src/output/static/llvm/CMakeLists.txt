@@ -24,3 +24,8 @@ target_include_directories(arancini-output-llvm PUBLIC ${INCLUDE_PATH}
 llvm_config(arancini-output-llvm USE_SHARED all)
 target_link_libraries(arancini-output-llvm PRIVATE xed arancini-ir)
 target_compile_definitions(arancini-output-llvm PRIVATE ${LLVM_DEFINITIONS})
+
+# We need to wait for XED to be build first In nix this is already ensured
+if(NOT DEFINED ENV{FLAKE_BUILD})
+  add_dependencies(arancini-output-llvm external-xed)
+endif() # NIX

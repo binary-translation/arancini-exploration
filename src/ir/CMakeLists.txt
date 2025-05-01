@@ -15,3 +15,9 @@ target_include_directories(arancini-ir-static PUBLIC ${INCLUDE_PATH})
 
 target_link_libraries(arancini-ir PUBLIC xed)
 target_link_libraries(arancini-ir-static PUBLIC xed)
+
+# We need to wait for XED to be build first In nix this is already ensured
+if(NOT DEFINED ENV{FLAKE_BUILD})
+  add_dependencies(arancini-ir external-xed)
+  add_dependencies(arancini-ir-static external-xed)
+endif() # NIX

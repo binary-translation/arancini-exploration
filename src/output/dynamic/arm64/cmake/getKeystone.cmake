@@ -3,7 +3,6 @@ project(Keystone)
 
 message("Downloading Keystone")
 
-
 include(FetchContent)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -12,18 +11,12 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 FetchContent_Declare(
   keystone
   GIT_REPOSITORY https://github.com/keystone-engine/keystone.git
-  GIT_TAG 0.9.2)
-
+  GIT_TAG 0.9.2
+  PATCH_COMMAND
+    patch -p1 --force -i
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/keystone.patch || true)
 
 FetchContent_MakeAvailable(keystone)
-
-message("keystone_SOURCE_DIR = ${keystone_SOURCE_DIR}")
-
-# Apply patch
-execute_process(
-  COMMAND patch -p1 --force -i ${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/keystone.patch || true
-  WORKING_DIRECTORY ${keystone_SOURCE_DIR}
-)
 
 set(BUILD_LIBS_ONLY
     ON
