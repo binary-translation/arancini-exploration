@@ -892,7 +892,7 @@ class InstructionBuilder {
             size_t allocation = 0;
             //				if (type.is_floating_point()) {
             //					allocation =
-            //avail_float_physregs._Find_first();
+            // avail_float_physregs._Find_first();
             //					avail_float_physregs.flip(allocation);
             //				} else {
             if (preference && avail_physregs.test(preference.encoding())) {
@@ -958,7 +958,7 @@ class InstructionBuilder {
                             //(type.is_floating_point()) {
                             //								avail_float_physregs.set(pri);
                             //							}
-                            //else {
+                            // else {
                             avail_physregs.set(pri);
                             vreg_to_preg.erase(
                                 alloc); // Clear allocations, so unrelated
@@ -996,7 +996,7 @@ class InstructionBuilder {
                                                  allocate_instruction, false);
                         }
                         //					auto type =
-                        //o.vreg().type();
+                        // o.vreg().type();
                         unsigned int vri = insn.rd.encoding();
 
                         auto alloc = vreg_to_preg.find(vri);
@@ -1009,7 +1009,7 @@ class InstructionBuilder {
                                 //(type.is_floating_point()) {
                                 //								avail_float_physregs.set(pri);
                                 //							}
-                                //else {
+                                // else {
                                 avail_physregs.set(pri);
                                 vreg_to_preg.erase(
                                     alloc); // Clear allocations, so unrelated
@@ -1069,7 +1069,7 @@ class InstructionBuilder {
                     }
 
                     //					auto type =
-                    //o.vreg().type();
+                    // o.vreg().type();
                     unsigned int vri = o->encoding();
                     if (!vreg_to_preg.count(vri)) {
                         allocate(o, insn.rd.is_physical() ? insn.rd : none_reg);
