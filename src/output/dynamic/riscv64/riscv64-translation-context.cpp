@@ -688,8 +688,8 @@ TypedRegister &riscv64_translation_context::materialise_binary_atomic(
             //			case 64:
             //				assembler_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node
             //*>(n.rhs().owner())->regidx()), out_reg);
-            //break; 			default:
-            //throw std::runtime_error("unsupported xadd width");
+            // break; 			default:
+            // throw std::runtime_error("unsupported xadd width");
             //			}
         }
     } break;
@@ -805,7 +805,7 @@ TypedRegister &riscv64_translation_context::materialise_binary_atomic(
         //		case 64:
         //			builder_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node
         //*>(n.rhs().owner())->regidx()), out_reg); 			break;
-        //default: 			throw std::runtime_error("unsupported
+        // default: 			throw std::runtime_error("unsupported
         // xchg width");
         //		}
         break;
