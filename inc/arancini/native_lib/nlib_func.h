@@ -6,9 +6,9 @@
 
 namespace arancini::native_lib {
 struct nlib_function {
-	std::string fname;
-	std::string libname;
+    std::string fname;
+    std::string libname;
 
-	arancini::ir::function_type sig;
+    arancini::ir::function_type sig;
 };
 } // namespace arancini::native_lib

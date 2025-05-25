@@ -5,90 +5,87 @@
 
 using namespace arancini::ir;
 
-void default_ir_builder::begin_chunk(const std::string &name)
-{
-	ir_builder::begin_chunk(name);
+void default_ir_builder::begin_chunk(const std::string &name) {
+    ir_builder::begin_chunk(name);
 
-	if (current_chunk_ != nullptr) {
-		throw std::runtime_error("chunk already in progress");
-	}
+    if (current_chunk_ != nullptr) {
+        throw std::runtime_error("chunk already in progress");
+    }
 
-	current_chunk_ = std::make_shared<chunk>(name);
+    current_chunk_ = std::make_shared<chunk>(name);
 }
 
-void default_ir_builder::end_chunk()
-{
-	ir_builder::end_chunk();
+void default_ir_builder::end_chunk() {
+    ir_builder::end_chunk();
 
-	if (current_pkt_ != nullptr) {
-		throw std::runtime_error("packet in progress");
-	}
+    if (current_pkt_ != nullptr) {
+        throw std::runtime_error("packet in progress");
+    }
 
-	if (current_chunk_ == nullptr) {
-		throw std::runtime_error("chunk not in progress");
-	}
+    if (current_chunk_ == nullptr) {
+        throw std::runtime_error("chunk not in progress");
+    }
 
-	if (chunk_complete_) {
-		throw std::runtime_error("chunk already completed");
-	}
+    if (chunk_complete_) {
+        throw std::runtime_error("chunk already completed");
+    }
 
-	chunk_complete_ = true;
+    chunk_complete_ = true;
 }
 
-void default_ir_builder::begin_packet(off_t address, const std::string &disassembly)
-{
-	if (current_chunk_ == nullptr) {
-		throw std::runtime_error("chunk not in progress");
-	}
+void default_ir_builder::begin_packet(off_t address,
+                                      const std::string &disassembly) {
+    if (current_chunk_ == nullptr) {
+        throw std::runtime_error("chunk not in progress");
+    }
 
-	if (chunk_complete_) {
-		throw std::runtime_error("chunk is completed");
-	}
+    if (chunk_complete_) {
+        throw std::runtime_error("chunk is completed");
+    }
 
-	if (current_pkt_) {
-		throw std::runtime_error("packet already in progress");
-	}
+    if (current_pkt_) {
+        throw std::runtime_error("packet already in progress");
+    }
 
-	current_pkt_ = std::make_shared<packet>(address, disassembly);
+    current_pkt_ = std::make_shared<packet>(address, disassembly);
 }
 
-packet_type default_ir_builder::end_packet()
-{
-	if (!current_pkt_) {
-		throw std::runtime_error("packet not in progress");
-	}
+packet_type default_ir_builder::end_packet() {
+    if (!current_pkt_) {
+        throw std::runtime_error("packet not in progress");
+    }
 
-	bool eob = current_pkt_->updates_pc() != br_type::none;
+    bool eob = current_pkt_->updates_pc() != br_type::none;
 
-	current_chunk_->add_packet(current_pkt_);
-	current_pkt_ = nullptr;
+    current_chunk_->add_packet(current_pkt_);
+    current_pkt_ = nullptr;
 
-	return eob ? packet_type::end_of_block : packet_type::normal;
+    return eob ? packet_type::end_of_block : packet_type::normal;
 }
 
-const local_var *default_ir_builder::alloc_local(const value_type &type)
-{
-	if (current_pkt_ == nullptr) {
-		throw std::runtime_error("cannot allocate local variable without packet");
-	}
+const local_var *default_ir_builder::alloc_local(const value_type &type) {
+    if (current_pkt_ == nullptr) {
+        throw std::runtime_error(
+            "cannot allocate local variable without packet");
+    }
 
-	return current_pkt_->alloc_local(type);
+    return current_pkt_->alloc_local(type);
 }
 
-void default_ir_builder::insert_action(std::shared_ptr<action_node> a)
-{
-	if (!current_pkt_) {
-		throw std::runtime_error("packet not in progress");
-	}
+void default_ir_builder::insert_action(std::shared_ptr<action_node> a) {
+    if (!current_pkt_) {
+        throw std::runtime_error("packet not in progress");
+    }
 
-	current_pkt_->append_action(a);
+    current_pkt_->append_action(a);
 }
 
-void default_ir_builder::process_node(node *n)
-{
+void default_ir_builder::process_node(node *n) {
 #ifndef NDEBUG
-	if (debug_ && current_pkt_) {
-		n->set_metadata("guest-address", std::make_shared<numeric_value_metadata>(current_pkt_->address()));
-	}
+    if (debug_ && current_pkt_) {
+        n->set_metadata(
+            "guest-address",
+            std::make_shared<numeric_value_metadata>(current_pkt_->address()));
+    }
 #endif
 }

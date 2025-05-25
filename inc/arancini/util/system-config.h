@@ -19,4 +19,3 @@ struct system_config {
 #undef ENABLE_VERBOSE_CODE_GEN
 
 } // namespace util
-

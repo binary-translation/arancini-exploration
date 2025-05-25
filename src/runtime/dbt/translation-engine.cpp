@@ -1,5 +1,4 @@
 #include <arancini/input/x86/x86-input-arch.h>
-#include <arancini/util/logger.h>
 #include <arancini/ir/chunk.h>
 #include <arancini/ir/default-ir-builder.h>
 #include <arancini/ir/dot-graph-generator.h>
@@ -11,6 +10,7 @@
 #include <arancini/runtime/dbt/translation-engine.h>
 #include <arancini/runtime/dbt/translation.h>
 #include <arancini/runtime/exec/execution-context.h>
+#include <arancini/util/logger.h>
 
 #include <cstdlib>
 #include <iostream>
@@ -22,150 +22,141 @@ using namespace arancini::runtime::exec;
 using namespace arancini::output::dynamic;
 using namespace arancini::ir;
 
-translation *translation_engine::get_translation(unsigned long pc)
-{
-	translation *t;
-	if (!cache_.lookup(pc, t)) {
-		t = translate(pc);
-		if (!t) {
-			throw std::runtime_error("translation failed");
-		}
+translation *translation_engine::get_translation(unsigned long pc) {
+    translation *t;
+    if (!cache_.lookup(pc, t)) {
+        t = translate(pc);
+        if (!t) {
+            throw std::runtime_error("translation failed");
+        }
 
-		cache_.insert(pc, t);
-	}
+        cache_.insert(pc, t);
+    }
 
-	return t;
+    return t;
 }
 
 class dbt_ir_builder : public ir_builder {
-public:
-	dbt_ir_builder(internal_function_resolver &ifr, std::shared_ptr<translation_context> tctx)
-		: ir_builder(ifr)
-		, tctx_(std::move(tctx))
-		, is_eob_(false)
-	{
-	}
+  public:
+    dbt_ir_builder(internal_function_resolver &ifr,
+                   std::shared_ptr<translation_context> tctx)
+        : ir_builder(ifr), tctx_(std::move(tctx)), is_eob_(false) {}
 
-	virtual void begin_chunk(const std::string &name) override {
-		ir_builder::begin_chunk(name);
-		tctx_->begin_block();
-	}
+    virtual void begin_chunk(const std::string &name) override {
+        ir_builder::begin_chunk(name);
+        tctx_->begin_block();
+    }
 
-	virtual void end_chunk() override {
-		ir_builder::end_chunk();
-		tctx_->end_block();
-	}
+    virtual void end_chunk() override {
+        ir_builder::end_chunk();
+        tctx_->end_block();
+    }
 
-	virtual void begin_packet(off_t address, const std::string &disassembly = "") override
-	{
-		is_eob_ = false;
-		tctx_->begin_instruction(address, disassembly);
-	}
+    virtual void begin_packet(off_t address,
+                              const std::string &disassembly = "") override {
+        is_eob_ = false;
+        tctx_->begin_instruction(address, disassembly);
+    }
 
-	virtual packet_type end_packet() override
-	{
-		tctx_->end_instruction();
-		return is_eob_ ? packet_type::end_of_block : packet_type::normal;
-	}
+    virtual packet_type end_packet() override {
+        tctx_->end_instruction();
+        return is_eob_ ? packet_type::end_of_block : packet_type::normal;
+    }
 
-	translation *create_translation()
-	{
-		auto &writer = tctx_->writer();
+    translation *create_translation() {
+        auto &writer = tctx_->writer();
 
-		writer.finalise();
-		auto *translation_p = new translation(writer.ptr(), writer.size());
-		writer.reset();
+        writer.finalise();
+        auto *translation_p = new translation(writer.ptr(), writer.size());
+        writer.reset();
 
-		return translation_p;
-	}
+        return translation_p;
+    }
 
-	virtual local_var *alloc_local(const value_type &type) override
-	{
-		auto lcl = new local_var(type);
-		locals_.push_back(lcl);
+    virtual local_var *alloc_local(const value_type &type) override {
+        auto lcl = new local_var(type);
+        locals_.push_back(lcl);
 
-		return lcl;
-	}
+        return lcl;
+    }
 
-protected:
-	virtual void insert_action(std::shared_ptr<action_node> a) override
-	{
-		if (a->updates_pc() != br_type::none) {
-			is_eob_ = true;
-		}
+  protected:
+    virtual void insert_action(std::shared_ptr<action_node> a) override {
+        if (a->updates_pc() != br_type::none) {
+            is_eob_ = true;
+        }
 
-		tctx_->lower(a);
-	}
+        tctx_->lower(a);
+    }
 
-private:
-	std::shared_ptr<translation_context> tctx_;
-	bool is_eob_;
-	std::vector<local_var *> locals_;
+  private:
+    std::shared_ptr<translation_context> tctx_;
+    bool is_eob_;
+    std::vector<local_var *> locals_;
 };
 
 class opt_dbt_ir_builder : public default_ir_builder {
-public:
-	opt_dbt_ir_builder(internal_function_resolver &ifr, std::shared_ptr<translation_context> tctx, deadflags_opt_visitor &deadflags, bool debug = false)
-		: default_ir_builder(ifr, debug)
-		, tctx_(std::move(tctx))
-		, deadflags_ { deadflags }
-	{
-	}
-	void end_chunk() override
-	{
-		default_ir_builder::end_chunk();
+  public:
+    opt_dbt_ir_builder(internal_function_resolver &ifr,
+                       std::shared_ptr<translation_context> tctx,
+                       deadflags_opt_visitor &deadflags, bool debug = false)
+        : default_ir_builder(ifr, debug), tctx_(std::move(tctx)),
+          deadflags_{deadflags} {}
+    void end_chunk() override {
+        default_ir_builder::end_chunk();
 
-		deadflags_.reset();
+        deadflags_.reset();
 
-		get_chunk()->accept(deadflags_);
+        get_chunk()->accept(deadflags_);
 
-		tctx_->begin_block();
+        tctx_->begin_block();
 
-		for (const auto &p : get_chunk()->packets()) {
+        for (const auto &p : get_chunk()->packets()) {
 
-			tctx_->begin_instruction(p->address(), p->disassembly());
+            tctx_->begin_instruction(p->address(), p->disassembly());
 
-			for (const auto& a : p->actions()) {
-				tctx_->lower(a);
-			}
+            for (const auto &a : p->actions()) {
+                tctx_->lower(a);
+            }
 
-			tctx_->end_instruction();
-		}
+            tctx_->end_instruction();
+        }
 
-		tctx_->end_block();
-	}
+        tctx_->end_block();
+    }
 
-	translation *create_translation()
-	{
-		auto &writer = tctx_->writer();
+    translation *create_translation() {
+        auto &writer = tctx_->writer();
 
-		writer.finalise();
-		auto *translation_p = new translation(writer.ptr(), writer.size());
-		writer.reset();
+        writer.finalise();
+        auto *translation_p = new translation(writer.ptr(), writer.size());
+        writer.reset();
 
-		return translation_p;
-	}
+        return translation_p;
+    }
 
-private:
-	std::shared_ptr<translation_context> tctx_;
-	deadflags_opt_visitor &deadflags_;
+  private:
+    std::shared_ptr<translation_context> tctx_;
+    deadflags_opt_visitor &deadflags_;
 };
 
-translation *translation_engine::translate(unsigned long pc)
-{
-	void *code = ec_.get_memory_ptr(pc);
+translation *translation_engine::translate(unsigned long pc) {
+    void *code = ec_.get_memory_ptr(pc);
 
     ::util::global_logger.debug("translating PC = {:#x}\n", pc);
 
-	if (deadflags_) {
-		opt_dbt_ir_builder builder(ia_.get_internal_function_resolver(), ctx_, *deadflags_);
-		ia_.translate_chunk(builder, pc, code, 0x1000, true, "");
-		return builder.create_translation();
-	}
+    if (deadflags_) {
+        opt_dbt_ir_builder builder(ia_.get_internal_function_resolver(), ctx_,
+                                   *deadflags_);
+        ia_.translate_chunk(builder, pc, code, 0x1000, true, "");
+        return builder.create_translation();
+    }
 
-	dbt_ir_builder builder(ia_.get_internal_function_resolver(), ctx_);
-	ia_.translate_chunk(builder, pc, code, 0x1000, true, "");
-	return builder.create_translation();
+    dbt_ir_builder builder(ia_.get_internal_function_resolver(), ctx_);
+    ia_.translate_chunk(builder, pc, code, 0x1000, true, "");
+    return builder.create_translation();
 }
 
-void translation_engine::chain(uint64_t chain_address, void *chain_target) { ctx_->chain(chain_address, chain_target); }
+void translation_engine::chain(uint64_t chain_address, void *chain_target) {
+    ctx_->chain(chain_address, chain_target);
+}

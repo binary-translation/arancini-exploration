@@ -1,20 +1,19 @@
 cmake_minimum_required(VERSION 3.22)
 project(arancini-test-kernels)
 
-add_compile_options ( -mavx2 -mavx -mavx512f )
+add_compile_options(-mavx2 -mavx -mavx512f)
 # Function to get files with a glob pattern and build objects
 function(glob_build PREFIX GLOB)
-    file(GLOB SOURCES "${GLOB}")
+  file(GLOB SOURCES "${GLOB}")
 
-    foreach (SRC ${SOURCES})
-        get_filename_component(TARGET ${SRC} NAME_WE)
-        add_library(${PREFIX}_${TARGET} OBJECT ${SRC})
-    endforeach ()
-endfunction ()
+  foreach(SRC ${SOURCES})
+    get_filename_component(TARGET ${SRC} NAME_WE)
+    add_library(${PREFIX}_${TARGET} OBJECT ${SRC})
+  endforeach()
+endfunction()
 
 # Call once for sources in each category
 glob_build(avx avx/*.c)
 glob_build(binop binop/*.c)
 glob_build(fp fp/*.c)
 glob_build(sse sse/*.c)
-

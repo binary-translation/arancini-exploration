@@ -1,3 +1,7 @@
+# CMake
+!CMakeLists.txt
+
+# Other
 **/*.o
 **/*.so
 **/*.a
@@ -28,3 +32,5 @@ result
 result-*
 phoenix-*
 parsec-*
+
+guest-sections.lds

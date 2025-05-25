@@ -5,16 +5,12 @@ project(arancini-core LANGUAGES C CXX)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Create the arancini-core library
-add_library(arancini-core
-            SHARED
-            elf/elf-reader.cpp
-            input/input-arch.cpp
-            util/tempfile-manager.cpp)
+add_library(arancini-core SHARED elf/elf-reader.cpp input/input-arch.cpp
+                                 util/tempfile-manager.cpp)
 
 set(INCLUDE_PATH ../../inc)
 target_include_directories(arancini-core PUBLIC ${INCLUDE_PATH})
 
-if (BISON_FOUND AND FLEX_FOUND)
-    target_link_libraries(arancini-core arancini-native_lib)
-endif ()
-
+if(BISON_FOUND AND FLEX_FOUND)
+  target_link_libraries(arancini-core arancini-native_lib)
+endif()

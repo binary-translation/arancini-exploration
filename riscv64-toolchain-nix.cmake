@@ -8,4 +8,3 @@ set(TOOLCHAIN_PREFIX riscv64-unknown-linux-gnu)
 
 # Set DBT architecture
 set(DBT_ARCH RISCV64)
-

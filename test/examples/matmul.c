@@ -10,23 +10,23 @@ int main(int argc, char *argv[]) {
     srand(0);
 
     unsigned dim = atoi(argv[1]);
-    double *A = malloc(dim*dim*sizeof(double));
-    double *B = malloc(dim*dim*sizeof(double));
-    double *C = calloc(dim*dim, sizeof(double));
+    double *A = malloc(dim * dim * sizeof(double));
+    double *B = malloc(dim * dim * sizeof(double));
+    double *C = calloc(dim * dim, sizeof(double));
 
     if (!A | !B)
         return -1;
 
-    for (unsigned i = 0; i < dim*dim; i++) {
+    for (unsigned i = 0; i < dim * dim; i++) {
 
-        A[i] = (rand()%10)/(rand()%10);
-        B[i] = (rand()%10)/(rand()%10);
+        A[i] = (rand() % 10) / (rand() % 10);
+        B[i] = (rand() % 10) / (rand() % 10);
     }
 
     for (unsigned i = 0; i < dim; i++) {
         for (unsigned k = 0; k < dim; k++) {
             for (unsigned j = 0; j < dim; j++) {
-                C[i*dim+j] += A[i*dim+k]*B[k*dim+j];
+                C[i * dim + j] += A[i * dim + k] * B[k * dim + j];
             }
         }
     }

@@ -13,26 +13,28 @@ class packet;
  * implied or represented by this data structure.
  */
 class chunk {
-public:
-	chunk(const std::string &name) : name_(name) {}
-	/**
-	 * @brief Adds an instruction packet to the end of this chunk.
-	 *
-	 * @param p The instruction packet to append to this chunk.
-	 */
-	void add_packet(std::shared_ptr<packet> p) { packets_.push_back(p); }
+  public:
+    chunk(const std::string &name) : name_(name) {}
+    /**
+     * @brief Adds an instruction packet to the end of this chunk.
+     *
+     * @param p The instruction packet to append to this chunk.
+     */
+    void add_packet(std::shared_ptr<packet> p) { packets_.push_back(p); }
 
-	const std::vector<std::shared_ptr<packet>> packets() const { return packets_; }
+    const std::vector<std::shared_ptr<packet>> packets() const {
+        return packets_;
+    }
 
-  off_t address(void) { return address_; }
+    off_t address(void) { return address_; }
 
-	void accept(visitor &v) { v.visit_chunk(*this); }
+    void accept(visitor &v) { v.visit_chunk(*this); }
 
-	const std::string &name() { return name_; };
+    const std::string &name() { return name_; };
 
-private:
-	off_t address_;
-	const std::string name_;
-	std::vector<std::shared_ptr<packet>> packets_;
+  private:
+    off_t address_;
+    const std::string name_;
+    std::vector<std::shared_ptr<packet>> packets_;
 };
 } // namespace arancini::ir

@@ -17,11 +17,11 @@ Given that Arancini relies on various system-specific headers, while the `txlat`
 tool directly invokes a compiler, it is expected that it will be built directly
 on the intended host architecture (e.g. Arancini for ARM64 must be built on ARM).
 
-A typical build proceeds as follows:
+A typical build proceeds as follows (currently nix is required):
 
 ```bash
-cmake -B build -S /path/to/arancini
-cmake --build build
+nix build --out-link result-aarch64
+nix develop --command zsh
 ```
 
 Arancini depends on the following libraries: Boost program options, XED, LLVM
@@ -43,7 +43,8 @@ containing the Arancini runtime and translated code.
 A typical invocation of txlat is presented below:
 
 ```bash
-txlat -I x86-program.o -O x86-program-translated.o
+./result-aarch64/bin/txlat --input test/hello-world/hello-static-musl --output hello-world-tranlsated
+./hello-world-tranlsated
 ```
 
 The produced binary is also compiled by the above invocation of `txlat` using

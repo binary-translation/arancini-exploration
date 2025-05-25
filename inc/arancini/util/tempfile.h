@@ -7,30 +7,29 @@
 
 namespace arancini::util {
 class basefile {
-public:
-	basefile(const std::string &name)
-		: name_(name) {}
-	const std::string &name() const { return name_; }
-	virtual std::ofstream open() = 0;
+  public:
+    basefile(const std::string &name) : name_(name) {}
+    const std::string &name() const { return name_; }
+    virtual std::ofstream open() = 0;
 
-protected:
-	std::string name_;
+  protected:
+    std::string name_;
 };
 
 class tempfile : public basefile {
-public:
-	tempfile(const std::string &name) : basefile(name) {};
-	~tempfile() { unlink(name_.c_str()); }
+  public:
+    tempfile(const std::string &name) : basefile(name) {};
+    ~tempfile() { unlink(name_.c_str()); }
 
-	std::ofstream open() override { return std::ofstream(name_); }
+    std::ofstream open() override { return std::ofstream(name_); }
 };
 
 class persfile : public basefile {
-public:
-	persfile(const std::string &name) : basefile(name) {};
+  public:
+    persfile(const std::string &name) : basefile(name) {};
 
-	std::ofstream open() override { return std::ofstream(name_);}
+    std::ofstream open() override { return std::ofstream(name_); }
 
-private:
+  private:
 };
 } // namespace arancini::util

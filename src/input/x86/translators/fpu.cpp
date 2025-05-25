@@ -1,21 +1,20 @@
 #include <arancini/input/x86/translators/translators.h>
+#include <arancini/ir/internal-function-resolver.h>
 #include <arancini/ir/ir-builder.h>
 #include <arancini/ir/node.h>
-#include <arancini/ir/internal-function-resolver.h>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
 
-void fpu_translator::do_translate()
-{
+void fpu_translator::do_translate() {
     auto inst_class = xed_decoded_inst_get_iclass(xed_inst());
 
     switch (inst_class) {
-	case XED_ICLASS_FNSTCW: {
-		auto fpu_ctrl = read_reg(value_type::u16(), reg_offsets::X87_CTRL);
-		write_operand(0, fpu_ctrl->val());
-		break;
-	}
+    case XED_ICLASS_FNSTCW: {
+        auto fpu_ctrl = read_reg(value_type::u16(), reg_offsets::X87_CTRL);
+        write_operand(0, fpu_ctrl->val());
+        break;
+    }
     case XED_ICLASS_FLDCW: {
         auto src = read_operand(0);
         write_reg(reg_offsets::X87_CTRL, src->val());
@@ -83,17 +82,21 @@ void fpu_translator::do_translate()
 
         // convert and write to memory
         if (target_width != 80) {
-            val = builder().insert_convert(value_type(value_type_class::floating_point, target_width), val->val());
+            val = builder().insert_convert(
+                value_type(value_type_class::floating_point, target_width),
+                val->val());
         }
         write_operand(0, val->val());
-        
+
         // TODO flag management
         break;
     }
     case XED_ICLASS_FIST:
     case XED_ICLASS_FISTP: {
         auto st0 = fpu_stack_get(0);
-        auto val = builder().insert_convert(value_type(value_type_class::signed_integer, get_operand_width(0)), st0->val());
+        auto val = builder().insert_convert(
+            value_type(value_type_class::signed_integer, get_operand_width(0)),
+            st0->val());
         write_operand(0, val->val());
 
         // TODO FPU flags
@@ -106,7 +109,7 @@ void fpu_translator::do_translate()
         auto src = read_operand(1);
 
         if (src->val().type().width() == 32)
-            src = builder().insert_bitcast(value_type::f32(),src->val());
+            src = builder().insert_bitcast(value_type::f32(), src->val());
         else if (src->val().type().width() == 64)
             src = builder().insert_bitcast(value_type::f64(), src->val());
 
@@ -126,9 +129,9 @@ void fpu_translator::do_translate()
         // xed encoding: fsub st(0) st(i)
         auto dst = read_operand(0);
         auto src = read_operand(1);
-        
+
         if (src->val().type().width() == 32)
-            src = builder().insert_bitcast(value_type::f32(),src->val());
+            src = builder().insert_bitcast(value_type::f32(), src->val());
         else if (src->val().type().width() == 64)
             src = builder().insert_bitcast(value_type::f64(), src->val());
 
@@ -149,7 +152,7 @@ void fpu_translator::do_translate()
         auto src = read_operand(1);
 
         if (src->val().type().width() == 32)
-            src = builder().insert_bitcast(value_type::f32(),src->val());
+            src = builder().insert_bitcast(value_type::f32(), src->val());
         else if (src->val().type().width() == 64)
             src = builder().insert_bitcast(value_type::f64(), src->val());
 
@@ -172,10 +175,16 @@ void fpu_translator::do_translate()
         auto conv = builder().insert_convert(st0->val().type(), op->val());
 
         value_node *res;
-        switch(inst_class) {
-            case XED_ICLASS_FISUB: res = builder().insert_sub(st0->val(), conv->val()); break;
-            case XED_ICLASS_FIADD: res = builder().insert_add(st0->val(), conv->val()); break;
-            default: res = nullptr; break;
+        switch (inst_class) {
+        case XED_ICLASS_FISUB:
+            res = builder().insert_sub(st0->val(), conv->val());
+            break;
+        case XED_ICLASS_FIADD:
+            res = builder().insert_add(st0->val(), conv->val());
+            break;
+        default:
+            res = nullptr;
+            break;
         }
 
         write_operand(0, res->val());
@@ -191,7 +200,8 @@ void fpu_translator::do_translate()
             toint = value_type::s32();
 
         auto conv = builder().insert_convert(toint, st0->val());
-        write_operand(0, builder().insert_convert(st0->val().type(), conv->val())->val());
+        write_operand(
+            0, builder().insert_convert(st0->val().type(), conv->val())->val());
         break;
     }
     case XED_ICLASS_FMUL:
@@ -201,7 +211,7 @@ void fpu_translator::do_translate()
         auto src = read_operand(1);
 
         if (src->val().type().width() == 32)
-            src = builder().insert_bitcast(value_type::f32(),src->val());
+            src = builder().insert_bitcast(value_type::f32(), src->val());
         else if (src->val().type().width() == 64)
             src = builder().insert_bitcast(value_type::f64(), src->val());
 
@@ -222,7 +232,7 @@ void fpu_translator::do_translate()
         auto src = read_operand(1);
 
         if (src->val().type().width() == 32)
-            src = builder().insert_bitcast(value_type::f32(),src->val());
+            src = builder().insert_bitcast(value_type::f32(), src->val());
         else if (src->val().type().width() == 64)
             src = builder().insert_bitcast(value_type::f64(), src->val());
 
@@ -243,7 +253,7 @@ void fpu_translator::do_translate()
         auto dst = read_operand(1);
 
         if (src->val().type().width() == 32)
-            src = builder().insert_bitcast(value_type::f32(),src->val());
+            src = builder().insert_bitcast(value_type::f32(), src->val());
         else if (src->val().type().width() == 64)
             src = builder().insert_bitcast(value_type::f64(), src->val());
 
@@ -270,7 +280,8 @@ void fpu_translator::do_translate()
         break;
     }
     case XED_ICLASS_FLDZ: {
-        auto zero = builder().insert_constant_f(value_type(value_type_class::floating_point, 80), +0.0);
+        auto zero = builder().insert_constant_f(
+            value_type(value_type_class::floating_point, 80), +0.0);
         fpu_stack_top_move(-1);
         fpu_stack_set(0, zero->val());
 
@@ -278,7 +289,8 @@ void fpu_translator::do_translate()
         break;
     }
     case XED_ICLASS_FLD1: {
-        auto one = builder().insert_constant_f(value_type(value_type_class::floating_point, 80), +1.0);
+        auto one = builder().insert_constant_f(
+            value_type(value_type_class::floating_point, 80), +1.0);
         fpu_stack_top_move(-1);
         fpu_stack_set(0, one->val());
 
@@ -295,7 +307,8 @@ void fpu_translator::do_translate()
     }
     case XED_ICLASS_FABS: {
         auto st0 = read_operand(0);
-        st0 = builder().insert_bit_insert(st0->val(), builder().insert_constant_u1(1)->val(), 79, 1);
+        st0 = builder().insert_bit_insert(
+            st0->val(), builder().insert_constant_u1(1)->val(), 79, 1);
         write_operand(0, st0->val());
 
         // TODO set C1 flag to 0
@@ -319,7 +332,8 @@ void fpu_translator::do_translate()
     case XED_ICLASS_FUCOMI:
     case XED_ICLASS_FUCOMIP: {
         // xed encoding: fucomi(p) st(0), st(i)
-        // TODO properly manage the unordered case (SNan, QNaN, etc), and diff with F* and FU*
+        // TODO properly manage the unordered case (SNan, QNaN, etc), and diff
+        // with F* and FU*
 
         // get stack top and operand
         auto st0 = read_operand(0);
@@ -329,39 +343,37 @@ void fpu_translator::do_translate()
         st0 = builder().insert_convert(value_type::f64(), st0->val());
         sti = builder().insert_convert(value_type::f64(), sti->val());
 
-        auto cmplt = builder().insert_binop(binary_arith_op::cmpolt, st0->val(), sti->val());
-        auto cmpeq = builder().insert_binop(binary_arith_op::cmpoeq, sti->val(), st0->val());
+        auto cmplt = builder().insert_binop(binary_arith_op::cmpolt, st0->val(),
+                                            sti->val());
+        auto cmpeq = builder().insert_binop(binary_arith_op::cmpoeq, sti->val(),
+                                            st0->val());
 
-        auto zf = builder().insert_csel(cmpeq->val(),
+        auto zf = builder().insert_csel(
+            cmpeq->val(),
             builder().insert_constant_i(value_type::u1(), 1)->val(),
-            builder().insert_constant_i(value_type::u1(), 0)->val()
-        );
-        auto cf = builder().insert_csel(cmplt->val(),
+            builder().insert_constant_i(value_type::u1(), 0)->val());
+        auto cf = builder().insert_csel(
+            cmplt->val(),
             builder().insert_constant_i(value_type::u1(), 1)->val(),
-            builder().insert_constant_i(value_type::u1(), 0)->val()
-        );
+            builder().insert_constant_i(value_type::u1(), 0)->val());
         auto pf = builder().insert_constant_i(value_type::u1(), 0);
 
-        builder().insert_write_reg(
-            util::to_underlying(reg_offsets::ZF),
-            util::to_underlying(reg_idx::ZF),
-            "ZF", zf->val()
-        );
-        builder().insert_write_reg(
-            util::to_underlying(reg_offsets::CF),
-            util::to_underlying(reg_idx::CF),
-            "CF", cf->val()
-        );
-        builder().insert_write_reg(
-            util::to_underlying(reg_offsets::PF),
-            util::to_underlying(reg_idx::PF),
-            "PF", pf->val()
-        );
+        builder().insert_write_reg(util::to_underlying(reg_offsets::ZF),
+                                   util::to_underlying(reg_idx::ZF), "ZF",
+                                   zf->val());
+        builder().insert_write_reg(util::to_underlying(reg_offsets::CF),
+                                   util::to_underlying(reg_idx::CF), "CF",
+                                   cf->val());
+        builder().insert_write_reg(util::to_underlying(reg_offsets::PF),
+                                   util::to_underlying(reg_idx::PF), "PF",
+                                   pf->val());
 
         break;
     }
     default:
-        throw std::runtime_error(std::string("unsupported fpu operation")+xed_iclass_enum_t2str(xed_decoded_inst_get_iclass(xed_inst())));
+        throw std::runtime_error(
+            std::string("unsupported fpu operation") +
+            xed_iclass_enum_t2str(xed_decoded_inst_get_iclass(xed_inst())));
     }
 
     switch (inst_class) {

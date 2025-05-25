@@ -5,22 +5,16 @@ project(arancini-output-riscv64)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(OUTPUT_RISCV64_SRCS
-        encoder/assert.cpp
-        encoder/riscv64-assembler.cpp
-        riscv64-translation-context.cpp
-        riscv64-dynamic-output-engine.cpp)
+    encoder/assert.cpp encoder/riscv64-assembler.cpp
+    riscv64-translation-context.cpp riscv64-dynamic-output-engine.cpp)
 
-add_library(arancini-output-riscv64
-            SHARED
-            ${OUTPUT_RISCV64_SRCS})
-add_library(arancini-output-riscv64-static
-            STATIC
-            ${OUTPUT_RISCV64_SRCS})
+add_library(arancini-output-riscv64 SHARED ${OUTPUT_RISCV64_SRCS})
+add_library(arancini-output-riscv64-static STATIC ${OUTPUT_RISCV64_SRCS})
 
 set(INCLUDE_PATH ../../../inc)
 target_include_directories(arancini-output-riscv64 PUBLIC ${INCLUDE_PATH})
-target_include_directories(arancini-output-riscv64-static PUBLIC ${INCLUDE_PATH})
-
+target_include_directories(arancini-output-riscv64-static
+                           PUBLIC ${INCLUDE_PATH})
 
 target_link_libraries(arancini-output-riscv64 PRIVATE arancini-ir)
 target_link_libraries(arancini-output-riscv64-static PRIVATE arancini-ir-static)
