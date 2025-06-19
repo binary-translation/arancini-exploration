@@ -1595,6 +1595,9 @@ Value *llvm_static_output_engine_impl::materialise_port(
         case 8:
             ty = types.i8;
             break;
+        case 16:
+            ty = types.i16;
+            break;
         case 80:
             ty = types.f80;
             break;
@@ -2165,6 +2168,9 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder,
         switch (wln->write_value().type().width()) {
         case 8:
             ty = types.i8;
+            break;
+        case 16:
+            ty = types.i16;
             break;
         case 80:
             ty = types.f80;

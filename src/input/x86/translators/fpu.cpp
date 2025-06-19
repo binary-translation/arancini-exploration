@@ -4,9 +4,16 @@
 #include <arancini/ir/ir-builder.h>
 #include <arancini/ir/node.h>
 #include <xed/xed-decoded-inst-api.h>
+#include <xed/xed-iclass-enum.h>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
+
+#define SET_C1_BIT(bool)                                                       \
+    auto status = read_reg(value_type::u16(), reg_offsets::X87_STS);           \
+    status = builder().insert_bit_insert(                                      \
+        status->val(), builder().insert_constant_u16(bool)->val(), 9, 1);      \
+    write_reg(reg_offsets::X87_STS, status->val());
 
 // Currently no exception (bit) creation or handeling is implemented
 // TODO: FPU: Implement exception handeling
@@ -161,6 +168,7 @@ void fpu_translator::do_translate() {
         // Convert to f64
         val = builder().insert_convert(value_type::f64(), val->val());
 
+        SET_C1_BIT(0);
         // push on the stack
         fpu_push(val->val());
 
@@ -172,19 +180,57 @@ void fpu_translator::do_translate() {
         // TODO: FPU: Exceptions, e.g.
         // floating-pointinvalid-operation(#IA)exception.
         // TODO: FPU: rounding behavior
-        
+
         auto st0 = fpu_stack_get(0);
         auto val = builder().insert_convert(
             value_type(value_type_class::signed_integer, get_operand_width(0)),
             st0->val());
         write_operand(0, val->val());
 
+        SET_C1_BIT(0);
         // POP in case of FISTP
         if (inst_class == XED_ICLASS_FISTP) {
             fpu_pop();
         }
         break;
     }
+    case XED_ICLASS_FXCH: {
+        // Get the stack index, this is the same code as in
+        // read_operand()
+        const xed_inst_t *insn = xed_decoded_inst_inst(xed_inst());
+
+        // auto operand_i = xed_inst_operand(insn, 0);
+        // auto opname_i = xed_operand_name(operand_i);
+        // auto reg_i = xed_decoded_inst_get_reg(xed_inst(), opname_i);
+        // int st_idx_i = reg_i - XED_REG_ST0;
+        int st_idx_i = 0;
+
+        auto operand_j = xed_inst_operand(insn, 1);
+        auto opname_j = xed_operand_name(operand_j);
+        auto reg_j = xed_decoded_inst_get_reg(xed_inst(), opname_j);
+        int st_idx_j = reg_j - XED_REG_ST0;
+
+        // Get stack, tag
+        auto st0 = fpu_stack_get(st_idx_i);
+        auto sti = fpu_stack_get(st_idx_j);
+        auto tag0 = fpu_tag_get(st_idx_i);
+        auto tagi = fpu_tag_get(st_idx_j);
+
+        auto st0_tmp = builder().alloc_local(st0->val().type());
+        auto tag0_tmp = builder().alloc_local(tag0->val().type());
+        builder().insert_write_local(st0_tmp, st0->val());
+        builder().insert_write_local(tag0_tmp, tag0->val());
+
+        // Set stack, tag
+        fpu_stack_set(st_idx_i, sti->val());
+        fpu_stack_set(st_idx_j, builder().insert_read_local(st0_tmp)->val());
+        fpu_tag_set(st_idx_i, tagi->val());
+        fpu_tag_set(st_idx_j, builder().insert_read_local(tag0_tmp)->val());
+
+        SET_C1_BIT(0);
+        break;
+    }
+
     // case XED_ICLASS_FILD: {
     //     // xed encoding: fild st0 memint
     //     auto val = read_operand(1);
