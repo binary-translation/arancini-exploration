@@ -11,7 +11,8 @@ using namespace arancini::input::x86::translators;
 // Currently no exception (bit) creation or handeling is implemented
 // TODO: FPU: Implement exception handeling
 
-// Chapter markers refer to the respective chapter in Intel® 64 and IA-32 Architectures Software Developer’s Manual
+// Chapter markers refer to the respective chapter in Intel® 64 and IA-32
+// Architectures Software Developer’s Manual
 void fpu_translator::do_translate() {
     auto inst_class = xed_decoded_inst_get_iclass(xed_inst());
 
@@ -151,22 +152,11 @@ void fpu_translator::do_translate() {
         // auto dst = read_operand(0); // dst always st(0)
         auto val = read_operand(1);
 
-        // Cast to correct type
-        switch (val->val().type().width()) {
-        case 16:
-            val = builder().insert_bitcast(value_type::u16(), val->val());
-            break;
-        case 32:
-            val = builder().insert_bitcast(value_type::u32(), val->val());
-            break;
-        case 64:
-            val = builder().insert_bitcast(value_type::u64(), val->val());
-            break;
-        default:
-            throw std::runtime_error(
-                std::string("unsupported X87 int value size (only 16, 32, and 64 "
-                            "bit are supported)"));
-        }
+        // Cast to signed int of correct size
+        val = builder().insert_bitcast(
+            value_type(value_type_class::signed_integer,
+                       val->val().type().width()),
+            val->val());
 
         // Convert to f64
         val = builder().insert_convert(value_type::f64(), val->val());
@@ -176,7 +166,25 @@ void fpu_translator::do_translate() {
 
         break;
     }
+    case XED_ICLASS_FIST:
+    case XED_ICLASS_FISTP: {
+        // TODO: FPU: flags
+        // TODO: FPU: Exceptions, e.g.
+        // floating-pointinvalid-operation(#IA)exception.
+        // TODO: FPU: rounding behavior
+        
+        auto st0 = fpu_stack_get(0);
+        auto val = builder().insert_convert(
+            value_type(value_type_class::signed_integer, get_operand_width(0)),
+            st0->val());
+        write_operand(0, val->val());
 
+        // POP in case of FISTP
+        if (inst_class == XED_ICLASS_FISTP) {
+            fpu_pop();
+        }
+        break;
+    }
     // case XED_ICLASS_FILD: {
     //     // xed encoding: fild st0 memint
     //     auto val = read_operand(1);
@@ -202,17 +210,6 @@ void fpu_translator::do_translate() {
     //     auto res = builder().insert_mul(src->val(), dst->val());
 
     //     fpu_stack_set(0, res->val());
-    //     // TODO FPU flags
-    //     break;
-    // }
-    // case XED_ICLASS_FIST:
-    // case XED_ICLASS_FISTP: {
-    //     auto st0 = fpu_stack_get(0);
-    //     auto val = builder().insert_convert(
-    //         value_type(value_type_class::signed_integer,
-    //         get_operand_width(0)), st0->val());
-    //     write_operand(0, val->val());
-
     //     // TODO FPU flags
     //     break;
     // }
