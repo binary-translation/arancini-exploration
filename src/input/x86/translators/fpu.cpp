@@ -11,10 +11,12 @@ using namespace arancini::input::x86::translators;
 // Currently no exception (bit) creation or handeling is implemented
 // TODO: FPU: Implement exception handeling
 
+// Chapter markers refer to the respective chapter in Intel® 64 and IA-32 Architectures Software Developer’s Manual
 void fpu_translator::do_translate() {
     auto inst_class = xed_decoded_inst_get_iclass(xed_inst());
 
     switch (inst_class) {
+    // 5.2.1 X87 FPU Data Transfer Instructions
     case XED_ICLASS_FLD: {
         // auto dst = read_operand(0); // dst always st(0)
         auto val = read_operand(1);
@@ -145,6 +147,35 @@ void fpu_translator::do_translate() {
         }
         break;
     }
+    case XED_ICLASS_FILD: {
+        // auto dst = read_operand(0); // dst always st(0)
+        auto val = read_operand(1);
+
+        // Cast to correct type
+        switch (val->val().type().width()) {
+        case 16:
+            val = builder().insert_bitcast(value_type::u16(), val->val());
+            break;
+        case 32:
+            val = builder().insert_bitcast(value_type::u32(), val->val());
+            break;
+        case 64:
+            val = builder().insert_bitcast(value_type::u64(), val->val());
+            break;
+        default:
+            throw std::runtime_error(
+                std::string("unsupported X87 int value size (only 16, 32, and 64 "
+                            "bit are supported)"));
+        }
+
+        // Convert to f64
+        val = builder().insert_convert(value_type::f64(), val->val());
+
+        // push on the stack
+        fpu_push(val->val());
+
+        break;
+    }
 
     // case XED_ICLASS_FILD: {
     //     // xed encoding: fild st0 memint
@@ -172,24 +203,6 @@ void fpu_translator::do_translate() {
 
     //     fpu_stack_set(0, res->val());
     //     // TODO FPU flags
-    //     break;
-    // }
-    // case XED_ICLASS_FST:
-    // case XED_ICLASS_FSTP: {
-    //     auto target_width = get_operand_width(0);
-
-    //     // get stack top
-    //     auto val = fpu_stack_get(0);
-
-    //     // convert and write to memory
-    //     if (target_width != 80) {
-    //         val = builder().insert_convert(
-    //             value_type(value_type_class::floating_point, target_width),
-    //             val->val());
-    //     }
-    //     write_operand(0, val->val());
-
-    //     // TODO flag management
     //     break;
     // }
     // case XED_ICLASS_FIST:
