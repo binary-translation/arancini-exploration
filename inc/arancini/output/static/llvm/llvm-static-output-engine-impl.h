@@ -79,6 +79,7 @@ class llvm_static_output_engine_impl {
         ::llvm::IntegerType *i16;
         ::llvm::IntegerType *i32;
         ::llvm::IntegerType *i64;
+        ::llvm::IntegerType *i80;
         ::llvm::IntegerType *i128;
         ::llvm::IntegerType *i256;
         ::llvm::IntegerType *i512;

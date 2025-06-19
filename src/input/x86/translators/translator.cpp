@@ -1,3 +1,4 @@
+#include "arancini/ir/value-type.h"
 #include <arancini/input/x86/translators/translators.h>
 #include <arancini/ir/ir-builder.h>
 #include <arancini/ir/node.h>
@@ -5,8 +6,6 @@
 #include <arancini/ir/port.h>
 #include <arancini/util/logger.h>
 
-#include <csignal>
-#include <iostream>
 
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
@@ -259,6 +258,7 @@ action_node *translator::write_operand(int opnum, port &value) {
             case XED_REG_ST5:
             case XED_REG_ST6:
             case XED_REG_ST7: {
+                // TODO: FPU: Check Flags
                 auto st_idx = reg - XED_REG_ST0;
                 return fpu_stack_set(st_idx, value);
             }
@@ -342,6 +342,7 @@ value_node *translator::read_operand(int opnum) {
             case XED_REG_ST5:
             case XED_REG_ST6:
             case XED_REG_ST7: {
+                // TODO: FPU: Check Flags
                 auto st_idx = reg - XED_REG_ST0;
                 return fpu_stack_get(st_idx);
             }
@@ -512,7 +513,7 @@ value_node *translator::compute_address(int mem_idx) {
                 xed_decoded_inst_get_length(xed_inst());
             address_base = builder_.insert_add(
                 address_base->val(),
-                builder().insert_constant_u64(instruction_length)->val());
+                builder_.insert_constant_u64(instruction_length)->val());
         } else {
             address_base =
                 read_reg(value_type::u64(), xedreg_to_offset(base_reg));
@@ -564,14 +565,9 @@ value_node *translator::compute_address(int mem_idx) {
     return address_base;
 }
 
-value_node *translator::compute_fpu_stack_addr(int stack_idx) {
-    auto cst_10 = builder_.insert_constant_u64(10);
-    auto x87_stack_base =
-        read_reg(value_type::u64(), reg_offsets::X87_STACK_BASE);
+value_node *translator::fpu_compute_stack_index(int stack_idx) {
     auto x87_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
-
-    // Get the TOP of the stack and multiply by 10 to get the proper offset (an
-    // FPU stack register is 10-bytes wide)
+    // Get the TOP of the stack
     auto top = builder_.insert_zx(
         value_type::u64(),
         builder_.insert_bit_extract(x87_status->val(), 11, 3)->val());
@@ -583,7 +579,19 @@ value_node *translator::compute_fpu_stack_addr(int stack_idx) {
         top = builder_.insert_mod(top->val(),
                                   builder_.insert_constant_u64(8)->val());
     }
-    top = builder_.insert_mul(top->val(), cst_10->val());
+
+    return top;
+}
+
+value_node *translator::fpu_compute_stack_addr(int stack_idx) {
+    auto x87_stack_base =
+        read_reg(value_type::u64(), reg_offsets::X87_STACK_BASE);
+
+    // Get the TOP of the stack and multiply by 8 to get the proper offset (an
+    // FPU stack register is 8-bytes wide, as we downgreade it to f64)
+    auto top = fpu_compute_stack_index(stack_idx);
+    top =
+        builder_.insert_mul(top->val(), builder_.insert_constant_u64(8)->val());
 
     // Add the TOP offset to the base address of the stack
     auto addr = builder_.insert_add(x87_stack_base->val(), top->val());
@@ -592,76 +600,140 @@ value_node *translator::compute_fpu_stack_addr(int stack_idx) {
 }
 
 value_node *translator::fpu_stack_get(int stack_idx) {
-    auto st0_addr = compute_fpu_stack_addr(stack_idx);
-    return builder().insert_read_mem(value_type::f80(), st0_addr->val());
+    auto st0_addr = fpu_compute_stack_addr(stack_idx);
+    auto st0 = builder_.insert_read_mem(value_type::f64(), st0_addr->val());
+    return builder().insert_bitcast(value_type::f64(), st0->val());
 }
 
 action_node *translator::fpu_stack_set(int stack_idx, port &val) {
-    // Update the tag register with a valid value
-    // TODO: Support for zero and special tags?
-    auto x87_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
-    auto top = builder_.insert_bit_extract(x87_status->val(), 11, 3);
-    auto x87_flag = read_reg(value_type::u16(), reg_offsets::X87_TAG);
-
-    auto valid_tag =
-        builder_.insert_constant_u16(0x3); // valid = 0b00 = 0x0 = ~0x3
-    // we shift 0x3 by 2 * top to match with the tag register, then NOT to get
-    // the proper mask to AND with tag register
-    valid_tag = builder_.insert_lsl(
-        valid_tag->val(),
-        builder_
-            .insert_lsl(
-                builder_.insert_zx(value_type::u16(), top->val())->val(),
-                builder_.insert_constant_u1(1)->val())
-            ->val());
-    valid_tag = builder_.insert_not(valid_tag->val());
-    x87_flag = builder_.insert_and(x87_flag->val(), valid_tag->val());
-    write_reg(reg_offsets::X87_TAG, x87_flag->val());
-
     // Write the value to ST(stack_idx)
-    auto st0_addr = compute_fpu_stack_addr(stack_idx);
-    return builder().insert_write_mem(st0_addr->val(), val);
+    auto st0_addr = fpu_compute_stack_addr(stack_idx);
+    return builder_.insert_write_mem(st0_addr->val(), val);
 }
 
-action_node *translator::fpu_stack_top_move(int val) {
-    auto x87_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
-    auto top = builder_.insert_bit_extract(x87_status->val(), 11, 3);
-    auto x87_flag = read_reg(value_type::u16(), reg_offsets::X87_TAG);
+value_node *translator::fpu_tag_get(int stack_idx) {
+    auto x87_tag = read_reg(value_type::u16(), reg_offsets::X87_TAG);
+    // Get the TOP of the stack
+    auto top = fpu_compute_stack_index(stack_idx);
 
-    value_node *new_top;
-    if (val == 1) { // pop
-        // mark the old tag as empty
-        auto empty_tag =
-            builder_.insert_constant_u16(0x3); // empty = 0b11 = 0x3
-        // we shift the empty tag by 2 * top to match with the tag register,
-        // then OR them
-        empty_tag = builder_.insert_lsl(
-            empty_tag->val(),
-            builder_
-                .insert_lsl(
-                    builder_.insert_zx(value_type::u16(), top->val())->val(),
-                    builder_.insert_constant_u1(1)->val())
-                ->val());
-        x87_flag = builder_.insert_or(x87_flag->val(), empty_tag->val());
-        write_reg(reg_offsets::X87_TAG, x87_flag->val());
+    // we shift our register by `2 * top` to have the requested index as the
+    // first two bits
+    auto res = builder_.insert_lsr(
+        x87_tag->val(),
+        builder_.insert_lsl(top->val(), builder_.insert_constant_u1(1)->val())
+            ->val());
 
-        // compute the new top index
-        new_top = builder_.insert_add(
-            top->val(),
-            builder_.insert_constant_i(top->val().type(), (unsigned int)val)
-                ->val());
-    } else if (val == -1) { // push
-        new_top = builder_.insert_sub(
-            top->val(),
-            builder_.insert_constant_i(top->val().type(), 1)->val());
-    } else {
+    // We AND to have the value remaining
+    return builder_.insert_and(res->val(),
+                               builder_.insert_constant_u16(0b11)->val());
+}
+
+action_node *translator::fpu_tag_set(int stack_idx, port &val) {
+    auto x87_tag = read_reg(value_type::u16(), reg_offsets::X87_TAG);
+    // Calculate shift amount (2 * top_of_stack)
+    auto top = fpu_compute_stack_index(stack_idx);
+    auto shift_amount =
+        builder_.insert_lsl(top->val(), builder_.insert_constant_u1(1)->val());
+
+    // Clear old tag (shift 0b11 into position, negate and apply)
+    auto clear_mask = builder_.insert_not(
+        builder_
+            .insert_lsl(builder_.insert_constant_u16(0b11)->val(),
+                        shift_amount->val())
+            ->val());
+    x87_tag = builder_.insert_and(x87_tag->val(), clear_mask->val());
+
+    // Set new tag (shift val into position and apply)
+    auto val_mask = builder_.insert_lsl(val, shift_amount->val());
+    x87_tag = builder_.insert_or(x87_tag->val(), val_mask->val());
+    return write_reg(reg_offsets::X87_TAG, x87_tag->val());
+}
+
+action_node *translator::fpu_stack_index_move(int val) {
+    if (val != 1 /* pop */ && val != -1 /* push */) {
         throw std::logic_error("Cannot move the FPU stack by " +
                                std::to_string(val) + ". Must be 1 or -1.");
     }
 
+    auto x87_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
+    auto top = builder_.insert_zx(
+        value_type::u8(),
+        builder_.insert_bit_extract(x87_status->val(), 11, 3)->val());
+
+    // compute the new top index (safely)
+    top =
+        builder_.insert_add(top->val(), builder_.insert_constant_u8(8)->val());
+    top = builder_.insert_add(
+        top->val(), builder_.insert_constant_i(top->val().type(), val)->val());
+    top =
+        builder_.insert_mod(top->val(), builder_.insert_constant_u8(8)->val());
+
+    // Write new status
     x87_status =
-        builder_.insert_bit_insert(x87_status->val(), new_top->val(), 11, 3);
+        builder_.insert_bit_insert(x87_status->val(), top->val(), 11, 3);
     return write_reg(reg_offsets::X87_STS, x87_status->val());
+}
+
+action_node *translator::fpu_push(port &val) {
+    auto orig_val = builder_.insert_bitcast(value_type::f64(), val);
+    // c1 is 1, iff overflow occured otherwise 0
+
+    // Check for overflow (if 0b11 is set as tag for the new word, none occurs)
+    auto old_tag_test = fpu_tag_get(7);
+    // Compare by checking old_tag_test == 0b11
+    auto overflow_check_val = builder_.insert_cmpeq(
+        old_tag_test->val(), builder_.insert_constant_u16(0b11)->val());
+
+    // No overflow block (default)
+    // calculate and set correct TAG value (we ignore specials, e.g. NaN,
+    // infinity)
+    // We convert both 0 and -0 to zero by ignoring the first bit
+    auto val_normalized = builder_.insert_and(
+        builder_.insert_bitcast(value_type::u64(), val)->val(),
+        builder_.insert_constant_u64(0x7FFFFFFFFFFFFFFF)->val());
+    // If the value is 0 set 0b01 else set 0b00
+    auto tag_val_default = builder_.insert_cmpeq(
+        val_normalized->val(), builder_.insert_constant_u64(0b00)->val());
+    tag_val_default =
+        builder_.insert_zx(value_type::u16(), tag_val_default->val());
+    auto c1_default = builder_.insert_constant_u16(0b0);
+
+    // Overflow block
+    // Set special tag
+    auto tag_val_overflow = builder_.insert_constant_u16(0b10);
+    // Set -nan with first bit of fraction set
+    auto val_u64 = builder_.insert_constant_u64(0xFFF8000000000000);
+    auto val_overflow =
+        builder_.insert_bitcast(value_type::f64(), val_u64->val());
+    auto c1_overflow = builder_.insert_constant_u16(0b1);
+
+    // Write values
+    auto tag_val =
+        builder_.insert_csel(overflow_check_val->val(), tag_val_default->val(),
+                             tag_val_overflow->val());
+    fpu_tag_set(7, tag_val->val());
+    auto stack_val = builder_.insert_csel(overflow_check_val->val(),
+                                          orig_val->val(), val_overflow->val());
+    fpu_stack_set(7, stack_val->val());
+
+    auto c1_val = builder_.insert_csel(overflow_check_val->val(),
+                                       c1_default->val(), c1_overflow->val());
+    auto status = read_reg(value_type::u16(), reg_offsets::X87_STS);
+    status = builder_.insert_bit_insert(status->val(), c1_val->val(), 9, 1);
+    write_reg(reg_offsets::X87_STS, status->val());
+
+    // We have to set this last, otherwise e.g. `FLD st(2)` would point to the
+    // wrong register when copying
+    return fpu_stack_index_move(-1);
+}
+
+action_node *translator::fpu_pop() {
+    // TODO: FPU: Check fpu flag behavior (for c1) in case of underflow
+
+    fpu_tag_set(0, builder_.insert_constant_u16(0b11)->val());
+    // A unused X87 isn't actually cleared register
+    // fpu_stack_set(0, builder_.insert_constant_u64(0x0)->val());
+    return fpu_stack_index_move(1);
 }
 
 action_node *translator::write_reg(reg_offsets reg, port &value) {

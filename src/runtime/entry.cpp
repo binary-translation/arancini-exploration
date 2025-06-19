@@ -304,7 +304,7 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
         ctx_, 1);
     // x86_state->GS = (unsigned long long)ctx_->get_memory_ptr(0);
     x86_state->X87_STACK_BASE =
-        (intptr_t)mmap(NULL, 80, PROT_READ | PROT_WRITE,
+        (intptr_t)mmap(NULL, 64, PROT_READ | PROT_WRITE,
                        MAP_ANONYMOUS | MAP_PRIVATE, -1, 0) -
         (intptr_t)ctx_->get_memory_ptr(0);
     x86_state->X87_TAG = std::uint16_t(0xFFFF);

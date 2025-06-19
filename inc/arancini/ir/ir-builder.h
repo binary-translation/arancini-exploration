@@ -115,6 +115,14 @@ class ir_builder {
         return create_and_insert<constant_node>(value_type::u64(),
                                                 (unsigned long)cv);
     }
+    
+    /// @brief Returns a node representing an 80-bit unsigned integer constant.
+    /// @param cv The value of the constant.
+    /// @return A constant node.
+    value_node *insert_constant_u80(unsigned long cv) {
+        return create_and_insert<constant_node>(value_type::u80(),
+                                                (unsigned long)cv);
+    }
 
     /// @brief Returns a node representing an 64-bit signed integer constant.
     /// @param cv The value of the constant.
@@ -196,7 +204,7 @@ class ir_builder {
 
     /// @brief write register
     /// @param regoff register offset (use reg_offsets enum values)
-    /// @param value value to write
+    /// @param value to write
     /// @return a write register node: regoff := value
     action_node *insert_write_reg(unsigned long regoff, unsigned long regidx,
                                   const char *regname, port &value) {
@@ -214,7 +222,7 @@ class ir_builder {
 
     /// @brief write memory location
     /// @param addr target address
-    /// @param value value to write
+    /// @param value to write
     /// @return a write memory node: [addr] := value
     action_node *insert_write_mem(port &addr, port &value) {
         return create_and_insert<write_mem_node>(addr, value);
@@ -394,7 +402,7 @@ class ir_builder {
     /// @brief zero extend a value to a larger width (does not preserve the
     /// sign)
     /// @param target_type new type
-    /// @param value value to extend
+    /// @param value to extend
     /// @return a zx node
     value_node *insert_zx(const value_type &target_type, port &value) {
         if (target_type.width() == value.type().width()) {
@@ -406,7 +414,7 @@ class ir_builder {
 
     /// @brief sign extend a value to a larger width (preserves the sign)
     /// @param target_type new type
-    /// @param value value to extend
+    /// @param value to extend
     /// @return an sx node
     value_node *insert_sx(const value_type &target_type, port &value) {
         if (target_type.width() == value.type().width()) {
@@ -418,7 +426,7 @@ class ir_builder {
 
     /// @brief truncate a value to a smaller width
     /// @param target_type new type
-    /// @param value value to truncate
+    /// @param value to truncate
     /// @return a trunc node
     value_node *insert_trunc(const value_type &target_type, port &value) {
         return create_and_insert<cast_node>(cast_op::trunc, target_type, value);

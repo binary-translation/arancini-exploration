@@ -99,8 +99,10 @@ void llvm_static_output_engine_impl::initialise_types() {
     types.i64 = Type::getInt64Ty(*llvm_context_);
     types.f32 = Type::getFloatTy(*llvm_context_);
     types.f64 = Type::getDoubleTy(*llvm_context_);
-    types.f80 = Type::getDoubleTy(*llvm_context_);
+    types.f80 = Type::getX86_FP80Ty(*llvm_context_);
+    types.f128 = Type::getFP128Ty(*llvm_context_);
     types.i128 = Type::getInt128Ty(*llvm_context_);
+    types.i80 = IntegerType::get(*llvm_context_, 80);
     types.i256 = IntegerType::get(*llvm_context_, 256);
     types.i512 = IntegerType::get(*llvm_context_, 512);
 
@@ -1025,6 +1027,10 @@ Value *llvm_static_output_engine_impl::materialise_port(
             case 64:
                 ty = types.i64;
                 break;
+            // x87 double extended-precision
+            case 80:
+                ty = types.i80;
+                break;
             case 128:
                 ty = types.i128;
                 break;
@@ -1146,6 +1152,14 @@ Value *llvm_static_output_engine_impl::materialise_port(
                     ty = types.f64;
                 else
                     ty = types.i64;
+                break;
+            }
+            // x87 double extended-precision
+            case 80: {
+                if (cn->target_type().is_floating_point())
+                    ty = types.f80;
+                else
+                    ty = types.i80;
                 break;
             }
             case 128:
@@ -1938,7 +1952,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder,
         //		if (out) {
         //			switch (ban->op()) {
         //			// case binary_atomic_op::xadd: out =
-        //builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, out, Align(64),
+        // builder.CreateAtomicRMW(AtomicRMWInst::Xchg, lhs, out, Align(64),
         // AtomicOrdering::SequentiallyConsistent);
         //			// break;
         //			default:
@@ -1952,7 +1966,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder,
         return out;
         //		}
         //		auto ret = builder.CreateLoad(rhs->getType(),
-        //builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256)),
+        // builder.CreateIntToPtr(lhs, PointerType::get(rhs->getType(), 256)),
         //"Atomic result");
         //		builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
         //		node_ports_to_llvm_values_[&ban->val()] = ret;
@@ -2200,14 +2214,20 @@ llvm_static_output_engine_impl::load_args(IRBuilder<> *builder,
         builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R8)),
         builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::R9)),
         //			  builder->CreateLoad(types.i512,
-        //reg_to_alloca_.at(reg_offsets::ZMM0)), builder->CreateLoad(types.i512,
-        //reg_to_alloca_.at(reg_offsets::ZMM1)), 			  builder->CreateLoad(types.i512,
-        //reg_to_alloca_.at(reg_offsets::ZMM2)), builder->CreateLoad(types.i512,
-        //reg_to_alloca_.at(reg_offsets::ZMM3)), 			  builder->CreateLoad(types.i512,
-        //reg_to_alloca_.at(reg_offsets::ZMM4)), builder->CreateLoad(types.i512,
-        //reg_to_alloca_.at(reg_offsets::ZMM5)), 			  builder->CreateLoad(types.i512,
-        //reg_to_alloca_.at(reg_offsets::ZMM6)), builder->CreateLoad(types.i512,
-        //reg_to_alloca_.at(reg_offsets::ZMM7))
+        // reg_to_alloca_.at(reg_offsets::ZMM0)),
+        // builder->CreateLoad(types.i512,
+        // reg_to_alloca_.at(reg_offsets::ZMM1)),
+        // builder->CreateLoad(types.i512,
+        // reg_to_alloca_.at(reg_offsets::ZMM2)),
+        // builder->CreateLoad(types.i512,
+        // reg_to_alloca_.at(reg_offsets::ZMM3)),
+        // builder->CreateLoad(types.i512,
+        // reg_to_alloca_.at(reg_offsets::ZMM4)),
+        // builder->CreateLoad(types.i512,
+        // reg_to_alloca_.at(reg_offsets::ZMM5)),
+        // builder->CreateLoad(types.i512,
+        // reg_to_alloca_.at(reg_offsets::ZMM6)),
+        // builder->CreateLoad(types.i512, reg_to_alloca_.at(reg_offsets::ZMM7))
     };
     return ret;
 };
@@ -2220,9 +2240,9 @@ void llvm_static_output_engine_impl::unwrap_ret(IRBuilder<> *builder,
     builder->CreateStore(builder->CreateExtractValue(value, {1}),
                          reg_to_alloca_.at(reg_offsets::RDX));
     //	builder->CreateStore(builder->CreateExtractValue(value, { 2 }),
-    //reg_to_alloca_.at(reg_offsets::ZMM0));
+    // reg_to_alloca_.at(reg_offsets::ZMM0));
     //	builder->CreateStore(builder->CreateExtractValue(value, { 3 }),
-    //reg_to_alloca_.at(reg_offsets::ZMM1));
+    // reg_to_alloca_.at(reg_offsets::ZMM1));
 };
 
 std::vector<Value *>
@@ -2234,9 +2254,9 @@ llvm_static_output_engine_impl::wrap_ret(IRBuilder<> *builder,
     ret.push_back(
         builder->CreateLoad(types.i64, reg_to_alloca_.at(reg_offsets::RDX)));
     //	ret.push_back(builder->CreateLoad(types.i512,
-    //reg_to_alloca_.at(reg_offsets::ZMM0)));
+    // reg_to_alloca_.at(reg_offsets::ZMM0)));
     //	ret.push_back(builder->CreateLoad(types.i512,
-    //reg_to_alloca_.at(reg_offsets::ZMM1)));
+    // reg_to_alloca_.at(reg_offsets::ZMM1)));
     return ret;
 }
 
@@ -2316,19 +2336,21 @@ void llvm_static_output_engine_impl::lower_chunk(IRBuilder<> *builder,
     builder->CreateStore(fn->getArg(6), reg_to_alloca_.at(reg_offsets::R9));
 
     //	builder->CreateStore(fn->getArg(7),
-    //reg_to_alloca_.at(reg_offsets::ZMM0)); 	builder->CreateStore(fn->getArg(8),
-    //reg_to_alloca_.at(reg_offsets::ZMM1)); 	builder->CreateStore(fn->getArg(9),
-    //reg_to_alloca_.at(reg_offsets::ZMM2));
+    // reg_to_alloca_.at(reg_offsets::ZMM0));
+    // builder->CreateStore(fn->getArg(8),
+    // reg_to_alloca_.at(reg_offsets::ZMM1));
+    // builder->CreateStore(fn->getArg(9),
+    // reg_to_alloca_.at(reg_offsets::ZMM2));
     //	builder->CreateStore(fn->getArg(10),
-    //reg_to_alloca_.at(reg_offsets::ZMM3));
+    // reg_to_alloca_.at(reg_offsets::ZMM3));
     //	builder->CreateStore(fn->getArg(11),
-    //reg_to_alloca_.at(reg_offsets::ZMM4));
+    // reg_to_alloca_.at(reg_offsets::ZMM4));
     //	builder->CreateStore(fn->getArg(12),
-    //reg_to_alloca_.at(reg_offsets::ZMM5));
+    // reg_to_alloca_.at(reg_offsets::ZMM5));
     //	builder->CreateStore(fn->getArg(13),
-    //reg_to_alloca_.at(reg_offsets::ZMM6));
+    // reg_to_alloca_.at(reg_offsets::ZMM6));
     //	builder->CreateStore(fn->getArg(14),
-    //reg_to_alloca_.at(reg_offsets::ZMM7));
+    // reg_to_alloca_.at(reg_offsets::ZMM7));
     auto pc_ptr = reg_to_alloca_.at(reg_offsets::PC);
 
     for (auto p : c->packets()) {
@@ -2540,13 +2562,14 @@ void llvm_static_output_engine_impl::save_callee_regs(IRBuilder<> &builder,
     auto args = {reg_offsets::RCX, reg_offsets::RDX, reg_offsets::RDI,
                  reg_offsets::RSI, reg_offsets::R8,  reg_offsets::R9};
     auto regs = {
-        reg_offsets::PC,       reg_offsets::RBX,     reg_offsets::RSP,
-        reg_offsets::RBP,      reg_offsets::R12,     reg_offsets::R13,
-        reg_offsets::R14,      reg_offsets::R15,     reg_offsets::FS,
-        reg_offsets::GS,       reg_offsets::X87_STS, reg_offsets::X87_TAG,
-        reg_offsets::X87_CTRL, reg_offsets::ZMM0,    reg_offsets::ZMM1,
-        reg_offsets::ZMM2,     reg_offsets::ZMM3,    reg_offsets::ZMM4,
-        reg_offsets::ZMM5,     reg_offsets::ZMM6,    reg_offsets::ZMM7};
+        reg_offsets::PC,       reg_offsets::RBX,        reg_offsets::RSP,
+        reg_offsets::RBP,      reg_offsets::R12,        reg_offsets::R13,
+        reg_offsets::R14,      reg_offsets::R15,        reg_offsets::FS,
+        reg_offsets::GS,       reg_offsets::X87_STS,    reg_offsets::X87_TAG,
+        reg_offsets::X87_CTRL, reg_offsets::X87_OPCODE, reg_offsets::ZMM0,
+        reg_offsets::ZMM1,     reg_offsets::ZMM2,       reg_offsets::ZMM3,
+        reg_offsets::ZMM4,     reg_offsets::ZMM5,       reg_offsets::ZMM6,
+        reg_offsets::ZMM7};
     for (auto reg : regs) {
         auto ptr = builder.CreateGEP(
             types.cpu_state, state_arg,
@@ -2601,6 +2624,7 @@ void llvm_static_output_engine_impl::restore_callee_regs(IRBuilder<> &builder,
                  reg_offsets::X87_STS,
                  reg_offsets::X87_TAG,
                  reg_offsets::X87_CTRL,
+                 reg_offsets::X87_OPCODE,
                  reg_offsets::ZMM0,
                  reg_offsets::ZMM1};
     for (auto reg : regs) {
