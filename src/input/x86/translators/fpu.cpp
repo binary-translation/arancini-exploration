@@ -92,13 +92,8 @@ void fpu_translator::do_translate() {
             // dump_xed_encoding();
             if (is_immediate_operand(0)) {
                 // FST ST(i) and FSTP ST(i)
-                // Get the stack index, this is the same code as in
-                // read_operand(0)
-                const xed_inst_t *insn = xed_decoded_inst_inst(xed_inst());
-                auto operand = xed_inst_operand(insn, 0);
-                auto opname = xed_operand_name(operand);
-                auto reg = xed_decoded_inst_get_reg(xed_inst(), opname);
-                int st_idx = reg - XED_REG_ST0;
+                // Get the stack index,
+                int st_idx = fpu_get_instruction_index(0);
                 // TODO: FPU: Missing underflow checks etc.
                 fpu_stack_set(st_idx, st0->val());
                 // Set Tag value
@@ -194,21 +189,11 @@ void fpu_translator::do_translate() {
         }
         break;
     }
+    // TODO: FPU: FBLD/FBSTP
     case XED_ICLASS_FXCH: {
-        // Get the stack index, this is the same code as in
-        // read_operand()
-        const xed_inst_t *insn = xed_decoded_inst_inst(xed_inst());
-
-        // auto operand_i = xed_inst_operand(insn, 0);
-        // auto opname_i = xed_operand_name(operand_i);
-        // auto reg_i = xed_decoded_inst_get_reg(xed_inst(), opname_i);
-        // int st_idx_i = reg_i - XED_REG_ST0;
+        // Get the stack index
         int st_idx_i = 0;
-
-        auto operand_j = xed_inst_operand(insn, 1);
-        auto opname_j = xed_operand_name(operand_j);
-        auto reg_j = xed_decoded_inst_get_reg(xed_inst(), opname_j);
-        int st_idx_j = reg_j - XED_REG_ST0;
+        int st_idx_j = fpu_get_instruction_index(1);
 
         // Get stack, tag
         auto st0 = fpu_stack_get(st_idx_i);
@@ -230,6 +215,7 @@ void fpu_translator::do_translate() {
         SET_C1_BIT(0);
         break;
     }
+    // FCMOVcc: See cmov.cpp
 
     // case XED_ICLASS_FILD: {
     //     // xed encoding: fild st0 memint

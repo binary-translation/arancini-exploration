@@ -565,6 +565,16 @@ value_node *translator::compute_address(int mem_idx) {
     return address_base;
 }
 
+int translator::fpu_get_instruction_index(int i) {
+    // Get the stack index, this is the same code as in
+    // read_operand()
+    const xed_inst_t *insn = xed_decoded_inst_inst(xed_inst());
+    auto operand = xed_inst_operand(insn, 1);
+    auto opname = xed_operand_name(operand);
+    auto reg = xed_decoded_inst_get_reg(xed_inst(), opname);
+    return reg - XED_REG_ST0;
+}
+
 value_node *translator::fpu_compute_stack_index(int stack_idx) {
     auto x87_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
     // Get the TOP of the stack
