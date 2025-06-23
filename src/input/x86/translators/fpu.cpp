@@ -417,6 +417,26 @@ void fpu_translator::do_translate() {
         SET_C1_BIT(0);
         break;
     }
+    case XED_ICLASS_FCHS: {
+        // xed encoding: fchs st(0)
+        auto mask = builder().insert_constant_u64(0x7FFFFFFFFFFFFFFF);
+        auto mask_inv = builder().insert_constant_u64(0x8000000000000000);
+
+        auto st0 = read_operand(0);
+
+        // Value without sign
+        auto res = builder().insert_and(st0->val(), mask->val());
+        // Negated sign
+        auto neg_sign = builder().insert_and(
+            builder().insert_not(st0->val())->val(), mask_inv->val());
+        // Add negated sign back to value
+        res = builder().insert_or(res->val(), neg_sign->val());
+
+        write_operand(0, res->val());
+
+        SET_C1_BIT(0);
+        break;
+    }
     // case XED_ICLASS_FRNDINT: {
     //     auto st0 = read_operand(0);
     //     auto width = st0->val().type().width();
@@ -446,14 +466,6 @@ void fpu_translator::do_translate() {
     //     fpu_stack_set(0, one->val());
 
     //     // TODO FPU flags
-    //     break;
-    // }
-    // case XED_ICLASS_FCHS: {
-    //     // xed encoding: fchs st(0)
-    //     auto st0 = read_operand(0);
-    //     write_operand(0, builder().insert_not(st0->val())->val());
-
-    //     // TODO flag management
     //     break;
     // }
     // case XED_ICLASS_FXCH: {
