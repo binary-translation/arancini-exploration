@@ -487,6 +487,15 @@ void fpu_translator::do_translate() {
         fpu_stack_set(0, res->val());
         break;
     }
+    case XED_ICLASS_FSQRT: {
+        // TODO: FPU: Set correct tag in case of special values
+        // TODO: FPU: Set correct C1
+
+        auto st0 = fpu_stack_get(0);
+        st0 = builder().insert_sqrt(st0->val());
+        fpu_stack_set(0, st0->val());
+        break;
+    }
     // case XED_ICLASS_FLDZ: {
     //     auto zero = builder().insert_constant_f(
     //         value_type(value_type_class::floating_point, 80), +0.0);
