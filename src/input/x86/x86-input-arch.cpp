@@ -329,8 +329,8 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder,
     case XED_ICLASS_FDIVR:
     case XED_ICLASS_FDIVRP:
     case XED_ICLASS_FIDIVR:
-        // case XED_ICLASS_FPREM:
-        // case XED_ICLASS_FPREM1:
+    case XED_ICLASS_FPREM:
+    case XED_ICLASS_FPREM1:
         // case XED_ICLASS_FABS:
         // case XED_ICLASS_FCHS:
         // case XED_ICLASS_FRNDINT:

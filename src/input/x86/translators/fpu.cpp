@@ -347,7 +347,7 @@ void fpu_translator::do_translate() {
         // Write result
         auto idx = fpu_get_instruction_index(0);
         fpu_stack_set(idx, val_0->val());
-        
+
         // TODO: FPU: Write correct TAG, catch 0, NaN, denormalised, Infinity
         fpu_tag_set(idx, builder().insert_constant_u16(0b00)->val());
 
@@ -364,6 +364,48 @@ void fpu_translator::do_translate() {
         default:
             break;
         }
+
+        // TODO: FPU: Set correct C1 bit
+        SET_C1_BIT(0);
+        break;
+    }
+    case XED_ICLASS_FPREM: {
+        // xed encoding: fprem st(0) st(1)
+        auto st0 = read_operand(0);
+        auto st1 = read_operand(1);
+
+        auto res = builder().insert_mod(st0->val(), st1->val());
+
+        write_operand(0, res->val());
+
+        // TODO: FPU: flags
+        // TODO: FPU: Correct tag
+        break;
+    }
+    case XED_ICLASS_FPREM1: {
+        // xed encoding: fprem st(0) st(1)
+        auto st0 = read_operand(0);
+        auto st1 = read_operand(1);
+
+        // res_1 and res_2 are two remainders that are the closest
+        // to 0 (above and below 0)
+        auto res_1 = builder().insert_mod(st0->val(), st1->val());
+        auto res_2 = builder().insert_sub(res_1->val(), st1->val());
+
+        // Calculate absolute values
+        auto mask = builder().insert_constant_u64(0x7FFFFFFFFFFFFFFF);
+        auto abs_res_1 = builder().insert_and(res_1->val(), mask->val());
+        auto abs_res_2 = builder().insert_and(res_2->val(), mask->val());
+
+        // Pick the closer value to 0 (the smaller value)
+        auto res = builder().insert_csel(
+            builder().insert_cmpgt(abs_res_1->val(), abs_res_2->val())->val(),
+            res_2->val(), res_1->val());
+
+        write_operand(0, res->val());
+
+        // TODO: FPU: flags
+        // TODO: FPU: Correct tag
         break;
     }
     // case XED_ICLASS_FRNDINT: {
@@ -377,18 +419,6 @@ void fpu_translator::do_translate() {
     //     write_operand(
     //         0, builder().insert_convert(st0->val().type(),
     //         conv->val())->val());
-    //     break;
-    // }
-    // case XED_ICLASS_FPREM: {
-    //     // xed encoding: fprem st(0) st(1)
-    //     auto st0 = read_operand(0);
-    //     auto st1 = read_operand(1);
-
-    //     auto res = builder().insert_mod(st0->val(), st1->val());
-
-    //     write_operand(0, res->val());
-
-    //     // TODO FPU flags
     //     break;
     // }
     // case XED_ICLASS_FLDZ: {
