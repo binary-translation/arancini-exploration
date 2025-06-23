@@ -309,26 +309,26 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder,
     // TODO: FPU: case XED_ICLASS_FBLD:
     // TODO: FPU: case XED_ICLASS_FBSTP:
     case XED_ICLASS_FXCH:
-        // FCMOVcc: cmov_translator
-        // // 5.2.2 X87 FPU Basic Arithmetic Instructions
-        // case XED_ICLASS_FADD:
-        // case XED_ICLASS_FADDP:
-        // case XED_ICLASS_FIADD:
-        // case XED_ICLASS_FSUB:
-        // case XED_ICLASS_FSUBP:
-        // case XED_ICLASS_FISUB:
-        // case XED_ICLASS_FSUBR:
-        // case XED_ICLASS_FSUBRP:
-        // case XED_ICLASS_FISUBR:
-        // case XED_ICLASS_FMUL:
-        // case XED_ICLASS_FMULP:
-        // case XED_ICLASS_FIMUL:
-        // case XED_ICLASS_FDIV:
-        // case XED_ICLASS_FDIVP:
-        // case XED_ICLASS_FIDIV:
-        // case XED_ICLASS_FDIVR:
-        // case XED_ICLASS_FDIVRP:
-        // case XED_ICLASS_FIDIVR:
+    // FCMOVcc: cmov_translator
+    // 5.2.2 X87 FPU Basic Arithmetic Instructions
+    case XED_ICLASS_FADD:
+    case XED_ICLASS_FADDP:
+    case XED_ICLASS_FIADD:
+    case XED_ICLASS_FSUB:
+    case XED_ICLASS_FSUBP:
+    case XED_ICLASS_FISUB:
+    case XED_ICLASS_FSUBR:
+    case XED_ICLASS_FSUBRP:
+    case XED_ICLASS_FISUBR:
+    case XED_ICLASS_FMUL:
+    case XED_ICLASS_FMULP:
+    case XED_ICLASS_FIMUL:
+    case XED_ICLASS_FDIV:
+    case XED_ICLASS_FDIVP:
+    case XED_ICLASS_FIDIV:
+    case XED_ICLASS_FDIVR:
+    case XED_ICLASS_FDIVRP:
+    case XED_ICLASS_FIDIVR:
         // case XED_ICLASS_FPREM:
         // case XED_ICLASS_FPREM1:
         // case XED_ICLASS_FABS:

@@ -569,7 +569,7 @@ int translator::fpu_get_instruction_index(int i) {
     // Get the stack index, this is the same code as in
     // read_operand()
     const xed_inst_t *insn = xed_decoded_inst_inst(xed_inst());
-    auto operand = xed_inst_operand(insn, 1);
+    auto operand = xed_inst_operand(insn, i);
     auto opname = xed_operand_name(operand);
     auto reg = xed_decoded_inst_get_reg(xed_inst(), opname);
     return reg - XED_REG_ST0;

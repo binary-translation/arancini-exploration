@@ -216,125 +216,156 @@ void fpu_translator::do_translate() {
         break;
     }
     // FCMOVcc: See cmov.cpp
+    case XED_ICLASS_FADD:
+    case XED_ICLASS_FADDP:
+    case XED_ICLASS_FIADD:
+    case XED_ICLASS_FSUB:
+    case XED_ICLASS_FSUBP:
+    case XED_ICLASS_FISUB:
+    case XED_ICLASS_FSUBR:
+    case XED_ICLASS_FSUBRP:
+    case XED_ICLASS_FISUBR:
+    case XED_ICLASS_FMUL:
+    case XED_ICLASS_FMULP:
+    case XED_ICLASS_FIMUL:
+    case XED_ICLASS_FDIV:
+    case XED_ICLASS_FDIVP:
+    case XED_ICLASS_FIDIV:
+    case XED_ICLASS_FDIVR:
+    case XED_ICLASS_FDIVRP:
+    case XED_ICLASS_FIDIVR: {
+        dump_xed_encoding();
 
-    // case XED_ICLASS_FILD: {
-    //     // xed encoding: fild st0 memint
-    //     auto val = read_operand(1);
+        // TODO: FPU: Flags: Check for underflow
+        // TODO: FPU: Flags: Round up/down
+        // TODO: FPU: Correct rounding behavior
+        // TODO: FPU: Check for special value combination
+        // (div with +-zero, +-infty, +-NaN etc.)
 
-    //     if (val->val().type().width() != 80) {
-    //         val = builder().insert_convert(value_type::f80(), val->val());
-    //     }
+        // Load values and convert them to 64bit floats (if needed)
+        // Val 0 is target
+        auto val_0 = read_operand(0);
+        // Val 1 is second source (may be mem)
+        auto val_1 = read_operand(1);
+        switch (inst_class) {
+        // Convert from 32bit/64bit floats
+        case XED_ICLASS_FADD:
+        case XED_ICLASS_FADDP:
+        case XED_ICLASS_FSUB:
+        case XED_ICLASS_FSUBP:
+        case XED_ICLASS_FSUBR:
+        case XED_ICLASS_FSUBRP:
+        case XED_ICLASS_FMUL:
+        case XED_ICLASS_FMULP:
+        case XED_ICLASS_FDIV:
+        case XED_ICLASS_FDIVP:
+        case XED_ICLASS_FDIVR:
+        case XED_ICLASS_FDIVRP: {
+            switch (val_1->val().type().width()) {
+            case 32:
+                val_1 =
+                    builder().insert_bitcast(value_type::f32(), val_1->val());
+                val_1 =
+                    builder().insert_convert(value_type::f64(), val_1->val());
+                break;
+            case 64:
+                val_1 =
+                    builder().insert_bitcast(value_type::f64(), val_1->val());
+                break;
+            default:
+                throw std::runtime_error(
+                    std::string("unsupported X87 FADD/FSUB... float width"));
+            }
+            break;
+        }
+        // Convert from 16bit/32bit ints
+        case XED_ICLASS_FIADD:
+        case XED_ICLASS_FISUB:
+        case XED_ICLASS_FISUBR:
+        case XED_ICLASS_FIMUL:
+        case XED_ICLASS_FIDIV:
+        case XED_ICLASS_FIDIVR: {
+            switch (val_1->val().type().width()) {
+            case 16:
+                val_1 =
+                    builder().insert_bitcast(value_type::s16(), val_1->val());
+                break;
+            case 32:
+                val_1 =
+                    builder().insert_bitcast(value_type::s32(), val_1->val());
+                break;
+            default:
+                printf("Int width: %i\n", (int)val_1->val().type().width());
+                throw std::runtime_error(
+                    std::string("unsupported X87 FIADD/FISUB... int width"));
+            }
+            val_1 = builder().insert_convert(value_type::f64(), val_1->val());
+            break;
+        }
+        default:
+            throw std::runtime_error(
+                std::string("unsupported X87 FADD/FSUB... instruction1"));
+        }
 
-    //     fpu_stack_top_move(-1);
-    //     fpu_stack_set(0, val->val());
+        // Do caluclation
+        switch (inst_class) {
+        case XED_ICLASS_FADD:
+        case XED_ICLASS_FADDP:
+        case XED_ICLASS_FIADD:
+            val_0 = builder().insert_add(val_0->val(), val_1->val());
+            break;
+        case XED_ICLASS_FSUB:
+        case XED_ICLASS_FSUBP:
+        case XED_ICLASS_FISUB:
+            val_0 = builder().insert_sub(val_0->val(), val_1->val());
+            break;
+        case XED_ICLASS_FSUBR:
+        case XED_ICLASS_FSUBRP:
+        case XED_ICLASS_FISUBR:
+            val_0 = builder().insert_sub(val_1->val(), val_0->val());
+            break;
+        case XED_ICLASS_FMUL:
+        case XED_ICLASS_FMULP:
+        case XED_ICLASS_FIMUL:
+            val_0 = builder().insert_mul(val_0->val(), val_1->val());
+            break;
+        case XED_ICLASS_FDIV:
+        case XED_ICLASS_FDIVP:
+        case XED_ICLASS_FIDIV:
+            val_0 = builder().insert_div(val_0->val(), val_1->val());
+            break;
+        case XED_ICLASS_FDIVR:
+        case XED_ICLASS_FDIVRP:
+        case XED_ICLASS_FIDIVR:
+            val_0 = builder().insert_div(val_1->val(), val_0->val());
+            break;
+        default:
+            throw std::runtime_error(
+                std::string("unsupported X87 FADD/FSUB... instruction2"));
+        }
 
-    //     // TODO FPU flags
-    //     break;
-    // }
-    // case XED_ICLASS_FIMUL: {
-    //     auto dst = fpu_stack_get(0);
-    //     auto src = read_operand(1);
+        // Write result
+        auto idx = fpu_get_instruction_index(0);
+        fpu_stack_set(idx, val_0->val());
+        
+        // TODO: FPU: Write correct TAG, catch 0, NaN, denormalised, Infinity
+        fpu_tag_set(idx, builder().insert_constant_u16(0b00)->val());
 
-    //     if (src->val().type().width() != 80) {
-    //         src = builder().insert_convert(dst->val().type(), src->val());
-    //     }
-
-    //     auto res = builder().insert_mul(src->val(), dst->val());
-
-    //     fpu_stack_set(0, res->val());
-    //     // TODO FPU flags
-    //     break;
-    // }
-    // case XED_ICLASS_FADD:
-    // case XED_ICLASS_FADDP: {
-    //     // xed encoding: fadd st(0) st(i)
-    //     auto dst = read_operand(0);
-    //     auto src = read_operand(1);
-
-    //     if (src->val().type().width() == 32)
-    //         src = builder().insert_bitcast(value_type::f32(), src->val());
-    //     else if (src->val().type().width() == 64)
-    //         src = builder().insert_bitcast(value_type::f64(), src->val());
-
-    //     if (src->val().type().width() != 80) {
-    //         src = builder().insert_convert(dst->val().type(), src->val());
-    //     }
-
-    //     auto res = builder().insert_add(dst->val(), src->val());
-
-    //     write_operand(0, res->val());
-
-    //     // TODO FPU flags
-    //     break;
-    // }
-    // case XED_ICLASS_FSUB:
-    // case XED_ICLASS_FSUBP: {
-    //     // xed encoding: fsub st(0) st(i)
-    //     auto dst = read_operand(0);
-    //     auto src = read_operand(1);
-
-    //     if (src->val().type().width() == 32)
-    //         src = builder().insert_bitcast(value_type::f32(), src->val());
-    //     else if (src->val().type().width() == 64)
-    //         src = builder().insert_bitcast(value_type::f64(), src->val());
-
-    //     if (src->val().type().width() != 80) {
-    //         src = builder().insert_convert(dst->val().type(), src->val());
-    //     }
-
-    //     auto res = builder().insert_sub(dst->val(), src->val());
-
-    //     write_operand(0, res->val());
-
-    //     // TODO FPU flags
-    //     break;
-    // }
-    // case XED_ICLASS_FSUBR:
-    // case XED_ICLASS_FSUBRP: {
-    //     auto dst = read_operand(0);
-    //     auto src = read_operand(1);
-
-    //     if (src->val().type().width() == 32)
-    //         src = builder().insert_bitcast(value_type::f32(), src->val());
-    //     else if (src->val().type().width() == 64)
-    //         src = builder().insert_bitcast(value_type::f64(), src->val());
-
-    //     if (src->val().type().width() != 80) {
-    //         src = builder().insert_convert(dst->val().type(), src->val());
-    //     }
-
-    //     auto res = builder().insert_sub(src->val(), dst->val());
-
-    //     write_operand(0, res->val());
-
-    //     // TODO FPU flags
-    //     break;
-    // }
-    // case XED_ICLASS_FIADD:
-    // case XED_ICLASS_FISUB: {
-    //     // xed encoding: fisub st(0) memint
-    //     auto st0 = read_operand(0);
-    //     auto op = read_operand(1);
-    //     auto conv = builder().insert_convert(st0->val().type(), op->val());
-
-    //     value_node *res;
-    //     switch (inst_class) {
-    //     case XED_ICLASS_FISUB:
-    //         res = builder().insert_sub(st0->val(), conv->val());
-    //         break;
-    //     case XED_ICLASS_FIADD:
-    //         res = builder().insert_add(st0->val(), conv->val());
-    //         break;
-    //     default:
-    //         res = nullptr;
-    //         break;
-    //     }
-
-    //     write_operand(0, res->val());
-
-    //     // TODO FPU flags
-    //     break;
-    // }
+        // POP if needed
+        switch (inst_class) {
+        case XED_ICLASS_FADDP:
+        case XED_ICLASS_FSUBP:
+        case XED_ICLASS_FSUBRP:
+        case XED_ICLASS_FMULP:
+        case XED_ICLASS_FDIVP:
+        case XED_ICLASS_FDIVRP:
+            fpu_pop();
+            break;
+        default:
+            break;
+        }
+        break;
+    }
     // case XED_ICLASS_FRNDINT: {
     //     auto st0 = read_operand(0);
     //     auto width = st0->val().type().width();
@@ -346,69 +377,6 @@ void fpu_translator::do_translate() {
     //     write_operand(
     //         0, builder().insert_convert(st0->val().type(),
     //         conv->val())->val());
-    //     break;
-    // }
-    // case XED_ICLASS_FMUL:
-    // case XED_ICLASS_FMULP: {
-    //     // xed encoding: fmul st(i) st(j)
-    //     auto dst = read_operand(0);
-    //     auto src = read_operand(1);
-
-    //     if (src->val().type().width() == 32)
-    //         src = builder().insert_bitcast(value_type::f32(), src->val());
-    //     else if (src->val().type().width() == 64)
-    //         src = builder().insert_bitcast(value_type::f64(), src->val());
-
-    //     if (src->val().type().width() != 80) {
-    //         src = builder().insert_convert(dst->val().type(), src->val());
-    //     }
-
-    //     auto res = builder().insert_mul(dst->val(), src->val());
-    //     write_operand(0, res->val());
-
-    //     // TODO FPU flags
-    //     break;
-    // }
-    // case XED_ICLASS_FDIV:
-    // case XED_ICLASS_FDIVP: {
-    //     // xed encoding: fdiv st(i) st(j)
-    //     auto dst = read_operand(0);
-    //     auto src = read_operand(1);
-
-    //     if (src->val().type().width() == 32)
-    //         src = builder().insert_bitcast(value_type::f32(), src->val());
-    //     else if (src->val().type().width() == 64)
-    //         src = builder().insert_bitcast(value_type::f64(), src->val());
-
-    //     if (src->val().type().width() != 80) {
-    //         src = builder().insert_convert(dst->val().type(), src->val());
-    //     }
-
-    //     auto res = builder().insert_div(dst->val(), src->val());
-    //     write_operand(0, res->val());
-
-    //     // TODO FPU flags
-    //     break;
-    // }
-    // case XED_ICLASS_FDIVR:
-    // case XED_ICLASS_FDIVRP: {
-    //     // xed encoding: fdiv st(i) st(j)
-    //     auto src = read_operand(0);
-    //     auto dst = read_operand(1);
-
-    //     if (src->val().type().width() == 32)
-    //         src = builder().insert_bitcast(value_type::f32(), src->val());
-    //     else if (src->val().type().width() == 64)
-    //         src = builder().insert_bitcast(value_type::f64(), src->val());
-
-    //     if (src->val().type().width() != 80) {
-    //         src = builder().insert_convert(dst->val().type(), src->val());
-    //     }
-
-    //     auto res = builder().insert_div(dst->val(), src->val());
-    //     write_operand(0, res->val());
-
-    //     // TODO FPU flags
     //     break;
     // }
     // case XED_ICLASS_FPREM: {
