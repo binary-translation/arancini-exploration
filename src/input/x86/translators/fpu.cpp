@@ -441,6 +441,7 @@ void fpu_translator::do_translate() {
         // TODO: FPU: Warning: Currently only rounds towards zero
         // TODO: FPU: Respect RC field (rounding mode)
         // TODO: FPU: Set correct tag in case of rounding to 0
+        // TODO: FPU: Handle Underflow
 
         auto st0 = read_operand(0);
         auto st0_as_int =
@@ -449,6 +450,41 @@ void fpu_translator::do_translate() {
                       builder()
                           .insert_convert(value_type::f64(), st0_as_int->val())
                           ->val());
+        break;
+    }
+    case XED_ICLASS_FSCALE: {
+        // TODO: FPU: Set correct tag in case of special values
+        // TODO: FPU: Set correct C1
+        // TODO: FPU: Handle denormal values correctly
+        // TODO: FPU: Handle Underflow
+
+        auto st0 = builder().insert_bitcast(value_type::u64(),
+                                            fpu_stack_get(0)->val());
+        auto st1 = builder().insert_convert(value_type::u64(),
+                                            fpu_stack_get(1)->val());
+
+        // Extract exponent (we can't shift st1, as the value may be negative)
+        auto exponent = builder().insert_lsr(
+            st0->val(), builder().insert_constant_u64(52)->val());
+        auto mask = builder().insert_constant_u64(0x7FF);
+        exponent = builder().insert_and(exponent->val(), mask->val());
+
+        // Add value to exponent as the "scale" operation
+        exponent = builder().insert_add(exponent->val(), st1->val());
+
+        // Shift it back into place
+        exponent = builder().insert_lsl(
+            exponent->val(), builder().insert_constant_u64(52)->val());
+
+        // Bolt new exponent onto value
+        auto exponent_mask = builder().insert_constant_u64(0x7FF0000000000000);
+        auto exponent_mask_inv =
+            builder().insert_constant_u64(0x800FFFFFFFFFFFFF);
+        exponent = builder().insert_and(exponent->val(), exponent_mask->val());
+        st0 = builder().insert_and(st0->val(), exponent_mask_inv->val());
+        auto res = builder().insert_or(exponent->val(), st0->val());
+
+        fpu_stack_set(0, res->val());
         break;
     }
     // case XED_ICLASS_FLDZ: {
