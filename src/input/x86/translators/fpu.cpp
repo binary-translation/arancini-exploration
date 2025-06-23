@@ -437,19 +437,20 @@ void fpu_translator::do_translate() {
         SET_C1_BIT(0);
         break;
     }
-    // case XED_ICLASS_FRNDINT: {
-    //     auto st0 = read_operand(0);
-    //     auto width = st0->val().type().width();
-    //     value_type toint = value_type::s64();
-    //     if (width == 32)
-    //         toint = value_type::s32();
+    case XED_ICLASS_FRNDINT: {
+        // TODO: FPU: Warning: Currently only rounds towards zero
+        // TODO: FPU: Respect RC field (rounding mode)
+        // TODO: FPU: Set correct tag in case of rounding to 0
 
-    //     auto conv = builder().insert_convert(toint, st0->val());
-    //     write_operand(
-    //         0, builder().insert_convert(st0->val().type(),
-    //         conv->val())->val());
-    //     break;
-    // }
+        auto st0 = read_operand(0);
+        auto st0_as_int =
+            builder().insert_convert(value_type::s128(), st0->val());
+        write_operand(0,
+                      builder()
+                          .insert_convert(value_type::f64(), st0_as_int->val())
+                          ->val());
+        break;
+    }
     // case XED_ICLASS_FLDZ: {
     //     auto zero = builder().insert_constant_f(
     //         value_type(value_type_class::floating_point, 80), +0.0);

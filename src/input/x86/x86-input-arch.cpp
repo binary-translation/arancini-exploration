@@ -333,7 +333,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder,
     case XED_ICLASS_FPREM1:
     case XED_ICLASS_FABS:
     case XED_ICLASS_FCHS:
-        // case XED_ICLASS_FRNDINT:
+    case XED_ICLASS_FRNDINT:
         // case XED_ICLASS_FSCALE:
         // case XED_ICLASS_FSQRT:
         // case XED_ICLASS_FXTRACT:
