@@ -346,10 +346,10 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder,
     case XED_ICLASS_FUCOMPP:
     case XED_ICLASS_FICOM:
     case XED_ICLASS_FICOMP:
-    // case XED_ICLASS_FCOMI:
-    // case XED_ICLASS_FUCOMI:
-    // case XED_ICLASS_FCOMIP:
-    // case XED_ICLASS_FUCOMIP:
+    case XED_ICLASS_FCOMI:
+    case XED_ICLASS_FUCOMI:
+    case XED_ICLASS_FCOMIP:
+    case XED_ICLASS_FUCOMIP:
     case XED_ICLASS_FTST:
         // case XED_ICLASS_FXAM:
         // // 5.2.4 X87 FPU Transcendental Instructions

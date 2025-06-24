@@ -542,7 +542,8 @@ void fpu_translator::do_translate() {
     case XED_ICLASS_FICOMP:
     // FCOMI/FUCOMI/FCOMIP/FUCOMIP see below
     case XED_ICLASS_FTST: {
-        // TODO: FPU: Check for underflow (Unordered)
+        // TODO: FPU: Check for underflow
+        // TODO: FPU: properly manage the unordered case
         // TODO: FPU: Handle differences of FUCOM/FUCOMP/FUCOMPP
         // dump_xed_encoding();
 
@@ -634,6 +635,39 @@ void fpu_translator::do_translate() {
         case XED_ICLASS_FICOMP:
             fpu_pop();
             break;
+        default:
+            break;
+        }
+        break;
+    }
+    case XED_ICLASS_FCOMI:
+    case XED_ICLASS_FCOMIP:
+    case XED_ICLASS_FUCOMI:
+    case XED_ICLASS_FUCOMIP: {
+        // TODO: FPU: Check for underflow
+        // TODO: FPU: properly manage the unordered case (SNan, QNaN, etc), and
+        // diff with F* and FU*
+        // xed encoding: fucomi(p) st(0), st(i)
+
+        // get stack top and operand
+        auto st0 = read_operand(0);
+        auto sti = read_operand(1);
+
+        // Test ST(0) = SRC (If true set ZF=1)
+        auto zf = builder().insert_cmpeq(sti->val(), st0->val());
+        // Test ST(0) < SRC (If true set CF=1)
+        auto cf = builder().insert_cmpgt(sti->val(), st0->val());
+        auto pf = builder().insert_constant_i(value_type::u1(), 0);
+
+        write_reg(reg_offsets::ZF, zf->val());
+        write_reg(reg_offsets::CF, cf->val());
+        write_reg(reg_offsets::PF, pf->val());
+
+        // Pop if required
+        switch (inst_class) {
+        case XED_ICLASS_FCOMIP:
+        case XED_ICLASS_FUCOMIP:
+            fpu_pop();
         default:
             break;
         }
