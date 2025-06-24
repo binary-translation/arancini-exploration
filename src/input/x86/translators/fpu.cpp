@@ -216,6 +216,7 @@ void fpu_translator::do_translate() {
         break;
     }
     // FCMOVcc: See cmov.cpp
+    // 5.2.2 X87 FPU Basic Arithmetic Instructions
     case XED_ICLASS_FADD:
     case XED_ICLASS_FADDP:
     case XED_ICLASS_FIADD:
@@ -234,7 +235,7 @@ void fpu_translator::do_translate() {
     case XED_ICLASS_FDIVR:
     case XED_ICLASS_FDIVRP:
     case XED_ICLASS_FIDIVR: {
-        dump_xed_encoding();
+        // dump_xed_encoding();
 
         // TODO: FPU: Flags: Check for underflow
         // TODO: FPU: Flags: Round up/down
@@ -304,7 +305,7 @@ void fpu_translator::do_translate() {
         }
         default:
             throw std::runtime_error(
-                std::string("unsupported X87 FADD/FSUB... instruction1"));
+                std::string("unsupported X87 FADD/FSUB... instruction"));
         }
 
         // Do caluclation
@@ -530,6 +531,115 @@ void fpu_translator::do_translate() {
         fpu_push(significand->val());
         break;
     }
+    // 5.2.3 X87 FPU Comparison Instructions
+    case XED_ICLASS_FCOM:
+    case XED_ICLASS_FCOMP:
+    case XED_ICLASS_FCOMPP:
+    case XED_ICLASS_FUCOM:
+    case XED_ICLASS_FUCOMP:
+    case XED_ICLASS_FUCOMPP:
+    case XED_ICLASS_FICOM:
+    case XED_ICLASS_FICOMP:
+    // FCOMI/FUCOMI/FCOMIP/FUCOMIP see below
+    case XED_ICLASS_FTST: {
+        // TODO: FPU: Check for underflow (Unordered)
+        // TODO: FPU: Handle differences of FUCOM/FUCOMP/FUCOMPP
+        // dump_xed_encoding();
+
+        // Load values and convert them to 64bit floats (if needed)
+        auto st0 = fpu_stack_get(0);
+        // Val is first source (may be mem)
+        value_node *src;
+        if (inst_class != XED_ICLASS_FTST) {
+            // Standard FCOM/FCOMP... load value
+            src = read_operand(1);
+        } else {
+            src = builder().insert_constant_f64(0.0f);
+        }
+
+        switch (inst_class) {
+        // Convert from 32bit/64bit floats
+        case XED_ICLASS_FCOM:
+        case XED_ICLASS_FCOMP:
+        case XED_ICLASS_FCOMPP:
+        case XED_ICLASS_FUCOM:
+        case XED_ICLASS_FUCOMP:
+        case XED_ICLASS_FUCOMPP: {
+            switch (src->val().type().width()) {
+            case 32:
+                src = builder().insert_bitcast(value_type::f32(), src->val());
+                src = builder().insert_convert(value_type::f64(), src->val());
+                break;
+            case 64:
+                src = builder().insert_bitcast(value_type::f64(), src->val());
+                break;
+            default:
+                throw std::runtime_error(
+                    std::string("unsupported X87 FCOM/FCOMP... float width"));
+            }
+            break;
+        }
+        // Convert from 16bit/32bit ints
+        case XED_ICLASS_FICOM:
+        case XED_ICLASS_FICOMP: {
+            switch (src->val().type().width()) {
+            case 16:
+                src = builder().insert_bitcast(value_type::s16(), src->val());
+                break;
+            case 32:
+                src = builder().insert_bitcast(value_type::s32(), src->val());
+                break;
+            default:
+                printf("Int width: %i\n", (int)src->val().type().width());
+                throw std::runtime_error(
+                    std::string("unsupported X87 FICOM/FICOMP int width"));
+            }
+            src = builder().insert_convert(value_type::f64(), src->val());
+            break;
+        }
+        case XED_ICLASS_FTST: {
+            break;
+        }
+        default:
+            throw std::runtime_error(
+                std::string("unsupported X87 FCOM/FCOMP... instruction"));
+        }
+
+        // Assume ST(0) > SRC therefore setting (C3=C2=C1=C0=0)
+        auto sts = read_reg(value_type::u16(), reg_offsets::X87_STS);
+        sts = builder().insert_and(
+            sts->val(), builder().insert_constant_u16(0xB8FF)->val());
+
+        // Test ST(0) < SRC (If true set C0=1)
+        auto c0 = builder().insert_zx(
+            value_type::u16(),
+            builder().insert_cmpgt(src->val(), st0->val())->val());
+        sts = builder().insert_bit_insert(sts->val(), c0->val(), 8, 1);
+
+        // Test ST(0) = SRC (If true set C3=1)
+        auto c3 = builder().insert_zx(
+            value_type::u16(),
+            builder().insert_cmpeq(src->val(), st0->val())->val());
+        sts = builder().insert_bit_insert(sts->val(), c3->val(), 14, 1);
+
+        write_reg(reg_offsets::X87_STS, sts->val());
+
+        // Pop if required
+        switch (inst_class) {
+        case XED_ICLASS_FCOMPP:
+        case XED_ICLASS_FUCOMPP:
+            fpu_pop();
+        case XED_ICLASS_FCOMP:
+        case XED_ICLASS_FUCOMP:
+        case XED_ICLASS_FICOMP:
+            fpu_pop();
+            break;
+        default:
+            break;
+        }
+        break;
+    }
+
     // case XED_ICLASS_FLDZ: {
     //     auto zero = builder().insert_constant_f(
     //         value_type(value_type_class::floating_point, 80), +0.0);
