@@ -115,7 +115,7 @@ class ir_builder {
         return create_and_insert<constant_node>(value_type::u64(),
                                                 (unsigned long)cv);
     }
-    
+
     /// @brief Returns a node representing an 80-bit unsigned integer constant.
     /// @param cv The value of the constant.
     /// @return A constant node.
@@ -452,6 +452,8 @@ class ir_builder {
                                             value, convert_type);
     }
 
+    // @brief Conditional selection (Both trueval and falseval need to be the
+    // same type)
     value_node *insert_csel(port &condition, port &trueval, port &falseval) {
         return create_and_insert<csel_node>(condition, trueval, falseval);
     }

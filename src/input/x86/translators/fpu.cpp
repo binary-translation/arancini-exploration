@@ -673,6 +673,96 @@ void fpu_translator::do_translate() {
         }
         break;
     }
+    case XED_ICLASS_FXAM: {
+        // TODO: FPU: Unsupported Value
+
+        // Clear C0-C4 bits
+        auto sts = read_reg(value_type::u16(), reg_offsets::X87_STS);
+        sts = builder().insert_and(
+            sts->val(), builder().insert_constant_u16(0xB8FF)->val());
+
+        // Set C1 bit to sign of ST(0)
+        auto st0 = fpu_stack_get(0);
+        st0 = builder().insert_bitcast(value_type::u64(), st0->val());
+        // Shift sign into the position into C1 bit pos
+        auto sign = builder().insert_lsr(
+            st0->val(), builder().insert_constant_u16(54)->val());
+        sign = builder().insert_trunc(value_type::u16(), sign->val());
+        // Bolt onto sts
+        sign = builder().insert_and(
+            sign->val(), builder().insert_constant_u16(0x0200)->val());
+        auto sts_with_c1 = builder().insert_or(sts->val(), sign->val());
+
+        // Needed basevalues for comparisons
+        // Mantissa
+        auto mantissa = builder().insert_and(
+            st0->val(), builder().insert_constant_u64(0xFFFFFFFFFFFFF)->val());
+        // Exponent (not shifted into place)
+        auto exponent = builder().insert_and(
+            st0->val(),
+            builder().insert_constant_u64(0x7FF0000000000000)->val());
+
+        // Needed conditionals
+        // True, if mantissa is 0
+        auto bool_mantissa_0 = builder().insert_cmpeq(
+            mantissa->val(), builder().insert_constant_u64(0)->val());
+        // True, if mantissa is NOT 0
+        auto bool_mantissa_n0 = builder().insert_not(bool_mantissa_0->val());
+        // True, if exponent is 0
+        auto bool_exponent_0 = builder().insert_cmpeq(
+            exponent->val(), builder().insert_constant_u64(0)->val());
+        // True, if exponent is 7FF (aka. filled with 1s)
+        auto bool_exponent_F = builder().insert_cmpeq(
+            exponent->val(),
+            builder().insert_constant_u64(0x7FF0000000000000)->val());
+
+        // Define default C3,C2,C0 Values (Normal finitie number)
+        // c_vals represents the current assignment
+        auto c_vals_normal = builder().insert_constant_u16(0x400);
+
+        // Check for zero
+        auto bool_zero = builder().insert_and(bool_exponent_0->val(),
+                                              bool_mantissa_0->val());
+        auto c_vals_zero = builder().insert_csel(
+            bool_zero->val(), builder().insert_constant_u16(0x4000)->val(),
+            c_vals_normal->val());
+
+        // Check for infinity
+        auto bool_infty = builder().insert_and(bool_exponent_F->val(),
+                                               bool_mantissa_0->val());
+        auto c_vals_infty = builder().insert_csel(
+            bool_infty->val(), builder().insert_constant_u16(0x500)->val(),
+            c_vals_zero->val());
+
+        // Check for denormalised
+        auto bool_denormalised = builder().insert_and(bool_exponent_0->val(),
+                                                      bool_mantissa_n0->val());
+        auto c_vals_denormalised = builder().insert_csel(
+            bool_denormalised->val(),
+            builder().insert_constant_u16(0x4400)->val(), c_vals_infty->val());
+
+        // Check if NaN
+        auto bool_nan = builder().insert_and(bool_exponent_F->val(),
+                                             bool_mantissa_n0->val());
+        auto c_vals_nan = builder().insert_csel(
+            bool_nan->val(), builder().insert_constant_u16(0x100)->val(),
+            c_vals_denormalised->val());
+
+        // Check if st0 is empty
+        auto st0_tag = fpu_tag_get(0);
+        auto bool_empty = builder().insert_cmpeq(
+            st0_tag->val(), builder().insert_constant_u16(0b11)->val());
+        auto c_vals = builder().insert_csel(
+            bool_empty->val(), builder().insert_constant_u16(0x4100)->val(),
+            c_vals_nan->val());
+
+        // Add c_vals to status
+        auto sts_result =
+            builder().insert_or(sts_with_c1->val(), c_vals->val());
+
+        write_reg(reg_offsets::X87_STS, sts_result->val());
+        break;
+    }
 
     // case XED_ICLASS_FLDZ: {
     //     auto zero = builder().insert_constant_f(
