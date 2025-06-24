@@ -692,66 +692,6 @@ void fpu_translator::do_translate() {
     //     // TODO FPU flags
     //     break;
     // }
-    // case XED_ICLASS_FXCH: {
-    //     // xed encoding: fxch st(i) st(j)
-    //     auto sti = read_operand(0);
-    //     auto stj = read_operand(1);
-    //     auto tmp = builder().alloc_local(sti->val().type());
-    //     builder().insert_write_local(tmp, sti->val());
-
-    //     write_operand(0, stj->val());
-    //     write_operand(1, builder().insert_read_local(tmp)->val());
-
-    //     // TODO set C1 flag to 0
-    //     break;
-    // }
-    // case XED_ICLASS_FCOMI:
-    // case XED_ICLASS_FCOMIP:
-    // case XED_ICLASS_FUCOMI:
-    // case XED_ICLASS_FUCOMIP: {
-    //     // xed encoding: fucomi(p) st(0), st(i)
-    //     // TODO properly manage the unordered case (SNan, QNaN, etc), and
-    //     diff
-    //     // with F* and FU*
-
-    //     // get stack top and operand
-    //     auto st0 = read_operand(0);
-    //     auto sti = read_operand(1);
-
-    //     // comparisons
-    //     st0 = builder().insert_convert(value_type::f64(), st0->val());
-    //     sti = builder().insert_convert(value_type::f64(), sti->val());
-
-    //     auto cmplt = builder().insert_binop(binary_arith_op::cmpolt,
-    //     st0->val(),
-    //                                         sti->val());
-    //     auto cmpeq = builder().insert_binop(binary_arith_op::cmpoeq,
-    //     sti->val(),
-    //                                         st0->val());
-
-    //     auto zf = builder().insert_csel(
-    //         cmpeq->val(),
-    //         builder().insert_constant_i(value_type::u1(), 1)->val(),
-    //         builder().insert_constant_i(value_type::u1(), 0)->val());
-    //     auto cf = builder().insert_csel(
-    //         cmplt->val(),
-    //         builder().insert_constant_i(value_type::u1(), 1)->val(),
-    //         builder().insert_constant_i(value_type::u1(), 0)->val());
-    //     auto pf = builder().insert_constant_i(value_type::u1(), 0);
-
-    //     builder().insert_write_reg(util::to_underlying(reg_offsets::ZF),
-    //                                util::to_underlying(reg_idx::ZF), "ZF",
-    //                                zf->val());
-    //     builder().insert_write_reg(util::to_underlying(reg_offsets::CF),
-    //                                util::to_underlying(reg_idx::CF), "CF",
-    //                                cf->val());
-    //     builder().insert_write_reg(util::to_underlying(reg_offsets::PF),
-    //                                util::to_underlying(reg_idx::PF), "PF",
-    //                                pf->val());
-
-    //     break;
-    // }
-
     // case XED_ICLASS_FNSTCW: {
     //     auto fpu_ctrl = read_reg(value_type::u16(), reg_offsets::X87_CTRL);
     //     write_operand(0, fpu_ctrl->val());
