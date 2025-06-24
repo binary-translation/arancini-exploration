@@ -216,6 +216,7 @@ void fpu_translator::do_translate() {
         break;
     }
     // FCMOVcc: See cmov.cpp
+
     // 5.2.2 X87 FPU Basic Arithmetic Instructions
     case XED_ICLASS_FADD:
     case XED_ICLASS_FADDP:
@@ -531,6 +532,7 @@ void fpu_translator::do_translate() {
         fpu_push(significand->val());
         break;
     }
+
     // 5.2.3 X87 FPU Comparison Instructions
     case XED_ICLASS_FCOM:
     case XED_ICLASS_FCOMP:
@@ -764,24 +766,43 @@ void fpu_translator::do_translate() {
         break;
     }
 
-    // case XED_ICLASS_FLDZ: {
-    //     auto zero = builder().insert_constant_f(
-    //         value_type(value_type_class::floating_point, 80), +0.0);
-    //     fpu_stack_top_move(-1);
-    //     fpu_stack_set(0, zero->val());
-
-    //     // TODO FPU flags
-    //     break;
-    // }
-    // case XED_ICLASS_FLD1: {
-    //     auto one = builder().insert_constant_f(
-    //         value_type(value_type_class::floating_point, 80), +1.0);
-    //     fpu_stack_top_move(-1);
-    //     fpu_stack_set(0, one->val());
-
-    //     // TODO FPU flags
-    //     break;
-    // }
+    // 5.2.5 X87 FPU Load Constants Instructions
+    case XED_ICLASS_FLD1: {
+        SET_C1_BIT(0);
+        fpu_push(builder().insert_constant_f64(1.0f)->val());
+        break;
+    }
+    case XED_ICLASS_FLDZ: {
+        SET_C1_BIT(0);
+        fpu_push(builder().insert_constant_f64(0.0f)->val());
+        break;
+    }
+    case XED_ICLASS_FLDPI: {
+        SET_C1_BIT(0);
+        fpu_push(builder().insert_constant_f64(3.14159265358979323851)->val());
+        break;
+    }
+    case XED_ICLASS_FLDL2E: {
+        SET_C1_BIT(0);
+        fpu_push(builder().insert_constant_f64(1.44269504088896340739)->val());
+        break;
+    }
+    case XED_ICLASS_FLDLN2: {
+        SET_C1_BIT(0);
+        fpu_push(builder().insert_constant_f64(0.693147180559945309429)->val());
+        break;
+    }
+    case XED_ICLASS_FLDL2T: {
+        SET_C1_BIT(0);
+        fpu_push(builder().insert_constant_f64(3.32192809488736234781)->val());
+        break;
+    }
+    case XED_ICLASS_FLDLG2: {
+        SET_C1_BIT(0);
+        fpu_push(builder().insert_constant_f64(0.301029995663981195226)->val());
+        break;
+    }
+    
     // case XED_ICLASS_FNSTCW: {
     //     auto fpu_ctrl = read_reg(value_type::u16(), reg_offsets::X87_CTRL);
     //     write_operand(0, fpu_ctrl->val());
@@ -802,21 +823,4 @@ void fpu_translator::do_translate() {
             std::string("unsupported fpu operation") +
             xed_iclass_enum_t2str(xed_decoded_inst_get_iclass(xed_inst())));
     }
-
-    // switch (inst_class) {
-    // case XED_ICLASS_FSTP:
-    // case XED_ICLASS_FISTP:
-    // case XED_ICLASS_FADDP:
-    // case XED_ICLASS_FSUBP:
-    // case XED_ICLASS_FSUBRP:
-    // case XED_ICLASS_FMULP:
-    // case XED_ICLASS_FDIVP:
-    // case XED_ICLASS_FDIVRP:
-    // case XED_ICLASS_FCOMIP:
-    // case XED_ICLASS_FUCOMIP:
-    //     fpu_stack_top_move(1);
-    //     break;
-    // default:
-    //     break;
-    // }
 }
