@@ -336,7 +336,7 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder,
     case XED_ICLASS_FRNDINT:
     case XED_ICLASS_FSCALE:
     case XED_ICLASS_FSQRT:
-        // case XED_ICLASS_FXTRACT:
+    case XED_ICLASS_FXTRACT:
         // // 5.2.3 X87 FPU Comparison Instructions
         // case XED_ICLASS_FCOM:
         // case XED_ICLASS_FCOMP:

@@ -496,6 +496,40 @@ void fpu_translator::do_translate() {
         fpu_stack_set(0, st0->val());
         break;
     }
+    case XED_ICLASS_FXTRACT: {
+        // TODO: FPU: Set correct tag in case of special values
+        // TODO: FPU: Set correct C1
+        // TODO: FPU: Handle special values correctly
+        // TODO: FPU: Handle Underflow
+
+        auto st0 = builder().insert_bitcast(value_type::u64(),
+                                            fpu_stack_get(0)->val());
+
+        // Get exponent value
+        auto exponent = builder().insert_lsr(
+            st0->val(), builder().insert_constant_u64(52)->val());
+        auto mask = builder().insert_constant_u64(0x7FF);
+        exponent = builder().insert_and(exponent->val(), mask->val());
+        // Remove bias
+        exponent = builder().insert_sub(
+            exponent->val(), builder().insert_constant_u64(1023)->val());
+        exponent = builder().insert_convert(value_type::f64(), exponent->val());
+
+        // Scale signigicand to true zero
+        auto true_zero_exponent_value =
+            builder().insert_constant_u64(0x3FF0000000000000);
+        auto true_zero_exponent_mask =
+            builder().insert_constant_u64(0x800FFFFFFFFFFFFF);
+        auto significand = builder().insert_or(
+            builder()
+                .insert_and(st0->val(), true_zero_exponent_mask->val())
+                ->val(),
+            true_zero_exponent_value->val());
+
+        fpu_stack_set(0, exponent->val());
+        fpu_push(significand->val());
+        break;
+    }
     // case XED_ICLASS_FLDZ: {
     //     auto zero = builder().insert_constant_f(
     //         value_type(value_type_class::floating_point, 80), +0.0);
