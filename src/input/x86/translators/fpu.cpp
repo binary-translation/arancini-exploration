@@ -955,21 +955,65 @@ void fpu_translator::do_translate() {
         break;
     }
 
-    // case XED_ICLASS_FNSTCW: {
-    //     auto fpu_ctrl = read_reg(value_type::u16(), reg_offsets::X87_CTRL);
-    //     write_operand(0, fpu_ctrl->val());
-    //     break;
-    // }
-    // case XED_ICLASS_FLDCW: {
-    //     auto src = read_operand(0);
-    //     write_reg(reg_offsets::X87_CTRL, src->val());
-    //     break;
-    // }
-    // case XED_ICLASS_FNSTSW: {
-    //     auto fpu_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
-    //     write_operand(0, fpu_status->val());
-    //     break;
-    // }
+    // 5.2.6 X87 FPU Control Instructions
+    case XED_ICLASS_FINCSTP: {
+        fpu_stack_index_move(1);
+        SET_C1_BIT(0);
+        break;
+    }
+    case XED_ICLASS_FDECSTP: {
+        fpu_stack_index_move(-1);
+        SET_C1_BIT(0);
+        break;
+    }
+    case XED_ICLASS_FFREE: {
+        // dump_xed_encoding();
+        int st_idx = fpu_get_instruction_index(0);
+        fpu_tag_set(st_idx, builder().insert_constant_u16(0b11)->val());
+        break;
+    }
+    case XED_ICLASS_FNINIT: {
+        // TODO: FPU Set FPUDataPointer, FPUInstructionPointer if required
+        write_reg(reg_offsets::X87_CTRL,
+                  builder().insert_constant_u16(0x037F)->val());
+        write_reg(reg_offsets::X87_STS,
+                  builder().insert_constant_u16(0)->val());
+        write_reg(reg_offsets::X87_TAG,
+                  builder().insert_constant_u16(0xFFFF)->val());
+        write_reg(reg_offsets::X87_OPCODE,
+                  builder().insert_constant_u16(0)->val());
+        break;
+    }
+    case XED_ICLASS_FNCLEX: {
+        auto sts = read_reg(value_type::u16(), reg_offsets::X87_STS);
+        auto res = builder().insert_and(
+            sts->val(), builder().insert_constant_u16(0x7F80)->val());
+        write_reg(reg_offsets::X87_STS, res->val());
+        break;
+    }
+    case XED_ICLASS_FNSTCW: {
+        // Unchanged since pre 01be6d261a1c0022aa1b78d7d64bea8959dc7f32
+        auto fpu_ctrl = read_reg(value_type::u16(), reg_offsets::X87_CTRL);
+        write_operand(0, fpu_ctrl->val());
+        break;
+    }
+    case XED_ICLASS_FLDCW: {
+        // Unchanged since pre 01be6d261a1c0022aa1b78d7d64bea8959dc7f32
+        auto src = read_operand(0);
+        write_reg(reg_offsets::X87_CTRL, src->val());
+        break;
+    }
+    case XED_ICLASS_FNSTSW: {
+        // Unchanged since pre 01be6d261a1c0022aa1b78d7d64bea8959dc7f32
+        auto fpu_status = read_reg(value_type::u16(), reg_offsets::X87_STS);
+        write_operand(0, fpu_status->val());
+        break;
+    }
+    case XED_ICLASS_FWAIT:
+    case XED_ICLASS_FNOP: {
+        // We can safely ignore waits, as we don't run concurrently
+        break;
+    }
     default:
         throw std::runtime_error(
             std::string("unsupported fpu operation") +

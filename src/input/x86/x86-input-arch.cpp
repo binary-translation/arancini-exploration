@@ -122,9 +122,6 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder,
     case XED_ICLASS_CPUID:
     case XED_ICLASS_PREFETCHNTA:
     case XED_ICLASS_PAUSE:
-    case XED_ICLASS_FWAIT:   // TODO support
-    case XED_ICLASS_FNSTENV: // TODO support
-    case XED_ICLASS_FLDENV:  // TODO support
         return std::make_unique<nop_translator>(builder);
 
     case XED_ICLASS_XOR:
@@ -369,28 +366,29 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder,
     case XED_ICLASS_FLDLN2:
     case XED_ICLASS_FLDL2T:
     case XED_ICLASS_FLDLG2:
-        // // 5.2.6 X87 FPU Control Instructions
-        // case XED_ICLASS_FINCSTP:
-        // case XED_ICLASS_FDECSTP:
-        // case XED_ICLASS_FFREE:
-        // // case XED_ICLASS_FINIT: // NA in XED
-        // case XED_ICLASS_FNINIT:
-        // // case XED_ICLASS_FCLEX: // NA in XED
-        // case XED_ICLASS_FNCLEX:
-        // // case XED_ICLASS_FSTCW: // NA in XED
-        // case XED_ICLASS_FNSTCW:
-        // case XED_ICLASS_FLDCW:
-        // case XED_ICLASS_FSTENV:
-        // case XED_ICLASS_FNSTENV:
-        // case XED_ICLASS_FLDENV:
-        // // case XED_ICLASS_FSAVE: // NA in XED
-        // case XED_ICLASS_FNSAVE:
-        // case XED_ICLASS_FRSTOR:
-        // // case XED_ICLASS_FSTSW: // NA in XED
-        // case XED_ICLASS_FNSTSW:
-        // // case XED_ICLASS_WAIT: // NA in XED
-        // case XED_ICLASS_FWAIT:
-        // case XED_ICLASS_FNOP:
+    // 5.2.6 X87 FPU Control Instructions
+    case XED_ICLASS_FINCSTP:
+    case XED_ICLASS_FDECSTP:
+    case XED_ICLASS_FFREE:
+    // case XED_ICLASS_FINIT: // NA in XED
+    case XED_ICLASS_FNINIT:
+    // case XED_ICLASS_FCLEX: // NA in XED
+    case XED_ICLASS_FNCLEX:
+    // case XED_ICLASS_FSTCW:
+    case XED_ICLASS_FNSTCW:
+    case XED_ICLASS_FLDCW:
+    // TODO: FPU: storing/loading FPU State
+    // case XED_ICLASS_FSTENV: // NA in XED
+    // case XED_ICLASS_FNSTENV:
+    // case XED_ICLASS_FLDENV:
+    // // case XED_ICLASS_FSAVE: // NA in XED
+    // case XED_ICLASS_FNSAVE:
+    // case XED_ICLASS_FRSTOR:
+    // case XED_ICLASS_FSTSW: // NA in XED
+    case XED_ICLASS_FNSTSW:
+    // case XED_ICLASS_WAIT: // NA in XED
+    case XED_ICLASS_FWAIT:
+    case XED_ICLASS_FNOP:
         return std::make_unique<fpu_translator>(builder);
 
     case XED_ICLASS_HLT:
