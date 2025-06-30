@@ -39,6 +39,8 @@ translation_result translator::translate(off_t address,
     }
 }
 
+/// @brief Print the xed encoded instruction details
+/// Also see: https://github.com/intelxed/xed/blob/b86dd5014463d954bc8898d2376b14852d26facd/datafiles/xed-isa.txt
 void translator::dump_xed_encoding(void) {
     xed_decoded_inst_t *xed_ins = xed_inst();
     const xed_inst_t *insn = xed_decoded_inst_inst(xed_ins);
