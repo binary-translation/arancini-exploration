@@ -685,6 +685,7 @@ action_node *translator::fpu_stack_index_move(int val) {
 }
 
 action_node *translator::fpu_push(port &val) {
+    // TODO: FPU: Handle other special values
     auto orig_val = builder_.insert_bitcast(value_type::f64(), val);
     // c1 is 1, iff overflow occured otherwise 0
 

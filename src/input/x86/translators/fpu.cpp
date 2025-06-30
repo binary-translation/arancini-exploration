@@ -15,6 +15,12 @@ using namespace arancini::input::x86::translators;
         status->val(), builder().insert_constant_u16(bool)->val(), 9, 1);      \
     write_reg(reg_offsets::X87_STS, status->val());
 
+#define SET_C2_BIT(bool)                                                       \
+    auto status = read_reg(value_type::u16(), reg_offsets::X87_STS);           \
+    status = builder().insert_bit_insert(                                      \
+        status->val(), builder().insert_constant_u16(bool)->val(), 10, 1);     \
+    write_reg(reg_offsets::X87_STS, status->val());
+
 // Currently no exception (bit) creation or handeling is implemented
 // TODO: FPU: Implement exception handeling
 
@@ -632,6 +638,7 @@ void fpu_translator::do_translate() {
         case XED_ICLASS_FCOMPP:
         case XED_ICLASS_FUCOMPP:
             fpu_pop();
+        [[fallthrough]]
         case XED_ICLASS_FCOMP:
         case XED_ICLASS_FUCOMP:
         case XED_ICLASS_FICOMP:
@@ -766,6 +773,151 @@ void fpu_translator::do_translate() {
         break;
     }
 
+    // 5.2.4 X87 FPU Transcendental Instructions
+    case XED_ICLASS_FSIN: {
+        // TODO: FPU: Flags
+        // TODO: FPU: Check for stack underflow
+        auto st0 = fpu_stack_get(0);
+
+        auto res = builder().insert_internal_call(
+            builder().ifr().resolve("sin"), {&st0->val()});
+
+        // Pop right before pushing (otherwise stuff breaks)
+        fpu_pop();
+        fpu_push(res->val());
+        SET_C2_BIT(0);
+        break;
+    }
+    case XED_ICLASS_FCOS: {
+        // TODO: FPU: Flags
+        // TODO: FPU: Check for stack underflow
+        auto st0 = fpu_stack_get(0);
+
+        auto res = builder().insert_internal_call(
+            builder().ifr().resolve("cos"), {&st0->val()});
+
+        // Pop right before pushing (otherwise stuff breaks)
+        fpu_pop();
+        fpu_push(res->val());
+        SET_C2_BIT(0);
+        break;
+    }
+    case XED_ICLASS_FSINCOS: {
+        // TODO: FPU: Flags
+        // TODO: FPU: Check for stack underflow
+        auto st0 = fpu_stack_get(0);
+
+        auto sin = builder().insert_internal_call(
+            builder().ifr().resolve("sin"), {&st0->val()});
+        auto cos = builder().insert_internal_call(
+            builder().ifr().resolve("cos"), {&st0->val()});
+
+        // Pop right before pushing (otherwise stuff breaks)
+        fpu_pop();
+        fpu_push(sin->val());
+        fpu_push(cos->val());
+        SET_C2_BIT(0);
+        break;
+    }
+    case XED_ICLASS_FPTAN: {
+        // TODO: FPU: Flags
+        // TODO: FPU: Check for stack underflow
+        auto st0 = fpu_stack_get(0);
+
+        auto res = builder().insert_internal_call(
+            builder().ifr().resolve("tan"), {&st0->val()});
+
+        // Pop right before pushing (otherwise stuff breaks)
+        fpu_pop();
+        fpu_push(res->val());
+        fpu_push(builder().insert_constant_f64(1.0f)->val());
+        SET_C2_BIT(0);
+        break;
+    }
+    case XED_ICLASS_FPATAN: {
+        // TODO: FPU: Flags
+        // TODO: FPU: Check for stack underflow
+
+        // First pop here other one later on (otherwise stuff breaks)
+        fpu_pop();
+        auto st0 = fpu_stack_get(7);
+        auto st1 = fpu_stack_get(0);
+
+        auto val = builder().insert_div(st1->val(), st0->val());
+
+        auto res = builder().insert_internal_call(
+            builder().ifr().resolve("atan"), {&val->val()});
+
+        // Pop right before pushing (otherwise stuff breaks)
+        fpu_pop();
+        fpu_push(res->val());
+        break;
+    }
+    case XED_ICLASS_F2XM1: {
+        // TODO: FPU: Flags
+        // TODO: FPU: Check for stack underflow
+        auto one = builder().insert_constant_f64(1.0f);
+        auto two = builder().insert_constant_f64(2.0f);
+
+        auto st0 = fpu_stack_get(0);
+
+        // Power could (possibly) be optimized by manipulating the Exponent of
+        // the IEEE 754 double directly
+        auto pow = builder().insert_internal_call(
+            builder().ifr().resolve("pow"), {&two->val(), &st0->val()});
+        auto res = builder().insert_sub(pow->val(), one->val());
+
+        // Pop right before pushing (otherwise stuff breaks)
+        fpu_pop();
+        fpu_push(res->val());
+        break;
+    }
+    case XED_ICLASS_FYL2X: {
+        // TODO: FPU: Flags
+        // TODO: FPU: Check for stack underflow
+
+        // First pop here other one later on (otherwise stuff breaks)
+        fpu_pop();
+        auto st0 = fpu_stack_get(7);
+        auto st1 = fpu_stack_get(0);
+
+        // Log could (possibly) be optimized by manipulating the Exponent of
+        // the IEEE 754 double directly
+        auto log = builder().insert_internal_call(
+            builder().ifr().resolve("log2"), {&st0->val()});
+
+        auto res = builder().insert_mul(st1->val(), log->val());
+
+        // Pop right before pushing (otherwise stuff breaks)
+        fpu_pop();
+        fpu_push(res->val());
+        break;
+    }
+    case XED_ICLASS_FYL2XP1: {
+        // TODO: FPU: Flags
+        // TODO: FPU: Check for stack underflow
+        auto one = builder().insert_constant_f64(1.0f);
+
+        // First pop here other one later on (otherwise stuff breaks)
+        fpu_pop();
+        auto st0 = fpu_stack_get(7);
+        auto st1 = fpu_stack_get(0);
+
+        auto st0_p1 = builder().insert_add(st0->val(), one->val());
+
+        // Log could (possibly) be optimized by manipulating the Exponent of
+        // the IEEE 754 double directly
+        auto log = builder().insert_internal_call(
+            builder().ifr().resolve("log2"), {&st0_p1->val()});
+
+        auto res = builder().insert_mul(st1->val(), log->val());
+
+        // Pop right before pushing (otherwise stuff breaks)
+        fpu_pop();
+        fpu_push(res->val());
+        break;
+    }
+
     // 5.2.5 X87 FPU Load Constants Instructions
     case XED_ICLASS_FLD1: {
         SET_C1_BIT(0);
@@ -802,7 +954,7 @@ void fpu_translator::do_translate() {
         fpu_push(builder().insert_constant_f64(0.301029995663981195226)->val());
         break;
     }
-    
+
     // case XED_ICLASS_FNSTCW: {
     //     auto fpu_ctrl = read_reg(value_type::u16(), reg_offsets::X87_CTRL);
     //     write_operand(0, fpu_ctrl->val());

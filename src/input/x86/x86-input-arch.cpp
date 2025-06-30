@@ -352,23 +352,23 @@ static std::unique_ptr<translator> get_translator(ir_builder &builder,
     case XED_ICLASS_FUCOMIP:
     case XED_ICLASS_FTST:
     case XED_ICLASS_FXAM:
-        // // 5.2.4 X87 FPU Transcendental Instructions
-        // case XED_ICLASS_FSIN:
-        // case XED_ICLASS_FCOS:
-        // case XED_ICLASS_FSINCOS:
-        // case XED_ICLASS_FPTAN:
-        // case XED_ICLASS_FPATAN:
-        // case XED_ICLASS_F2XM1:
-        // case XED_ICLASS_FYL2X:
-        // case XED_ICLASS_FYL2XP1:
-        // 5.2.5 X87 FPU Load Constants Instructions
-        case XED_ICLASS_FLD1:
-        case XED_ICLASS_FLDZ:
-        case XED_ICLASS_FLDPI:
-        case XED_ICLASS_FLDL2E:
-        case XED_ICLASS_FLDLN2:
-        case XED_ICLASS_FLDL2T:
-        case XED_ICLASS_FLDLG2:
+    // 5.2.4 X87 FPU Transcendental Instructions
+    case XED_ICLASS_FSIN:
+    case XED_ICLASS_FCOS:
+    case XED_ICLASS_FSINCOS:
+    case XED_ICLASS_FPTAN:
+    case XED_ICLASS_FPATAN:
+    case XED_ICLASS_F2XM1:
+    case XED_ICLASS_FYL2X:
+    case XED_ICLASS_FYL2XP1:
+    // 5.2.5 X87 FPU Load Constants Instructions
+    case XED_ICLASS_FLD1:
+    case XED_ICLASS_FLDZ:
+    case XED_ICLASS_FLDPI:
+    case XED_ICLASS_FLDL2E:
+    case XED_ICLASS_FLDLN2:
+    case XED_ICLASS_FLDL2T:
+    case XED_ICLASS_FLDLG2:
         // // 5.2.6 X87 FPU Control Instructions
         // case XED_ICLASS_FINCSTP:
         // case XED_ICLASS_FDECSTP:
