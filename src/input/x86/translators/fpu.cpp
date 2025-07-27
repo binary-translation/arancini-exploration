@@ -47,13 +47,15 @@ void fpu_translator::do_translate() {
         case 80: {
             // Works, but ignores the Integer bit
             val = builder().insert_bitcast(value_type::u80(), val->val());
-            auto frac = builder().insert_bit_extract(val->val(), 68, 12);
-            auto sign_exponent =
-                builder().insert_bit_extract(val->val(), 11, 52);
+            // Sign + Sign of exponent
+            auto sign_s = builder().insert_bit_extract(val->val(), 78, 2);
+            auto exponent = builder().insert_bit_extract(val->val(), 64, 10);
+            auto frac = builder().insert_bit_extract(val->val(), 11, 52);
             val = builder().insert_constant_f64(0);
-            val = builder().insert_bit_insert(val->val(), frac->val(), 52, 12);
-            val = builder().insert_bit_insert(val->val(), sign_exponent->val(),
-                                              0, 52);
+            val = builder().insert_bit_insert(val->val(), sign_s->val(), 62, 2);
+            val = builder().insert_bit_insert(val->val(), exponent->val(), 52,
+                                              10);
+            val = builder().insert_bit_insert(val->val(), frac->val(), 0, 52);
 
             // Does not work, as truncxfdf2 isn't available
             // The only implementation I could find is on m68k (motorola 68000)
@@ -128,18 +130,27 @@ void fpu_translator::do_translate() {
                 frac->val(), builder().insert_constant_u64(11)->val());
             frac = builder().insert_zx(value_type::u80(), frac->val());
 
-            // Remove frac from 64bit value
+            // Grab exponent (exept of exponent sign)
+            auto exponent = builder().insert_and(
+                st0->val(),
+                builder().insert_constant_u64(0x3FF0000000000000)->val());
+            exponent = builder().insert_zx(value_type::u80(), exponent->val());
+            exponent = builder().insert_lsl(
+                exponent->val(), builder().insert_constant_u64(12)->val());
+
+            // Remove frac & exponent (exept of exponent sign) from 64bit value
             st0 = builder().insert_and(
                 st0->val(),
-                builder().insert_constant_u64(0xFFF0000000000000)->val());
+                builder().insert_constant_u64(0xC000000000000000)->val());
 
-            // Extend to u80 and shift sign & esponent into correct pos
+            // Extend to u80 and shift sign & esponents sign into correct pos
             st0 = builder().insert_zx(value_type::u80(), st0->val());
             st0 = builder().insert_lsl(
                 st0->val(), builder().insert_constant_u64(16)->val());
 
-            // Reinsert fraction
+            // Reinsert fraction & exponent
             st0 = builder().insert_or(st0->val(), frac->val());
+            st0 = builder().insert_or(st0->val(), exponent->val());
 
             write_operand(0, st0->val());
             break;
