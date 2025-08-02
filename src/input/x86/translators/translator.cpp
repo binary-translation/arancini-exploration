@@ -6,7 +6,6 @@
 #include <arancini/ir/port.h>
 #include <arancini/util/logger.h>
 
-
 using namespace arancini::ir;
 using namespace arancini::input::x86::translators;
 
@@ -40,7 +39,8 @@ translation_result translator::translate(off_t address,
 }
 
 /// @brief Print the xed encoded instruction details
-/// Also see: https://github.com/intelxed/xed/blob/b86dd5014463d954bc8898d2376b14852d26facd/datafiles/xed-isa.txt
+/// Also see:
+/// https://github.com/intelxed/xed/blob/b86dd5014463d954bc8898d2376b14852d26facd/datafiles/xed-isa.txt
 void translator::dump_xed_encoding(void) {
     xed_decoded_inst_t *xed_ins = xed_inst();
     const xed_inst_t *insn = xed_decoded_inst_inst(xed_ins);
@@ -673,12 +673,10 @@ action_node *translator::fpu_stack_index_move(int val) {
         builder_.insert_bit_extract(x87_status->val(), 11, 3)->val());
 
     // compute the new top index (safely)
-    top =
-        builder_.insert_add(top->val(), builder_.insert_constant_u8(8)->val());
     top = builder_.insert_add(
         top->val(), builder_.insert_constant_i(top->val().type(), val)->val());
-    top =
-        builder_.insert_mod(top->val(), builder_.insert_constant_u8(8)->val());
+    top = builder_.insert_and(top->val(),
+                              builder_.insert_constant_u8(0b111)->val());
 
     // Write new status
     x87_status =
