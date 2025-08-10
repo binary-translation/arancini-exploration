@@ -108,11 +108,12 @@ void fpu_translator::do_translate() {
                 auto tag_val = fpu_tag_get(0);
                 fpu_tag_set(st_idx, tag_val->val());
                 // TODO: FPU: Set correct c1 val (We just assume no error)
-                auto c1_default = builder().insert_constant_u16(0b0);
-                auto status = read_reg(value_type::u16(), reg_offsets::X87_STS);
-                status = builder().insert_bit_insert(status->val(),
-                                                     c1_default->val(), 9, 1);
-                write_reg(reg_offsets::X87_STS, status->val());
+                // // The following would indicate that an underflow occured:
+                // auto c1_default = builder().insert_constant_u16(0b0);
+                // auto status = read_reg(value_type::u16(), reg_offsets::X87_STS);
+                // status = builder().insert_bit_insert(status->val(),
+                //                                      c1_default->val(), 9, 1);
+                // write_reg(reg_offsets::X87_STS, status->val());
             } else {
                 // Working for DD /2 and DB /7
                 write_operand(0, st0->val());
