@@ -386,7 +386,6 @@ void fpu_translator::do_translate() {
         }
 
         // TODO: FPU: Set correct C1 bit
-        SET_C1_BIT(0);
         break;
     }
     case XED_ICLASS_FPREM: {
