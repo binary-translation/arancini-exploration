@@ -466,15 +466,12 @@ void fpu_translator::do_translate() {
         auto st0 = read_operand(0);
 
         // Add -0.5 or 0.5 to round for correct rounding
-        auto zero_point_five = builder().insert_constant_f64(0.5f);
-        auto minus_zero_point_five = builder().insert_constant_f64(-0.5f);
-        auto condition = builder().insert_bit_extract(
+        auto zpf = builder().insert_constant_f64(0.5f);
+        auto neg_bit = builder().insert_bit_extract(
             builder().insert_bitcast(value_type::u64(), st0->val())->val(), 63,
             1);
-        auto zpf_fix_value = builder().insert_csel(condition->val(),
-                                                   minus_zero_point_five->val(),
-                                                   zero_point_five->val());
-        auto st0_fix = builder().insert_add(st0->val(), zpf_fix_value->val());
+        auto zpf_fix = builder().insert_bitcast(value_type::f64(), builder().insert_bit_insert(builder().insert_bitcast(value_type::u64(), zpf->val())->val(), neg_bit->val(), 63, 1)->val());
+        auto st0_fix = builder().insert_add(st0->val(), zpf_fix->val());
 
         auto st0_as_int =
             builder().insert_convert(value_type::s128(), st0_fix->val());
