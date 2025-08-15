@@ -110,9 +110,11 @@ void fpu_translator::do_translate() {
                 // TODO: FPU: Set correct c1 val (We just assume no error)
                 // // The following would indicate that an underflow occured:
                 // auto c1_default = builder().insert_constant_u16(0b0);
-                // auto status = read_reg(value_type::u16(), reg_offsets::X87_STS);
-                // status = builder().insert_bit_insert(status->val(),
-                //                                      c1_default->val(), 9, 1);
+                // auto status = read_reg(value_type::u16(),
+                // reg_offsets::X87_STS); status =
+                // builder().insert_bit_insert(status->val(),
+                //                                      c1_default->val(), 9,
+                //                                      1);
                 // write_reg(reg_offsets::X87_STS, status->val());
             } else {
                 // Working for DD /2 and DB /7
@@ -457,14 +459,25 @@ void fpu_translator::do_translate() {
         break;
     }
     case XED_ICLASS_FRNDINT: {
-        // TODO: FPU: Warning: Currently only rounds towards zero
         // TODO: FPU: Respect RC field (rounding mode)
         // TODO: FPU: Set correct tag in case of rounding to 0
         // TODO: FPU: Handle Underflow
 
         auto st0 = read_operand(0);
+
+        // Add -0.5 or 0.5 to round for correct rounding
+        auto zero_point_five = builder().insert_constant_f64(0.5f);
+        auto minus_zero_point_five = builder().insert_constant_f64(-0.5f);
+        auto condition = builder().insert_bit_extract(
+            builder().insert_bitcast(value_type::u64(), st0->val())->val(), 63,
+            1);
+        auto zpf_fix_value = builder().insert_csel(condition->val(),
+                                                   minus_zero_point_five->val(),
+                                                   zero_point_five->val());
+        auto st0_fix = builder().insert_add(st0->val(), zpf_fix_value->val());
+
         auto st0_as_int =
-            builder().insert_convert(value_type::s128(), st0->val());
+            builder().insert_convert(value_type::s128(), st0_fix->val());
         write_operand(0,
                       builder()
                           .insert_convert(value_type::f64(), st0_as_int->val())
