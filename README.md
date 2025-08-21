@@ -1,6 +1,6 @@
 # Arancini
 
-Arancini is a *Hybrid Binary Translator (HBT)* that utilizes LLVM and
+Arancini is a _Hybrid Binary Translator (HBT)_ that utilizes LLVM and
 custom-designed Dynamic Binary Translators (DBT) to perform user-mode emulation
 of x86.
 
@@ -34,6 +34,14 @@ There exists some preliminary support for cross-compilation on non-Nix systems,
 but it requires access to the system root of the target system. As such, it is
 advisable to avoid using cross-compilation.
 
+Native compilation on ARM64 is possible using (ccache args may be omitted):
+
+```bash
+nix develop ./scripts/mini-nix --command 'echo' 'Set up!'
+cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Debug # -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+cmake --build build -j$(nproc)
+```
+
 ## Usage
 
 The user interface for Arancini is the `txlat` program, which utilizes the Arancini
@@ -45,6 +53,13 @@ A typical invocation of txlat is presented below:
 ```bash
 ./result-aarch64/bin/txlat --input test/hello-world/hello-static-musl --output hello-world-tranlsated
 ./hello-world-tranlsated
+````
+
+The following may be run with the natively compiled version:
+
+```bash
+./build/out/Debug/txlat --cxx-compiler-path "nix develop ./scripts/mini-nix --command 'g++'" --input ./test/hello-world/hello-static-musl --output ./hello-static-musl-translated --graph ./graph
+./hello-static-musl-translated
 ```
 
 The produced binary is also compiled by the above invocation of `txlat` using
@@ -57,4 +72,3 @@ information or debugging the `txlat` tool itself. For a complete overview of all
 supported flags, consult `txlat --help`.
 
 Further documentation may be found under the `arancini/docs` directory.
-
