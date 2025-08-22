@@ -51,7 +51,7 @@ containing the Arancini runtime and translated code.
 A typical invocation of txlat is presented below:
 
 ```bash
-./result-aarch64/bin/txlat --input test/hello-world/hello-static-musl --output hello-world-tranlsated
+./result-aarch64/bin/txlat --cxx-compiler-path 'g++' --input test/hello-world/hello-static-musl --output hello-world-tranlsated
 ./hello-world-tranlsated
 ````
 
