@@ -470,7 +470,15 @@ void fpu_translator::do_translate() {
         auto neg_bit = builder().insert_bit_extract(
             builder().insert_bitcast(value_type::u64(), st0->val())->val(), 63,
             1);
-        auto zpf_fix = builder().insert_bitcast(value_type::f64(), builder().insert_bit_insert(builder().insert_bitcast(value_type::u64(), zpf->val())->val(), neg_bit->val(), 63, 1)->val());
+        auto zpf_fix = builder().insert_bitcast(
+            value_type::f64(),
+            builder()
+                .insert_bit_insert(
+                    builder()
+                        .insert_bitcast(value_type::u64(), zpf->val())
+                        ->val(),
+                    neg_bit->val(), 63, 1)
+                ->val());
         auto st0_fix = builder().insert_add(st0->val(), zpf_fix->val());
 
         auto st0_as_int =
@@ -659,7 +667,7 @@ void fpu_translator::do_translate() {
         case XED_ICLASS_FCOMPP:
         case XED_ICLASS_FUCOMPP:
             fpu_pop();
-        [[fallthrough]]
+        // Fallthrough intended
         case XED_ICLASS_FCOMP:
         case XED_ICLASS_FUCOMP:
         case XED_ICLASS_FICOMP:
