@@ -681,13 +681,15 @@ TypedRegister &riscv64_translation_context::materialise_binary_atomic(
         if (n.op() == binary_atomic_op::xadd) {
             //			Not needed anymore
             //			switch (n.val().type().element_width()) { //
-            //FIXME This feels so wrong 			case 32: 				assembler_.slli(out_reg,
-            //out_reg, 32); 				assembler_.srli(out_reg, out_reg, 32);
+            // FIXME This feels so wrong 			case 32:
+            // assembler_.slli(out_reg, out_reg, 32);
+            // assembler_.srli(out_reg, out_reg, 32);
             //				[[fallthrough]];
             //			case 64:
             //				assembler_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node
-            //*>(n.rhs().owner())->regidx()), out_reg); 				break; 			default: 				throw
-            //std::runtime_error("unsupported xadd width");
+            //*>(n.rhs().owner())->regidx()), out_reg);
+            // break; 			default:
+            // throw std::runtime_error("unsupported xadd width");
             //			}
         }
     } break;
@@ -802,8 +804,9 @@ TypedRegister &riscv64_translation_context::materialise_binary_atomic(
         //			[[fallthrough]];
         //		case 64:
         //			builder_.mv(get_or_assign_mapped_register(reinterpret_cast<read_reg_node
-        //*>(n.rhs().owner())->regidx()), out_reg); 			break; 		default: 			throw
-        //std::runtime_error("unsupported xchg width");
+        //*>(n.rhs().owner())->regidx()), out_reg); 			break;
+        // default: 			throw std::runtime_error("unsupported
+        // xchg width");
         //		}
         break;
     default:

@@ -324,7 +324,7 @@ extern "C" void *initialise_dynamic_runtime(unsigned long entry_point, int argc,
         auto app_dso = new dso();
         app_dso->dynv = &guest_exec_DYNAMIC;
         //		app_dso->base = &guest_exec_base; //Load offset assume 0
-        //since not pie
+        // since not pie
         if (&guest_exec_tls) {
             app_dso->tls_id = tls_cnt = 1;
             app_dso->tls = guest_exec_tls;
