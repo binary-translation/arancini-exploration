@@ -76,7 +76,7 @@ class translator {
     /// @param i: operand_num (of xed)
     /// @return index encoded in instruction
     int fpu_get_instruction_index(int i);
-    
+
     /// @brief Generates nodes to compute index of an element on the FPU stack
     /// @param stack_idx: the index for which the address is queried, starting
     /// from top of stack

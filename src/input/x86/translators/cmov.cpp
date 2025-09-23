@@ -89,9 +89,9 @@ void cmov_translator::do_translate() {
 
         // Get the stack index
         int st_idx_i = fpu_get_instruction_index(1);
-        
-        auto tag_val = builder().insert_csel(cond->val(), fpu_tag_get(st_idx_i)->val(),
-                                         fpu_tag_get(0)->val());
+
+        auto tag_val = builder().insert_csel(
+            cond->val(), fpu_tag_get(st_idx_i)->val(), fpu_tag_get(0)->val());
         fpu_tag_set(0, tag_val->val());
     }
     default:
