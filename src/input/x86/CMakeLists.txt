@@ -42,3 +42,9 @@ target_include_directories(arancini-input-x86-static PUBLIC ${INCLUDE_PATH})
 # Link to XED
 target_link_libraries(arancini-input-x86 PRIVATE xed arancini-logger)
 target_link_libraries(arancini-input-x86-static PRIVATE xed arancini-logger)
+
+# We need to wait for XED to be build first In nix this is already ensured
+if(NOT DEFINED ENV{FLAKE_BUILD})
+  add_dependencies(arancini-input-x86 external-xed)
+  add_dependencies(arancini-input-x86-static external-xed)
+endif() # NIX

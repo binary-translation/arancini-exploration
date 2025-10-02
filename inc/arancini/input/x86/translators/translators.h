@@ -47,13 +47,6 @@ class translator {
     bool is_memory_operand(int opnum);
     bool is_immediate_operand(int opnum);
     value_node *compute_address(int mem_idx);
-    /// @brief Generates nodes to compute the address of an element on the FPU
-    /// stack
-    /// @param stack_idx: the index for which the address is queried, starting
-    /// from top of stack
-    /// @return a tree computing: x87_stack_base + (x87_stack_top_index * 10) +
-    /// (stack_idx * 10)
-    value_node *compute_fpu_stack_addr(int stack_idx);
 
     action_node *write_reg(reg_offsets reg, port &value);
     value_node *read_reg(const value_type &vt, reg_offsets reg);
@@ -77,26 +70,70 @@ class translator {
     void write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,
                      flag_op sf, flag_op pf, flag_op af);
 
-    // x87 FPU stack manipulation
+    // x87 FPU manipulation
+
+    /// @brief Gets the fpu stack index of an instruction
+    /// @param i: operand_num (of xed)
+    /// @return index encoded in instruction
+    int fpu_get_instruction_index(int i);
+
+    /// @brief Generates nodes to compute index of an element on the FPU stack
+    /// @param stack_idx: the index for which the address is queried, starting
+    /// from top of stack
+    /// @return index in memory as a u64
+    value_node *fpu_compute_stack_index(int stack_idx);
+
+    /// @brief Generates nodes to compute the address of an element on the FPU
+    /// stack
+    /// @param stack_idx: the index for which the address is queried, starting
+    /// from top of stack
+    /// @return a tree computing: x87_stack_base + (x87_stack_top_index * 8) +
+    /// (stack_idx * 8)
+    value_node *fpu_compute_stack_addr(int stack_idx);
 
     /// @brief Get a value from the x87 FPU stack
+    /// (Does not manipulate registers, use fpu_pop instead)
     /// @param stack_idx index in the stack to get, starting from top of stack
     /// @return The value located at this index in the FPU stack
     value_node *fpu_stack_get(int stack_idx);
 
     /// @brief Set a value in the x87 FPU stack
+    /// (Does not manipulate registers, use fpu_push instead)
     /// @param stack_idx index in the stack to set, starting from top of stack
-    /// @param val value top write in the stack
+    /// @param val value to write to the top of the stack
     /// @return An action node representing the write to the stack
     action_node *fpu_stack_set(int stack_idx, port &val);
 
-    /// @brief Move the x87 FPU stack index, updating the x87 tag register on
-    /// the way.
+    /// @brief Get a value from the x87 FPU tagword
+    /// @param stack_idx index of the corresponding value in the stack,
+    /// starting from top of stack
+    /// @return corresponding value:
+    /// 0b00 (valid), 0b01 (zero), 0b10 (special), 0b11 (empty)
+    value_node *fpu_tag_get(int stack_idx);
+
+    /// @brief Set a value from the x87 FPU tagword
+    /// @param stack_idx index of the corresponding value in the stack,
+    /// starting from top of stack
+    /// @param port the value that should be set:
+    /// 0b00 (valid), 0b01 (zero), 0b10 (special), 0b11 (empty)
+    /// @return An action node representing the write to the tag
+    action_node *fpu_tag_set(int stack_idx, port &val);
+
+    /// @brief Move the x87 FPU stack index
     /// @param val the value added to the current top index (1 to pop, -1 to
     /// push, fail otherwise)
     /// @return the action node writng the new top index to the x87 status
     /// register
-    action_node *fpu_stack_top_move(int val);
+    action_node *fpu_stack_index_move(int val);
+
+    /// @brief Set a f64 value in the x87 FPU
+    /// @param val value to write to the top of the stack
+    /// @return An action node representing pushing on to the stack
+    action_node *fpu_push(port &val);
+
+    /// @brief Pop st0 of the fpu stack
+    /// @return An action node representing popping on to the stack
+    action_node *fpu_pop();
 
     enum class cond_type {
         nbe,

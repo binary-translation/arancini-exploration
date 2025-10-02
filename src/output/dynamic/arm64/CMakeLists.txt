@@ -2,14 +2,7 @@ cmake_minimum_required(VERSION 3.22)
 project(arancini-output-arm64)
 
 if(NOT DEFINED ENV{FLAKE_BUILD})
-  find_package(Keystone)
-  if(NOT Keystone_FOUND)
-    message("Keystone not found")
-
-    # Try to fetch and build Keystone
-    include("../../../../cmake/getKeystone.cmake")
-    get_keystone()
-  endif()
+  include("./cmake/getKeystone.cmake")
 endif() # NIX
 
 # Compile with -fPIC

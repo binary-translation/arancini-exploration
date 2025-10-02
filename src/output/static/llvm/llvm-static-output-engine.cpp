@@ -99,8 +99,10 @@ void llvm_static_output_engine_impl::initialise_types() {
     types.i64 = Type::getInt64Ty(*llvm_context_);
     types.f32 = Type::getFloatTy(*llvm_context_);
     types.f64 = Type::getDoubleTy(*llvm_context_);
-    types.f80 = Type::getDoubleTy(*llvm_context_);
+    types.f80 = Type::getX86_FP80Ty(*llvm_context_);
+    types.f128 = Type::getFP128Ty(*llvm_context_);
     types.i128 = Type::getInt128Ty(*llvm_context_);
+    types.i80 = IntegerType::get(*llvm_context_, 80);
     types.i256 = IntegerType::get(*llvm_context_, 256);
     types.i512 = IntegerType::get(*llvm_context_, 512);
 
@@ -1025,6 +1027,10 @@ Value *llvm_static_output_engine_impl::materialise_port(
             case 64:
                 ty = types.i64;
                 break;
+            // x87 double extended-precision
+            case 80:
+                ty = types.i80;
+                break;
             case 128:
                 ty = types.i128;
                 break;
@@ -1146,6 +1152,14 @@ Value *llvm_static_output_engine_impl::materialise_port(
                     ty = types.f64;
                 else
                     ty = types.i64;
+                break;
+            }
+            // x87 double extended-precision
+            case 80: {
+                if (cn->target_type().is_floating_point())
+                    ty = types.f80;
+                else
+                    ty = types.i80;
                 break;
             }
             case 128:
@@ -1580,6 +1594,9 @@ Value *llvm_static_output_engine_impl::materialise_port(
         switch (rln->local()->type().width()) {
         case 8:
             ty = types.i8;
+            break;
+        case 16:
+            ty = types.i16;
             break;
         case 80:
             ty = types.f80;
@@ -2152,6 +2169,9 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder,
         case 8:
             ty = types.i8;
             break;
+        case 16:
+            ty = types.i16;
+            break;
         case 80:
             ty = types.f80;
             break;
@@ -2548,13 +2568,14 @@ void llvm_static_output_engine_impl::save_callee_regs(IRBuilder<> &builder,
     auto args = {reg_offsets::RCX, reg_offsets::RDX, reg_offsets::RDI,
                  reg_offsets::RSI, reg_offsets::R8,  reg_offsets::R9};
     auto regs = {
-        reg_offsets::PC,       reg_offsets::RBX,     reg_offsets::RSP,
-        reg_offsets::RBP,      reg_offsets::R12,     reg_offsets::R13,
-        reg_offsets::R14,      reg_offsets::R15,     reg_offsets::FS,
-        reg_offsets::GS,       reg_offsets::X87_STS, reg_offsets::X87_TAG,
-        reg_offsets::X87_CTRL, reg_offsets::ZMM0,    reg_offsets::ZMM1,
-        reg_offsets::ZMM2,     reg_offsets::ZMM3,    reg_offsets::ZMM4,
-        reg_offsets::ZMM5,     reg_offsets::ZMM6,    reg_offsets::ZMM7};
+        reg_offsets::PC,       reg_offsets::RBX,        reg_offsets::RSP,
+        reg_offsets::RBP,      reg_offsets::R12,        reg_offsets::R13,
+        reg_offsets::R14,      reg_offsets::R15,        reg_offsets::FS,
+        reg_offsets::GS,       reg_offsets::X87_STS,    reg_offsets::X87_TAG,
+        reg_offsets::X87_CTRL, reg_offsets::X87_OPCODE, reg_offsets::ZMM0,
+        reg_offsets::ZMM1,     reg_offsets::ZMM2,       reg_offsets::ZMM3,
+        reg_offsets::ZMM4,     reg_offsets::ZMM5,       reg_offsets::ZMM6,
+        reg_offsets::ZMM7};
     for (auto reg : regs) {
         auto ptr = builder.CreateGEP(
             types.cpu_state, state_arg,
@@ -2609,6 +2630,7 @@ void llvm_static_output_engine_impl::restore_callee_regs(IRBuilder<> &builder,
                  reg_offsets::X87_STS,
                  reg_offsets::X87_TAG,
                  reg_offsets::X87_CTRL,
+                 reg_offsets::X87_OPCODE,
                  reg_offsets::ZMM0,
                  reg_offsets::ZMM1};
     for (auto reg : regs) {

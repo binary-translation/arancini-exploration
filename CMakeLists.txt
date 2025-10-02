@@ -9,6 +9,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_FLAGS "-Wall -std=c++17 -Wno-unused-function")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 
+add_compile_options(-fdiagnostics-color=always)
+
 # Generate the compile commands for development
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Needed to get stdlibs in compile_commands.json on NixOS
@@ -67,25 +69,12 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY
     ${CMAKE_CURRENT_BINARY_DIR}/out/${CMAKE_BUILD_TYPE})
 
-# Get XED (if not found)
+# Nix takes care of fetching the dependencies
 if(NOT DEFINED ENV{FLAKE_BUILD})
-  # Nix takes care of fetching the dependencies, this check will still fail
-  # though
-  list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/lib)
-  find_package(XED GLOBAL)
-  if(NOT XED_FOUND)
-    message("XED not found")
-
-    # Try to fetch and build XED
-    include(cmake/getXED.cmake)
-    get_xed()
-  endif()
+  # Get dependencies
+  include(cmake/xed.cmake)
   include(cmake/fadec.cmake)
-
-  find_package(fmt QUIET)
-  if(NOT fmt_FOUND)
-    include(cmake/fmt.cmake)
-  endif()
+  include(cmake/fmt.cmake)
 endif() # NIX
 
 find_package(BISON)

@@ -3,45 +3,38 @@ project(fadec)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-set(FADEC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/fadec)
-
 find_package(Python3 COMPONENTS Interpreter)
 if(NOT Python3_FOUND)
   message(FATAL_ERROR "Python3 is required for building fadec")
 endif()
 
-if(NOT EXISTS ${FADEC_DIR}/encode.c)
-  find_package(Git QUIET)
-  if(NOT Git_FOUND OR NOT EXISTS "${CMAKE_SOURCE_DIR}/.git")
-    # Fetch FADEC from repo
-    message(STATUS "Git not found: fetching release")
+message("Acquiring fadec")
 
-    FetchContent_Declare(
-      FADEC URL https://github.com/aengelke/fadec/archive/refs/heads/main.zip
-                DOWNLOAD_DIR ${FADEC_DIR}/../ SOURCE_DIR ${FADEC_DIR})
+include(FetchContent)
 
-  else()
-    # Get submodule: fadec
-    FetchContent_Declare(
-      FADEC DOWNLOAD_COMMAND ${GIT_EXECUTABLE} submodule update --init
-                             --recursive ${FADEC_DIR})
-  endif()
-  # Populate FADEC directory
-  FetchContent_MakeAvailable(FADEC)
-endif()
+# We want to use the same fmt version as NixOS (as of 2024-04-29)
+FetchContent_Declare(
+  fadec
+  GIT_REPOSITORY https://github.com/aengelke/fadec.git
+  GIT_TAG ee111375d99d98538fff448cc81c355911562ef2)
 
+FetchContent_MakeAvailable(fadec)
+
+# Specify only the files that your command generates.
 add_custom_command(
-  OUTPUT ${FADEC_DIR}/fadec-encode-public.inc
-         ${FADEC_DIR}/fadec-encode-private.inc
+  OUTPUT ${fadec_SOURCE_DIR}/fadec-encode-public.inc
+         ${fadec_SOURCE_DIR}/fadec-encode-private.inc
   COMMAND
-    ${Python3_EXECUTABLE} ${FADEC_DIR}/parseinstrs.py encode
-    ${FADEC_DIR}/instrs.txt ${FADEC_DIR}/fadec-encode-public.inc
-    ${FADEC_DIR}/fadec-encode-private.inc)
+    ${Python3_EXECUTABLE} ${fadec_SOURCE_DIR}/parseinstrs.py encode
+    ${fadec_SOURCE_DIR}/instrs.txt ${fadec_SOURCE_DIR}/fadec-encode-public.inc
+    ${fadec_SOURCE_DIR}/fadec-encode-private.inc
+  DEPENDS ${fadec_SOURCE_DIR}/parseinstrs.py ${fadec_SOURCE_DIR}/instrs.txt
+  COMMENT "Generating fadec encoding header files")
 
-add_custom_target(fadec-defs ALL DEPENDS ${FADEC_DIR}/fadec-encode-public.inc
-                                         ${FADEC_DIR}/fadec-encode-private.inc)
+add_custom_target(
+  fadec-defs ALL DEPENDS ${fadec_SOURCE_DIR}/fadec-encode-public.inc
+                         ${fadec_SOURCE_DIR}/fadec-encode-private.inc)
 
-add_library(fadec ${FADEC_DIR}/encode.c)
-
-target_include_directories(fadec PUBLIC ${FADEC_DIR})
+add_library(fadec ${fadec_SOURCE_DIR}/encode.c)
+target_include_directories(fadec PUBLIC ${fadec_SOURCE_DIR})
 add_dependencies(fadec fadec-defs)

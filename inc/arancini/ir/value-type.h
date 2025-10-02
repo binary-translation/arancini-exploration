@@ -30,6 +30,9 @@ class value_type {
     static value_type u64() {
         return value_type(value_type_class::unsigned_integer, 64, 1);
     }
+    static value_type u80() {
+        return value_type(value_type_class::unsigned_integer, 80, 1);
+    } // x87 double extended-precision
     static value_type u128() {
         return value_type(value_type_class::unsigned_integer, 128, 1);
     }

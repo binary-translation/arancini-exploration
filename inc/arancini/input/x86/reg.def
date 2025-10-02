@@ -42,7 +42,8 @@ DEFREG(uint64_t, i64, X87_STACK_BASE)
 DEFREG(uint16_t, i16, X87_CTRL)
 DEFREG(uint16_t, i16, X87_STS)
 DEFREG(uint16_t, i16, X87_TAG)
-DEFREG(uint16_t, i16, unused4)
+// We may only use 11 bits
+DEFREG(uint16_t, i16, X87_OPCODE)
 
 // ZMMs
 DEFREG(uint512_t, i512, ZMM0)
