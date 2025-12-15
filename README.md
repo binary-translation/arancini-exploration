@@ -125,3 +125,9 @@ nix develop ./scripts#phoenix.x86_64-linux
 ```
 
 Also note that the implementation is missing relocations that are needed for C++ `new` and `delete`. Hence you are limited to C programs.
+
+
+## Docker image
+
+Parts of this setup have been pre-run as part of a Docker image.
+The image is available here: https://hub.docker.com/r/rmrssebastian/arancini-system-aarch64
