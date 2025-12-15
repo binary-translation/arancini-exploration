@@ -1,59 +1,127 @@
-# Arancini
+# Evaluation setup for "Arancini: A Hybrid Binary Translator for Weak Memory Architectures"
 
-Arancini is a *Hybrid Binary Translator (HBT)* that utilizes LLVM and
-custom-designed Dynamic Binary Translators (DBT) to perform user-mode emulation
-of x86.
+## Dependencies
+We use the Nix package manager: https://nixos.org/download/
 
-It currently supports x86-64, ARM64 and 64-bit RISC-V (RV64G) as host architectures
-and it is designed to support only x86 as its guest architecture.
+After installing it, you must enable flakes: https://nixos.wiki/wiki/flakes
 
-## Building
+## The main executable "txlat"
+*On the host*
 
-Arancini features a build system using CMake, which produces as output the
-Arancini libraries and the `txlat` program (described in Usage). Besides the
-build system, Arancini includes support for Nix directly.
-
-Given that Arancini relies on various system-specific headers, while the `txlat`
-tool directly invokes a compiler, it is expected that it will be built directly
-on the intended host architecture (e.g. Arancini for ARM64 must be built on ARM).
-
-A typical build proceeds as follows:
-
-```bash
-cmake -B build -S /path/to/arancini
-cmake --build build
+### Building it
+```
+nix build
 ```
 
-Arancini depends on the following libraries: Boost program options, XED, LLVM
-(all constituent libraries), keystone and fadec. Among these libraries, XED,
-keystone and fadec are handled directly by the build. Conversely, LLVM and Boost
-must be present on the system, they are widely available through package
-managers.
-
-There exists some preliminary support for cross-compilation on non-Nix systems,
-but it requires access to the system root of the target system. As such, it is
-advisable to avoid using cross-compilation.
-
-## Usage
-
-The user interface for Arancini is the `txlat` program, which utilizes the Arancini
-libraries for translating an input x86 binary to produce an output binary
-containing the Arancini runtime and translated code.
-
-A typical invocation of txlat is presented below:
-
-```bash
-txlat -I x86-program.o -O x86-program-translated.o
+### Using it
+You will need a working `clang` in your path. The easiest way to do so is:
+```
+nix develop
 ```
 
-The produced binary is also compiled by the above invocation of `txlat` using
-`g++`, the default for the `--cxx-compiler-path`. This binary can be directly
-executed as a regular executable.
+In this shell you should have everything to translate x86_64 programs.
+Example:
+```
+./result/bin/txlat -I test/hello-world/hello-static-musl -O hello.tx
 
-Additional flags are available for generating DOT graphs of the source program
-along with its corresponding translation, but also for including debugging
-information or debugging the `txlat` tool itself. For a complete overview of all
-supported flags, consult `txlat --help`.
+./hello.tx
+```
 
-Further documentation may be found under the `arancini/docs` directory.
+## Reproducing the evaluation
+### Conventions
+Many scripts expect binaries and translations to be placed in specific directories.
+Directories are usually suffixed by `-x86_64`, `-aarch64`, or `-riscv64` depending on the bianries they contain.
+Phoenix binaries are placed in `phoenix-<suffix>` directories, translations in `txlat-<suffix>`.
+Depending on applied or ommited optimizations there may be infixes like `-nodeadflags-` and `-nofencemerge-` for translations where the specific optimization is disabled, or `-fast-` when wrappers to native libc functions are used.
 
+### Prepared binaries
+We included pre-compiled binaries of the Phoenix benchmark suite under `test/phoenix`
+You can also build them yourself using the instructions below.
+
+### Building the x86_64 binaries
+*On the guest*
+```
+nix build ./scripts#phoenix.x86_64-linux --out-link phoenix-x86_64
+```
+
+If your guest and host machines are connected over ssh (and both have nix) you can simply copy
+the nix store contents over:
+```
+nix copy --to <url of the host> ./phoenix-x86_64
+```
+
+Trying to build the x86_64 binaries *on the host* should now use the cached version.
+Cross-compiling will very likely fail.
+
+### Translating the benchmarks
+*On the host*
+
+We use an Aarch64 host as an example thoughout.
+
+First you need to translate `libc.so` and `libunwind.so` since all benchmarks are linked against it.
+```
+txlat -I phoenix-x86_64/x86_64-linux/libc.so -O txlat-aarch64/libc.so
+
+txlat -I phoenix-x86_64/x86_64-linux/libunwind.so -O txlat-aarch64/libunwind.so
+```
+This takes ~40min. Repeat for any optimization you want do disable.
+
+Now translate all benchmarks:
+```
+bash ./tx_all.sh
+```
+Since the benchmarks are very small compared to libc, this will only take a few minutes in total.
+
+### Building native benchmarks
+
+This will build all benchmarks exactly like on the guest system, just for the host:
+```
+nix build ./scripts#phoenix.aarch64-linux --out-link phoenix-aarch64
+```
+
+### Entering the evaluation environment
+
+Yes, you can nest `nix develop` shells.
+```
+nix develop ./scripts
+```
+
+This should give you access to `risotto` binaries, which we will compare against.
+
+### Running the benchamrks
+
+Given the amount of translations, emulators and threads we compare, this will take multiple hours:
+```
+python3 ./scripts/bench.py
+```
+
+Results are placed under `bench`, with the newest results linked to `bench/latest`
+
+### Generating plots
+
+There are two scripts that will generate the figures 6-9 from the paper:
+- `scripts/timeplot.py` for figures 6,8,9
+- `scripts/distplot.py` for figure 7
+
+Both have to be used from the `scripts` directory:
+```
+cd scripts 
+python3 timeplot.py
+```
+
+`timeplot.py` uses the results in `bench/latest` by default.
+`distplot.py` will either parse files of the form `<benchmark-name>.data.script` or used cached results in `scripts/distribution.csv`.
+
+For the later you need a working `perf` (e.g. you are not in a container, VM or otherwise unnatural system).
+Simply run `perf record -F 99 -o <benchmark-name>.data -- txlat-aarch64/<benchmark-name> <inputs> && perf script -i <benchmark-name>.data > <benchmark-name>.data.script` to generate the traces.
+
+
+## Playing around
+
+Note that the current implementation of Arancini can only translate bianries linked to musl libc.
+To get a build environment where the compiler will do that for you automatically, use:
+```
+nix develop ./scripts#phoenix.x86_64-linux
+```
+
+Also note that the implementation is missing relocations that are needed for C++ `new` and `delete`. Hence you are limited to C programs.

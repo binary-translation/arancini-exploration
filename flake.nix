@@ -66,6 +66,35 @@
 		native_pkgs = import nixpkgs { system = system; };
 	in
 	{
+    # artifact = native_pkgs.dockerTools.buildLayeredImage {
+    #   name = "arancini-${system}";
+    #   tag = "latest";
+    #   fromImage = native_pkgs.dockerTools.pullImage {
+    #     imageName = "nixos/nix";
+    #     sha256 = "0opkJTUNNdz+Ve8gHlJXJ0VsatzBjLYL8xu/ekNc5Co=";
+    #     imageDigest = "sha256:081b65e50a5c4e6ef4a9094a462da3b83ff76bfec70236eb010047fcee36e11c";
+    #   };
+
+    #   contents = [
+    #     self.outputs.defaultPackage.${system}
+    #     # !!! make sure to nix copy this to the builder,
+    #     # otherwise it tries to cross-compile the whole toolchain
+    #     # benchmarks.phoenix.x86_64-linux
+    #     # benchmarks.phoenix.${system}
+    #     # benchmarks.risotto-qemu.${system}
+    #     # benchmarks.risotto.${system}
+    #     # benchmarks.risotto-nofence.${system}
+    #     # benchmarks.risotto-tso.${system}
+    #     # native_pkgs.gdb
+    #     native_pkgs.clang_18
+    #     # native_pkgs.gcc
+    #     native_pkgs.dockerTools.binSh
+    #   ];
+
+    #   config = {
+    #     Cmd = [ "${native_pkgs.bash}/bin/bash"];
+    #   };
+    # };
 		defaultPackage = native_pkgs.stdenv.mkDerivation {
 				name = "arancini";
 				pname = "txlat";
@@ -80,9 +109,10 @@
                     flex
                     bison
 					clang_18
+          util-linux
 				];
 				buildInputs = with native_pkgs; [
-                    fmt
+          fmt
 					zlib
 					boost
 					patched-xed
@@ -99,8 +129,18 @@
 					export FLAKE_BUILD=1
 					export NDEBUG=1
 					cmakeConfigurePhase
+
+          mkdir -p $out/test/phoenix
+          cp -r $src/test/phoenix/* $out/test/phoenix/
+          chmod +x $out/test/phoenix/*
+
+          cp $src/init_lib.c $out/
+          cp $src/lib.*.lds $out/
+
+          cp $src/*exec.lds $out/
 				'';
 				cmakeFlags = [ "-DBUILD_TESTS=1" ];
+        dontStrip = true;
 			};
 	}) //
 	flake-utils.lib.eachSystem [ "aarch64-linux" "riscv64-linux" ] (system:

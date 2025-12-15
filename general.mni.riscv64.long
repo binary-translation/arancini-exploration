@@ -1,0 +1,9 @@
+library "/nix/store/vhxcjs9sk8ww3g1ly5sf3amp7778rxhb-glibc-2.39-52/lib/libc.so.6";
+u64 strlen ( const ptr s );
+ptr memmove ( ptr dest, const ptr src, u64 count );
+ptr memset ( ptr dest, i32 ch, u64 count );
+i64 strcmp ( const ptr l, const ptr r );
+i32 rand ( );
+i32 rand_r ( ptr seed );
+i64 gettimeofday ( ptr tv, ptr tz );
+i64 atoi ( const ptr s );

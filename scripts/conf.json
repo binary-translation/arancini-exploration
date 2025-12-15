@@ -1,20 +1,8 @@
 {
     "machines": [
         {
-            "url": "graham",
-            "arch": "x86_64",
-            "user": "$USER",
-            "arancini_root": "$HOME/arancini-exploration"
-        },
-        {
-            "url": "yasmin",
+            "url": "localhost",
             "arch": "aarch64",
-            "user": "$USER",
-            "arancini_root": "$HOME/arancini-exploration"
-        },
-        {
-            "url": "tegan",
-            "arch": "riscv64",
             "user": "$USER",
             "arancini_root": "$HOME/arancini-exploration"
         }
@@ -33,15 +21,47 @@
         "phoenix": {
             "bins": [
                 {
+                    "name": "histogram",
+                    "args": [
+                        { "name": "small.bmp", "type": "datafile" }
+                    ]
+                },
+                {
+                    "name": "kmeans",
+                    "args": []
+                },
+                {
+                    "name": "linear_regression",
+                    "args": [
+                        { "name": "key_file_50MB.txt", "type": "datafile" }
+                    ]
+                },
+                {
+                    "name": "matrix_multiply",
+                    "args": [
+                        { "name": "1024 1024 0", "type": "literal" }
+                    ]
+                },
+                {
+                    "name": "pca",
+                    "args": []
+                },
+                {
+                    "name": "string_match",
+                    "args": [
+                        { "name": "key_file_50MB.txt", "type": "datafile" }
+                    ]
+                },
+                {
                     "name": "word_count",
                     "args": [
                         { "name": "word_10MB.txt", "type": "datafile" }
                     ]
                 }
             ],
-            "x86_64": "phoenix-x86_64",
-            "aarch64": "phoenix-aarch64",
-            "riscv64": "phoenix-riscv64"
+            "x86_64": "test/phoenix",
+            "aarch64": "phoenix-aarch64/aarch64-linux",
+            "riscv64": "phoenix-riscv64/riscv64-linux"
         },
         "parsec": {
             "bins": [
@@ -59,6 +79,30 @@
         "threads": [1, 2, 4, 8, 16, 32, 64]
         },
         {
+        "name": "arancini-no-df",
+        "what": "static",
+        "tx": "tx-df",
+        "threads": [1, 2, 4, 8, 16, 32, 64]
+        },
+        {
+        "name": "arancini-no-df+nlib",
+        "what": "static",
+        "tx": "tx-df-fast",
+        "threads": [1, 2, 4, 8, 16, 32, 64]
+        },
+        {
+        "name": "arancini-no-fm",
+        "what": "static",
+        "tx": "tx-fm",
+        "threads": [1, 2, 4, 8, 16, 32, 64]
+        },
+        {
+        "name": "arancini-no-fm+nlib",
+        "what": "static",
+        "tx": "tx-fm-fast",
+        "threads": [1, 2, 4, 8, 16, 32, 64]
+        },
+        {
         "name": "arancini",
         "what": "static",
         "tx": "translations",
@@ -71,6 +115,12 @@
         "threads": [1, 2, 4, 8, 16, 32, 64]
         },
         {
+        "name": "qemu",
+        "what": "dynamic",
+        "bin": "risotto-qemu",
+        "threads": [16]
+        },
+        {
         "name": "risotto",
         "what": "dynamic",
         "bin": "risotto",
@@ -79,7 +129,7 @@
         {
         "name": "risotto+nlib",
         "what": "dynamic",
-        "bin": "risotto -nlib general.mni.riscv64.long",
+        "bin": "risotto -nlib general.mni.aarch64",
         "threads": [16]
         },
         {

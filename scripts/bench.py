@@ -85,7 +85,7 @@ def parse_bench(b, obj):
     tmp["args"] = []
     for a in b["args"]:
         if a["type"] == "datafile":
-            tmp["args"].append(f'{obj["x86_64"]}/{b["name"]}_datafiles/{a["name"]}')
+            tmp["args"].append(f'{obj["aarch64"]}/{b["name"]}_datafiles/{a["name"]}')
         else:
             tmp["args"].append(a["name"])
     return tmp
@@ -106,7 +106,7 @@ def do_run(bench, e, env, t, v):
     #cmd = ['taskset', '-c', f'1-{t}']
     if e["what"] == "static":
         tx = e["tx"]
-        cmd += ["./"+config["prefixes"][tx]+arch+"/"+bench["name"]+v+"."+arch]
+        cmd += ["./"+config["prefixes"][tx]+arch+"/"+bench["name"]+v]
     elif e["what"] == "dynamic":
         cmd += e["bin"].split() + [f'{bench["guest"]}/{bench["name"]}{v}']
     else:
@@ -133,11 +133,11 @@ def run(csvfile, config):
     writer = csv.DictWriter(csvfile, fieldnames)
 
     #TODO: make a real path option for the benchmarks
-    prog = "./"+config["prefixes"]["translations"]+arch+"/matrix_multiply."+arch
-    #sp.run([prog]+["1024 1024 1"], capture_output=True, timeout=1800) 
+    prog = "./"+config["prefixes"]["translations"]+arch+"/matrix_multiply"
+    sp.run([prog]+["1024 1024 1"], capture_output=True, timeout=1800)
 
     benchs = config["benchmarks"]["phoenix"]["bins"]
-    versions = [ "-pthread" ]
+    versions = [ "", "-pthread" ]
 
     for b in benchs:
         be = parse_bench(b, config["benchmarks"]["phoenix"])

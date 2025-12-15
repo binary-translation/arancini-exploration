@@ -6,7 +6,7 @@
 			type = "github";
 			owner = "ReimersS";
 			repo = "phoenix";
-			ref = "musl";
+			ref = "ta/word-count";
 			flake = false;
 		};
 		phoenix-16 = {
@@ -29,12 +29,18 @@
 			repo = "nixpkgs";
 			rev = "80b3160c21977e627ae99f0c87404cdcd85646ad";
 		};
+    redis-src = {
+      type = "github";
+      owner = "ReimersS";
+      repo = "redis";
+      flake = false;
+    };
 	};
 
 	nixConfig.extra-substituters = [ "https://musl-toolchains.cachix.org" ];
 	nixConfig.extra-trusted-public-keys = [ "musl-toolchains.cachix.org-1:g9L50mmWHHMzAVIfgLVQjhoBsjT66n3LDa0f8xeigpI=" ];
 
-	outputs = { self, nixpkgs, flake-utils, phoenix-src, phoenix-16, parsec-src, risotto-pkgs, ... }:
+	outputs = { self, nixpkgs, flake-utils, phoenix-src, phoenix-16, parsec-src, risotto-pkgs, redis-src, ... }:
 	flake-utils.lib.eachSystem [ "x86_64-linux" "riscv64-linux" "aarch64-linux" ] (system:
 	let
 		pkgs = import nixpkgs { system = system; crossSystem = { config = system+"-musl"; useLLVM = true; linker = "lld"; }; };
@@ -191,12 +197,19 @@
 			packages = [
 				native_pkgs.flamegraph
 			] ++ native_pkgs.lib.optionals (system != "x86_64-linux") [
-				qemu
+				#qemu
 				risotto-qemu
 				risotto
 				risotto-nofence
 				risotto-tso
 				native_pkgs.flamegraph
+				(native_pkgs.python3.withPackages (python-pkgs: [
+				python-pkgs.pandas
+				python-pkgs.seaborn
+				python-pkgs.matplotlib
+				python-pkgs.notebook
+                python-pkgs.pylatex
+				]))
 			] ++ native_pkgs.lib.optionals (system == "x86_64-linux") [
                 (native_pkgs.texlive.combine { inherit (native_pkgs.texlive) scheme-small type1cm mlmodern; })
 				(native_pkgs.python3.withPackages (python-pkgs: [
@@ -208,7 +221,23 @@
 				]))];
 		};
 	};
-	
+  risotto-qemu = risotto-qemu;
+  risotto = risotto;
+  risotto-nofence = risotto-nofence;
+  risotto-tso = risotto-tso;
+
+  scripts = pkgs.stdenv.mkDerivation {
+    name = "scripts";
+    src = self;
+    phases = [ "installPhase" ];
+    installPhase = ''
+      mkdir -p $out/bin
+      mkdir -p $out/results
+      cp $src/bench.py $out/bin/
+      cp $src/conf.json $out/bin/
+    '';
+  };
+
 	phoenix =
 		pkgs.llvmPackages_15.stdenv.mkDerivation {
 			name = "phoenix";
@@ -216,20 +245,20 @@
 
 			src = phoenix-src;
 			nativeBuildInputs = [
-				pkgs.gnumake
-				pkgs.binutils
+				native_pkgs.gnumake
+				native_pkgs.binutils
 			];
 
 			configurePhase = "cd phoenix-2.0";
 			buildPhase = "make";
 			installPhase = ''
-				mkdir $out;
+				mkdir -p $out/${system};
 				for p in $(ls tests/*/*); do
-					if [[ -x $p ]]; then cp $p $out/; fi;
+					if [[ -x $p ]]; then cp $p $out/${system}/; fi;
 				done;
-				ln -s ${pkgs.llvmPackages_15.stdenv.cc.libc}/lib/libc.so $out/libc.so;
-                ln -s ${toString ((builtins.elemAt (builtins.filter (x: x.pname=="libunwind") pkgs.llvmPackages_15.stdenv.cc.depsTargetTargetPropagated) 0).out.outPath)}/lib/libunwind.so $out/libunwind.so;
-				cd $out;
+				ln -s ${pkgs.llvmPackages_15.stdenv.cc.libc}/lib/libc.so $out/${system}/libc.so;
+        ln -s ${toString ((builtins.elemAt (builtins.filter (x: x.pname=="libunwind") pkgs.llvmPackages_15.stdenv.cc.depsTargetTargetPropagated) 0).out.outPath)}/lib/libunwind.so $out/${system}/libunwind.so;
+				cd $out/${system};
 				tar -xzf ${histogram_datafiles};
 				tar -xzf ${linear_regression_datafiles};
 				tar -xzf ${string_match_datafiles};
@@ -299,6 +328,33 @@
 				done;
 			'';
 		};
+  redis = pkgs.stdenv.mkDerivation {
+			name = "redis";
+			hardeningDisable = [ "all" ];
+
+			src = redis-src;
+			nativeBuildInputs = [
+				native_pkgs.gnumake
+				#pkgs.binutils
+				native_pkgs.pkg-config
+        native_pkgs.python3
+			];
+			buildInputs = [
+			];
+      enableParallelBuilding = true;
+      makeFlags = [
+        "PREFIX=$(out)"
+        "LD=${pkgs.stdenv.cc.targetPrefix}clang++"
+        "AR=${pkgs.stdenv.cc.targetPrefix}ar"
+        "RANLIB=${pkgs.stdenv.cc.targetPrefix}ranlib"
+        "BUILD_TLS=no"
+        "BUILD_WITH_MODULES=no"
+        "INSTALL_RUST_TOOLCHAIN=no"
+        "DISABLE_WERRORS=yes"
+        "MALLOC=libc"
+      ];
+  };
+
 	checks = {
 		ccTest = pkgs.llvmPackages_15.stdenv.cc;
 	};
