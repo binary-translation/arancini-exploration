@@ -14,7 +14,7 @@ public:
 	llvm_static_output_engine(const std::string &output_filename, const bool is_exec);
 	virtual ~llvm_static_output_engine();
 
-	void generate() override;
+	void generate(bool no_fence_opt) override;
 
 	void set_debug(bool dbg) { dbg_ = dbg; }
 
