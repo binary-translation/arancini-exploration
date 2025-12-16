@@ -129,7 +129,7 @@
         {
         "name": "risotto+nlib",
         "what": "dynamic",
-        "bin": "risotto -nlib general.mni.aarch64",
+        "bin": "risotto -nlib general.mni.aarch64.long",
         "threads": [16]
         },
         {
