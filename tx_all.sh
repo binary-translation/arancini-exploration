@@ -44,4 +44,5 @@ tx_all_fast() {
 
 tx_all
 tx_all_ndf
+tx_all_nfm
 tx_all_fast
