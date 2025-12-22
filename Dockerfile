@@ -28,13 +28,19 @@ RUN mkdir txlat-nofencemerge-fast-aarch64
 SHELL ["nix", "develop", "--accept-flake-config", "--command", "bash", "-c"]
 RUN result/bin/txlat -I test/phoenix/libc.so -O txlat-aarch64/libc.so
 RUN result/bin/txlat --disable-flag-opt -I test/phoenix/libc.so -O txlat-nodeadflags-aarch64/libc.so
+RUN result/bin/txlat --disable-fence-opt -I test/phoenix/libc.so -O txlat-nofencemerge-aarch64/libc.so
 RUN result/bin/txlat --nlib general.mni.aarch64.long -I test/phoenix/libc.so -O txlat-fast-aarch64/libc.so
 RUN result/bin/txlat --nlib general.mni.aarch64.long --disable-flag-opt -I test/phoenix/libc.so -O txlat-nodeadflags-fast-aarch64/libc.so
+RUN result/bin/txlat --nlib general.mni.aarch64.long --disable-fence-opt -I test/phoenix/libc.so -O txlat-nofencemerge-fast-aarch64/libc.so
 
 RUN result/bin/txlat -I test/phoenix/libunwind.so -O txlat-aarch64/libunwind.so
 RUN result/bin/txlat --disable-flag-opt -I test/phoenix/libunwind.so -O txlat-nodeadflags-aarch64/libunwind.so
+RUN result/bin/txlat --disable-fence-opt -I test/phoenix/libunwind.so -O txlat-nofencemerge-aarch64/libunwind.so
 RUN result/bin/txlat --nlib general.mni.aarch64.long -I test/phoenix/libunwind.so -O txlat-fast-aarch64/libunwind.so
 RUN result/bin/txlat --nlib general.mni.aarch64.long --disable-flag-opt -I test/phoenix/libunwind.so -O txlat-nodeadflags-fast-aarch64/libunwind.so
+RUN result/bin/txlat --nlib general.mni.aarch64.long --disable-fence-opt -I test/phoenix/libunwind.so -O txlat-nofencemerge-fast-aarch64/libunwind.so
 
 SHELL ["/bin/sh", "-c"]
+RUN nix develop ./scripts --accept-flake-config
+
 CMD nix develop --accept-flake-config

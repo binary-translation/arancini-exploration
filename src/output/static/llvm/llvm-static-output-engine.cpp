@@ -69,7 +69,7 @@ llvm_static_output_engine::llvm_static_output_engine(const std::string &output_f
 
 llvm_static_output_engine::~llvm_static_output_engine() = default;
 
-void llvm_static_output_engine::generate() { oei_->generate(); }
+void llvm_static_output_engine::generate(bool no_fence_opt) { oei_->generate(no_fence_opt); }
 
 llvm_static_output_engine_impl::llvm_static_output_engine_impl(const llvm_static_output_engine &e, const std::vector<std::pair<unsigned long, std::string>> &extern_fns, const std::vector<std::shared_ptr<ir::chunk>> &chunks)
 	: e_(e)
@@ -82,7 +82,7 @@ llvm_static_output_engine_impl::llvm_static_output_engine_impl(const llvm_static
 {
 }
 
-void llvm_static_output_engine_impl::generate()
+void llvm_static_output_engine_impl::generate(bool no_fence_opt)
 {
 	InitializeAllTargetInfos();
 	InitializeAllTargets();
@@ -91,7 +91,7 @@ void llvm_static_output_engine_impl::generate()
 	InitializeAllAsmPrinters();
 
 	build();
-	optimise();
+	optimise(no_fence_opt);
 	compile();
 }
 
@@ -2071,7 +2071,7 @@ Function *llvm_static_output_engine_impl::get_static_fn(std::shared_ptr<packet> 
 	return nullptr;
 };
 
-void llvm_static_output_engine_impl::optimise()
+void llvm_static_output_engine_impl::optimise(bool no_fence_opt)
 {
 	LoopAnalysisManager LAM;
 	FunctionAnalysisManager FAM;
@@ -2085,9 +2085,11 @@ void llvm_static_output_engine_impl::optimise()
 	PB.registerLoopAnalyses(LAM);
 	PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-	PB.registerOptimizerLastEPCallback( [&](ModulePassManager &mpm, OptimizationLevel Level) {
-		mpm.addPass(createModuleToFunctionPassAdaptor(FenceCombinePass()));
-	});
+  if (!no_fence_opt) {
+	  PB.registerOptimizerLastEPCallback( [&](ModulePassManager &mpm, OptimizationLevel Level) {
+  		mpm.addPass(createModuleToFunctionPassAdaptor(FenceCombinePass()));
+  	});
+  }
 
 	ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
 	MPM.run(*module_, MAM);

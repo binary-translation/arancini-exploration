@@ -240,7 +240,7 @@ void txlat_engine::translate(const boost::program_options::variables_map &cmdlin
 	}
 
 	// Invoke the output engine, and tell it to write to a temporary file.
-	oe->generate();
+	oe->generate(cmdline.count("disable-fence-opt") > 0);
 
 	// --------------- //
 

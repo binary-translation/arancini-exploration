@@ -24,12 +24,7 @@ target_link_libraries(txlat
                       Boost::program_options)
 
 # Copy linker script files
-if (DBT_ARCH STREQUAL "X86_64")
-    add_custom_command(TARGET txlat POST_BUILD
-                       COMMAND ${CMAKE_COMMAND} -E copy
-                       ${CMAKE_SOURCE_DIR}/x86_64.exec.lds
-                       $<TARGET_FILE_DIR:txlat>)
-elseif (DBT_ARCH STREQUAL "AARCH64")
+if (DBT_ARCH STREQUAL "AARCH64")
     add_custom_command(TARGET txlat POST_BUILD
                        COMMAND ${CMAKE_COMMAND} -E copy
                        ${CMAKE_SOURCE_DIR}/aarch64.exec.lds
@@ -39,6 +34,8 @@ elseif (DBT_ARCH STREQUAL "RISCV64")
                        COMMAND ${CMAKE_COMMAND} -E copy
                        ${CMAKE_SOURCE_DIR}/riscv64.exec.lds
                        $<TARGET_FILE_DIR:txlat>)
+elseif (DBT_ARCH STREQUAL "X86_64")
+
 else ()
     message(FATAL_ERROR "Invalid ARCH specified: valid values are X86_64, AARCH64, RISCV64")
 endif ()

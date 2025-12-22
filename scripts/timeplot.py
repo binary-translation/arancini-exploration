@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
-bm = { "native":99, "arancini":1, "arancini+nlib":2, "lasagne":98, "arancini-no-fm":3, "arancini-no-fm+nlib":4, "risotto":4, "risotto+nlib":5, "arancini-no-df":3, "arancini-no-df+nlib":4}
+bm = { "native":99, "arancini":1, "arancini+nlib":2, "lasagne":98, "arancini-no-fm":3, "arancini-no-fm+nlib":4, "risotto":4, "risotto+nlib":5, "arancini-no-df":3, "arancini-no-df+nlib":4, "qemu":4}
 sm = { "hi":"hi", "km":"km", "li":"lr", "ma":"mm", "pc":"pc", "st":"sm", "wo":"wc"}
 
 def to_idx(s):
@@ -73,6 +73,7 @@ scale.append(base.copy())
 
 # optimizations
 for i in [0]:
+    opt[i].drop(opt[i][opt[i]["emulator"]=="qemu"].index, inplace=True)
     opt[i].drop(opt[i][opt[i]["emulator"]=="risotto"].index, inplace=True)
     opt[i].drop(opt[i][opt[i]["emulator"]=="risotto-nofence"].index, inplace=True)
     opt[i].drop(opt[i][opt[i]["emulator"]=="risotto+nlib"].index, inplace=True)
@@ -111,7 +112,7 @@ data.drop(data[data["emulator"]=="native"].index, inplace=True)
 mpl.rcParams["pdf.fonttype"] = 42
 mpl.rcParams["ps.fonttype"] = 42
 mpl.rcParams["figure.labelsize"] = 14
-#mpl.rcParams["figure.figsize"] = (7,3)
+mpl.rcParams["figure.figsize"] = (7,3)
 #fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7, 3), sharex=True)
 #fig.subplots_adjust(hspace=0.05)
 
@@ -123,8 +124,9 @@ sns.set_style("ticks", {"xtick.major.size": 14, "ytick.major.size": 14, "axes.gr
 sns.set_context("talk", rc={"font.size": 14, "axes.titlesize": 18, "axes.labelsize": 14})
 
 dat = data.copy()
-#dat.drop(dat[dat["emulator"]=="arancini"].index, inplace=True)
+dat.drop(dat[dat["emulator"]=="arancini"].index, inplace=True)
 dat.drop(dat[dat["emulator"]=="risotto"].index, inplace=True)
+dat.drop(dat[dat["emulator"]=="qemu"].index, inplace=True)
 
 dat["emulator"] = dat["emulator"].apply(lambda l: "Arancini" if l=="arancini+nlib" else l)
 dat["emulator"] = dat["emulator"].apply(lambda l: "Risotto" if l=="risotto+nlib" else l)
@@ -230,7 +232,7 @@ fig.tight_layout()
 
 plt.savefig("figure6.png", dpi=500, bbox_inches="tight")
 
-out = ["risotto", "risotto+nlib", "lasagne", "arancini+nlib"]
+out = ["qemu", "risotto", "risotto+nlib", "lasagne", "arancini+nlib"]
 #ob = ["km", "lr", "sm", "pc"]
 #data2=data.copy()
 

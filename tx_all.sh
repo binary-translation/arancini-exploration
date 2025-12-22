@@ -22,6 +22,16 @@ tx_all_ndf() {
   done
 }
 
+tx_all_nfm() {
+
+  echo "Translating all Benchmarks without fencemerge opt"
+  for b in test/phoenix/*; do
+    if [[ $(basename $b) != *.so ]]; then
+      result/bin/txlat --disable-flag-opt -I $b -O txlat-nofencemerge-aarch64/$(basename $b) -l txlat-nofencemerge-aarch64/libc.so -l txlat-nofencemerge-aarch64/libunwind.so
+    fi
+  done
+}
+
 tx_all_fast() {
 
   echo "Translating all Benchmarks with native libs"
@@ -34,4 +44,5 @@ tx_all_fast() {
 
 tx_all
 tx_all_ndf
+tx_all_nfm
 tx_all_fast

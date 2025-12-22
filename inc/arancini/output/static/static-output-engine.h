@@ -28,7 +28,7 @@ public:
 	void set_entrypoint(off_t ep) { ep_ = ep; }
 	off_t get_entrypoint() const { return ep_; }
 
-	virtual void generate() = 0;
+	virtual void generate(bool arg) = 0;
 
     virtual ~static_output_engine() = default;
 private:

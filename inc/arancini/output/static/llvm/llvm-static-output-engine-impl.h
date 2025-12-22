@@ -52,7 +52,7 @@ class llvm_static_output_engine_impl {
 public:
 	llvm_static_output_engine_impl(const llvm_static_output_engine &e, const std::vector<std::pair<unsigned long, std::string>> &extern_fns, const std::vector<std::shared_ptr<ir::chunk>> &chunks);
 
-	void generate();
+	void generate(bool no_fence_opt);
 
 	unsigned long fixed_branches;
 private:
@@ -119,7 +119,7 @@ private:
 	void build();
 	void initialise_types();
 	void create_main_function(::llvm::Function *loop_fn);
-	void optimise();
+	void optimise(bool no_fence_opt);
 	void compile();
 	void lower_chunks(::llvm::Function *main_loop_fn);
 	void lower_chunk(::llvm::IRBuilder<> *builder, ::llvm::Function *main_loop_fn, std::shared_ptr<ir::chunk> chunk);
