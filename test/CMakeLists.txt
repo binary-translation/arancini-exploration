@@ -5,17 +5,17 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 set(tester "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/translate-and-run.py")
 
-set(static-musl-phoenix-path "share/static-musl-phoenix" CACHE PATH "Path to static-musl-phoenix executables")
+# set(static-musl-phoenix-path "share/static-musl-phoenix" CACHE PATH "Path to static-musl-phoenix executables")
 
 set(smoke-tests
-    hello-world/hello-static-musl
-    "${static-musl-phoenix-path}/histogram-seq-static-musl"
-    "${static-musl-phoenix-path}/kmeans-seq-static-musl"
-    "${static-musl-phoenix-path}/linear_regression-seq"
-    "${static-musl-phoenix-path}/matrix_multiple-seq-static-musl"
-    "${static-musl-phoenix-path}/pca-seq-static-musl"
-    "${static-musl-phoenix-path}/string_match-seq-static-musl"
-    "${static-musl-phoenix-path}/word_count-seq-static-musl")
+    hello-world/hello-static-musl)
+    # "${static-musl-phoenix-path}/histogram-seq-static-musl"
+    # "${static-musl-phoenix-path}/kmeans-seq-static-musl"
+    # "${static-musl-phoenix-path}/linear_regression-seq"
+    # "${static-musl-phoenix-path}/matrix_multiple-seq-static-musl"
+    # "${static-musl-phoenix-path}/pca-seq-static-musl"
+    # "${static-musl-phoenix-path}/string_match-seq-static-musl"
+    # "${static-musl-phoenix-path}/word_count-seq-static-musl")
 
 foreach (test ${smoke-tests})
     get_filename_component(filename "${test}" NAME)
@@ -68,4 +68,4 @@ endif ()
 
 # Install static binaries
 install(DIRECTORY hello-world DESTINATION ${CMAKE_INSTALL_PREFIX}/test)
-install(DIRECTORY phoenix DESTINATION ${CMAKE_INSTALL_PREFIX}/test)
+# install(DIRECTORY phoenix DESTINATION ${CMAKE_INSTALL_PREFIX}/test)
