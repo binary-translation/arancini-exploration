@@ -59,7 +59,7 @@
                     ]
                 }
             ],
-            "x86_64": "test/phoenix",
+            "x86_64": "phoenix-x86_64",
             "aarch64": "phoenix-aarch64/aarch64-linux",
             "riscv64": "phoenix-riscv64/riscv64-linux"
         },

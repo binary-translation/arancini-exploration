@@ -35,7 +35,7 @@ Phoenix binaries are placed in `phoenix-<suffix>` directories, translations in `
 Depending on applied or ommited optimizations there may be infixes like `-nodeadflags-` and `-nofencemerge-` for translations where the specific optimization is disabled, or `-fast-` when wrappers to native libc functions are used.
 
 ### Prepared binaries
-We included pre-compiled binaries of the Phoenix benchmark suite under `test/phoenix`
+We included pre-compiled binaries of the Phoenix benchmark suite under `phoenix-x86_64`
 You can also build them yourself using the instructions below.
 
 ### Building the x86_64 binaries

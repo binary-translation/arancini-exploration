@@ -130,9 +130,9 @@
 					export NDEBUG=1
 					cmakeConfigurePhase
 
-          mkdir -p $out/test/phoenix
-          cp -r $src/test/phoenix/* $out/test/phoenix/
-          chmod +x $out/test/phoenix/*
+          mkdir -p $out/phoenix-x86_64
+          cp -r $src/phoenix-x86_64/* $out/phoenix-x86_64
+          chmod +x $out/phoenix-x86_64/*
 
           cp $src/init_lib.c $out/
           cp $src/lib.*.lds $out/
