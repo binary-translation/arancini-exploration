@@ -1,0 +1,2 @@
+x86_closure.nar filter=lfs diff=lfs merge=lfs -text
+*.nar filter=lfs diff=lfs merge=lfs -text
