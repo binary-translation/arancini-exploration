@@ -38,6 +38,9 @@ Depending on applied or ommited optimizations there may be infixes like `-nodead
 We included pre-compiled binaries of the Phoenix benchmark suite under `phoenix-x86_64`
 You can also build them yourself using the instructions below.
 
+> [!] When using the pre-compiled binaries, you must import the `x86_closure` into your nix store for QEMU (Risotto) to find the dynamically linked libraries.
+> To do so, decompress `tar -xzvf x86_closure.gz` and import `nix-store --import < ./x86_closure.nar`
+
 ### Building the x86_64 binaries
 *On the guest*
 ```
@@ -78,6 +81,7 @@ This will build all benchmarks exactly like on the guest system, just for the ho
 ```
 nix build ./scripts#phoenix.aarch64-linux --out-link phoenix-aarch64
 ```
+Additionally this downloads all inputs for the benchmarks, which are otherwise distributed separately.
 
 ### Entering the evaluation environment
 
