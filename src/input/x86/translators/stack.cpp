@@ -9,10 +9,18 @@ void stack_translator::do_translate() {
     switch (xed_decoded_inst_get_iclass(xed_inst())) {
     case XED_ICLASS_PUSH: {
         auto rsp = read_reg(value_type::u64(), reg_offsets::RSP);
-        auto new_rsp = builder().insert_sub(
-            rsp->val(), builder().insert_constant_u64(8)->val());
 
-        builder().insert_write_mem(new_rsp->val(), read_operand(0)->val());
+        value_node *node = read_operand(0);
+        if (node->kind() == node_kinds::constant) {
+            node = builder().insert_sx(value_type::s64(), node->val());
+        }
+
+        auto new_rsp = builder().insert_sub(
+            rsp->val(), builder()
+                            .insert_constant_u64(node->val().type().width() / 8)
+                            ->val());
+
+        builder().insert_write_mem(new_rsp->val(), node->val());
         write_reg(reg_offsets::RSP, new_rsp->val());
         break;
     }

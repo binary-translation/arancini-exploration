@@ -18,7 +18,6 @@ using namespace arancini::output::dynamic::arm64;
 using namespace arancini::ir;
 
 // TODO: move to common
-register_operand memory_base_reg(register_operand::x18);
 register_operand context_block_reg(register_operand::x29);
 
 // TODO: handle as part of capabilities code
@@ -147,11 +146,7 @@ memory_operand arm64_translation_context::guestreg_memory_operand(
 register_operand
 arm64_translation_context::add_membase(const register_operand &addr,
                                        const value_type &type) {
-    const register_operand &mem_addr_vreg = vreg_alloc_.allocate(type);
-    builder_.add(mem_addr_vreg, memory_base_reg, addr,
-                 "add memory base register");
-
-    return mem_addr_vreg;
+    return addr;
 }
 
 void arm64_translation_context::begin_block() {
@@ -374,7 +369,9 @@ void arm64_translation_context::materialise_read_reg(const read_reg_node &n) {
     auto &dest_vregs = vreg_alloc_.allocate(n.val());
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
         std::size_t width = dest_vregs[i].type().width();
-        auto addr = guestreg_memory_operand(n.regoff() + i * width);
+        auto addr = guestreg_memory_operand(n.regoff() +
+                                            i * (width / 8) + // width in bytes
+                                            n.internal_regoff());
         switch (width) {
         case 1:
         case 8:
@@ -428,7 +425,9 @@ void arm64_translation_context::materialise_write_reg(const write_reg_node &n) {
             src_vregs[i] = cast(src_vregs[i], n.value().type());
 
         std::size_t width = src_vregs[i].type().width();
-        auto addr = guestreg_memory_operand(n.regoff() + i * width);
+        auto addr = guestreg_memory_operand(n.regoff() +
+                                            i * (width / 8) + // width in bytes
+                                            n.internal_regoff());
         switch (width) {
         case 1:
         case 8:
@@ -465,7 +464,8 @@ void arm64_translation_context::materialise_read_mem(const read_mem_node &n) {
     for (std::size_t i = 0; i < dest_vregs.size(); ++i) {
         std::size_t width = dest_vregs[i].type().width();
 
-        memory_operand mem_op(addr_vreg, immediate_operand(i * width, u12()));
+        memory_operand mem_op(addr_vreg,
+                              immediate_operand(i * (width / 8), u12()));
         switch (width) {
         case 1:
         case 8:
@@ -505,7 +505,8 @@ void arm64_translation_context::materialise_write_mem(const write_mem_node &n) {
     for (std::size_t i = 0; i < src_vregs.size(); ++i) {
         std::size_t width = src_vregs[i].type().width();
 
-        memory_operand mem_op(address, immediate_operand(i * width, u12()));
+        memory_operand mem_op(address,
+                              immediate_operand(i * (width / 8), u12()));
         switch (width) {
         case 1:
         case 8:
@@ -1730,6 +1731,10 @@ void arm64_translation_context::materialise_internal_call(
         ret_ = 1;
     } else if (n.fn().name() == "handle_int") {
         ret_ = 2;
+    } else if (n.fn().name() == "handle_poison") {
+        ret_ = 3;
+    } else if (n.fn().name() == "handle_cpuid") {
+        ret_ = 4;
     } else {
         throw backend_exception("unsupported internal call: {}", n.fn().name());
     }

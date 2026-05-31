@@ -71,6 +71,8 @@ void shuffle_translator::do_translate() {
 
     case XED_ICLASS_SHUFPS:
     case XED_ICLASS_SHUFPD: {
+        // only 128 bit versions supported!
+
         auto dst = read_operand(0);
         value_type vec_ty = value_type::v();
         unsigned long mask;
@@ -90,7 +92,7 @@ void shuffle_translator::do_translate() {
 
         for (unsigned i = 0; i < vec_ty.nr_elements(); i++) {
             auto idx = (slct >> (bits * i)) & mask;
-            auto from = (idx < vec_ty.nr_elements() / 2) ? src1 : src2;
+            auto from = (i < vec_ty.nr_elements() / 2) ? src1 : src2;
             auto val = builder().insert_vector_extract(from->val(), idx);
             dst = builder().insert_vector_insert(dst->val(), i, val->val());
         }

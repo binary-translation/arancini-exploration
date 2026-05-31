@@ -37,6 +37,9 @@ x86_internal_functions::create(const std::string &name) const {
     } else if (name == "log2") {
         return std::make_shared<internal_function>(
             "log2", function_type(value_type::f64(), {value_type::f64()}));
+    } else if (name == "handle_cpuid") {
+        return std::make_shared<internal_function>(
+            "handle_cpuid", function_type(value_type::v(), {}));
     }
     return nullptr;
 }

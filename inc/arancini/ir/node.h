@@ -376,9 +376,11 @@ class constant_node : public value_node {
 class read_reg_node : public value_node {
   public:
     read_reg_node(const value_type &vt, unsigned long regoff,
-                  unsigned long regidx, const char *regname)
+                  unsigned long regidx, const char *regname,
+                  uint8_t internal_regoff = 0)
         : value_node(node_kinds::read_reg, vt), regoff_(regoff),
-          regidx_(regidx), regname_(regname) {}
+          internal_regoff_(internal_regoff), regidx_(regidx),
+          regname_(regname) {}
 
     [[nodiscard]]
     unsigned long regoff() const {
@@ -395,6 +397,11 @@ class read_reg_node : public value_node {
         return regname_;
     }
 
+    [[nodiscard]]
+    uint8_t internal_regoff() const {
+        return internal_regoff_;
+    }
+
     virtual void accept(visitor &v) override {
         value_node::accept(v);
         v.visit_read_reg_node(*this);
@@ -402,6 +409,7 @@ class read_reg_node : public value_node {
 
   private:
     unsigned long regoff_;
+    uint8_t internal_regoff_; // used for AH, CH, DH, BH registers
     unsigned long regidx_;
     const char *regname_;
 };
@@ -435,15 +443,20 @@ class read_mem_node : public value_node {
 class write_reg_node : public action_node {
   public:
     write_reg_node(unsigned long regoff, unsigned long regidx,
-                   const char *regname, port &val)
+                   const char *regname, port &val, uint8_t internal_regoff = 0)
         : action_node(node_kinds::write_reg), regoff_(regoff), regidx_(regidx),
-          regname_(regname), val_(val) {
+          regname_(regname), val_(val), internal_regoff_(internal_regoff) {
         val.add_target(this);
     }
 
     [[nodiscard]]
     unsigned long regoff() const {
         return regoff_;
+    }
+
+    [[nodiscard]]
+    uint8_t internal_regoff() const {
+        return internal_regoff_;
     }
 
     [[nodiscard]]
@@ -473,6 +486,7 @@ class write_reg_node : public action_node {
 
   private:
     unsigned long regoff_;
+    uint8_t internal_regoff_; // used for AH, CH, DH, BH registers
     unsigned long regidx_;
     const char *regname_;
     port &val_;

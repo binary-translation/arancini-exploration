@@ -23,7 +23,7 @@ namespace arancini::input::x86::translators {
 using namespace arancini::ir;
 using namespace arancini::input::x86;
 
-enum class translation_result { normal, noop, end_of_block, fail };
+enum class translation_result { normal, end_of_block, fail };
 
 class translator {
   public:
@@ -49,7 +49,8 @@ class translator {
     value_node *compute_address(int mem_idx);
 
     action_node *write_reg(reg_offsets reg, port &value);
-    value_node *read_reg(const value_type &vt, reg_offsets reg);
+    value_node *read_reg(const value_type &vt, reg_offsets reg,
+                         uint8_t internal_offset = 0);
 
     /// @brief Convert a register name from XED to an arancini register
     ///        Should only be used in helper functions, not in instruction
@@ -164,6 +165,13 @@ class translator {
     ///        Use this function when discovering which operands to use when
     ///        adding support for instructions
     void dump_xed_encoding(void);
+
+    /// @brief Check if the register is a high byte register
+    /// @param r the register to check
+    /// @return true if the register is a high byte register, false otherwise
+    inline bool is_high_byte(xed_reg_enum_t r) {
+        return (r >= XED_REG_GPR8h_FIRST && r <= XED_REG_GPR8h_LAST);
+    }
 
   private:
     ir_builder &builder_;

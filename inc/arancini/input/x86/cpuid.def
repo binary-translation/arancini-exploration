@@ -1,0 +1,21 @@
+
+// to use this file, include it once without defining DEF_CPUID to define the
+// result and then include it again with DEF_CPUID defined bind the static
+// objects somewhere DEF_CPUID(eax, ecx, result)
+
+#ifndef DEF_CPUID
+#include <arancini/input/x86/ia32_compact.hpp>
+
+namespace arancini::input::x86::cpuid {
+ia32::cpuid_eax_00 cpuid_eax_00 = {
+    .max_cpuid_input_value = 0x00000001,
+    // CoreArancini
+    .ebx_value_genu = 'Core',
+    .ecx_value_ntel = 'cini',
+    .edx_value_inei = 'Aran',
+};
+} // namespace arancini::input::x86::cpuid
+#else
+DEF_CPUID(0x00000000, 0x00000000, &cpuid::cpuid_eax_00)
+
+#endif

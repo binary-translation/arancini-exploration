@@ -198,8 +198,10 @@ class ir_builder {
     /// @param regoff register offset (use reg_offsets enum values)
     /// @return a read register node: (vt) regoff
     value_node *insert_read_reg(const value_type &vt, unsigned long regoff,
-                                unsigned long regidx, const char *regname) {
-        return create_and_insert<read_reg_node>(vt, regoff, regidx, regname);
+                                unsigned long regidx, const char *regname,
+                                uint8_t internal_offset = 0) {
+        return create_and_insert<read_reg_node>(vt, regoff, regidx, regname,
+                                                internal_offset);
     }
 
     /// @brief write register

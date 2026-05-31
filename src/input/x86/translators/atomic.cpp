@@ -7,13 +7,26 @@ using namespace arancini::input::x86::translators;
 
 void atomic_translator::do_translate() {
     switch (xed_decoded_inst_get_iclass(xed_inst())) {
+    case XED_ICLASS_SUB_LOCK: {
+        // if LOCK prefix, dst is a memory address
+        auto dst = compute_address(0);
+        auto src = read_operand(1);
+
+        auto sub = builder().insert_atomic_binop(binary_atomic_op::sub,
+                                                 dst->val(), src->val());
+        write_operand(0, sub->val());
+        write_flags(sub, flag_op::update, flag_op::update, flag_op::update,
+                    flag_op::update, flag_op::update, flag_op::update);
+
+        break;
+    }
     case XED_ICLASS_XADD_LOCK: {
         // if LOCK prefix, dst is a memory address
         auto dst = compute_address(0);
         auto src = read_operand(1);
 
         auto xadd = builder().insert_atomic_xadd(dst->val(), src->val());
-        write_operand(1, xadd->val());
+        write_operand(0, xadd->val());
         write_flags(xadd, flag_op::update, flag_op::update, flag_op::update,
                     flag_op::update, flag_op::update, flag_op::update);
 

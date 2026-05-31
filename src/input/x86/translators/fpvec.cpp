@@ -199,10 +199,10 @@ void fpvec_translator::do_translate() {
             builder().insert_vector_insert(dest->val(), 0, res->val())->val());
         break;
     }
-    case XED_ICLASS_CVTSD2SI:
     case XED_ICLASS_CVTSD2SS: {
         auto res = builder().insert_convert(value_type::f32(), src1->val(),
                                             fp_convert_type::round);
+        dest->val().type() = value_type::vector(value_type::f32(), 4);
         dest = builder().insert_vector_insert(dest->val(), 0, res->val());
 
         write_operand(0, dest->val());
@@ -215,10 +215,22 @@ void fpvec_translator::do_translate() {
         write_operand(0, dest->val());
         break;
     }
-    case XED_ICLASS_CVTSS2SI:
-    case XED_ICLASS_CVTSS2SD: {
+    case XED_ICLASS_CVTSD2SI:
+    case XED_ICLASS_CVTSS2SI: {
         dest = builder().insert_convert(dest->val().type(), src1->val(),
                                         fp_convert_type::none);
+        write_operand(0, dest->val());
+        break;
+    }
+    case XED_ICLASS_CVTSS2SD: {
+        // DEST[63:0] :=
+        //      Convert_Single_Precision_To_Double_Precision_Floating_Point(SRC[31:0]);
+        // DEST[MAXVL-1:64] (Unmodified)
+        auto converted = builder().insert_convert(
+            value_type::f64(), src1->val(), fp_convert_type::none);
+
+        dest->val().type() = value_type::vector(value_type::f64(), 2);
+        dest = builder().insert_vector_insert(dest->val(), 0, converted->val());
         write_operand(0, dest->val());
         break;
     }

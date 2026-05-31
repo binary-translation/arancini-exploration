@@ -22,6 +22,10 @@ generated.S
 cmake-build-*
 compile_commands.json
 result
+_deps/
+CMakeFiles/
+xed-prefix/
+.gdb_history
 
 **/*.dot
 **/*.dot.*
@@ -33,3 +37,4 @@ phoenix-*
 parsec-*
 
 guest-sections.lds
+/.vs

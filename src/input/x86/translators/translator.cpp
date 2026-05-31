@@ -12,30 +12,14 @@ using namespace arancini::input::x86::translators;
 translation_result translator::translate(off_t address,
                                          xed_decoded_inst_t *xed_inst,
                                          const std::string &disasm) {
-    switch (xed_decoded_inst_get_iclass(xed_inst)) {
-        // TODO: this is a bad way of avoiding empty packets. Should be done by
-        // checking that the translator is a nop_translator, not hardcoded
-        // switch case
-        // case XED_ICLASS_NOP:
-        //	case XED_ICLASS_HLT:
-    case XED_ICLASS_CPUID:
-    case XED_ICLASS_PREFETCHNTA:
-    case XED_ICLASS_PAUSE:
-    case XED_ICLASS_NOP:
-        builder_.begin_packet(address, disasm);
-        return builder_.end_packet() == packet_type::end_of_block
-                   ? translation_result::end_of_block
-                   : translation_result::noop;
-    default:
-        builder_.begin_packet(address, disasm);
+    builder_.begin_packet(address, disasm);
 
-        xed_inst_ = xed_inst;
-        do_translate();
+    xed_inst_ = xed_inst;
+    do_translate();
 
-        return builder_.end_packet() == packet_type::end_of_block
-                   ? translation_result::end_of_block
-                   : translation_result::normal;
-    }
+    return builder_.end_packet() == packet_type::end_of_block
+               ? translation_result::end_of_block
+               : translation_result::normal;
 }
 
 /// @brief Print the xed encoded instruction details
@@ -305,8 +289,11 @@ value_node *translator::read_operand(int opnum) {
         case XED_REG_CLASS_GPR:
             switch (xed_get_register_width_bits(reg)) {
             case 8:
-                // FIXME AH, CH, DH, BH
-                return read_reg(value_type::u8(), xedreg_to_offset(reg));
+                if (is_high_byte(reg)) {
+                    return read_reg(value_type::u8(), xedreg_to_offset(reg), 1);
+                } else {
+                    return read_reg(value_type::u8(), xedreg_to_offset(reg));
+                }
             case 16:
                 return read_reg(value_type::u16(), xedreg_to_offset(reg));
             case 32:
@@ -500,11 +487,6 @@ value_node *translator::compute_address(int mem_idx) {
                           : 0;
 
     auto seg = xed_decoded_inst_get_seg_reg(xed_inst(), mem_idx);
-
-    if (xed_get_register_width_bits(base_reg) != 64 &&
-        base_reg != XED_REG_INVALID) {
-        throw std::runtime_error("base reg invalid size");
-    }
 
     value_node *address_base{nullptr};
 
@@ -752,9 +734,10 @@ action_node *translator::write_reg(reg_offsets reg, port &value) {
                                      offset_to_name(reg), value);
 }
 
-value_node *translator::read_reg(const value_type &vt, reg_offsets reg) {
+value_node *translator::read_reg(const value_type &vt, reg_offsets reg,
+                                 uint8_t internal_offset) {
     return builder_.insert_read_reg(vt, (unsigned long)reg, offset_to_idx(reg),
-                                    offset_to_name(reg));
+                                    offset_to_name(reg), internal_offset);
 }
 
 void translator::write_flags(value_node *op, flag_op zf, flag_op cf, flag_op of,

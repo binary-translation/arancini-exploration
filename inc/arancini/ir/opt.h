@@ -30,19 +30,25 @@ class deadflags_opt_visitor : public default_visitor {
     }
 
     void visit_chunk(chunk &c) {
-        nr_flags_ = nr_flags_opt_ = 0;
-        last_se_packets_.clear();
-        live_flags_.clear();
+        // deadflags optimization is currently broken!!!
+        // the order of execution can go "up" (to earlier addresses).
+        // Simply optimizing in regards to oder of instructions is wrong.
+        // You need to actually consider control flow!
 
-        auto packets = c.packets();
-        for (auto p = packets.rbegin(); p != packets.rend(); ++p) {
+        // nr_flags_ = nr_flags_opt_ = 0;
+        // last_se_packets_.clear();
+        // live_flags_.clear();
 
-            (*p)->accept(*this);
-        }
-        // std::cout << "Dead flags opt pass @ " << c.address() << ": optimised
-        // out " << nr_flags_opt_ << "/" << nr_flags_ << " flags" << std::endl;
-        nr_flags_total_ += nr_flags_;
-        nr_flags_opt_total_ += nr_flags_opt_;
+        // auto packets = c.packets();
+        // for (auto p = packets.rbegin(); p != packets.rend(); ++p) {
+
+        //     (*p)->accept(*this);
+        // }
+        // // std::cout << "Dead flags opt pass @ " << c.address() << ":
+        // optimised
+        // // out " << nr_flags_opt_ << "/" << nr_flags_ << " flags" <<
+        // std::endl; nr_flags_total_ += nr_flags_; nr_flags_opt_total_ +=
+        // nr_flags_opt_;
     }
 
     void visit_packet(packet &p) {

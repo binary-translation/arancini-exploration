@@ -19,6 +19,9 @@ void binop_translator::do_translate() {
     case XED_ICLASS_PXOR:
         rslt = builder().insert_xor(op0->val(), op1->val());
         break;
+    case XED_ICLASS_PANDN:
+        op0 = builder().insert_not(op0->val());
+        [[fallthrough]];
     case XED_ICLASS_AND:
     case XED_ICLASS_PAND:
     case XED_ICLASS_TEST:
@@ -232,23 +235,20 @@ void binop_translator::do_translate() {
         if (lhs->val().type().width() == 128) {
             nr_splits *= 2;
         }
-        auto typ = (inst_class == XED_ICLASS_PCMPGTB)   ? value_type::u8()
-                   : (inst_class == XED_ICLASS_PCMPGTW) ? value_type::u16()
-                                                        : value_type::u32();
+        auto typ = (inst_class == XED_ICLASS_PCMPGTB)   ? value_type::s8()
+                   : (inst_class == XED_ICLASS_PCMPGTW) ? value_type::s16()
+                                                        : value_type::s32();
         lhs = builder().insert_bitcast(value_type::vector(typ, nr_splits),
                                        lhs->val());
         rhs = builder().insert_bitcast(value_type::vector(typ, nr_splits),
                                        rhs->val());
 
-        auto cst_0 = builder().insert_constant_i(
-            value_type(value_type_class::unsigned_integer,
-                       lhs->val().type().width() / nr_splits),
-            0);
+        auto cst_0 = builder().insert_constant_i(typ, 0);
         auto cst_1 = (inst_class == XED_ICLASS_PCMPGTB)
-                         ? builder().insert_constant_u8(0xFF)
+                         ? builder().insert_constant_s8(0xFF)
                      : (inst_class == XED_ICLASS_PCMPGTW)
-                         ? builder().insert_constant_u16(0xFFFF)
-                         : builder().insert_constant_u32(0xFFFFFFFF);
+                         ? builder().insert_constant_s16(0xFFFF)
+                         : builder().insert_constant_s32(0xFFFFFFFF);
 
         for (int i = 0; i < nr_splits; i++) {
             auto gt = builder().insert_cmpgt(
@@ -260,6 +260,80 @@ void binop_translator::do_translate() {
         }
         rslt = lhs;
 
+        break;
+    }
+
+    case XED_ICLASS_PMINUB:
+    case XED_ICLASS_PMINUW:
+    case XED_ICLASS_PMINUD: {
+        auto lhs = read_operand(0);
+        auto rhs = read_operand(1);
+
+        value_type typ;
+        if (inst_class == XED_ICLASS_PMINUB) {
+            typ = value_type::u8();
+        } else if (inst_class == XED_ICLASS_PMINUW) {
+            typ = value_type::u16();
+        } else if (inst_class == XED_ICLASS_PMINUD) {
+            typ = value_type::u32();
+        }
+        auto nr_splits = lhs->val().type().width() / typ.width();
+        auto lhs_vec = builder().insert_bitcast(
+            value_type::vector(typ, nr_splits), lhs->val());
+        auto rhs_vec = builder().insert_bitcast(
+            value_type::vector(typ, nr_splits), rhs->val());
+
+        // dst[i] = min(lhs[i], rhs[i])
+        for (int i = 0; i < nr_splits; i++) {
+            auto lhs_elem =
+                builder().insert_vector_extract(lhs_vec->val(), i)->val();
+            auto rhs_elem =
+                builder().insert_vector_extract(rhs_vec->val(), i)->val();
+            auto min_elem = builder().insert_csel(
+                builder().insert_cmpgt(lhs_elem, rhs_elem)->val(), rhs_elem,
+                lhs_elem);
+            lhs =
+                builder().insert_vector_insert(lhs->val(), i, min_elem->val());
+        }
+        rslt = builder().insert_bitcast(
+            lhs->val().type(), lhs_vec->val()); // cast back to original type
+        break;
+    }
+
+    case XED_ICLASS_PMAXUB:
+    case XED_ICLASS_PMAXUW:
+    case XED_ICLASS_PMAXUD: {
+        auto lhs = read_operand(0);
+        auto rhs = read_operand(1);
+
+        value_type typ;
+        if (inst_class == XED_ICLASS_PMAXUB) {
+            typ = value_type::u8();
+        } else if (inst_class == XED_ICLASS_PMAXUW) {
+            typ = value_type::u16();
+        } else if (inst_class == XED_ICLASS_PMAXUD) {
+            typ = value_type::u32();
+        }
+        auto nr_splits = lhs->val().type().width() / typ.width();
+        auto lhs_vec = builder().insert_bitcast(
+            value_type::vector(typ, nr_splits), lhs->val());
+        auto rhs_vec = builder().insert_bitcast(
+            value_type::vector(typ, nr_splits), rhs->val());
+
+        // dst[i] = max(lhs[i], rhs[i])
+        for (int i = 0; i < nr_splits; i++) {
+            auto lhs_elem =
+                builder().insert_vector_extract(lhs_vec->val(), i)->val();
+            auto rhs_elem =
+                builder().insert_vector_extract(rhs_vec->val(), i)->val();
+            auto max_elem = builder().insert_csel(
+                builder().insert_cmpgt(lhs_elem, rhs_elem)->val(), lhs_elem,
+                rhs_elem);
+            lhs =
+                builder().insert_vector_insert(lhs->val(), i, max_elem->val());
+        }
+        rslt = builder().insert_bitcast(
+            lhs->val().type(), lhs_vec->val()); // cast back to original type
         break;
     }
 
@@ -331,87 +405,19 @@ void binop_translator::do_translate() {
         break;
     }
     case XED_ICLASS_BSF: {
-        /*
-        auto idx = builder().alloc_local(value_type::u64());
-        auto mask = builder().alloc_local(type);
-        // if src == 0
-        auto src_zero = builder().insert_cmpeq(src->val(),
-        builder().insert_constant_i(type, 0)->val()); cond_br_node *undef =
-        (cond_br_node *)builder().insert_cond_br(src_zero->val(), nullptr);
-
-        // then [src != 0]
-        write_reg(reg_offsets::ZF, builder().insert_constant_i(value_type::u1(),
-        0)->val()); builder().insert_write_local(mask,
-        builder().insert_constant_i(type, 1)->val()); // mask := 0x1 if
-        (inst_class == XED_ICLASS_BSR) { auto mask_val =
-        builder().insert_read_local(mask); mask_val =
-        builder().insert_lsl(mask_val->val(), builder().insert_constant_i(type,
-        type.width() - 1)->val()); builder().insert_write_local(mask,
-        mask_val->val()); // mask := mask << width - 1
-          builder().insert_write_local(idx,
-        builder().insert_constant_u64(type.width() - 1)->val()); // idx = width
-        - 1 } else { builder().insert_write_local(idx,
-        builder().insert_constant_u64(0)->val()); // idx := 0
-        }
-            auto next = (br_node *)builder().insert_br(nullptr);
-        //   while mask & src == 0; do idx--; mask = mask >> 1; done
-            auto while_loop1 = builder().insert_label("while");
-            next->add_br_target(while_loop1);
-            auto while_loop = builder().insert_label("while");
-
-            //       mask & src == 1  -> jump to endif
-        auto mask_val = builder().insert_read_local(mask);
-        auto mask_and =
-        builder().insert_cmpne(builder().insert_and(mask_val->val(),
-        src->val())->val(), builder().insert_constant_i(type, 0)->val());
-        cond_br_node *fi_br = (cond_br_node
-        *)builder().insert_cond_br(mask_and->val(), nullptr);
-        //       idx--/++; mask = mask >>/<< 1
-        auto idx_val = builder().insert_read_local(idx);
-        if (inst_class == XED_ICLASS_BSR) {
-          idx_val = builder().insert_sub(idx_val->val(),
-        builder().insert_constant_u64(1)->val()); mask_val =
-        builder().insert_lsr(mask_val->val(), builder().insert_constant_i(type,
-        1)->val()); } else { idx_val = builder().insert_add(idx_val->val(),
-        builder().insert_constant_u64(1)->val()); mask_val =
-        builder().insert_lsl(mask_val->val(), builder().insert_constant_i(type,
-        1)->val());
-        }
-        builder().insert_write_local(idx, idx_val->val());
-        builder().insert_write_local(mask, mask_val->val());
-        //       jump back to loop test
-        builder().insert_br(while_loop);
-
-        // else [src == 0]
-        auto else_label = builder().insert_label("else");
-        undef->add_br_target(else_label);
-        write_reg(reg_offsets::ZF, builder().insert_constant_i(value_type::u1(),
-        1)->val());
-            // undef, so write 0
-        write_operand(0, builder().insert_constant_i(type, 0)->val());
-            auto end = (br_node *)builder().insert_br(nullptr);
-
-        //
-        auto fi_label = builder().insert_label("fi");
-        fi_br->add_br_target(fi_label);
-
-        // write result
-        write_operand(0, builder().insert_read_local(idx)->val());
-            next = (br_node *)builder().insert_br(nullptr);
-
-            auto end_label = builder().insert_label("end");
-            auto end_label2 = builder().insert_label("end");
-        next->add_br_target(end_label);
-        end->add_br_target(end_label2);
-
-        */
 
         auto src = read_operand(1);
+        numeric_value_metadata *guest_addr =
+            (numeric_value_metadata *)src->get_metadata("guest-address").get();
+        if (guest_addr->value() == 0x41DCA2) {
+            util::global_logger.info("translating BSR at 0x41DCA2");
+        }
         auto type = src->val().type();
         // auto src_b =
         // builder().insert_bitcast(value_type::vector(value_type::u1(),
         // type.width()), src->val());
-        auto mask = builder().insert_constant_i(type, 1 << type.width() - 1);
+        auto mask =
+            builder().insert_constant_i(type, 1ull << (type.width() - 1));
 
         auto idx = builder().insert_constant_i(type, type.width() - 1);
         for (int i = type.width() - 1; i >= 0; i--) {

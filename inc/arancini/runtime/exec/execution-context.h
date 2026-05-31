@@ -51,5 +51,7 @@ class execution_context {
 
     pthread_mutex_t big_fat_lock;
     void allocate_guest_memory();
+
+    void handle_cpuid(x86::x86_cpu_state *x86_state);
 };
 } // namespace arancini::runtime::exec

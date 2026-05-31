@@ -84,9 +84,13 @@ void llvm_static_output_engine_impl::generate() {
     InitializeAllAsmParsers();
     InitializeAllAsmPrinters();
 
+    ::util::global_logger.info("Generating LLVM IR for static output\n");
     build();
+    ::util::global_logger.info("LLVM IR generation complete\n");
     optimise();
+    ::util::global_logger.info("LLVM IR optimisations complete\n");
     compile();
+    ::util::global_logger.info("LLVM IR compilation complete\n");
 }
 
 void llvm_static_output_engine_impl::initialise_types() {
@@ -675,7 +679,7 @@ Value *llvm_static_output_engine_impl::materialise_port(
         // auto src_reg = builder.CreateGEP(types.cpu_state, state_arg, {
         // ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32,
         // rrn->regidx()) }, 	idx_to_reg_name(rrn->regidx()));
-        auto src_reg = reg_to_alloca_.at((reg_offsets)rrn->regoff());
+        ::llvm::Value *src_reg = reg_to_alloca_.at((reg_offsets)rrn->regoff());
 
         ::llvm::Type *ty;
         Align align = Align(8);
@@ -714,6 +718,13 @@ Value *llvm_static_output_engine_impl::materialise_port(
                                      std::to_string(rrn->val().type().width()) +
                                      " in load");
         }
+
+        if (rrn->internal_regoff() != 0) {
+            src_reg = builder.CreateGEP(
+                types.i8, src_reg,
+                ConstantInt::get(types.i64, rrn->internal_regoff()));
+        }
+
         return builder.CreateAlignedLoad(ty, src_reg, align);
     }
 
@@ -835,7 +846,10 @@ Value *llvm_static_output_engine_impl::materialise_port(
             case binary_arith_op::div: {
                 if (is_f_or_fv)
                     return builder.CreateFDiv(lhs, rhs);
-                return builder.CreateUDiv(lhs, rhs);
+                if (((IntegerType *)lhs->getType())->getSignBit())
+                    return builder.CreateSDiv(lhs, rhs);
+                else
+                    return builder.CreateUDiv(lhs, rhs);
             }
             case binary_arith_op::cmpeq: {
                 if (lhs->getType()->isFloatingPointTy())
@@ -866,10 +880,10 @@ Value *llvm_static_output_engine_impl::materialise_port(
                 auto rtype = rhs->getType();
                 if (ltype->isFloatingPointTy() && rtype->isFloatingPointTy())
                     return builder.CreateFRem(lhs, rhs);
-                if (((IntegerType *)ltype)->getSignBit() &&
-                    ((IntegerType *)ltype)->getSignBit())
+                if (((IntegerType *)ltype)->getSignBit())
                     return builder.CreateSRem(lhs, rhs);
-                return builder.CreateURem(lhs, rhs);
+                else
+                    return builder.CreateURem(lhs, rhs);
             }
             case binary_arith_op::cmpo: {
                 return builder.CreateCmp(CmpInst::FCMP_ORD, lhs, rhs);
@@ -1682,7 +1696,12 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder,
         // auto dest_reg = builder.CreateGEP(types.cpu_state, state_arg, {
         // ConstantInt::get(types.i64, 0), ConstantInt::get(types.i32,
         // wrn->regidx()) }, 	idx_to_reg_name(wrn->regidx()));
-        auto dest_reg = reg_to_alloca_.at((reg_offsets)wrn->regoff());
+        ::llvm::Value *dest_reg = reg_to_alloca_.at((reg_offsets)wrn->regoff());
+        if (wrn->internal_regoff() != 0) {
+            dest_reg = builder.CreateGEP(
+                types.i8, dest_reg,
+                ConstantInt::get(types.i64, wrn->internal_regoff()));
+        }
 
         // auto *reg_type =
         // ((GetElementPtrInst*)dest_reg)->getResultElementType();
@@ -1931,6 +1950,7 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder,
                 auto reg = reg_to_alloca_.at((reg_offsets)reg_off);
                 builder.CreateStore(out, reg);
             }
+            val = rhs;
             break;
         case binary_atomic_op::bor:
             out =
@@ -2103,6 +2123,9 @@ Value *llvm_static_output_engine_impl::lower_node(IRBuilder<> &builder,
         } else if (icn->fn().name() == "handle_int") {
             return builder.CreateCall(
                 switch_callee, {state_arg, ConstantInt::get(types.i32, 2)});
+        } else if (icn->fn().name() == "handle_cpuid") {
+            return builder.CreateCall(
+                switch_callee, {state_arg, ConstantInt::get(types.i32, 4)});
         } else {
             const port &ret = icn->val();
             const std::vector<port *> &args = icn->args();
@@ -2567,15 +2590,17 @@ void llvm_static_output_engine_impl::save_callee_regs(IRBuilder<> &builder,
                                                       bool with_args) {
     auto args = {reg_offsets::RCX, reg_offsets::RDX, reg_offsets::RDI,
                  reg_offsets::RSI, reg_offsets::R8,  reg_offsets::R9};
+    // rax is passed as arg for variadic functions (indicates number of floats)
+    // since we dont pass it as arg (llvm ir) need to always store and restore
     auto regs = {
-        reg_offsets::PC,       reg_offsets::RBX,        reg_offsets::RSP,
-        reg_offsets::RBP,      reg_offsets::R12,        reg_offsets::R13,
-        reg_offsets::R14,      reg_offsets::R15,        reg_offsets::FS,
-        reg_offsets::GS,       reg_offsets::X87_STS,    reg_offsets::X87_TAG,
-        reg_offsets::X87_CTRL, reg_offsets::X87_OPCODE, reg_offsets::ZMM0,
-        reg_offsets::ZMM1,     reg_offsets::ZMM2,       reg_offsets::ZMM3,
-        reg_offsets::ZMM4,     reg_offsets::ZMM5,       reg_offsets::ZMM6,
-        reg_offsets::ZMM7};
+        reg_offsets::PC,      reg_offsets::RAX,      reg_offsets::RBX,
+        reg_offsets::RSP,     reg_offsets::RBP,      reg_offsets::R12,
+        reg_offsets::R13,     reg_offsets::R14,      reg_offsets::R15,
+        reg_offsets::FS,      reg_offsets::GS,       reg_offsets::X87_STS,
+        reg_offsets::X87_TAG, reg_offsets::X87_CTRL, reg_offsets::X87_OPCODE,
+        reg_offsets::ZMM0,    reg_offsets::ZMM1,     reg_offsets::ZMM2,
+        reg_offsets::ZMM3,    reg_offsets::ZMM4,     reg_offsets::ZMM5,
+        reg_offsets::ZMM6,    reg_offsets::ZMM7};
     for (auto reg : regs) {
         auto ptr = builder.CreateGEP(
             types.cpu_state, state_arg,
@@ -2615,24 +2640,18 @@ void llvm_static_output_engine_impl::save_callee_regs(IRBuilder<> &builder,
 void llvm_static_output_engine_impl::restore_callee_regs(IRBuilder<> &builder,
                                                          Argument *state_arg,
                                                          bool with_rets) {
+    // rax always needs to be restored because it can also be an arg (see
+    // save_callee_regs)
     auto rets = {reg_offsets::RAX, reg_offsets::RDX};
-    auto regs = {reg_offsets::PC,
-                 reg_offsets::RBX,
-                 reg_offsets::RSP,
-                 reg_offsets::RBP,
-                 reg_offsets::R12,
-                 reg_offsets::R13,
-                 reg_offsets::R14,
-                 reg_offsets::R15,
-                 reg_offsets::FS,
-                 reg_offsets::GS,
-                 reg_offsets::X87_STACK_BASE,
-                 reg_offsets::X87_STS,
-                 reg_offsets::X87_TAG,
-                 reg_offsets::X87_CTRL,
-                 reg_offsets::X87_OPCODE,
-                 reg_offsets::ZMM0,
-                 reg_offsets::ZMM1};
+    auto regs = {reg_offsets::PC,       reg_offsets::RAX,
+                 reg_offsets::RBX,      reg_offsets::RSP,
+                 reg_offsets::RBP,      reg_offsets::R12,
+                 reg_offsets::R13,      reg_offsets::R14,
+                 reg_offsets::R15,      reg_offsets::FS,
+                 reg_offsets::GS,       reg_offsets::X87_STACK_BASE,
+                 reg_offsets::X87_STS,  reg_offsets::X87_TAG,
+                 reg_offsets::X87_CTRL, reg_offsets::X87_OPCODE,
+                 reg_offsets::ZMM0,     reg_offsets::ZMM1};
     for (auto reg : regs) {
         auto ptr = builder.CreateGEP(
             types.cpu_state, state_arg,

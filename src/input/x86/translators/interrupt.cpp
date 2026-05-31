@@ -51,7 +51,14 @@ void interrupt_translator::do_translate() {
         break;
     }
 
+    case XED_ICLASS_CPUID: {
+        builder().insert_internal_call(builder().ifr().resolve("handle_cpuid"), {});
+        break;
+    }
+
     default:
-        throw std::runtime_error("unsupported interrupt operation");
+        throw std::runtime_error("unsupported interrupt operation: " +
+                                 std::string(xed_iclass_enum_t2str(
+                                     xed_decoded_inst_get_iclass(xed_inst()))));
     }
 }

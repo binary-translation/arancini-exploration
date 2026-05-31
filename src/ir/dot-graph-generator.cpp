@@ -17,12 +17,15 @@ void dot_graph_generator::visit_chunk(chunk &c) {
 }
 
 void dot_graph_generator::visit_packet(packet &p) {
+    if (p.actions().empty()) {
+        return;
+    }
+
     os_ << "subgraph cluster_" << std::hex << &p << " {" << std::endl;
     os_ << "label = \"@0x" << std::hex << p.address() << ": " << p.disassembly()
         << "\";" << std::endl;
 
-    if (current_packet_ && !current_packet_->actions().empty() &&
-        !p.actions().empty()) {
+    if (current_packet_) {
         add_edge(current_packet_->actions().back().get(),
                  p.actions().front().get(), "blue2");
     }

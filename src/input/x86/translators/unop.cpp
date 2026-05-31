@@ -61,29 +61,38 @@ void unop_translator::do_translate() {
         break;
     }
 
+    case XED_ICLASS_MOVMSKPS:
     case XED_ICLASS_PMOVMSKB: {
-        auto src = read_operand(1);
-        auto nr_bytes = src->val().type().width() == 64 ? 8 : 16;
 
-        if (nr_bytes == 8) {
-            rslt = builder().insert_constant_i(value_type::u8(), 0);
-        } else {
-            rslt = builder().insert_constant_i(value_type::u16(), 0);
+        auto src = read_operand(1);
+        value_type src_type;
+        // PMOVMSKB is used for 64-bit and 128-bit vectors extracting byte mask
+        if (xed_decoded_inst_get_iclass(xed_inst()) == XED_ICLASS_PMOVMSKB) {
+            src_type = value_type::u8();
+        } else if (xed_decoded_inst_get_iclass(xed_inst()) ==
+                   XED_ICLASS_MOVMSKPS) {
+            // extract packed single-precision floating-point values. interpret
+            // as int for easier access to sign bit.
+            src_type = value_type::u32();
         }
+
+        auto nr_bytes = src->val().type().width() / src_type.width();
+        src = builder().insert_bitcast(value_type::vector(src_type, nr_bytes),
+                                       src->val());
+
+        // https://stackoverflow.com/questions/11177137/why-do-x86-64-instructions-on-32-bit-registers-zero-the-upper-part-of-the-full-6
+        rslt = builder().insert_constant_i(value_type::u64(), 0);
 
         for (int i = 0; i < nr_bytes; i++) {
-            auto top_bit =
-                builder().insert_bit_extract(src->val(), (i + 1) * 8 - 1, 1);
-            rslt =
-                builder().insert_bit_insert(rslt->val(), top_bit->val(), i, 1);
+            auto byte = builder().insert_vector_extract(src->val(), i);
+            auto bit_0 = builder().insert_bit_extract(byte->val(),
+                                                      src_type.width() - 1, 1);
+            rslt = builder().insert_bit_insert(rslt->val(), bit_0->val(), i, 1);
         }
 
-        rslt =
-            builder().insert_zx(value_type(value_type_class::unsigned_integer,
-                                           get_operand_width(0)),
-                                rslt->val());
         break;
     }
+
     case XED_ICLASS_SQRTSD: {
         auto src = read_operand(1);
         if (src->val().type().width() == 64) {
